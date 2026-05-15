@@ -1,0 +1,429 @@
+name: Build MangaWorld APK
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+          - both
+
+env:
+  JAVA_VERSION: '17'
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true
+
+jobs:
+  # ─── Lint & Unit Tests ──────────────────────────────────────────────────────
+  lint-and-test:
+    name: Lint & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Configure Android SDK path
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$SDK_DIR" ]]; then
+            for CANDIDATE in /usr/local/lib/android/sdk /opt/android-sdk /opt/hostedtoolcache/Android/Sdk; do
+              if [[ -d "$CANDIDATE" ]]; then
+                SDK_DIR="$CANDIDATE"
+                break
+              fi
+            done
+          fi
+          if [[ -z "$SDK_DIR" ]]; then
+            echo "Android SDK directory could not be determined." >&2
+            exit 1
+          fi
+          echo "Using Android SDK at: $SDK_DIR"
+          echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK_DIR" > local.properties
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+          cache-read-only: false
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Run Lint
+        run: ./gradlew :app:lintDebug --stacktrace
+
+      - name: Run Unit Tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Run Scraper Fixture Tests
+        run: ./gradlew :app:testDebugUnitTest --tests "*ScraperFixtureTest*" --stacktrace
+
+      - name: Upload Lint Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-results
+          path: app/build/reports/lint-results-debug.html
+          retention-days: 7
+
+  # ─── Debug Build ────────────────────────────────────────────────────────────
+  build-debug:
+    name: Build Debug APKs (All ABIs)
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both'))
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Configure Android SDK path
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$SDK_DIR" ]]; then
+            for CANDIDATE in /usr/local/lib/android/sdk /opt/android-sdk /opt/hostedtoolcache/Android/Sdk; do
+              if [[ -d "$CANDIDATE" ]]; then
+                SDK_DIR="$CANDIDATE"
+                break
+              fi
+            done
+          fi
+          if [[ -z "$SDK_DIR" ]]; then
+            echo "Android SDK directory could not be determined." >&2
+            exit 1
+          fi
+          echo "Using Android SDK at: $SDK_DIR"
+          echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK_DIR" > local.properties
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build Debug APKs
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: List APK files
+        run: find app/build/outputs/apk -name "*.apk" -type f
+
+      - name: Upload arm64-v8a Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MangaWorld-debug-arm64-v8a
+          path: app/build/outputs/apk/debug/*arm64-v8a*.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload armeabi-v7a Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MangaWorld-debug-armeabi-v7a
+          path: app/build/outputs/apk/debug/*armeabi-v7a*.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload x86_64 Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MangaWorld-debug-x86_64
+          path: app/build/outputs/apk/debug/*x86_64*.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Universal Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MangaWorld-debug-universal
+          path: app/build/outputs/apk/debug/*universal*.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ─── Release Build ──────────────────────────────────────────────────────────
+  build-release:
+    name: Build Release APKs + AAB (All ABIs)
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+    if: |
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both'))
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Configure Android SDK path
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$SDK_DIR" ]]; then
+            for CANDIDATE in /usr/local/lib/android/sdk /opt/android-sdk /opt/hostedtoolcache/Android/Sdk; do
+              if [[ -d "$CANDIDATE" ]]; then
+                SDK_DIR="$CANDIDATE"
+                break
+              fi
+            done
+          fi
+          if [[ -z "$SDK_DIR" ]]; then
+            echo "Android SDK directory could not be determined." >&2
+            exit 1
+          fi
+          echo "Using Android SDK at: $SDK_DIR"
+          echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK_DIR" > local.properties
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # ── Keystore setup ──────────────────────────────────────────────────────
+      - name: Build Release APKs (signed when keystore is provided)
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${KEYSTORE_BASE64:-}" ]]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > app/keystore.jks
+            export KEYSTORE_PATH="$GITHUB_WORKSPACE/app/keystore.jks"
+            echo "Using signed release build."
+          else
+            echo "No keystore secret found; building unsigned release."
+          fi
+          ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Build Release AAB
+        run: ./gradlew :app:bundleRelease --stacktrace
+
+      - name: List output files
+        run: |
+          echo "=== APKs ==="
+          find app/build/outputs/apk -name "*.apk" -type f
+          echo "=== AABs ==="
+          find app/build/outputs/bundle -name "*.aab" -type f
+
+      # ── Upload APKs per ABI ─────────────────────────────────────────────────
+      - name: Upload arm64-v8a Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MangaWorld-release-arm64-v8a
+          path: app/build/outputs/apk/release/*arm64-v8a*.apk
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Upload armeabi-v7a Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MangaWorld-release-armeabi-v7a
+          path: app/build/outputs/apk/release/*armeabi-v7a*.apk
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Upload x86 Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MangaWorld-release-x86
+          path: app/build/outputs/apk/release/*x86*.apk
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Upload x86_64 Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MangaWorld-release-x86_64
+          path: app/build/outputs/apk/release/*x86_64*.apk
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Upload Universal Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MangaWorld-release-universal
+          path: app/build/outputs/apk/release/*universal*.apk
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Upload Release AAB (Play Store)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MangaWorld-release-bundle-aab
+          path: app/build/outputs/bundle/release/*.aab
+          if-no-files-found: warn
+          retention-days: 90
+
+  # ─── GitHub Release ─────────────────────────────────────────────────────────
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download all APK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: MangaWorld-release-*
+          merge-multiple: false
+          path: release-artifacts/
+
+      - name: List downloaded artifacts
+        run: find release-artifacts -type f
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "MangaWorld ${{ github.ref_name }}"
+          body: |
+            ## 📦 MangaWorld ${{ github.ref_name }}
+
+            ### التنزيل
+            اختر APK المناسب لجهازك:
+
+            | الجهاز | الملف |
+            |--------|-------|
+            | معظم الأجهزة الحديثة (64-bit) | `MangaWorld-release-arm64-v8a` |
+            | أجهزة قديمة (32-bit) | `MangaWorld-release-armeabi-v7a` |
+            | محاكي (x86_64) | `MangaWorld-release-x86_64` |
+            | جميع الأجهزة (universal) | `MangaWorld-release-universal` |
+
+            ### المصادر المدعومة
+            - ✅ Olympus Staff (olympustaff.com)
+            - ✅ Azora Moon (azoramoon.com)
+            - ✅ Manga Starz (manga-starz.net)
+
+            ### المتطلبات
+            - Android 8.0+ (API 26)
+          files: |
+            release-artifacts/**/*.apk
+            release-artifacts/**/*.aab
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          fail_on_unmatched_files: false
+
+  # ─── Artifact Verification ───────────────────────────────────────────────────
+  verify-debug-artifacts:
+    name: Verify Debug Artifacts
+    runs-on: ubuntu-latest
+    needs: build-debug
+    if: always() && needs.build-debug.result == 'success'
+    steps:
+      - name: Download debug artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: MangaWorld-debug-*
+          merge-multiple: true
+          path: verify-debug/
+
+      - name: Ensure debug APKs exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=$(find verify-debug -type f -name "*.apk" | wc -l | tr -d ' ')
+          echo "Debug APK count: $count"
+          if [[ "$count" -lt 1 ]]; then
+            echo "No debug APK artifacts found." >&2
+            exit 1
+          fi
+
+  verify-release-artifacts:
+    name: Verify Release Artifacts
+    runs-on: ubuntu-latest
+    needs: build-release
+    if: always() && needs.build-release.result == 'success'
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: MangaWorld-release-*
+          merge-multiple: true
+          path: verify-release/
+
+      - name: Ensure release APK/AAB exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk_count=$(find verify-release -type f -name "*.apk" | wc -l | tr -d ' ')
+          aab_count=$(find verify-release -type f -name "*.aab" | wc -l | tr -d ' ')
+          echo "Release APK count: $apk_count"
+          echo "Release AAB count: $aab_count"
+          if [[ "$apk_count" -lt 1 && "$aab_count" -lt 1 ]]; then
+            echo "No release APK/AAB artifacts found." >&2
+            exit 1
+          fi
+
+  # ─── Build Summary ──────────────────────────────────────────────────────────
+  build-summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [ lint-and-test, build-debug, verify-debug-artifacts ]
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## 🎌 MangaWorld Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint & Tests | ${{ needs.lint-and-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Debug APKs | ${{ needs.build-debug.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ABIs Built" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ arm64-v8a (64-bit ARM — Pixel, Samsung, etc.)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ armeabi-v7a (32-bit ARM — older devices)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ x86_64 (64-bit — emulator/Intel)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ x86 (32-bit — legacy emulator)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ universal (all ABIs combined)" >> $GITHUB_STEP_SUMMARY
