@@ -280,18 +280,18 @@ class SettingsRepositoryImpl @Inject constructor(
     private val prefs: AppPreferences
 ) : SettingsRepository {
     override fun getAppSettings() = prefs.appSettings
-    override suspend fun updateTheme(theme: AppTheme) = prefs.setTheme(theme)
-    override suspend fun setOnboardingCompleted(completed: Boolean) = prefs.setOnboardingDone(completed)
-    override suspend fun setDownloadOnWifiOnly(enabled: Boolean) = prefs.setDownloadWifiOnly(enabled)
-    override suspend fun setAutoDownloadNewChapters(enabled: Boolean) = prefs.setAutoDownload(enabled)
-    override suspend fun setNotificationsEnabled(enabled: Boolean) = prefs.setNotifications(enabled)
-    override suspend fun toggleSource(sourceId: String, enabled: Boolean) = prefs.toggleSource(sourceId, enabled)
+    override suspend fun updateTheme(theme: AppTheme) { prefs.setTheme(theme) }
+    override suspend fun setOnboardingCompleted(completed: Boolean) { prefs.setOnboardingDone(completed) }
+    override suspend fun setDownloadOnWifiOnly(enabled: Boolean) { prefs.setDownloadWifiOnly(enabled) }
+    override suspend fun setAutoDownloadNewChapters(enabled: Boolean) { prefs.setAutoDownload(enabled) }
+    override suspend fun setNotificationsEnabled(enabled: Boolean) { prefs.setNotifications(enabled) }
+    override suspend fun toggleSource(sourceId: String, enabled: Boolean) { prefs.toggleSource(sourceId, enabled) }
     override fun getReaderSettings() = prefs.readerSettings
-    override suspend fun updateReaderMode(mode: ReaderMode) = prefs.setReaderMode(mode)
-    override suspend fun updateBrightness(brightness: Float) = prefs.setBrightness(brightness)
-    override suspend fun updateKeepScreenOn(enabled: Boolean) = prefs.setKeepScreen(enabled)
-    override suspend fun updateAutoWebtoon(enabled: Boolean) = prefs.setAutoWebtoon(enabled)
+    override suspend fun updateReaderMode(mode: ReaderMode) { prefs.setReaderMode(mode) }
+    override suspend fun updateBrightness(brightness: Float) { prefs.setBrightness(brightness) }
+    override suspend fun updateKeepScreenOn(enabled: Boolean) { prefs.setKeepScreen(enabled) }
+    override suspend fun updateAutoWebtoon(enabled: Boolean) { prefs.setAutoWebtoon(enabled) }
     override fun getCookies(domain: String) = prefs.getCookies(domain)
-    override suspend fun saveCookies(domain: String, cookies: String) = prefs.saveCookies(domain, cookies)
-    override suspend fun clearCookies(domain: String) = prefs.clearCookies(domain)
+    override suspend fun saveCookies(domain: String, cookies: String) { prefs.saveCookies(domain, cookies) }
+    override suspend fun clearCookies(domain: String) { prefs.clearCookies(domain) }
 }
