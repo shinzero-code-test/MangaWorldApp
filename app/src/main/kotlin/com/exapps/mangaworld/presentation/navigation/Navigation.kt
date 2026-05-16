@@ -48,13 +48,12 @@ val bottomNavItems: List<Triple<Screen, String, ImageVector>> = listOf(
 
 @Composable
 fun MangaNavGraph(navController: NavHostController) {
-    val slide = tween<Float>(220)
     NavHost(
         navController = navController,
         startDestination = Screen.Home.route,
-        enterTransition  = { fadeIn(slide) + slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Start, slide) },
+        enterTransition  = { fadeIn(tween(220)) + slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Start, tween(220)) },
         exitTransition   = { fadeOut(tween(180)) + slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Start, tween(180)) },
-        popEnterTransition  = { fadeIn(slide) + slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.End, slide) },
+        popEnterTransition  = { fadeIn(tween(220)) + slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(220)) },
         popExitTransition   = { fadeOut(tween(180)) + slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(180)) }
     ) {
         composable(Screen.Home.route) {
