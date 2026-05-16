@@ -99,3 +99,21 @@ data class DownloadTaskEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "downloaded_manga")
+data class DownloadedMangaEntity(
+    @PrimaryKey val mangaId: String,
+    val slug: String,
+    val title: String,
+    val coverUrl: String,
+    val localCoverPath: String? = null,
+    val sourceId: String,
+    val totalChapters: Int = 0,
+    val downloadedChapters: Int = 0,
+    val genresJson: String = "[]",
+    val statusStr: String = "UNKNOWN",
+    val typeStr: String = "UNKNOWN",
+    val description: String = "",
+    val downloadedAt: Long = System.currentTimeMillis(),
+    val lastUpdatedAt: Long = System.currentTimeMillis()
+)

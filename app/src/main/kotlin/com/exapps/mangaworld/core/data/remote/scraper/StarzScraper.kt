@@ -276,7 +276,7 @@ class StarzScraper @Inject constructor(
                     val json = JSONObject(bodyStr)
                     if (json.optBoolean("success", false)) {
                         val html = json.optString("data", "")
-                        val chapDoc = Jsoup.parse(html)
+                        val chapDoc = Jsoup.parse(html, source.baseUrl)  // base URL required for abs:href on AJAX response
                         chapters = chapDoc.select("li").mapNotNull { li ->
                             val chLink = li.selectFirst("a[href]") ?: return@mapNotNull null
                             val chHref = chLink.attr("abs:href").ifEmpty {

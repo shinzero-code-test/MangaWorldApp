@@ -48,13 +48,19 @@ class AzoraScraper @Inject constructor(
      *  type 1 → List<Any?> (each element also encoded)
      */
     private fun decodeWire(v: Any?): Any? {
-        if (v !is JSONArray || v.length() != 2) return v
-        return when (v.getInt(0)) {
-            0 -> v.get(1).let { if (it == JSONObject.NULL) null else it }
-            1 -> {
-                val arr = v.getJSONArray(1)
-                (0 until arr.length()).map { decodeWire(arr.get(it)) }
+        return when {
+            // [type, value] wire pair
+            v is JSONArray && v.length() == 2 -> when (v.getInt(0)) {
+                0 -> v.get(1).let { if (it == JSONObject.NULL) null else it }
+                1 -> {
+                    val arr = v.getJSONArray(1)
+                    (0 until arr.length()).map { decodeWire(arr.get(it)) }
+                }
+                else -> v
             }
+            // Nested object — decode each of its values so callers get a real Map
+            v is JSONObject -> v.keys().asSequence()
+                .associateWith { k -> decodeWire(v.opt(k)) }
             else -> v
         }
     }
@@ -88,32 +94,60 @@ class AzoraScraper @Inject constructor(
     }.getOrDefault("")
 
     /**
-     * Find the first <astro-island> whose opts.name contains [componentName],
-     * HTML-unescape its props attribute, then JSON-parse it.
+     * Fast string-based parser: finds every <astro-island> tag, extracts its
+     * opts and props attribute values, checks if opts.name matches [componentName],
+     * then JSON-parses and returns props.
+     *
+     * Uses indexOf/substring instead of regex to avoid catastrophic backtracking
+     * on the 1 MB+ detail pages that embed 300+ chapters in props.
      */
     private fun extractIslandProps(rawHtml: String, componentName: String): JSONObject? {
-        val islandRe = Regex(
-            """<astro-island\b[^>]*?opts="([^"]*)"[^>]*?props="([^"]*)"[^>]*?>""",
-            RegexOption.DOT_MATCHES_ALL
-        )
-        val islandRe2 = Regex(
-            """<astro-island\b[^>]*?props="([^"]*)"[^>]*?opts="([^"]*)"[^>]*?>""",
-            RegexOption.DOT_MATCHES_ALL
-        )
+        var pos = 0
+        while (true) {
+            val tagStart = rawHtml.indexOf("<astro-island", pos)
+            if (tagStart < 0) break
 
-        fun tryMatch(m: MatchResult, optsGroup: Int, propsGroup: Int): JSONObject? {
-            val opts = m.groupValues[optsGroup].htmlUnesc()
-            if (!opts.contains(componentName)) return null
-            return runCatching { JSONObject(m.groupValues[propsGroup].htmlUnesc()) }.getOrNull()
-        }
+            // Walk to end of opening tag, respecting quoted attribute values
+            val tagEnd = findOpenTagEnd(rawHtml, tagStart)
+            if (tagEnd < 0) break
+            pos = tagEnd + 1
 
-        for (m in islandRe.findAll(rawHtml)) {
-            tryMatch(m, 1, 2)?.let { return it }
-        }
-        for (m in islandRe2.findAll(rawHtml)) {
-            tryMatch(m, 2, 1)?.let { return it }
+            val tagContent = rawHtml.substring(tagStart, tagEnd + 1)
+            val optsVal = extractAttrValue(tagContent, "opts") ?: continue
+            if (componentName !in optsVal.htmlUnesc()) continue
+            val propsVal = extractAttrValue(tagContent, "props") ?: continue
+            return runCatching { JSONObject(propsVal.htmlUnesc()) }.getOrNull()
         }
         return null
+    }
+
+    /** Returns the index of the closing '>' of the opening tag starting at [start]. */
+    private fun findOpenTagEnd(html: String, start: Int): Int {
+        var i = start
+        var inQuote = false
+        var quoteChar = ' '
+        while (i < html.length) {
+            val c = html[i]
+            when {
+                inQuote       -> { if (c == quoteChar) inQuote = false }
+                c == '"'    -> { inQuote = true; quoteChar = c }
+                c == '\''   -> { inQuote = true; quoteChar = c }
+                c == '>'    -> return i
+            }
+            i++
+        }
+        return -1
+    }
+
+    /** Extracts the value of attribute [name] from a raw HTML tag string. */
+    private fun extractAttrValue(tagContent: String, name: String): String? {
+        val marker = "$name=\""
+        val start = tagContent.indexOf(marker)
+        if (start < 0) return null
+        val valueStart = start + marker.length
+        val valueEnd = tagContent.indexOf('"', valueStart)
+        if (valueEnd < 0) return null
+        return tagContent.substring(valueStart, valueEnd)
     }
 
     private fun String.htmlUnesc(): String =

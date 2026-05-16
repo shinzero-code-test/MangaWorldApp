@@ -95,6 +95,7 @@ object DatabaseModule {
     @Provides fun provideProgressDao(db: MangaDatabase) = db.readingProgressDao()
     @Provides fun provideCacheDao(db: MangaDatabase) = db.mangaCacheDao()
     @Provides fun provideDownloadTaskDao(db: MangaDatabase) = db.downloadTaskDao()
+    @Provides fun provideDownloadedMangaDao(db: MangaDatabase) = db.downloadedMangaDao()
 }
 
 @Module

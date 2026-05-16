@@ -121,4 +121,25 @@ interface DownloadTaskDao {
 
     @Query("DELETE FROM download_tasks WHERE status = 'completed'")
     suspend fun clearCompleted()
+
+    @Query("DELETE FROM download_tasks WHERE mangaId = :mangaId")
+    suspend fun deleteByMangaId(mangaId: String)
+}
+
+@Dao
+interface DownloadedMangaDao {
+    @Query("SELECT * FROM downloaded_manga ORDER BY lastUpdatedAt DESC")
+    fun observeAll(): Flow<List<DownloadedMangaEntity>>
+
+    @Query("SELECT * FROM downloaded_manga WHERE mangaId = :mangaId LIMIT 1")
+    suspend fun get(mangaId: String): DownloadedMangaEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: DownloadedMangaEntity)
+
+    @Query("UPDATE downloaded_manga SET downloadedChapters = :count, lastUpdatedAt = :now WHERE mangaId = :mangaId")
+    suspend fun updateChapterCount(mangaId: String, count: Int, now: Long = System.currentTimeMillis())
+
+    @Query("DELETE FROM downloaded_manga WHERE mangaId = :mangaId")
+    suspend fun delete(mangaId: String)
 }

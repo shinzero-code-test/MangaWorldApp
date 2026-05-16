@@ -13,8 +13,9 @@ import com.exapps.mangaworld.core.data.local.entity.*
         ReadingProgressEntity::class,
         MangaCacheEntity::class,
         DownloadTaskEntity::class,
+        DownloadedMangaEntity::class,
     ],
-    version = 3,          // bumped: added chaptersJson column to manga_cache
+    version = 4,          // v4: added downloaded_manga table
     exportSchema = false
 )
 abstract class MangaDatabase : RoomDatabase() {
@@ -24,4 +25,5 @@ abstract class MangaDatabase : RoomDatabase() {
     abstract fun readingProgressDao(): ReadingProgressDao
     abstract fun mangaCacheDao(): MangaCacheDao
     abstract fun downloadTaskDao(): DownloadTaskDao
+    abstract fun downloadedMangaDao(): DownloadedMangaDao
 }

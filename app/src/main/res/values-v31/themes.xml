@@ -1,13 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!--
-        API 31+: windowSplashScreenBrandingImage is valid here.
-        The branding image is shown at the bottom of the splash screen.
-    -->
     <style name="Theme.MangaWorld.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/background</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
-        <item name="android:windowSplashScreenBrandingImage">@drawable/splash_branding</item>
+        <item name="windowSplashScreenBackground">@color/launcher_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/mangaworld_logo</item>
+        <item name="android:windowSplashScreenBrandingImage">@drawable/mangaworld_logo</item>
         <item name="postSplashScreenTheme">@style/Theme.MangaWorld</item>
     </style>
 </resources>

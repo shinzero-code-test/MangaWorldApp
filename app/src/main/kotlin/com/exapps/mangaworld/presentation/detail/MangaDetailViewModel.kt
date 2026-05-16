@@ -172,13 +172,28 @@ class MangaDetailViewModel @Inject constructor(
                 }
                 if (pages.isNotEmpty()) {
                     val wifiOnly = settingsRepo.getAppSettings().first().downloadOnWifiOnly
+                    val manga = _state.value.manga
                     downloadQueueManager.enqueueAndRun(
                         taskId = "dl_${UUID.randomUUID()}",
                         mangaId = currentMangaId,
                         chapterUrl = chapter.url,
                         chapterTitle = chapter.title ?: "الفصل ${chapter.displayNumber}",
                         pages = pages,
-                        wifiOnly = wifiOnly
+                        wifiOnly = wifiOnly,
+                        mangaMetadata = manga?.let { m ->
+                            com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity(
+                                mangaId = currentMangaId,
+                                slug = m.slug,
+                                title = m.title,
+                                coverUrl = m.coverUrl,
+                                sourceId = m.source.id,
+                                totalChapters = m.totalChapters,
+                                genresJson = org.json.JSONArray(m.genres).toString(),
+                                statusStr = m.status.name,
+                                typeStr = m.type.name,
+                                description = m.description
+                            )
+                        }
                     )
                 }
             } finally {

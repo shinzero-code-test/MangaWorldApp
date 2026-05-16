@@ -19,7 +19,8 @@ import java.net.URL
 class ChapterDownloadWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
-    private val downloadTaskDao: DownloadTaskDao
+    private val downloadTaskDao: DownloadTaskDao,
+    private val downloadedMangaDao: com.exapps.mangaworld.core.data.local.dao.DownloadedMangaDao
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -55,6 +56,11 @@ class ChapterDownloadWorker @AssistedInject constructor(
             }
             File(targetDir, ".completed").writeText("ok")
             downloadTaskDao.updateState(taskId, "completed", 1f, pages.size, pages.size, System.currentTimeMillis(), null)
+            // Refresh the downloaded chapter count in the local storage table
+            val count = (applicationContext.getExternalFilesDir(null)
+                ?.let { java.io.File(it, "downloads/$mangaId") }
+                ?.listFiles()?.count { it.isDirectory && java.io.File(it, ".completed").exists() } ?: 0)
+            downloadedMangaDao.updateChapterCount(mangaId, count)
             Result.success()
         }.getOrElse { e ->
             val current = downloadTaskDao.getById(taskId)

@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Base app theme — Compose handles the UI; this covers window chrome only. -->
     <style name="Theme.MangaWorld" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/background</item>
         <item name="android:statusBarColor">@color/background</item>
@@ -8,10 +7,9 @@
         <item name="android:windowLightStatusBar">false</item>
     </style>
 
-    <!-- Splash screen theme (core-splashscreen library) -->
     <style name="Theme.MangaWorld.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/background</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowSplashScreenBackground">@color/launcher_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/mangaworld_logo</item>
         <item name="postSplashScreenTheme">@style/Theme.MangaWorld</item>
     </style>
 </resources>
