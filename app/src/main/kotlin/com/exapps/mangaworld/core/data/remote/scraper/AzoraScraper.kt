@@ -150,11 +150,13 @@ class AzoraScraper @Inject constructor(
         //               isPaid, createdAt, seriesSlug, seriesTitle, seriesImage,
         //               uploaderName
         val latestChapters = mutableListOf<LatestChapterItem>()
-        extractIslandProps(rawHtml, "ChapterUpdatesSectionIsland")?.let { props ->
-            val items = decodeList(props.opt("items"))
+        val chapterIslandProps = extractIslandProps(rawHtml, "ChapterUpdatesSectionIsland")
+        if (chapterIslandProps != null) {
+            val items = decodeList(chapterIslandProps.opt("items"))
             for (item in items) {
                 val obj = item as? Map<*, *> ?: continue
-                val seriesSlug = decodeStr(obj["seriesSlug"]).ifBlank { continue }
+                val seriesSlug = decodeStr(obj["seriesSlug"])
+                if (seriesSlug.isBlank()) continue
                 val chapterNum  = decodeFloat(obj["chapterNumber"])
                 val chapterSlug = decodeStr(obj["chapterSlug"]).ifBlank { "chapter-${chapterNum.toInt()}" }
                 val createdAt   = decodeStr(obj["createdAt"])
@@ -175,8 +177,7 @@ class AzoraScraper @Inject constructor(
                         chapterUrl   = "${source.baseUrl}/series/$seriesSlug/$chapterSlug",
                         timeAgo      = createdAt.take(10),
                         source       = source,
-                        isNew        = isNew,
-                        isPaid       = decodeBool(obj["isPaid"])
+                        isNew        = isNew
                     )
                 )
             }
@@ -186,11 +187,12 @@ class AzoraScraper @Inject constructor(
         //    post keys: id, slug, postTitle, featuredImage, seriesStatus,
         //               seriesType, averageRating, genres, _count, postContent, …
         val featured = mutableListOf<MangaItem>()
-        extractIslandProps(rawHtml, "HomepageMainSliderIsland")?.let { props ->
-            val posts = decodeList(props.opt("sliderPosts"))
-            for (p in posts) {
+        val sliderProps = extractIslandProps(rawHtml, "HomepageMainSliderIsland")
+        if (sliderProps != null) {
+            for (p in decodeList(sliderProps.opt("sliderPosts"))) {
                 val obj = p as? Map<*, *> ?: continue
-                val slug = decodeStr(obj["slug"]).ifBlank { continue }
+                val slug = decodeStr(obj["slug"])
+                if (slug.isBlank()) continue
                 featured.add(buildMangaItem(obj, slug))
             }
         }
@@ -199,11 +201,12 @@ class AzoraScraper @Inject constructor(
         //    post keys: id, slug, postTitle, featuredImage, seriesType,
         //               genres, lastChapter, sumViews, averageRating
         val trending = mutableListOf<MangaItem>()
-        extractIslandProps(rawHtml, "HomepageSharedSliderIsland")?.let { props ->
-            val posts = decodeList(props.opt("posts"))
-            for (p in posts) {
+        val sharedProps = extractIslandProps(rawHtml, "HomepageSharedSliderIsland")
+        if (sharedProps != null) {
+            for (p in decodeList(sharedProps.opt("posts"))) {
                 val obj = p as? Map<*, *> ?: continue
-                val slug = decodeStr(obj["slug"]).ifBlank { continue }
+                val slug = decodeStr(obj["slug"])
+                if (slug.isBlank()) continue
                 trending.add(buildMangaItem(obj, slug))
             }
         }
@@ -346,7 +349,8 @@ class AzoraScraper @Inject constructor(
         val result = mutableListOf<MangaItem>()
         for (i in 0 until posts.length()) {
             val post = posts.getJSONObject(i)
-            val slug = post.optString("slug", "").ifBlank { continue }
+            val slug = post.optString("slug", "")
+            if (slug.isBlank()) continue
             result.add(
                 MangaItem(
                     id       = "azora_$slug",
@@ -388,7 +392,8 @@ class AzoraScraper @Inject constructor(
             val result = mutableListOf<MangaItem>()
             for (i in 0 until posts.length()) {
                 val post = posts.getJSONObject(i)
-                val slug = post.optString("slug", "").ifBlank { continue }
+                val slug = post.optString("slug", "")
+                if (slug.isBlank()) continue
                 result.add(
                     MangaItem(
                         id       = "azora_$slug",
