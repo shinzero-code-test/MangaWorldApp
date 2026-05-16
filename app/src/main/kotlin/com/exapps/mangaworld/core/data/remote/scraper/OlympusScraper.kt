@@ -63,8 +63,14 @@ class OlympusScraper @Inject constructor(
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
             val slug = href.substringAfterLast("/series/").trimEnd('/')
             val mangaId = "olympus_$slug"
-            val chapterNumber = chapterEl?.text()
-                ?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull() ?: 0f
+            // Confirmed from real HTML: <a class="new" href="/series/{slug}/{N}">
+            // Chapter URL is already embedded in the link — do NOT reconstruct it.
+            val chapterHref = chapterEl?.attr("abs:href")
+                ?.ifEmpty { chapterEl.attr("href").absoluteUrl() } ?: ""
+            val chapterNumber = chapterHref.trimEnd('/').substringAfterLast("/")
+                .toFloatOrNull()
+                ?: chapterEl?.text()?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull()
+                ?: 0f
             val timeText = box.selectFirst(".info ul li .post-on, .info .post-on")?.text()
                 ?.cleanText() ?: ""
             val isPaid = box.selectFirst(".fa-lock") != null
@@ -75,7 +81,7 @@ class OlympusScraper @Inject constructor(
                 mangaTitle = titleEl.text().cleanText(),
                 coverUrl = imgEl.attr("abs:src").ifEmpty { imgEl.attr("src").absoluteUrl() },
                 chapterNumber = chapterNumber,
-                chapterUrl = href + "/$chapterNumber",
+                chapterUrl = chapterHref,
                 timeAgo = timeText,
                 source = source,
                 isNew = timeText.contains("ساعة") || timeText.contains("hour")
@@ -116,19 +122,20 @@ class OlympusScraper @Inject constructor(
 
         val coverUrl = doc.selectFirst("img[alt=\"Manga Image\"]")
             ?.attr("abs:src")
-            ?: doc.selectFirst(".whitebox img.shadow-sm")?.attr("abs:src")
+            ?: doc.selectFirst(".text-right img.shadow-sm, .shadow-sm")?.attr("abs:src")
             ?: ""
 
-        val title = doc.selectFirst(".col-md-9 .author-info-title h1")
-            ?.text()?.cleanText()
-            ?: doc.selectFirst("h1")?.text()?.cleanText()
+        // Title: h1 is the most reliable; .col-md-9 doesn't exist in real HTML
+        val title = doc.selectFirst("h1")?.text()?.cleanText()
+            ?: doc.selectFirst(".author-info-title h6, .title")?.text()?.cleanText()
             ?: slug
 
-        // Genres: a.subtitle elements
+        // Genres: confirmed selector from real HTML — a.subtitle inside .review-author-info
         val genres = doc.select(".review-author-info a.subtitle").map { it.text().cleanText() }
 
-        // Description: find paragraph with substantial text in info column
-        val description = doc.select(".col-md-9 p").firstOrNull { it.text().length > 30 }
+        // Description: first long paragraph anywhere in the detail column
+        val description = doc.select("p")
+            .firstOrNull { it.text().length > 30 && !it.text().contains("http") }
             ?.text()?.cleanText() ?: ""
 
         // Status from text content

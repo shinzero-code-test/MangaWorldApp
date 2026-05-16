@@ -86,20 +86,20 @@ class StarzScraper @Inject constructor(
                 )
             )
 
-            // Chapter items within this card
-            card.select(".chapter-item").take(2).forEach chapters@{ chItem ->
-                val chLink = chItem.selectFirst(".chapter a.btn-link, .chapter a") ?: return@chapters
+            // Confirmed from real HTML: chapters use <a class="btn-link" href="…/manga/{slug}/{N}/">
+            // .chapter-item does NOT exist — replaced by direct a.btn-link links
+            card.select("a.btn-link[href*='/manga/']").take(2).forEach chapters@{ chLink ->
                 val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
-                val chNumStr = chLink.text().replace("[^0-9.]".toRegex(), "").trim()
-                val chNum = chNumStr.toFloatOrNull() ?: return@chapters
-                val timeText = chItem.selectFirst(".post-on")?.text()?.cleanText() ?: ""
-                val isNew = chItem.selectFirst(".c-new-tag") != null
+                val chNum = chHref.trimEnd('/').substringAfterLast("/").toFloatOrNull()
+                    ?: chLink.text().replace("[^0-9.]".toRegex(), "").trim().toFloatOrNull()
+                    ?: return@chapters
+                val isNew = false   // no .c-new-tag at this level in real HTML
 
                 latestItems.add(
                     LatestChapterItem(
                         mangaId = mangaId, mangaSlug = slug, mangaTitle = title,
                         coverUrl = coverUrl, chapterNumber = chNum, chapterUrl = chHref,
-                        timeAgo = timeText, source = source, isNew = isNew
+                        timeAgo = "", source = source, isNew = isNew
                     )
                 )
             }
@@ -157,8 +157,18 @@ class StarzScraper @Inject constructor(
         val statusText = statusEl?.selectFirst(".summary-content")?.text()?.cleanText()
         val status = MangaStatus.from(statusText)
 
-        // Genres
-        val genres = doc.select(".genres-content a, .tags-content a").map { it.text().cleanText() }
+        // Genres: Madara/WP-Manga confirmed structure — .genres-content a exists in this theme version
+        // Fallback: .post-content_item containing "التصنيف" heading
+        val genres = doc.select(".genres-content a, .c-cat-list a").map { it.text().cleanText() }
+            .ifEmpty {
+                doc.select(".post-content_item").firstOrNull { item ->
+                    item.selectFirst(".summary-heading")?.text()?.let {
+                        it.contains("التصنيف") || it.contains("Genre") || it.contains("الفئات")
+                    } == true
+                }?.select(".summary-content a")?.map { it.text().cleanText() }
+                    ?: emptyList()
+            }
+            .filter { it.isNotBlank() }
 
         // Type from page body text
         val bodyText = doc.body().text()
@@ -240,52 +250,59 @@ class StarzScraper @Inject constructor(
                 } ?: ""
 
             if (postId.isNotBlank()) {
-                val formBody = FormBody.Builder()
-                    .add("action", "wp-manga-get-chapters")
-                    .add("manga", postId)
-                    .build()
+                // Madara theme action (confirmed from manga-single.js source)
+                // Try both common variants
+                var chapters = emptyList<Chapter>()
+                for (action in listOf("wp-manga-get-chapters", "manga-get-chapters")) {
+                    val formBody = FormBody.Builder()
+                        .add("action", action)
+                        .add("manga", postId)
+                        .build()
 
                 val ajaxRequest = Request.Builder()
-                    .url("${source.baseUrl}/wp-admin/admin-ajax.php")
-                    .header("User-Agent", USER_AGENT)
-                    .header("Accept", "*/*")
-                    .header("Accept-Language", "ar,en;q=0.9")
-                    .header("Referer", url)
-                    .header("X-Requested-With", "XMLHttpRequest")
-                    .post(formBody)
-                    .build()
+                        .url("${source.baseUrl}/wp-admin/admin-ajax.php")
+                        .header("User-Agent", USER_AGENT)
+                        .header("Accept", "*/*")
+                        .header("Accept-Language", "ar,en;q=0.9")
+                        .header("Referer", url)
+                        .header("X-Requested-With", "XMLHttpRequest")
+                        .post(formBody)
+                        .build()
 
-                val response = client.newCall(ajaxRequest).execute()
-                val bodyStr = response.body?.string() ?: "{}"
-                response.close()
+                    val response = client.newCall(ajaxRequest).execute()
+                    val bodyStr = response.body?.string() ?: "{}"
+                    response.close()
 
-                val json = JSONObject(bodyStr)
-                if (json.optBoolean("success", false)) {
-                    val html = json.optString("data", "")
-                    val chapDoc = Jsoup.parse(html)
-                    chapDoc.select("li").mapNotNull { li ->
-                        val chLink = li.selectFirst("a[href]") ?: return@mapNotNull null
-                        val chHref = chLink.attr("abs:href").ifEmpty {
-                            chLink.attr("href").absoluteUrl()
+                    val json = JSONObject(bodyStr)
+                    if (json.optBoolean("success", false)) {
+                        val html = json.optString("data", "")
+                        val chapDoc = Jsoup.parse(html)
+                        chapters = chapDoc.select("li").mapNotNull { li ->
+                            val chLink = li.selectFirst("a[href]") ?: return@mapNotNull null
+                            val chHref = chLink.attr("abs:href").ifEmpty {
+                                chLink.attr("href").absoluteUrl()
+                            }
+                            val chText = chLink.text().cleanText()
+                            val chNumStr = chText.replace("الفصل", "").replace("[^0-9.]".toRegex(), "").trim()
+                            val chNum = chNumStr.toFloatOrNull()
+                                ?: chHref.trimEnd('/').substringAfterLast("/").toFloatOrNull()
+                                ?: return@mapNotNull null
+                            val dateEl = li.selectFirst(".chapter-release-date i, .chapter-release-date span")
+                            val (dateText, dateLong) = parseChapterDate(dateEl)
+                            Chapter(
+                                id = "${slug}_$chNum",
+                                mangaId = "starz_$slug",
+                                number = chNum,
+                                title = parseChapterTitle(chText),
+                                url = chHref,
+                                date = dateLong,
+                                dateText = dateText
+                            )
                         }
-                        val chText = chLink.text().cleanText()
-                        val chNumStr = chText.replace("الفصل", "").replace("[^0-9.]".toRegex(), "").trim()
-                        val chNum = chNumStr.toFloatOrNull()
-                            ?: chHref.trimEnd('/').substringAfterLast("/").toFloatOrNull()
-                            ?: return@mapNotNull null
-                        val dateEl = li.selectFirst(".chapter-release-date i, .chapter-release-date span")
-                        val (dateText, dateLong) = parseChapterDate(dateEl)
-                        Chapter(
-                            id = "${slug}_$chNum",
-                            mangaId = "starz_$slug",
-                            number = chNum,
-                            title = parseChapterTitle(chText),
-                            url = chHref,
-                            date = dateLong,
-                            dateText = dateText
-                        )
+                        if (chapters.isNotEmpty()) break   // success — stop trying actions
                     }
-                } else emptyList()
+                }
+                chapters
             } else emptyList()
         } catch (e: Exception) {
             emptyList()
