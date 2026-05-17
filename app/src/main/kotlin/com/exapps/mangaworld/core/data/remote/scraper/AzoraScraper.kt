@@ -559,7 +559,7 @@ class AzoraScraper @Inject constructor(
             )
         }
         return items
-    
+    }
 
     private fun String?.ifNullOrBlank(block: () -> String?): String? =
         if (this.isNullOrBlank()) block() else this
