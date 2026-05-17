@@ -173,13 +173,16 @@ class MangaDetailViewModel @Inject constructor(
                 if (pages.isNotEmpty()) {
                     val wifiOnly = settingsRepo.getAppSettings().first().downloadOnWifiOnly
                     val manga = _state.value.manga
+                    val srcReferer = manga?.source?.baseUrl?.plus("/") ?: ""
                     downloadQueueManager.enqueueAndRun(
                         taskId = "dl_${UUID.randomUUID()}",
                         mangaId = currentMangaId,
+                        mangaTitle = manga?.title ?: currentSlug,
                         chapterUrl = chapter.url,
                         chapterTitle = chapter.title ?: "الفصل ${chapter.displayNumber}",
                         pages = pages,
                         wifiOnly = wifiOnly,
+                        referer = srcReferer,
                         mangaMetadata = manga?.let { m ->
                             com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity(
                                 mangaId = currentMangaId,

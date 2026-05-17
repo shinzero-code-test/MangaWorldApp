@@ -26,19 +26,30 @@ class MangaWorldApp : Application(), Configuration.Provider {
 
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                DOWNLOAD_CHANNEL_ID,
-                "تنزيل الفصول",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "إشعارات تقدم تنزيل الفصول"
-            }
             val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+
+            // Progress channel — silent / low importance so it doesn't spam
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    DOWNLOAD_CHANNEL_ID,
+                    "تنزيل الفصول",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply { description = "تقدم تنزيل الفصول" }
+            )
+
+            // Completion/failure channel — normal importance so user sees it
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    COMPLETE_CHANNEL_ID,
+                    "إشعارات التنزيل",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply { description = "الفصول المكتملة والفاشلة" }
+            )
         }
     }
 
     companion object {
         const val DOWNLOAD_CHANNEL_ID = "download_channel"
+        const val COMPLETE_CHANNEL_ID = "complete_channel"
     }
 }

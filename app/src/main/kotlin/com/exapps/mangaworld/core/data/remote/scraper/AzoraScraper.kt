@@ -2,6 +2,9 @@ package com.exapps.mangaworld.core.data.remote.scraper
 
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -51,7 +54,17 @@ class AzoraScraper @Inject constructor(
         return when {
             // [type, value] wire pair
             v is JSONArray && v.length() == 2 -> when (v.getInt(0)) {
-                0 -> v.get(1).let { if (it == JSONObject.NULL) null else it }
+                0 -> {
+                    val inner = v.get(1)
+                    when {
+                        inner == JSONObject.NULL -> null
+                        // type-0 can wrap a nested object — recurse so callers get a Map
+                        inner is JSONObject -> decodeWire(inner)
+                        // type-0 can also wrap an inner array — recurse
+                        inner is JSONArray  -> decodeWire(inner)
+                        else -> inner
+                    }
+                }
                 1 -> {
                     val arr = v.getJSONArray(1)
                     (0 until arr.length()).map { decodeWire(arr.get(it)) }
@@ -80,18 +93,24 @@ class AzoraScraper @Inject constructor(
 
     // ─── Raw HTTP (Astro props must come from raw HTML, not Jsoup) ────────────
 
-    private fun fetchRawHtml(url: String): String = runCatching {
-        val req = Request.Builder()
-            .url(url)
-            .header("User-Agent", USER_AGENT)
-            .header("Accept", "text/html,application/xhtml+xml")
-            .header("Accept-Language", "ar,en;q=0.9")
-            .build()
-        val resp = client.newCall(req).execute()
-        val body = resp.body?.string() ?: ""
-        resp.close()
-        body
-    }.getOrDefault("")
+    private suspend fun fetchRawHtml(url: String): String = withContext(Dispatchers.IO) {
+        runCatching {
+            val domain = runCatching { java.net.URI(url).host }.getOrDefault(
+                source.baseUrl.removePrefix("https://").removePrefix("http://"))
+            val cookies = settingsRepo.getCookies(domain).first()
+            val req = Request.Builder()
+                .url(url)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "text/html,application/xhtml+xml")
+                .header("Accept-Language", "ar,en;q=0.9")
+                .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
+                .build()
+            val resp = client.newCall(req).execute()
+            val body = resp.body?.string() ?: ""
+            resp.close()
+            body
+        }.getOrDefault("")
+    }
 
     /**
      * Fast string-based parser: finds every <astro-island> tag, extracts its
@@ -160,19 +179,27 @@ class AzoraScraper @Inject constructor(
 
     // ─── Search API (JSON REST — works correctly as-is) ───────────────────────
 
-    private fun apiGet(url: String): JSONObject? = runCatching {
-        val req = Request.Builder()
-            .url(url)
-            .header("User-Agent", USER_AGENT)
-            .header("Accept", "application/json")
-            .header("Referer", "${source.baseUrl}/")
-            .build()
-        val resp = client.newCall(req).execute()
-        val body = resp.body?.string() ?: ""
-        resp.close()
-        if (body.isBlank() || !body.trimStart().startsWith("{")) null
-        else JSONObject(body)
-    }.getOrNull()
+    private suspend fun apiGet(url: String): JSONObject? = withContext(Dispatchers.IO) {
+        runCatching {
+            val domain = runCatching { java.net.URI(url).host }.getOrDefault("api.azoramoon.com")
+            // Try API subdomain cookies first, then fall back to main domain
+            val cookies = settingsRepo.getCookies(domain).first()
+                .ifNullOrBlank { settingsRepo.getCookies(source.baseUrl
+                    .removePrefix("https://").removePrefix("http://")).first() }
+            val req = Request.Builder()
+                .url(url)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json")
+                .header("Referer", "${source.baseUrl}/")
+                .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
+                .build()
+            val resp = client.newCall(req).execute()
+            val body = resp.body?.string() ?: ""
+            resp.close()
+            if (body.isBlank() || !body.trimStart().startsWith("{")) null
+            else JSONObject(body)
+        }.getOrNull()
+    }
 
     // ─── Home ─────────────────────────────────────────────────────────────────
 
@@ -532,5 +559,8 @@ class AzoraScraper @Inject constructor(
             )
         }
         return items
-    }
+    
+
+    private fun String?.ifNullOrBlank(block: () -> String?): String? =
+        if (this.isNullOrBlank()) block() else this
 }

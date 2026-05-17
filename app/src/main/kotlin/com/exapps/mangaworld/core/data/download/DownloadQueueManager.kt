@@ -7,6 +7,12 @@ import com.exapps.mangaworld.core.data.local.dao.DownloadedMangaDao
 import com.exapps.mangaworld.core.data.local.entity.DownloadTaskEntity
 import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
 import com.exapps.mangaworld.domain.model.ChapterPage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.flow.Flow
 import java.io.File
 import javax.inject.Inject
@@ -16,7 +22,8 @@ import javax.inject.Singleton
 class DownloadQueueManager @Inject constructor(
     private val app: Application,
     private val downloadTaskDao: DownloadTaskDao,
-    private val downloadedMangaDao: DownloadedMangaDao
+    private val downloadedMangaDao: DownloadedMangaDao,
+    private val okHttpClient: OkHttpClient
 ) {
     // ─── Observe ──────────────────────────────────────────────────────────────
 
@@ -28,22 +35,29 @@ class DownloadQueueManager @Inject constructor(
     private fun chapterKey(chapterUrl: String): String =
         chapterUrl.trimEnd('/').substringAfterLast("/").ifBlank { "chapter" }
 
-    private fun chapterDir(mangaId: String, chapterUrl: String): File =
-        File(app.getExternalFilesDir(null), "downloads/$mangaId/${chapterKey(chapterUrl)}")
+    /** Safe folder name: strip forbidden chars, limit length. */
+    private fun safeName(name: String): String =
+        name.replace(Regex("""[/\\\\:*?""<>|]"""), "_").trim().take(80).ifBlank { "manga" }
 
-    private fun mangaDir(mangaId: String): File =
-        File(app.getExternalFilesDir(null), "downloads/$mangaId")
+    /** Returns the manga root dir: downloads/<sanitised_title>/  */
+    private fun mangaDir(mangaId: String, title: String? = null): File {
+        val name = if (title != null) safeName(title) else safeName(mangaId)
+        return File(app.getExternalFilesDir(null), "downloads/$name")
+    }
+
+    private fun chapterDir(mangaId: String, chapterUrl: String, title: String? = null): File =
+        File(mangaDir(mangaId, title), chapterKey(chapterUrl))
 
     // ─── Read ─────────────────────────────────────────────────────────────────
 
-    fun isChapterDownloaded(mangaId: String, chapterUrl: String): Boolean {
-        val dir = chapterDir(mangaId, chapterUrl)
+    fun isChapterDownloaded(mangaId: String, chapterUrl: String, title: String? = null): Boolean {
+        val dir = chapterDir(mangaId, chapterUrl, title)
         if (!dir.exists() || !File(dir, ".completed").exists()) return false
         return dir.listFiles()?.any { it.isFile && it.extension.lowercase() in setOf("jpg", "png", "webp") } == true
     }
 
-    fun getLocalChapterPages(mangaId: String, chapterUrl: String): List<ChapterPage> {
-        val dir = chapterDir(mangaId, chapterUrl)
+    fun getLocalChapterPages(mangaId: String, chapterUrl: String, title: String? = null): List<ChapterPage> {
+        val dir = chapterDir(mangaId, chapterUrl, title)
         if (!dir.exists()) return emptyList()
         return dir.listFiles()
             ?.filter { it.isFile && it.extension.lowercase() in setOf("jpg", "png", "webp") }
@@ -53,8 +67,8 @@ class DownloadQueueManager @Inject constructor(
     }
 
     /** Count locally-downloaded chapters for a manga by scanning the directory. */
-    fun countDownloadedChapters(mangaId: String): Int {
-        val dir = mangaDir(mangaId)
+    fun countDownloadedChapters(mangaId: String, title: String? = null): Int {
+        val dir = mangaDir(mangaId, title)
         if (!dir.exists()) return 0
         return dir.listFiles()?.count { it.isDirectory && File(it, ".completed").exists() } ?: 0
     }
@@ -64,15 +78,17 @@ class DownloadQueueManager @Inject constructor(
     suspend fun enqueueAndRun(
         taskId: String,
         mangaId: String,
+        mangaTitle: String,
         chapterUrl: String,
         chapterTitle: String?,
         pages: List<ChapterPage>,
         wifiOnly: Boolean = true,
+        referer: String = "",
         mangaMetadata: DownloadedMangaEntity? = null
     ) {
         if (downloadTaskDao.getPendingByChapter(chapterUrl, mangaId) != null) return
 
-        val targetDir = chapterDir(mangaId, chapterUrl)
+        val targetDir = chapterDir(mangaId, chapterUrl, mangaTitle)
         downloadTaskDao.upsert(
             DownloadTaskEntity(
                 id = taskId,
@@ -93,6 +109,8 @@ class DownloadQueueManager @Inject constructor(
                     downloadedAt = existing?.downloadedAt ?: System.currentTimeMillis()
                 )
             )
+            // Save cover + metadata.json for offline access
+            saveCoverAndMetadata(mangaDir(mangaId, mangaTitle), mangaMetadata)
         }
 
         val constraints = Constraints.Builder()
@@ -103,6 +121,7 @@ class DownloadQueueManager @Inject constructor(
             .putString(ChapterDownloadWorker.KEY_MANGA_ID, mangaId)
             .putString(ChapterDownloadWorker.KEY_CHAPTER_URL, chapterUrl)
             .putString(ChapterDownloadWorker.KEY_CHAPTER_TITLE, chapterTitle)
+            .putString(ChapterDownloadWorker.KEY_REFERER, referer)
             .putStringArray(ChapterDownloadWorker.KEY_PAGES, pages.map { it.url }.toTypedArray())
             .build()
         val request = OneTimeWorkRequestBuilder<ChapterDownloadWorker>()
@@ -164,4 +183,61 @@ class DownloadQueueManager @Inject constructor(
         val count = countDownloadedChapters(mangaId)
         downloadedMangaDao.updateChapterCount(mangaId, count)
     }
+    // ─── Offline metadata ─────────────────────────────────────────────────────
+
+    /** Downloads the cover and writes metadata.json into the manga folder. */
+    suspend fun saveCoverAndMetadata(
+        dir: File, metadata: DownloadedMangaEntity
+    ) = withContext(Dispatchers.IO) {
+        dir.mkdirs()
+        // Cover
+        val coverFile = File(dir, "cover.jpg")
+        if (!coverFile.exists() && metadata.coverUrl.isNotBlank()) {
+            runCatching {
+                val req = Request.Builder().url(metadata.coverUrl)
+                    .header("User-Agent", "Mozilla/5.0").build()
+                val resp = okHttpClient.newCall(req).execute()
+                resp.body?.byteStream()?.use { inp ->
+                    coverFile.outputStream().use { out -> inp.copyTo(out) }
+                }
+                resp.close()
+                // Update localCoverPath in DB
+                downloadedMangaDao.upsert(metadata.copy(localCoverPath = coverFile.absolutePath))
+            }
+        }
+        // metadata.json
+        writeMetadataJson(dir, metadata)
+    }
+
+    private fun writeMetadataJson(dir: File, metadata: DownloadedMangaEntity) {
+        runCatching {
+            val genresArr = runCatching { org.json.JSONArray(metadata.genresJson) }.getOrDefault(JSONArray())
+            val obj = JSONObject().apply {
+                put("mangaId", metadata.mangaId)
+                put("slug", metadata.slug)
+                put("title", metadata.title)
+                put("source", metadata.sourceId)
+                put("coverUrl", metadata.coverUrl)
+                put("localCoverPath", metadata.localCoverPath ?: "")
+                put("status", metadata.statusStr)
+                put("type", metadata.typeStr)
+                put("genres", genresArr)
+                put("description", metadata.description)
+                put("totalChapters", metadata.totalChapters)
+                put("downloadedAt", metadata.downloadedAt)
+                // List downloaded chapter dirs
+                val chapters = JSONArray()
+                dir.listFiles()
+                    ?.filter { it.isDirectory && File(it, ".completed").exists() }
+                    ?.sortedBy { it.name }
+                    ?.forEach { chDir -> chapters.put(chDir.name) }
+                put("downloadedChapters", chapters)
+            }
+            File(dir, "metadata.json").writeText(obj.toString(2))
+        }
+    }
+
+    fun getMangaDirPath(mangaId: String, title: String? = null): String =
+        mangaDir(mangaId, title).absolutePath
+
 }

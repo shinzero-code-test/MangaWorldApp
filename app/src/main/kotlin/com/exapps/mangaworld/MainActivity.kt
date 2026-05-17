@@ -57,24 +57,22 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestStoragePermissionsIfNeeded() {
-        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val base = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             arrayOf(
                 Manifest.permission.READ_MEDIA_IMAGES,
-                Manifest.permission.READ_MEDIA_VIDEO
+                Manifest.permission.POST_NOTIFICATIONS
             )
         } else {
             arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
 
-        val missing = permissions.filter {
+        val missing = base.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
         if (missing.isEmpty()) return
 
-        val launcher = registerForActivityResult(
-            ActivityResultContracts.RequestMultiplePermissions()
-        ) { }
-        launcher.launch(missing.toTypedArray())
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
+            .launch(missing.toTypedArray())
     }
 }
 
@@ -114,7 +112,8 @@ private fun MangaWorldContent() {
     // Only show bottom bar on top-level routes
     val topLevelRoutes = setOf(
         Screen.Home.route, Screen.Browse.route, Screen.Search.route,
-        Screen.Library.route, Screen.Downloads.route, Screen.Settings.route
+        Screen.Library.route, Screen.Downloads.route,
+        Screen.LocalStorage.route, Screen.Settings.route
     )
     val showBottomBar = currentDest?.route in topLevelRoutes
 
