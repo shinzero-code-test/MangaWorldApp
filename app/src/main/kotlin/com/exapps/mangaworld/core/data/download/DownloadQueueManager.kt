@@ -68,7 +68,8 @@ class DownloadQueueManager @Inject constructor(
 
     /** Count locally-downloaded chapters for a manga by scanning the directory. */
     fun countDownloadedChapters(mangaId: String, title: String? = null): Int {
-        val dir = mangaDir(mangaId, title)
+        // Use title for dir path so it matches the download path
+        val dir = if (title != null) mangaDir(mangaId, title) else mangaDir(mangaId, null)
         if (!dir.exists()) return 0
         return dir.listFiles()?.count { it.isDirectory && File(it, ".completed").exists() } ?: 0
     }

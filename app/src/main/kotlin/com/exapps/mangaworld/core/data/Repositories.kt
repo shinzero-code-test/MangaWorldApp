@@ -172,8 +172,14 @@ class MangaPagingSource(
             val sources = if (filters.source != null) listOf(filters.source)
             else MangaSource.values().toList()
 
+            // getPopularManga has no pagination — only load page 1
+            if (filters.query.isEmpty() && filters.genre == null && page > 1) {
+                return LoadResult.Page(data = emptyList(), prevKey = page - 1, nextKey = null)
+            }
+
             val rawResults = sources.flatMap { source ->
                 val scraper = scrapers[source.id] ?: return@flatMap emptyList()
+                if (source.requiresVerification) return@flatMap emptyList<MangaItem>()
                 runCatching {
                     when {
                         filters.query.isNotEmpty() -> scraper.searchManga(filters.query, page)
@@ -200,7 +206,7 @@ class MangaPagingSource(
             LoadResult.Page(
                 data = sorted,
                 prevKey = if (page == 1) null else page - 1,
-                nextKey = if (sorted.isEmpty()) null else page + 1
+                nextKey = if (sorted.size < 20) null else page + 1
             )
         } catch (e: Exception) {
             LoadResult.Error(e)

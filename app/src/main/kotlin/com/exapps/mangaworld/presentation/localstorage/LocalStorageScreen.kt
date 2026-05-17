@@ -52,7 +52,8 @@ class LocalStorageViewModel @Inject constructor(
         _confirmDelete.value = null
         viewModelScope.launch { manager.deleteDownloadedManga(manga.mangaId) }
     }
-    fun chapterCount(mangaId: String): Int = manager.countDownloadedChapters(mangaId)
+    fun chapterCount(entity: DownloadedMangaEntity): Int =
+        manager.countDownloadedChapters(entity.mangaId, entity.title)
 }
 
 @Composable
@@ -103,7 +104,7 @@ fun LocalStorageScreen(
                     items(mangas, key = { it.mangaId }) { manga ->
                         LocalMangaCard(
                             manga = manga,
-                            downloadedChapters = viewModel.chapterCount(manga.mangaId),
+                            downloadedChapters = viewModel.chapterCount(manga),
                             onClick = { onMangaClick(manga.sourceId, manga.slug) },
                             onDelete = { viewModel.promptDelete(manga) }
                         )

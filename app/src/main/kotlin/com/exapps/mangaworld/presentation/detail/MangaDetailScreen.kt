@@ -1,5 +1,8 @@
 package com.exapps.mangaworld.presentation.detail
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -26,6 +29,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
+import com.exapps.mangaworld.presentation.webview.WebViewSolverActivity
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
 @Composable
@@ -38,10 +42,34 @@ fun MangaDetailScreen(
 ) {
     LaunchedEffect(slug, source) { viewModel.load(slug, source) }
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val ctx = LocalContext.current
+
+    // Launcher for Cloudflare WebView solver
+    val cfLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val cookies = result.data?.getStringExtra(WebViewSolverActivity.RESULT_COOKIES).orEmpty()
+            val domain  = result.data?.getStringExtra(WebViewSolverActivity.EXTRA_DOMAIN).orEmpty()
+            if (cookies.isNotBlank() && domain.isNotBlank()) {
+                viewModel.onCloudflareSolved(domain, cookies)
+            }
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(MangaColors.Background)) {
         when {
             state.isLoading && state.manga == null -> DetailShimmer()
+            state.cloudflareUrl != null && state.manga == null -> CloudflareRequired(
+                onSolve = {
+                    cfLauncher.launch(
+                        android.content.Intent(ctx, WebViewSolverActivity::class.java).apply {
+                            putExtra(WebViewSolverActivity.EXTRA_URL, state.cloudflareUrl)
+                            putExtra(WebViewSolverActivity.EXTRA_DOMAIN, state.cloudfareDomain ?: "")
+                        }
+                    )
+                }
+            )
             state.error != null && state.manga == null -> DetailError(
                 state.error!!, onRetry = { viewModel.load(slug, source) }
             )
@@ -493,6 +521,23 @@ private fun DetailShimmer() {
             }
         }
     }
+}
+
+@Composable
+private fun CloudflareRequired(onSolve: () -> Unit) {
+    EmptyState(
+        icon = Icons.Filled.Shield,
+        title = "تحقق Cloudflare مطلوب",
+        subtitle = "يحتاج هذا المصدر إلى التحقق من المتصفح. اضغط لحل التحدي ثم ستُفتح المانجا تلقائياً.",
+        action = {
+            GradientButton(
+                text = "حل تحدي Cloudflare",
+                onClick = onSolve,
+                modifier = androidx.compose.ui.Modifier.padding(horizontal = 32.dp)
+            )
+        },
+        modifier = androidx.compose.ui.Modifier.fillMaxSize()
+    )
 }
 
 @Composable

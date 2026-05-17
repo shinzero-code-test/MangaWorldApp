@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
+import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.*
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,7 +35,8 @@ class ReaderViewModel @Inject constructor(
     private val downloadQueueManager: DownloadQueueManager,
     private val mangaRepo: MangaRepository,
     private val libraryRepo: LibraryRepository,
-    private val settingsRepo: SettingsRepository
+    private val settingsRepo: SettingsRepository,
+    private val cacheDao: MangaCacheDao
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReaderUiState())
@@ -107,6 +109,19 @@ class ReaderViewModel @Inject constructor(
                             totalPages = pages.size,
                             currentPage = savedPage.coerceIn(0, maxOf(0, pages.size - 1))
                         )
+                    }
+                    // Update reading history so Library shows last-visited manga
+                    runCatching {
+                        val cached = cacheDao.get(mangaId)
+                        if (cached != null) {
+                            libraryRepo.updateReadingHistory(
+                                mangaId = mangaId, slug = cached.slug,
+                                title = cached.title, coverUrl = cached.coverUrl,
+                                source = MangaSource.fromId(cached.sourceId),
+                                chapterNumber = chNum,
+                                totalChapters = cached.totalChapters ?: 0
+                            )
+                        }
                     }
                 }
                 .onFailure { e ->

@@ -3,6 +3,8 @@ package com.exapps.mangaworld.presentation.detail
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
+import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
+import kotlinx.coroutines.flow.first
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.*
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,7 +23,9 @@ data class DetailUiState(
     val chaptersReversed: Boolean = true,
     val error: String? = null,
     val downloadingChapters: Set<Float> = emptySet(),
-    val showDownloadDialog: Boolean = false
+    val showDownloadDialog: Boolean = false,
+    val cloudflareUrl: String? = null,
+    val cloudfareDomain: String? = null
 )
 
 @HiltViewModel
@@ -105,8 +109,9 @@ class MangaDetailViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             isLoading = false,
-                            // Keep existing manga visible; only show error if we have no data at all
-                            error = if (it.manga == null) (e.message ?: "خطأ في التحميل") else null
+                            error = if (it.manga == null) (e.message ?: "خطأ في التحميل") else null,
+                            cloudflareUrl = if (e is CloudflareChallengeException) e.targetUrl else null,
+                            cloudfareDomain = if (e is CloudflareChallengeException) e.domain else null
                         )
                     }
                 }
@@ -156,7 +161,19 @@ class MangaDetailViewModel @Inject constructor(
 
     // ─── Download ─────────────────────────────────────────────────────────────
 
-    fun showDownloadDialog() = _state.update { it.copy(showDownloadDialog = true) }
+    // ─── Cloudflare ──────────────────────────────────────────────────────────────
+
+    /** Called after the user solves the Cloudflare challenge in the WebView. */
+    fun onCloudflareSolved(domain: String, cookies: String) {
+        viewModelScope.launch {
+            settingsRepo.saveCookies(domain, cookies)
+            // Clear CF state and retry
+            _state.update { it.copy(cloudflareUrl = null, cloudfareDomain = null, error = null) }
+            load(currentSlug, currentSource)
+        }
+    }
+
+        fun showDownloadDialog() = _state.update { it.copy(showDownloadDialog = true) }
     fun hideDownloadDialog() = _state.update { it.copy(showDownloadDialog = false) }
 
     /** Enqueue a single chapter for download. */
