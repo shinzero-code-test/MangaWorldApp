@@ -147,6 +147,7 @@ class ReaderViewModel @Inject constructor(
             downloadQueueManager.enqueueAndRun(
                 taskId = taskId,
                 mangaId = st.mangaId,
+                mangaTitle = st.mangaId.substringAfter("_").ifBlank { st.mangaId },
                 chapterUrl = st.chapterUrl,
                 chapterTitle = null,
                 pages = st.pages,

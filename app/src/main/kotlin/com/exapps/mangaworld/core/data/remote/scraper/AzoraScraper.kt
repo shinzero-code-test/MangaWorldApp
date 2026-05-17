@@ -183,9 +183,10 @@ class AzoraScraper @Inject constructor(
         runCatching {
             val domain = runCatching { java.net.URI(url).host }.getOrDefault("api.azoramoon.com")
             // Try API subdomain cookies first, then fall back to main domain
+            val mainDomain = source.baseUrl
+                .removePrefix("https://").removePrefix("http://")
             val cookies = settingsRepo.getCookies(domain).first()
-                .ifNullOrBlank { settingsRepo.getCookies(source.baseUrl
-                    .removePrefix("https://").removePrefix("http://")).first() }
+                ?: settingsRepo.getCookies(mainDomain).first()
             val req = Request.Builder()
                 .url(url)
                 .header("User-Agent", USER_AGENT)

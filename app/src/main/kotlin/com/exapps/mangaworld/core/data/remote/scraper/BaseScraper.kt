@@ -37,7 +37,7 @@ class CloudflareChallengeException(
 abstract class BaseScraperImpl(
     protected val client: OkHttpClient,
     override val source: MangaSource,
-    private val settingsRepo: SettingsRepository
+    protected val settingsRepo: SettingsRepository
 ) : MangaScraper {
 
     protected suspend fun fetchDocument(url: String, extraHeaders: Map<String, String> = emptyMap()): Document =
