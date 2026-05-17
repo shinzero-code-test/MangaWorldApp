@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -7,15 +9,6 @@ plugins {
 }
 
 // ─── Signing from environment variables ──────────────────────────────────────
-// Supports both a path-based keystore and a base64-encoded one (GitHub Actions).
-//
-//  Required env vars (any of these naming conventions work):
-//    KEYSTORE_PATH  or  KEYSTORE_FILE          – absolute path to .jks / .keystore
-//    KEYSTORE_BASE64                            – base64-encoded keystore (alternative)
-//    KEYSTORE_PASSWORD  or  KEY_STORE_PASSWORD  – store password
-//    KEY_ALIAS      or  KEY_ALIAS_NAME          – key alias
-//    KEY_PASSWORD   or  KEY_ALIAS_PASSWORD      – key password
-// ─────────────────────────────────────────────────────────────────────────────
 fun env(vararg names: String): String =
     names.firstNotNullOfOrNull { System.getenv(it) }.orEmpty()
 
@@ -25,15 +18,14 @@ val keystorePassword = env("KEYSTORE_PASSWORD", "KEY_STORE_PASSWORD")
 val keyAlias         = env("KEY_ALIAS", "KEY_ALIAS_NAME")
 val keyPassword      = env("KEY_PASSWORD", "KEY_ALIAS_PASSWORD")
 
-// Decode base64 keystore to a temp file if no direct path is given
 val resolvedKeystoreFile: File? by lazy {
     when {
         keystoreBase64.isNotBlank() -> {
-            val decoded = java.util.Base64.getDecoder().decode(keystoreBase64)
-            val tmp = File(rootProject.buildDir, "signing/release.keystore").also {
-                it.parentFile?.mkdirs()
-                it.writeBytes(decoded)
-            }
+            // Decode base64-encoded keystore (GitHub Actions secret)
+            val decoded = Base64.getDecoder().decode(keystoreBase64)
+            val tmp = layout.buildDirectory.get().asFile
+                .resolve("signing/release.keystore")
+                .also { it.parentFile?.mkdirs(); it.writeBytes(decoded) }
             tmp
         }
         keystorePathEnv.isNotBlank() -> File(keystorePathEnv)
@@ -72,13 +64,13 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix  = ".debug"
-            versionNameSuffix    = "-debug"
-            isDebuggable         = true
+            applicationIdSuffix = ".debug"
+            versionNameSuffix   = "-debug"
+            isDebuggable        = true
         }
         release {
-            isMinifyEnabled    = true
-            isShrinkResources  = true
+            isMinifyEnabled   = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -102,18 +94,24 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-            "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
-            "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
-        )
+
+    // Replaces deprecated kotlinOptions {} — required by Gradle 9 / AGP 8+
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            freeCompilerArgs.addAll(
+                "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+                "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+                "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
+            )
+        }
     }
+
     buildFeatures {
         compose     = true
         buildConfig = true
     }
+
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
