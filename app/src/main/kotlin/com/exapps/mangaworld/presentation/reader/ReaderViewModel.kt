@@ -133,6 +133,9 @@ class ReaderViewModel @Inject constructor(
         if (st.pages.isEmpty() || st.downloadInProgress) return
         val taskId = "${st.mangaId}_${st.chapterUrl.hashCode()}"
         viewModelScope.launch {
+            val referer = st.pages.firstOrNull()?.headers?.get("Referer")
+                ?.takeIf { it.isNotBlank() }
+                ?: st.chapterUrl
             _state.update { it.copy(downloadInProgress = true, downloadProgress = 0f, downloadMessage = "بدء التنزيل...", activeDownloadTaskId = taskId) }
             downloadQueueManager.enqueueAndRun(
                 taskId = taskId,
@@ -141,7 +144,8 @@ class ReaderViewModel @Inject constructor(
                 chapterUrl = st.chapterUrl,
                 chapterTitle = null,
                 pages = st.pages,
-                wifiOnly = st.downloadOnWifiOnly
+                wifiOnly = st.downloadOnWifiOnly,
+                referer = referer
             )
         }
     }

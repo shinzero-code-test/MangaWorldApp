@@ -25,12 +25,14 @@
 | **Olympus Staff** | olympustaff.com | Bootstrap + Tailwind + Laravel |
 | **Azora Moon** | azoramoon.com | Astro.js + Tailwind + SSR |
 | **Manga Starz** | manga-starz.net | WordPress + Madara Theme |
+| **Manga Sid** | mangasid.com | Astro + Tailwind + SSR |
+| **Meshmanga** | meshmanga.com | Next.js + Appswat REST API |
 
 ---
 
 ## Features
 
-- **Home** — Latest chapters + trending manga aggregated from all 3 sources
+- **Home** — Latest chapters + trending manga aggregated from all 5 sources
 - **Browse / Search** — Unified search with genre filtering, status, and type filters
 - **Library** — Favorites list + reading history with per-manga progress tracking
 - **Manga Detail** — Chapter list with read/download status indicators and progress per chapter
@@ -74,7 +76,7 @@ Clean Architecture + MVVM + Single Activity + Jetpack Compose
     │   │   └── entity/    ← Room entities
     │   ├── download/      ← DownloadQueueManager + ChapterDownloadWorker (WorkManager)
     │   └── remote/
-    │       └── scraper/   ← Jsoup-based scrapers (BaseScraper + 3 site implementations)
+    │       └── scraper/   ← Jsoup/API scrapers (BaseScraper + 5 site implementations)
     └── di/                ← Hilt dependency injection modules
 ```
 
@@ -133,7 +135,7 @@ Clean Architecture + MVVM + Single Activity + Jetpack Compose
 ./gradlew lintDebug
 ```
 
-The project includes fixture-based scraper tests that validate HTML parsing against saved samples for all 3 sources (detail pages + genre pages).
+The project includes fixture-based scraper tests that validate representative scraper parsing against saved samples for the supported HTML sources.
 
 ---
 

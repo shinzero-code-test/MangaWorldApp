@@ -1,9 +1,10 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.data.resolveCookieForDomain
+import com.exapps.mangaworld.core.data.resolveCookieForUrl
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -37,7 +38,7 @@ abstract class BaseScraperImpl(
     protected suspend fun fetchDocument(url: String, extraHeaders: Map<String, String> = emptyMap()): Document =
         withContext(Dispatchers.IO) {
             val domain = java.net.URI(url).host ?: source.baseUrl.removePrefix("https://").removePrefix("http://")
-            val cookies = settingsRepo.getCookies(domain).first()
+            val cookies = resolveCookieForUrl(settingsRepo, url)
 
             val requestBuilder = Request.Builder()
                 .url(url)
@@ -93,14 +94,26 @@ abstract class BaseScraperImpl(
             .toASCIIString()
     }.getOrDefault(this)
 
+    protected fun String.encodeForUrl(): String = replace(" ", "%20")
+
     companion object {
         const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
     }
 
-    protected suspend fun getCookiesForDomain(url: String): String? {
-        val domain = runCatching { java.net.URI(url).host }.getOrDefault(
-            source.baseUrl.removePrefix("https://").removePrefix("http://"))
-        return settingsRepo.getCookies(domain).first()
+    protected suspend fun getCookiesForDomain(url: String): String? = resolveCookieForUrl(settingsRepo, url)
+
+    protected suspend fun buildImageHeaders(imageUrl: String, referer: String): Map<String, String> {
+        val headers = linkedMapOf<String, String>()
+        val safeReferer = referer.encodeForHeader()
+        if (safeReferer.isNotBlank()) headers["Referer"] = safeReferer
+
+        val imageDomain = runCatching { java.net.URI(imageUrl).host }.getOrNull().orEmpty()
+        if (imageDomain.isNotBlank()) {
+            resolveCookieForDomain(settingsRepo, imageDomain)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { headers["Cookie"] = it }
+        }
+        return headers
     }
 }

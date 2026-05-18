@@ -44,7 +44,7 @@ val onboardingPages = listOf(
         iconTint = MangaColors.Cyan,
         iconBg = MangaColors.GlowCyan,
         title = "مصادر متعددة",
-        subtitle = "Olympus Staff · Azora Moon · Manga Starz\nكل المصادر المفضلة في تطبيق واحد"
+        subtitle = "Olympus Staff · Azora Moon · Manga Starz\nManga Sid · Meshmanga"
     ),
     OnboardingPage(
         icon = Icons.Filled.Download,

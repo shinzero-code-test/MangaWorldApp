@@ -186,17 +186,16 @@ class MangaPagingSource(
                 val deferred: List<kotlinx.coroutines.Deferred<List<MangaItem>>> = sources.map { source ->
                     async {
                         val scraper = scrapers[source.id] ?: return@async emptyList<MangaItem>()
-                        runCatching {
-                            when {
-                                filters.query.isNotEmpty() -> scraper.searchManga(filters.query, page)
-                                filters.genre != null -> scraper.getMangaByGenre(filters.genre, page)
-                                else -> scraper.getPopularManga()
-                            }.getOrDefault(emptyList())
-                        }.recoverCatching { e ->
-                            // Cloudflare failures on a single source shouldn't kill the whole search
-                            if (e is CloudflareChallengeException) emptyList()
-                            else throw e
-                        }.getOrDefault(emptyList())
+                        val result = when {
+                            filters.query.isNotEmpty() -> scraper.searchManga(filters.query, page)
+                            filters.genre != null -> scraper.getMangaByGenre(filters.genre, page)
+                            else -> scraper.getPopularManga()
+                        }
+
+                        result.getOrElse { e ->
+                            if (filters.source != null) throw e
+                            emptyList()
+                        }
                     }
                 }
                 deferred.awaitAll().flatMap { it }

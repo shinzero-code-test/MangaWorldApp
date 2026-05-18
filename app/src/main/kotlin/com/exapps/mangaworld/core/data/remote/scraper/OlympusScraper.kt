@@ -241,17 +241,19 @@ class OlympusScraper @Inject constructor(
             extraHeaders = mapOf("Referer" to source.baseUrl + "/")
         )
 
-        // Referer must be ASCII-safe — chapterUrls may contain Arabic path segments
-        val safeReferer = chapterUrl.encodeForHeader()
-
         // Pages: .reading-content .page-break img.manga-chapter-img
         val pages = doc.select(".reading-content .page-break img.manga-chapter-img, .reading-content img")
-            .mapIndexed { index, img ->
-                val src = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() }
+            .mapNotNull { img ->
+                val raw = img.attr("data-src").ifEmpty { img.attr("src") }
+                val src = img.attr("abs:src").ifEmpty { raw.absoluteUrl() }.encodeForUrl()
+                src.takeIf { it.isNotBlank() }
+            }
+            .distinct()
+            .mapIndexed { index, src ->
                 ChapterPage(
                     index = index,
                     url = src,
-                    headers = mapOf("Referer" to safeReferer)
+                    headers = buildImageHeaders(src, chapterUrl)
                 )
             }
 
@@ -270,6 +272,7 @@ class OlympusScraper @Inject constructor(
             .url(url)
             .header("User-Agent", BaseScraperImpl.USER_AGENT)
             .header("Accept", "*/*")
+            .header("Accept-Language", "ar,en;q=0.9")
             .header("Referer", source.baseUrl + "/series")
             .header("X-Requested-With", "XMLHttpRequest")
             .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
@@ -279,8 +282,14 @@ class OlympusScraper @Inject constructor(
         val body = response.body?.string() ?: ""
         response.close()
 
-        if (body.isBlank() || body.contains("Just a moment", ignoreCase = true)) emptyList()
-        else {
+        if (body.isBlank()) emptyList()
+        else if (
+            body.contains("Just a moment", ignoreCase = true) ||
+            body.contains("Attention Required", ignoreCase = true) ||
+            body.contains("cf-chl", ignoreCase = true)
+        ) {
+            throw CloudflareChallengeException("olympustaff.com", url)
+        } else {
             // /ajax/search returns JSON on olympustaff.com — try JSON first, fall back to HTML
             val trimmed = body.trimStart()
             if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
@@ -293,9 +302,13 @@ class OlympusScraper @Inject constructor(
                     val slug = href.substringAfterLast("/series/").trimEnd('/')
                     if (slug.isEmpty()) return@mapNotNull null
                     val title = a.selectFirst("h4, h3, .title, span")?.text()?.cleanText()
+                        ?: a.selectFirst("img[alt]")?.attr("alt")?.cleanText()
                         ?: a.attr("title").cleanText().ifEmpty { return@mapNotNull null }
-                    val coverUrl = a.selectFirst("img")?.attr("abs:src")
-                        ?.ifEmpty { a.selectFirst("img")?.attr("src")?.absoluteUrl() } ?: ""
+                    val coverUrl = a.selectFirst("img")?.let { img ->
+                        img.attr("abs:src").ifEmpty {
+                            img.attr("data-src").ifEmpty { img.attr("src") }.absoluteUrl()
+                        }
+                    }?.encodeForUrl().orEmpty()
                     MangaItem(
                         id = "olympus_$slug", slug = slug, title = title,
                         coverUrl = coverUrl, source = source, url = href

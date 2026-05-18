@@ -76,6 +76,18 @@ object ScraperModule {
     @IntoMap
     @StringKey("starz")
     fun provideStarzScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = StarzScraper(client, settingsRepo)
+
+    @Provides
+    @Singleton
+    @IntoMap
+    @StringKey("mangasid")
+    fun provideMangaSidScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = MangaSidScraper(client, settingsRepo)
+
+    @Provides
+    @Singleton
+    @IntoMap
+    @StringKey("meshmanga")
+    fun provideMeshmangaScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = MeshmangaScraper(client, settingsRepo)
 }
 
 @Module

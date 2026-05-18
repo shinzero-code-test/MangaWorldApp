@@ -10,9 +10,11 @@ import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.exapps.mangaworld.MangaWorldApp
+import com.exapps.mangaworld.core.data.resolveCookieForUrl
 import com.exapps.mangaworld.core.data.local.dao.DownloadTaskDao
 import com.exapps.mangaworld.core.data.local.dao.DownloadedMangaDao
 import com.exapps.mangaworld.core.data.local.entity.DownloadTaskEntity
+import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +29,8 @@ class ChapterDownloadWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val downloadTaskDao: DownloadTaskDao,
     private val downloadedMangaDao: DownloadedMangaDao,
-    private val okHttpClient: OkHttpClient
+    private val okHttpClient: OkHttpClient,
+    private val settingsRepository: SettingsRepository
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -96,7 +99,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
 
     // ─── Image download with Referer header ───────────────────────────────────
 
-    private fun downloadPage(pageUrl: String, referer: String, outFile: File) {
+    private suspend fun downloadPage(pageUrl: String, referer: String, outFile: File) {
         val reqBuilder = Request.Builder()
             .url(pageUrl)
             .header("User-Agent",
@@ -104,8 +107,16 @@ class ChapterDownloadWorker @AssistedInject constructor(
                 "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
             .header("Accept", "image/webp,image/apng,image/*,*/*;q=0.8")
         if (referer.isNotBlank()) reqBuilder.header("Referer", referer)
+        runCatching { resolveCookieForUrl(settingsRepository, pageUrl) }.getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { reqBuilder.header("Cookie", it) }
 
         val resp = okHttpClient.newCall(reqBuilder.build()).execute()
+        if (!resp.isSuccessful) {
+            val code = resp.code
+            resp.close()
+            error("HTTP $code for $pageUrl")
+        }
         val body = resp.body ?: run { resp.close(); error("Empty body for $pageUrl") }
         body.byteStream().use { input ->
             outFile.outputStream().use { out -> input.copyTo(out) }

@@ -3,7 +3,6 @@ package com.exapps.mangaworld.core.data.remote.scraper
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -179,11 +178,7 @@ class AzoraScraper @Inject constructor(
 
     private suspend fun apiGet(url: String): JSONObject? = withContext(Dispatchers.IO) {
         runCatching {
-            // Try API subdomain cookies first, fall back to main domain
-            val apiDomain = runCatching { java.net.URI(url).host }.getOrDefault("api.azoramoon.com")
-            val mainDomain = source.baseUrl.removePrefix("https://").removePrefix("http://")
-            val cookies = settingsRepo.getCookies(apiDomain).first()
-                ?: settingsRepo.getCookies(mainDomain).first()
+            val cookies = getCookiesForDomain(url)
             val req = Request.Builder()
                 .url(url)
                 .header("User-Agent", USER_AGENT)
@@ -384,8 +379,9 @@ class AzoraScraper @Inject constructor(
             )}
             .mapIndexed { idx, img ->
                 val readerIdx = img.attr("data-reader-index").toIntOrNull() ?: idx
-                ChapterPage(index = readerIdx, url = img.attr("abs:src"),
-                    headers = mapOf("Referer" to chapterUrl))
+                val src = img.attr("abs:src").encodeForUrl()
+                ChapterPage(index = readerIdx, url = src,
+                    headers = buildImageHeaders(src, chapterUrl))
             }
             .sortedBy { it.index }
 
@@ -393,8 +389,10 @@ class AzoraScraper @Inject constructor(
         if (pages.isEmpty()) {
             pages = doc.select("img[src*='storage.azoramoon.com']")
                 .filter { !it.attr("src").contains("logo") && !it.attr("src").contains("avatar") }
-                .mapIndexed { idx, img -> ChapterPage(idx, img.attr("abs:src"),
-                    headers = mapOf("Referer" to chapterUrl)) }
+                .mapIndexed { idx, img ->
+                    val src = img.attr("abs:src").encodeForUrl()
+                    ChapterPage(idx, src, headers = buildImageHeaders(src, chapterUrl))
+                }
         }
 
         pages

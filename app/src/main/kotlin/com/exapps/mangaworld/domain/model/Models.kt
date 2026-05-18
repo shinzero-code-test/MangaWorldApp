@@ -10,7 +10,9 @@ enum class MangaSource(
 ) {
     OLYMPUS("olympus", "Olympus Staff", "https://olympustaff.com", true),
     AZORA("azora", "Azora Moon", "https://azoramoon.com", false),
-    STARZ("starz", "Manga Starz", "https://manga-starz.net", true);
+    STARZ("starz", "Manga Starz", "https://manga-starz.net", true),
+    MANGASID("mangasid", "Manga Sid", "https://mangasid.com", false),
+    MESHMANGA("meshmanga", "Meshmanga", "https://meshmanga.com", false);
 
     companion object {
         fun fromId(id: String) = values().find { it.id == id } ?: AZORA

@@ -343,20 +343,20 @@ class StarzScraper @Inject constructor(
             extraHeaders = mapOf("Referer" to source.baseUrl + "/")
         )
 
-        // Referer must be ASCII-safe — chapterUrls may contain Arabic path segments
-        val safeReferer = chapterUrl.encodeForHeader()
-
         // .reading-content img or .page-break img
-        val pages = doc.select(".reading-content img[src], .page-break img[src]")
-            .filter { it.attr("src").isNotEmpty() }
-            .mapIndexed { index, img ->
+        val pages = doc.select(".reading-content img[src], .reading-content img[data-src], .page-break img[src], .page-break img[data-src]")
+            .mapNotNull { img ->
                 val src = img.attr("abs:src").ifEmpty {
-                    (img.attr("data-src").ifEmpty { img.attr("src") }).absoluteUrl()
-                }
+                    img.attr("data-src").ifEmpty { img.attr("src") }.absoluteUrl()
+                }.encodeForUrl()
+                src.takeIf { it.isNotBlank() }
+            }
+            .distinct()
+            .mapIndexed { index, src ->
                 ChapterPage(
                     index = index,
                     url = src,
-                    headers = mapOf("Referer" to safeReferer)
+                    headers = buildImageHeaders(src, chapterUrl)
                 )
             }
 

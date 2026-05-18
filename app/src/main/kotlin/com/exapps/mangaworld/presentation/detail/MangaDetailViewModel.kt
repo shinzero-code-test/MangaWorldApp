@@ -192,7 +192,9 @@ class MangaDetailViewModel @Inject constructor(
                 if (pages.isNotEmpty()) {
                     val wifiOnly = settingsRepo.getAppSettings().first().downloadOnWifiOnly
                     val manga = _state.value.manga
-                    val srcReferer = manga?.source?.baseUrl?.plus("/") ?: ""
+                    val srcReferer = pages.firstOrNull()?.headers?.get("Referer")
+                        ?.takeIf { it.isNotBlank() }
+                        ?: chapter.url
                     downloadQueueManager.enqueueAndRun(
                         taskId = "dl_${UUID.randomUUID()}",
                         mangaId = currentMangaId,
