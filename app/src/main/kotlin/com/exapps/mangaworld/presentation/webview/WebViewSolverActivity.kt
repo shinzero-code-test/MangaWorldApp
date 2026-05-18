@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.exapps.mangaworld.core.data.remote.scraper.BaseScraperImpl
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import com.exapps.mangaworld.presentation.theme.MangaWorldTheme
 
@@ -100,9 +101,7 @@ private fun CloudflareWebView(
                         javaScriptEnabled  = true
                         domStorageEnabled  = true
                         databaseEnabled    = true
-                        userAgentString    = "Mozilla/5.0 (Linux; Android 14; Pixel 8) " +
-                            "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                            "Chrome/124.0.0.0 Mobile Safari/537.36"
+                        userAgentString    = BaseScraperImpl.USER_AGENT
                         loadWithOverviewMode = true
                         useWideViewPort    = true
                         allowContentAccess = true
@@ -113,10 +112,6 @@ private fun CloudflareWebView(
                     cm.setAcceptCookie(true)
                     cm.setAcceptThirdPartyCookies(wv, true)
 
-                    // ── Clear stale cf_clearance so the challenge always shows ──
-                    cm.removeAllCookies(null)
-                    cm.flush()
-
                     wv.webViewClient = object : WebViewClient() {
                         override fun onPageFinished(view: WebView?, pageUrl: String?) {
                             if (pageUrl == null) return
@@ -126,7 +121,7 @@ private fun CloudflareWebView(
                             if (!isCfPage && pageUrl.contains(domain)) {
                                 val cookies = cm.getCookie(pageUrl) ?: ""
                                 if (cookies.contains("cf_clearance")) {
-                                    cm.flush()          // persist before returning
+                                    cm.flush()
                                     onVerified(cookies)
                                 }
                             }

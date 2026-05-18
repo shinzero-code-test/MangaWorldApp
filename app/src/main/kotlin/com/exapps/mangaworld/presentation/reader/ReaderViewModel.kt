@@ -32,54 +32,20 @@ data class ReaderUiState(
 
 @HiltViewModel
 class ReaderViewModel @Inject constructor(
-    private val downloadQueueManager: DownloadQueueManager,
     private val mangaRepo: MangaRepository,
     private val libraryRepo: LibraryRepository,
     private val settingsRepo: SettingsRepository,
+    private val downloadQueueManager: DownloadQueueManager,
     private val cacheDao: MangaCacheDao
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReaderUiState())
     val state: StateFlow<ReaderUiState> = _state.asStateFlow()
 
-    init {
-        viewModelScope.launch {
-            settingsRepo.getReaderSettings().collect { settings ->
-                _state.update {
-                    it.copy(readerMode = settings.mode, brightness = settings.brightness)
-                }
-            }
-        }
-        viewModelScope.launch {
-            settingsRepo.getAppSettings().collect { settings ->
-                _state.update {
-                    it.copy(downloadOnWifiOnly = settings.downloadOnWifiOnly)
-                }
-            }
-        }
-        viewModelScope.launch {
-            downloadQueueManager.observeTasks().collect { tasks ->
-                val currentId = _state.value.activeDownloadTaskId ?: return@collect
-                val task = tasks.firstOrNull { it.id == currentId } ?: return@collect
-                _state.update {
-                    it.copy(
-                        downloadInProgress = task.status == "running" || task.status == "queued",
-                        downloadProgress = task.progress,
-                        downloadMessage = when (task.status) {
-                            "queued" -> "في انتظار التنزيل..."
-                            "running" -> "يتم التنزيل ${task.downloadedPages}/${task.totalPages}"
-                            "completed" -> "اكتمل التنزيل"
-                            "failed" -> "فشل التنزيل: ${task.errorMessage ?: ""}"
-                            "cancelled" -> "تم إلغاء التنزيل"
-                            else -> it.downloadMessage
-                        }
-                    )
-                }
-            }
-        }
-    }
+    private var currentSource: MangaSource = MangaSource.STARZ
 
     fun loadChapter(chapterUrl: String, mangaId: String, source: MangaSource) {
+        currentSource = source
         _state.update { it.copy(isLoading = true, error = null, chapterUrl = chapterUrl, mangaId = mangaId) }
         viewModelScope.launch {
             val localPages = downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
@@ -130,6 +96,15 @@ class ReaderViewModel @Inject constructor(
                     } else e.message
                     _state.update { it.copy(isLoading = false, error = msg) }
                 }
+        }
+    }
+
+    fun onCloudflareSolved(domain: String, cookies: String) {
+        viewModelScope.launch {
+            settingsRepo.saveCookies(domain, cookies)
+            delay(300)
+            val st = _state.value
+            loadChapter(st.chapterUrl, st.mangaId, currentSource)
         }
     }
 

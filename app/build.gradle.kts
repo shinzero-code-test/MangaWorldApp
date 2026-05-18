@@ -8,9 +8,11 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// ─── Signing from environment variables ──────────────────────────────────────
+// ─── Signing from environment variables or Gradle properties ─────────────────
 fun env(vararg names: String): String =
-    names.firstNotNullOfOrNull { System.getenv(it) }.orEmpty()
+    names.firstNotNullOfOrNull {
+        System.getenv(it) ?: (project.findProperty(it) as? String)
+    }.orEmpty()
 
 val keystoreBase64   = env("KEYSTORE_BASE64")
 val keystorePathEnv  = env("KEYSTORE_PATH", "KEYSTORE_FILE")
@@ -21,7 +23,6 @@ val keyPassword      = env("KEY_PASSWORD", "KEY_ALIAS_PASSWORD")
 val resolvedKeystoreFile: File? by lazy {
     when {
         keystoreBase64.isNotBlank() -> {
-            // Decode base64-encoded keystore (GitHub Actions secret)
             val decoded = Base64.getDecoder().decode(keystoreBase64)
             val tmp = layout.buildDirectory.get().asFile
                 .resolve("signing/release.keystore")
@@ -35,6 +36,30 @@ val resolvedKeystoreFile: File? by lazy {
 
 val canSign = resolvedKeystoreFile != null && keystorePassword.isNotBlank() &&
               keyAlias.isNotBlank() && keyPassword.isNotBlank()
+
+// Auto-generate a debug keystore so the release APK is always installable
+val debugKeystore: File by lazy {
+    val f = rootProject.file("debug.keystore")
+    if (!f.exists()) {
+        val cmd = arrayOf(
+            "keytool", "-genkey", "-v",
+            "-keystore", f.absolutePath,
+            "-alias", "androiddebugkey",
+            "-storepass", "android",
+            "-keypass", "android",
+            "-keyalg", "RSA",
+            "-keysize", "2048",
+            "-validity", "10000",
+            "-dname", "CN=Debug, OU=Dev, O=MangaWorld, L=Unknown, ST=Unknown, C=US"
+        )
+        val proc = ProcessBuilder(*cmd)
+            .directory(rootProject.projectDir)
+            .inheritIO()
+            .start()
+        proc.waitFor()
+    }
+    f
+}
 
 android {
     namespace  = "com.exapps.mangaworld"
@@ -60,13 +85,18 @@ android {
                 keyPassword   = keyPassword
             }
         }
+        getByName("debug") {
+            storeFile     = debugKeystore
+            storePassword = "android"
+            keyAlias      = "androiddebugkey"
+            keyPassword   = "android"
+        }
     }
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".debug"
-            versionNameSuffix   = "-debug"
-            isDebuggable        = true
+            isDebuggable = true
+            signingConfig = signingConfigs.getByName("debug")
         }
         release {
             isMinifyEnabled   = true
@@ -77,6 +107,8 @@ android {
             )
             if (canSign) {
                 signingConfig = signingConfigs.getByName("release")
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
             }
         }
     }

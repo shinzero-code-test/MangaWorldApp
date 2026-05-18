@@ -1,9 +1,12 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
+import org.json.JSONObject
 import org.jsoup.Jsoup
 import javax.inject.Inject
 
@@ -238,6 +241,9 @@ class OlympusScraper @Inject constructor(
             extraHeaders = mapOf("Referer" to source.baseUrl + "/")
         )
 
+        // Referer must be ASCII-safe — chapterUrls may contain Arabic path segments
+        val safeReferer = chapterUrl.encodeForHeader()
+
         // Pages: .reading-content .page-break img.manga-chapter-img
         val pages = doc.select(".reading-content .page-break img.manga-chapter-img, .reading-content img")
             .mapIndexed { index, img ->
@@ -245,7 +251,7 @@ class OlympusScraper @Inject constructor(
                 ChapterPage(
                     index = index,
                     url = src,
-                    headers = mapOf("Referer" to source.baseUrl + "/")
+                    headers = mapOf("Referer" to safeReferer)
                 )
             }
 
@@ -258,30 +264,44 @@ class OlympusScraper @Inject constructor(
         val encoded = java.net.URLEncoder.encode(query.trim(), "UTF-8")
         val url = "${source.baseUrl}/ajax/search?keyword=$encoded"
 
+        val domain = runCatching { java.net.URI(url).host }.getOrNull() ?: ""
+        val cookies = getCookiesForDomain(url) ?: CookieCache.get(domain)
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", BaseScraperImpl.USER_AGENT)
             .header("Accept", "*/*")
             .header("Referer", source.baseUrl + "/series")
             .header("X-Requested-With", "XMLHttpRequest")
+            .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
             .build()
 
         val response = client.newCall(request).execute()
         val body = response.body?.string() ?: ""
         response.close()
 
-        val doc = Jsoup.parse(body)
-        doc.select("a[href*=\"/series/\"]").mapNotNull { a ->
-            val href = a.attr("abs:href").ifEmpty { a.attr("href").absoluteUrl() }
-            val slug = href.substringAfterLast("/series/").trimEnd('/')
-            if (slug.isEmpty()) return@mapNotNull null
-            val title = a.selectFirst("h4")?.text()?.cleanText() ?: return@mapNotNull null
-            val coverUrl = a.selectFirst("img")?.attr("abs:src")
-                ?.ifEmpty { a.selectFirst("img")?.attr("src")?.absoluteUrl() } ?: ""
-            MangaItem(
-                id = "olympus_$slug", slug = slug, title = title,
-                coverUrl = coverUrl, source = source, url = href
-            )
+        if (body.isBlank() || body.contains("Just a moment", ignoreCase = true)) emptyList()
+        else {
+            // /ajax/search returns JSON on olympustaff.com — try JSON first, fall back to HTML
+            val trimmed = body.trimStart()
+            if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+                parseJsonSearchResults(body)
+            } else {
+                // HTML fragment fallback: parse with base URL so abs:href resolves correctly
+                val doc = Jsoup.parse(body, source.baseUrl)
+                doc.select("a[href*=\"/series/\"]").mapNotNull { a ->
+                    val href = a.attr("abs:href").ifEmpty { a.attr("href").absoluteUrl() }
+                    val slug = href.substringAfterLast("/series/").trimEnd('/')
+                    if (slug.isEmpty()) return@mapNotNull null
+                    val title = a.selectFirst("h4, h3, .title, span")?.text()?.cleanText()
+                        ?: a.attr("title").cleanText().ifEmpty { return@mapNotNull null }
+                    val coverUrl = a.selectFirst("img")?.attr("abs:src")
+                        ?.ifEmpty { a.selectFirst("img")?.attr("src")?.absoluteUrl() } ?: ""
+                    MangaItem(
+                        id = "olympus_$slug", slug = slug, title = title,
+                        coverUrl = coverUrl, source = source, url = href
+                    )
+                }
+            }
         }
     }
 
@@ -335,5 +355,72 @@ class OlympusScraper @Inject constructor(
                 url = href
             )
         }
+    }
+
+    /**
+     * Parses the JSON response from /ajax/search.
+     *
+     * Handles both array format: [{"title":…,"url":…,"thumbnail":…}, …]
+     * and object format: {"data":[…]} / {"results":[…]}
+     *
+     * Common field aliases across different server implementations:
+     *   title       → title, name
+     *   url/href    → url, href, link, permalink
+     *   cover image → thumbnail, image, cover, img, photo
+     */
+    private fun parseJsonSearchResults(body: String): List<MangaItem> {
+        fun parseItem(obj: JSONObject): MangaItem? {
+            val title = obj.optString("title").ifBlank { obj.optString("name") }.trim()
+            if (title.isBlank()) return null
+
+            val rawUrl = obj.optString("url").ifBlank {
+                obj.optString("href").ifBlank {
+                    obj.optString("link").ifBlank { obj.optString("permalink") }
+                }
+            }
+            val href = when {
+                rawUrl.startsWith("http") -> rawUrl
+                rawUrl.startsWith("/")    -> "${source.baseUrl}$rawUrl"
+                rawUrl.isNotBlank()       -> "${source.baseUrl}/$rawUrl"
+                else                      -> return null
+            }
+            val slug = href.substringAfterLast("/series/").trimEnd('/').ifBlank { return null }
+
+            val rawCover = obj.optString("thumbnail").ifBlank {
+                obj.optString("image").ifBlank {
+                    obj.optString("cover").ifBlank {
+                        obj.optString("img").ifBlank { obj.optString("photo") }
+                    }
+                }
+            }
+            val coverUrl = when {
+                rawCover.startsWith("http") -> rawCover
+                rawCover.startsWith("/")    -> "${source.baseUrl}$rawCover"
+                else                        -> rawCover
+            }
+
+            return MangaItem(
+                id = "olympus_$slug", slug = slug, title = title.cleanText(),
+                coverUrl = coverUrl, source = source, url = href
+            )
+        }
+
+        return runCatching {
+            val trimmed = body.trimStart()
+            val array: JSONArray = when {
+                trimmed.startsWith("[") -> JSONArray(body)
+                else -> {
+                    val obj = JSONObject(body)
+                    // Try common wrapper keys
+                    listOf("data", "results", "items", "manga", "series")
+                        .firstNotNullOfOrNull { key ->
+                            runCatching { obj.getJSONArray(key) }.getOrNull()
+                        } ?: JSONArray()
+                }
+            }
+            (0 until array.length()).mapNotNull { i ->
+                runCatching { parseItem(array.getJSONObject(i)) }.getOrNull()
+            }
+        }.getOrElse { emptyList() }
     }
 }

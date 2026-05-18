@@ -32,12 +32,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val context = LocalContext.current
     val cfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val data = result.data ?: return@rememberLauncherForActivityResult
-            val cookies = data.getStringExtra(WebViewSolverActivity.RESULT_COOKIES).orEmpty()
-            val domain = data.getStringExtra(WebViewSolverActivity.EXTRA_DOMAIN).orEmpty()
-            if (cookies.isNotBlank() && domain.isNotBlank()) {
-                viewModel.saveCookies(domain, cookies)
-            }
+            // Cookies are automatically stored in the system CookieManager
         }
     }
 

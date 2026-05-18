@@ -45,7 +45,14 @@ fun ReaderScreen(
     val ctx = LocalContext.current
     val solverLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            viewModel.loadChapter(chapterUrl, mangaId, source)
+            val cookies = result.data?.getStringExtra(WebViewSolverActivity.RESULT_COOKIES).orEmpty()
+            val domain  = result.data?.getStringExtra(WebViewSolverActivity.EXTRA_DOMAIN).orEmpty()
+            if (cookies.isNotBlank() && domain.isNotBlank()) {
+                com.exapps.mangaworld.core.data.CookieCache.put(domain, cookies)
+                viewModel.onCloudflareSolved(domain, cookies)
+            } else {
+                viewModel.loadChapter(chapterUrl, mangaId, source)
+            }
         }
     }
 

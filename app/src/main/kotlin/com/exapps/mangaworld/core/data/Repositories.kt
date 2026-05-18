@@ -4,9 +4,13 @@ import androidx.paging.*
 import com.exapps.mangaworld.core.data.local.AppPreferences
 import com.exapps.mangaworld.core.data.local.dao.*
 import com.exapps.mangaworld.core.data.local.entity.*
+import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import com.exapps.mangaworld.core.data.remote.scraper.MangaScraper
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -177,16 +181,25 @@ class MangaPagingSource(
                 return LoadResult.Page(data = emptyList(), prevKey = page - 1, nextKey = null)
             }
 
-            val rawResults = sources.flatMap { source ->
-                val scraper = scrapers[source.id] ?: return@flatMap emptyList()
-                if (source.requiresVerification) return@flatMap emptyList<MangaItem>()
-                runCatching {
-                    when {
-                        filters.query.isNotEmpty() -> scraper.searchManga(filters.query, page)
-                        filters.genre != null -> scraper.getMangaByGenre(filters.genre, page)
-                        else -> scraper.getPopularManga()
-                    }.getOrDefault(emptyList())
-                }.getOrDefault(emptyList())
+            // Run all source queries in parallel, tolerate CF errors per-source
+            val rawResults: List<MangaItem> = coroutineScope {
+                val deferred: List<kotlinx.coroutines.Deferred<List<MangaItem>>> = sources.map { source ->
+                    async {
+                        val scraper = scrapers[source.id] ?: return@async emptyList<MangaItem>()
+                        runCatching {
+                            when {
+                                filters.query.isNotEmpty() -> scraper.searchManga(filters.query, page)
+                                filters.genre != null -> scraper.getMangaByGenre(filters.genre, page)
+                                else -> scraper.getPopularManga()
+                            }.getOrDefault(emptyList())
+                        }.recoverCatching { e ->
+                            // Cloudflare failures on a single source shouldn't kill the whole search
+                            if (e is CloudflareChallengeException) emptyList()
+                            else throw e
+                        }.getOrDefault(emptyList())
+                    }
+                }
+                deferred.awaitAll().flatMap { it }
             }.distinctBy { it.id }
 
             var filtered = rawResults

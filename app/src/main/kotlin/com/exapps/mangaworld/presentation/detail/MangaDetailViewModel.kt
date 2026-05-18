@@ -2,6 +2,7 @@ package com.exapps.mangaworld.presentation.detail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import kotlinx.coroutines.flow.first
@@ -165,9 +166,10 @@ class MangaDetailViewModel @Inject constructor(
 
     /** Called after the user solves the Cloudflare challenge in the WebView. */
     fun onCloudflareSolved(domain: String, cookies: String) {
+        CookieCache.put(domain, cookies)
         viewModelScope.launch {
             settingsRepo.saveCookies(domain, cookies)
-            // Clear CF state and retry
+            delay(300)
             _state.update { it.copy(cloudflareUrl = null, cloudfareDomain = null, error = null) }
             load(currentSlug, currentSource)
         }

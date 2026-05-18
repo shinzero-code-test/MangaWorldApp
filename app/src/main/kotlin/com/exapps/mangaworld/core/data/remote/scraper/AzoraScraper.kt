@@ -95,9 +95,7 @@ class AzoraScraper @Inject constructor(
 
     private suspend fun fetchRawHtml(url: String): String = withContext(Dispatchers.IO) {
         runCatching {
-            val domain = runCatching { java.net.URI(url).host }.getOrDefault(
-                source.baseUrl.removePrefix("https://").removePrefix("http://"))
-            val cookies = settingsRepo.getCookies(domain).first()
+            val cookies = getCookiesForDomain(url)
             val req = Request.Builder()
                 .url(url)
                 .header("User-Agent", USER_AGENT)
@@ -181,11 +179,10 @@ class AzoraScraper @Inject constructor(
 
     private suspend fun apiGet(url: String): JSONObject? = withContext(Dispatchers.IO) {
         runCatching {
-            val domain = runCatching { java.net.URI(url).host }.getOrDefault("api.azoramoon.com")
-            // Try API subdomain cookies first, then fall back to main domain
-            val mainDomain = source.baseUrl
-                .removePrefix("https://").removePrefix("http://")
-            val cookies = settingsRepo.getCookies(domain).first()
+            // Try API subdomain cookies first, fall back to main domain
+            val apiDomain = runCatching { java.net.URI(url).host }.getOrDefault("api.azoramoon.com")
+            val mainDomain = source.baseUrl.removePrefix("https://").removePrefix("http://")
+            val cookies = settingsRepo.getCookies(apiDomain).first()
                 ?: settingsRepo.getCookies(mainDomain).first()
             val req = Request.Builder()
                 .url(url)
@@ -387,7 +384,8 @@ class AzoraScraper @Inject constructor(
             )}
             .mapIndexed { idx, img ->
                 val readerIdx = img.attr("data-reader-index").toIntOrNull() ?: idx
-                ChapterPage(index = readerIdx, url = img.attr("abs:src"))
+                ChapterPage(index = readerIdx, url = img.attr("abs:src"),
+                    headers = mapOf("Referer" to chapterUrl))
             }
             .sortedBy { it.index }
 
@@ -395,7 +393,8 @@ class AzoraScraper @Inject constructor(
         if (pages.isEmpty()) {
             pages = doc.select("img[src*='storage.azoramoon.com']")
                 .filter { !it.attr("src").contains("logo") && !it.attr("src").contains("avatar") }
-                .mapIndexed { idx, img -> ChapterPage(idx, img.attr("abs:src")) }
+                .mapIndexed { idx, img -> ChapterPage(idx, img.attr("abs:src"),
+                    headers = mapOf("Referer" to chapterUrl)) }
         }
 
         pages
