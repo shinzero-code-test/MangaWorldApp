@@ -4,7 +4,10 @@ import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.glance.Button
+import androidx.glance.ButtonDefaults
 import androidx.glance.GlanceModifier
+import androidx.glance.GlanceTheme
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.background
@@ -25,9 +28,6 @@ import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import androidx.glance.material3.ButtonDefaults
-import androidx.glance.material3.FilledButton
-import androidx.glance.material3.GlanceTheme
 import com.exapps.mangaworld.R
 
 @Composable
@@ -72,7 +72,7 @@ internal fun WidgetCover(provider: ImageProvider, description: String?) {
 
 @Composable
 internal fun WidgetPrimaryButton(label: String, intent: Intent) {
-    FilledButton(
+    Button(
         text = label,
         onClick = actionStartActivity(intent),
         modifier = GlanceModifier.fillMaxWidth(),

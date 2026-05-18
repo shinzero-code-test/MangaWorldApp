@@ -74,7 +74,7 @@ private fun ContinueReadingContent(data: ContinueReadingWidgetData?, cover: andr
             text = data.title,
             maxLines = if (size.width < 170.dp) 1 else 2,
             style = TextStyle(
-                color = androidx.glance.material3.GlanceTheme.colors.onSurface,
+                color = androidx.glance.GlanceTheme.colors.onSurface,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -83,7 +83,7 @@ private fun ContinueReadingContent(data: ContinueReadingWidgetData?, cover: andr
         Text(
             text = data.chapterLabel,
             style = TextStyle(
-                color = androidx.glance.material3.GlanceTheme.colors.onSurfaceVariant,
+                color = androidx.glance.GlanceTheme.colors.onSurfaceVariant,
                 fontSize = 12.sp
             )
         )
