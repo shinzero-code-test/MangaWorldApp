@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.widgets
 
 import android.content.Context
+import android.content.res.Configuration
 import android.os.Build
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -8,7 +9,6 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.glance.GlanceTheme
 import androidx.glance.color.ColorProviders
 import androidx.glance.color.colorProviders
@@ -41,35 +41,41 @@ internal fun widgetColorProviders(context: Context): ColorProviders {
             onSurfaceVariant = Color(0xFFCAC4D0)
         )
     }
-    fun cp(day: Color, night: Color) = ColorProvider(day.toArgb().toLong(), night.toArgb().toLong())
+    val active = if ((context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES) {
+        dark
+    } else {
+        light
+    }
+
+    fun cp(color: Color) = ColorProvider(color)
 
     return colorProviders(
-        primary = cp(light.primary, dark.primary),
-        onPrimary = cp(light.onPrimary, dark.onPrimary),
-        primaryContainer = cp(light.primaryContainer, dark.primaryContainer),
-        onPrimaryContainer = cp(light.onPrimaryContainer, dark.onPrimaryContainer),
-        secondary = cp(light.secondary, dark.secondary),
-        onSecondary = cp(light.onSecondary, dark.onSecondary),
-        secondaryContainer = cp(light.secondaryContainer, dark.secondaryContainer),
-        onSecondaryContainer = cp(light.onSecondaryContainer, dark.onSecondaryContainer),
-        tertiary = cp(light.tertiary, dark.tertiary),
-        onTertiary = cp(light.onTertiary, dark.onTertiary),
-        tertiaryContainer = cp(light.tertiaryContainer, dark.tertiaryContainer),
-        onTertiaryContainer = cp(light.onTertiaryContainer, dark.onTertiaryContainer),
-        error = cp(light.error, dark.error),
-        errorContainer = cp(light.errorContainer, dark.errorContainer),
-        onError = cp(light.onError, dark.onError),
-        onErrorContainer = cp(light.onErrorContainer, dark.onErrorContainer),
-        background = cp(light.background, dark.background),
-        onBackground = cp(light.onBackground, dark.onBackground),
-        surface = cp(light.surface, dark.surface),
-        onSurface = cp(light.onSurface, dark.onSurface),
-        surfaceVariant = cp(light.surfaceVariant, dark.surfaceVariant),
-        onSurfaceVariant = cp(light.onSurfaceVariant, dark.onSurfaceVariant),
-        outline = cp(light.outline, dark.outline),
-        inverseOnSurface = cp(light.inverseOnSurface, dark.inverseOnSurface),
-        inverseSurface = cp(light.inverseSurface, dark.inverseSurface),
-        inversePrimary = cp(light.inversePrimary, dark.inversePrimary)
+        primary = cp(active.primary),
+        onPrimary = cp(active.onPrimary),
+        primaryContainer = cp(active.primaryContainer),
+        onPrimaryContainer = cp(active.onPrimaryContainer),
+        secondary = cp(active.secondary),
+        onSecondary = cp(active.onSecondary),
+        secondaryContainer = cp(active.secondaryContainer),
+        onSecondaryContainer = cp(active.onSecondaryContainer),
+        tertiary = cp(active.tertiary),
+        onTertiary = cp(active.onTertiary),
+        tertiaryContainer = cp(active.tertiaryContainer),
+        onTertiaryContainer = cp(active.onTertiaryContainer),
+        error = cp(active.error),
+        errorContainer = cp(active.errorContainer),
+        onError = cp(active.onError),
+        onErrorContainer = cp(active.onErrorContainer),
+        background = cp(active.background),
+        onBackground = cp(active.onBackground),
+        surface = cp(active.surface),
+        onSurface = cp(active.onSurface),
+        surfaceVariant = cp(active.surfaceVariant),
+        onSurfaceVariant = cp(active.onSurfaceVariant),
+        outline = cp(active.outline),
+        inverseOnSurface = cp(active.inverseOnSurface),
+        inverseSurface = cp(active.inverseSurface),
+        inversePrimary = cp(active.inversePrimary)
     )
 }
 
