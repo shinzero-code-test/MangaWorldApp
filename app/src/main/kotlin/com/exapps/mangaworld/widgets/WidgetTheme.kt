@@ -8,6 +8,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.glance.GlanceTheme
 import androidx.glance.color.ColorProviders
 import androidx.glance.color.colorProviders
@@ -40,7 +41,7 @@ internal fun widgetColorProviders(context: Context): ColorProviders {
             onSurfaceVariant = Color(0xFFCAC4D0)
         )
     }
-    fun cp(day: Color, night: Color) = ColorProvider(day = day, night = night)
+    fun cp(day: Color, night: Color) = ColorProvider(day.toArgb().toLong(), night.toArgb().toLong())
 
     return colorProviders(
         primary = cp(light.primary, dark.primary),
