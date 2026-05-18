@@ -1,5 +1,9 @@
 package com.exapps.mangaworld.presentation.search
 
+import android.app.Activity
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -14,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -22,9 +27,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
+import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.webview.WebViewSolverActivity
 
 @Composable
 fun SearchScreen(
@@ -33,9 +40,22 @@ fun SearchScreen(
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
     val source by viewModel.source.collectAsStateWithLifecycle()
+    val enabledSources by viewModel.enabledSources.collectAsStateWithLifecycle()
     val requiresVerification by viewModel.selectedSourceRequiresVerification.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val context = LocalContext.current
+    val cfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val cookies = result.data?.getStringExtra(WebViewSolverActivity.RESULT_COOKIES).orEmpty()
+            val domain = result.data?.getStringExtra(WebViewSolverActivity.EXTRA_DOMAIN).orEmpty()
+            if (cookies.isNotBlank() && domain.isNotBlank()) {
+                CookieCache.put(domain, cookies)
+                viewModel.saveCookies(domain, cookies)
+                viewModel.reload()
+            }
+        }
+    }
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
@@ -85,7 +105,7 @@ fun SearchScreen(
                     text = { Text("كل المصادر") },
                     onClick = { viewModel.setSource(null); expanded = false }
                 )
-                MangaSource.entries.forEach { src ->
+                enabledSources.forEach { src ->
                     DropdownMenuItem(
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically,
@@ -121,10 +141,25 @@ fun SearchScreen(
                     modifier = Modifier.size(16.dp), tint = MangaColors.Yellow)
                 Text(
                     "هذا المصدر يحتاج إلى التحقق من Cloudflare. " +
-                    "افتح أي مانجا منه أولاً لاجتياز التحقق.",
+                    "يمكنك إتمام التحقق مباشرة من هنا.",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MangaColors.Yellow
+                    color = MangaColors.Yellow,
+                    modifier = Modifier.weight(1f)
                 )
+                source?.let { selectedSource ->
+                    TextButton(onClick = {
+                        cfLauncher.launch(
+                            Intent(context, WebViewSolverActivity::class.java)
+                                .putExtra(WebViewSolverActivity.EXTRA_URL, selectedSource.baseUrl)
+                                .putExtra(
+                                    WebViewSolverActivity.EXTRA_DOMAIN,
+                                    selectedSource.baseUrl.removePrefix("https://").removePrefix("http://")
+                                )
+                        )
+                    }) {
+                        Text("تحقق الآن", color = MangaColors.Yellow)
+                    }
+                }
             }
         }
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
+import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
 import kotlinx.coroutines.flow.first
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.*
@@ -34,7 +35,8 @@ class MangaDetailViewModel @Inject constructor(
     private val mangaRepo: MangaRepository,
     private val libraryRepo: LibraryRepository,
     private val settingsRepo: SettingsRepository,
-    private val downloadQueueManager: DownloadQueueManager
+    private val downloadQueueManager: DownloadQueueManager,
+    private val widgetShortcutCoordinator: WidgetShortcutCoordinator
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DetailUiState())
@@ -135,6 +137,7 @@ class MangaDetailViewModel @Inject constructor(
                     )
                 )
             }
+            widgetShortcutCoordinator.refreshWidgets()
         }
     }
 

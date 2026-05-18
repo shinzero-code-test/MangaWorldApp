@@ -48,6 +48,7 @@ fun HomeScreen(
                 // Source selector chips
                 item {
                     SourceSelectorRow(
+                        sources = state.availableSources,
                         active = state.activeSource,
                         onSelect = viewModel::selectSource
                     )
@@ -74,7 +75,7 @@ fun HomeScreen(
                 }
 
                 // Latest chapters list
-                items(state.latestChapters.take(15), key = { it.mangaId + it.chapterNumber }) { item ->
+                items(state.latestChapters.take(15), key = { it.chapterUrl }) { item ->
                     LatestChapterRow(
                         item = item,
                         onClick = { onMangaClick(item.source.id, item.mangaSlug) }
@@ -118,12 +119,16 @@ fun HomeScreen(
 // ─── Source Selector ──────────────────────────────────────────────────────────
 
 @Composable
-private fun SourceSelectorRow(active: MangaSource, onSelect: (MangaSource) -> Unit) {
+private fun SourceSelectorRow(
+    sources: List<MangaSource>,
+    active: MangaSource,
+    onSelect: (MangaSource) -> Unit
+) {
     LazyRow(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(MangaSource.values()) { source ->
+        items(sources) { source ->
             GenreChip(
                 label = source.displayName,
                 selected = source == active,

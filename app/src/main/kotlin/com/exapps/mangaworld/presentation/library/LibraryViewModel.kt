@@ -2,6 +2,7 @@ package com.exapps.mangaworld.presentation.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.LibraryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,7 +21,8 @@ data class LibraryUiState(
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
-    private val repo: LibraryRepository
+    private val repo: LibraryRepository,
+    private val widgetShortcutCoordinator: WidgetShortcutCoordinator
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(LibraryUiState())
@@ -40,7 +42,18 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun selectTab(tab: LibraryTab) = _state.update { it.copy(activeTab = tab) }
-    fun removeFavorite(id: String) = viewModelScope.launch { repo.removeFavorite(id) }
-    fun removeHistory(id: String) = viewModelScope.launch { repo.removeFromHistory(id) }
-    fun clearHistory() = viewModelScope.launch { repo.clearHistory() }
+    fun removeFavorite(id: String) = viewModelScope.launch {
+        repo.removeFavorite(id)
+        widgetShortcutCoordinator.refreshWidgets()
+    }
+
+    fun removeHistory(id: String) = viewModelScope.launch {
+        repo.removeFromHistory(id)
+        widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
+    }
+
+    fun clearHistory() = viewModelScope.launch {
+        repo.clearHistory()
+        widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
+    }
 }

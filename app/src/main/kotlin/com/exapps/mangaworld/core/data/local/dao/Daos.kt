@@ -15,6 +15,9 @@ interface FavoriteDao {
     @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE mangaId = :mangaId)")
     suspend fun isFavorite(mangaId: String): Boolean
 
+    @Query("SELECT * FROM favorites WHERE mangaId = :mangaId LIMIT 1")
+    suspend fun getById(mangaId: String): FavoriteEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(favorite: FavoriteEntity)
 
@@ -23,6 +26,9 @@ interface FavoriteDao {
 
     @Query("UPDATE favorites SET readChapters = :read, totalChapters = :total WHERE mangaId = :mangaId")
     suspend fun updateProgress(mangaId: String, read: Int, total: Int)
+
+    @Query("SELECT * FROM favorites ORDER BY addedAt DESC")
+    suspend fun getFavoritesList(): List<FavoriteEntity>
 }
 
 @Dao
@@ -41,6 +47,12 @@ interface ReadingHistoryDao {
 
     @Query("SELECT * FROM reading_history WHERE mangaId = :mangaId")
     suspend fun getByMangaId(mangaId: String): ReadingHistoryEntity?
+
+    @Query("SELECT * FROM reading_history ORDER BY lastReadAt DESC LIMIT :limit")
+    suspend fun getRecent(limit: Int): List<ReadingHistoryEntity>
+
+    @Query("SELECT * FROM reading_history ORDER BY lastReadAt DESC LIMIT 1")
+    suspend fun getLatest(): ReadingHistoryEntity?
 }
 
 @Dao
@@ -56,6 +68,12 @@ interface ReadChapterDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM read_chapters WHERE mangaId = :mangaId AND chapterNumber = :chapterNumber)")
     suspend fun isRead(mangaId: String, chapterNumber: Float): Boolean
+
+    @Query("SELECT COUNT(*) FROM read_chapters")
+    suspend fun getTotalReadCount(): Int
+
+    @Query("SELECT readAt FROM read_chapters ORDER BY readAt DESC")
+    suspend fun getReadTimestamps(): List<Long>
 }
 
 @Dao
@@ -80,6 +98,12 @@ interface MangaCacheDao {
 
     @Query("DELETE FROM manga_cache WHERE cachedAt < :before")
     suspend fun evictOlderThan(before: Long)
+
+    @Query("SELECT * FROM manga_cache WHERE mangaId IN (:mangaIds)")
+    suspend fun getByIds(mangaIds: List<String>): List<MangaCacheEntity>
+
+    @Query("SELECT * FROM manga_cache ORDER BY RANDOM() LIMIT 1")
+    suspend fun getRandom(): MangaCacheEntity?
 }
 
 @Dao

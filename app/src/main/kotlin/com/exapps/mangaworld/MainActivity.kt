@@ -1,6 +1,7 @@
 package com.exapps.mangaworld
 
 import android.Manifest
+import android.content.Intent
 import android.os.Bundle
 import android.os.Build
 import androidx.activity.ComponentActivity
@@ -33,6 +34,9 @@ import com.exapps.mangaworld.presentation.navigation.*
 import com.exapps.mangaworld.presentation.onboarding.OnboardingScreen
 import com.exapps.mangaworld.presentation.theme.*
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -40,6 +44,7 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var settingsRepository: SettingsRepository
+    private val deepLinkIntents = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
@@ -51,9 +56,15 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                MangaApp(settingsRepository)
+                MangaApp(settingsRepository, intent, deepLinkIntents.asSharedFlow())
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        deepLinkIntents.tryEmit(intent)
     }
 
     private fun requestStoragePermissionsIfNeeded() {
@@ -77,7 +88,11 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun MangaApp(settingsRepo: SettingsRepository) {
+private fun MangaApp(
+    settingsRepo: SettingsRepository,
+    launchIntent: Intent?,
+    deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>
+) {
     val scope = rememberCoroutineScope()
     val settings by settingsRepo.getAppSettings().collectAsStateWithLifecycle(
         initialValue = com.exapps.mangaworld.domain.model.AppSettings()
@@ -98,16 +113,29 @@ private fun MangaApp(settingsRepo: SettingsRepository) {
                 }
             )
         } else {
-            MangaWorldContent()
+            MangaWorldContent(launchIntent = launchIntent, deepLinkIntents = deepLinkIntents)
         }
     }
 }
 
 @Composable
-private fun MangaWorldContent() {
+private fun MangaWorldContent(
+    launchIntent: Intent?,
+    deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>
+) {
     val navController = rememberNavController()
     val navBackStack by navController.currentBackStackEntryAsState()
     val currentDest = navBackStack?.destination
+
+    LaunchedEffect(navController, launchIntent) {
+        launchIntent?.let { navController.handleDeepLink(it) }
+    }
+
+    LaunchedEffect(navController, deepLinkIntents) {
+        deepLinkIntents.collect { intent ->
+            navController.handleDeepLink(intent)
+        }
+    }
 
     // Only show bottom bar on top-level routes
     val topLevelRoutes = setOf(

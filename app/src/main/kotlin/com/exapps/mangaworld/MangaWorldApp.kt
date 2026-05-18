@@ -6,13 +6,23 @@ import android.app.NotificationManager
 import android.os.Build
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.exapps.mangaworld.core.widget.AppShortcutManager
+import com.exapps.mangaworld.core.widget.WidgetRefreshScheduler
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
 class MangaWorldApp : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
+    @Inject lateinit var widgetRefreshScheduler: WidgetRefreshScheduler
+    @Inject lateinit var appShortcutManager: AppShortcutManager
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -22,6 +32,10 @@ class MangaWorldApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
+        widgetRefreshScheduler.schedule()
+        applicationScope.launch {
+            appShortcutManager.refreshDynamicShortcuts()
+        }
     }
 
     private fun createNotificationChannels() {

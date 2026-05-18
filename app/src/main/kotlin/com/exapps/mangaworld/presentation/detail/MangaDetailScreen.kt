@@ -316,7 +316,7 @@ private fun DetailContent(
         }
 
         // ── Chapters ─────────────────────────────────────────────────────────
-        items(sortedChapters, key = { it.id }) { chapter ->
+        items(sortedChapters, key = { it.url.ifBlank { it.id } }) { chapter ->
             ChapterItem(
                 chapter = chapter,
                 isRead = readChapters.contains(chapter.number),

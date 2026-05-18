@@ -7,18 +7,37 @@ import androidx.paging.cachedIn
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.MangaRepository
+import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 
 @HiltViewModel
-class SearchViewModel @Inject constructor(private val repo: MangaRepository) : ViewModel() {
+class SearchViewModel @Inject constructor(
+    private val repo: MangaRepository,
+    private val settingsRepo: SettingsRepository
+) : ViewModel() {
 
     private val _query = MutableStateFlow("")
     private val _source = MutableStateFlow<MangaSource?>(null)
+    private val _reloadToken = MutableStateFlow(0)
 
     val query: StateFlow<String> = _query.asStateFlow()
     val source: StateFlow<MangaSource?> = _source.asStateFlow()
+    val enabledSources: StateFlow<List<MangaSource>> = settingsRepo.getAppSettings()
+        .map { settings -> MangaSource.entries.filter { it.id in settings.enabledSources } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, MangaSource.entries.toList())
+
+    init {
+        viewModelScope.launch {
+            enabledSources.collect { enabled ->
+                if (_source.value != null && _source.value !in enabled) {
+                    _source.value = null
+                }
+            }
+        }
+    }
 
     /**
      * True when the currently selected source requires Cloudflare verification.
@@ -34,17 +53,30 @@ class SearchViewModel @Inject constructor(private val repo: MangaRepository) : V
      * Source-only changes also trigger a new search.
      */
     val results: Flow<PagingData<MangaItem>> =
-        combine(_query, _source) { q, s -> q to s }
+        combine(_query, _source, enabledSources, _reloadToken) { q, s, enabled, reload ->
+            SearchRequest(q, s, enabled, reload)
+        }
             .debounce(400)
-            .filter { (q, _) -> q.length >= 2 }
-            .flatMapLatest { (q, s) ->
-                repo.searchManga(SearchFilters(query = q, source = s))
+            .filter { it.query.length >= 2 }
+            .flatMapLatest { request ->
+                val selectedSource = request.source?.takeIf { it in request.enabledSources }
+                repo.searchManga(
+                    SearchFilters(
+                        query = request.query,
+                        source = selectedSource,
+                        enabledSourceIds = request.enabledSources.map { it.id }.toSet()
+                    )
+                )
             }
             .cachedIn(viewModelScope)
 
     fun setQuery(q: String) = _query.update { q }
     fun setSource(source: MangaSource?) = _source.update { source }
     fun clear() = _query.update { "" }
+    fun reload() = _reloadToken.update { it + 1 }
+    fun saveCookies(domain: String, cookies: String) = viewModelScope.launch {
+        settingsRepo.saveCookies(domain, cookies)
+    }
 
     /**
      * Convenience check: tells callers if results are expected to be empty because all
@@ -57,3 +89,10 @@ class SearchViewModel @Inject constructor(private val repo: MangaRepository) : V
         fun isCloudflareCause(t: Throwable) = t is CloudflareChallengeException
     }
 }
+
+private data class SearchRequest(
+    val query: String,
+    val source: MangaSource?,
+    val enabledSources: List<MangaSource>,
+    val reloadToken: Int
+)

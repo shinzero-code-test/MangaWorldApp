@@ -2,9 +2,11 @@ package com.exapps.mangaworld.presentation.reader
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.data.ReadingStatsStore
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
+import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.*
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -36,15 +38,22 @@ class ReaderViewModel @Inject constructor(
     private val libraryRepo: LibraryRepository,
     private val settingsRepo: SettingsRepository,
     private val downloadQueueManager: DownloadQueueManager,
-    private val cacheDao: MangaCacheDao
+    private val cacheDao: MangaCacheDao,
+    private val readingStatsStore: ReadingStatsStore,
+    private val widgetShortcutCoordinator: WidgetShortcutCoordinator
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReaderUiState())
     val state: StateFlow<ReaderUiState> = _state.asStateFlow()
 
     private var currentSource: MangaSource = MangaSource.STARZ
+    private var activeSessionKey: String? = null
+    private var sessionCheckpointAt: Long? = null
 
     fun loadChapter(chapterUrl: String, mangaId: String, source: MangaSource) {
+        if (_state.value.chapterUrl != chapterUrl) {
+            finishSessionAsync()
+        }
         currentSource = source
         _state.update { it.copy(isLoading = true, error = null, chapterUrl = chapterUrl, mangaId = mangaId) }
         viewModelScope.launch {
@@ -59,6 +68,7 @@ class ReaderViewModel @Inject constructor(
                         downloadMessage = "قراءة بدون إنترنت"
                     )
                 }
+                beginSession(mangaId, chapterUrl)
                 return@launch
             }
             mangaRepo.getChapterPages("", chapterUrl, source)
@@ -89,6 +99,8 @@ class ReaderViewModel @Inject constructor(
                             )
                         }
                     }
+                    beginSession(mangaId, chapterUrl)
+                    viewModelScope.launch { widgetShortcutCoordinator.refreshWidgetsAndShortcuts() }
                 }
                 .onFailure { e ->
                     val msg = if (e is CloudflareChallengeException) {
@@ -115,9 +127,11 @@ class ReaderViewModel @Inject constructor(
         viewModelScope.launch {
             val chNum = st.chapterUrl.substringAfterLast("/").replace("[^0-9.]".toRegex(), "")
                 .toFloatOrNull() ?: return@launch
+            trackReadingTime()
             libraryRepo.saveReadingProgress(st.mangaId, chNum, page, st.totalPages)
             if (page >= st.totalPages - 1) {
                 libraryRepo.markChapterRead(st.mangaId, chNum)
+                widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
             }
         }
     }
@@ -159,5 +173,39 @@ class ReaderViewModel @Inject constructor(
 
     fun retryCurrentChapterDownload() {
         downloadCurrentChapter()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        finishSessionAsync()
+    }
+
+    private fun beginSession(mangaId: String, chapterUrl: String) {
+        activeSessionKey = "$mangaId|$chapterUrl"
+        sessionCheckpointAt = System.currentTimeMillis()
+    }
+
+    private suspend fun trackReadingTime() {
+        val checkpoint = sessionCheckpointAt ?: return
+        val now = System.currentTimeMillis()
+        val delta = (now - checkpoint).coerceIn(0L, 2 * 60_000L)
+        if (delta >= 1_000L) {
+            readingStatsStore.addReadingTime(delta)
+        }
+        sessionCheckpointAt = now
+    }
+
+    private fun finishSessionAsync() {
+        val checkpoint = sessionCheckpointAt ?: return
+        val now = System.currentTimeMillis()
+        val delta = (now - checkpoint).coerceIn(0L, 2 * 60_000L)
+        sessionCheckpointAt = null
+        activeSessionKey = null
+        if (delta >= 1_000L) {
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                readingStatsStore.addReadingTime(delta)
+                widgetShortcutCoordinator.refreshWidgets()
+            }
+        }
     }
 }

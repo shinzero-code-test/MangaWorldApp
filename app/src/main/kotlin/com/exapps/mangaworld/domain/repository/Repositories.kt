@@ -22,7 +22,7 @@ interface MangaRepository {
     suspend fun getPopularManga(source: MangaSource): Result<List<MangaItem>>
 
     // Genres
-    suspend fun getGenres(source: MangaSource? = null): List<String>
+    suspend fun getGenres(source: MangaSource? = null, enabledSourceIds: Set<String>? = null): List<String>
 }
 
 interface LibraryRepository {

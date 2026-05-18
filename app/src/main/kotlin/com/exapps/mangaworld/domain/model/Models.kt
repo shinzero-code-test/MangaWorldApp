@@ -157,7 +157,8 @@ data class SearchFilters(
     val status: MangaStatus? = null,
     val type: MangaType? = null,
     val sortBy: SortBy = SortBy.LATEST,
-    val source: MangaSource? = null
+    val source: MangaSource? = null,
+    val enabledSourceIds: Set<String> = MangaSource.entries.map { it.id }.toSet()
 )
 
 enum class SortBy(val label: String) {

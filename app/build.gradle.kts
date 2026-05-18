@@ -206,6 +206,10 @@ dependencies {
     // Accompanist
     implementation(libs.accompanist.systemuicontroller)
 
+    // Widgets / Glance
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.ext)

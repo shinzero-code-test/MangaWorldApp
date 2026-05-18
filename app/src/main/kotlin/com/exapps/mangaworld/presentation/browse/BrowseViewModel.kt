@@ -6,6 +6,7 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.MangaRepository
+import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.*
@@ -19,6 +20,7 @@ data class BrowseUiState(
     val selectedSource: MangaSource? = null,
     val sortBy: SortBy = SortBy.LATEST,
     val isGridView: Boolean = true,
+    val enabledSourceIds: Set<String> = MangaSource.entries.map { it.id }.toSet(),
     val genres: List<String> = listOf("الكل")
 ) {
     val filters get() = SearchFilters(
@@ -27,12 +29,16 @@ data class BrowseUiState(
         status = selectedStatus,
         type = selectedType,
         source = selectedSource,
-        sortBy = sortBy
+        sortBy = sortBy,
+        enabledSourceIds = enabledSourceIds
     )
 }
 
 @HiltViewModel
-class BrowseViewModel @Inject constructor(private val repo: MangaRepository) : ViewModel() {
+class BrowseViewModel @Inject constructor(
+    private val repo: MangaRepository,
+    settingsRepo: SettingsRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BrowseUiState())
     val uiState: StateFlow<BrowseUiState> = _uiState.asStateFlow()
@@ -44,8 +50,21 @@ class BrowseViewModel @Inject constructor(private val repo: MangaRepository) : V
 
     init {
         viewModelScope.launch {
-            val loaded = repo.getGenres()
-            _uiState.update { it.copy(genres = listOf("الكل") + loaded) }
+            settingsRepo.getAppSettings()
+                .map { it.enabledSources }
+                .distinctUntilChanged()
+                .collectLatest { enabledSources ->
+                    val loaded = repo.getGenres(enabledSourceIds = enabledSources)
+                    val availableGenres = listOf("الكل") + loaded
+                    _uiState.update {
+                        it.copy(
+                            enabledSourceIds = enabledSources,
+                            selectedSource = it.selectedSource?.takeIf { src -> src.id in enabledSources },
+                            selectedGenre = it.selectedGenre?.takeIf { genre -> genre in loaded },
+                            genres = availableGenres
+                        )
+                    }
+                }
         }
     }
 

@@ -10,9 +10,13 @@ import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.MangaStatus
 import com.exapps.mangaworld.domain.model.MangaType
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONArray
+import org.json.JSONObject
 import org.jsoup.nodes.Document
-import org.jsoup.nodes.Element
 import javax.inject.Inject
 
 class MangaSidScraper @Inject constructor(
@@ -33,49 +37,87 @@ class MangaSidScraper @Inject constructor(
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
         val url = "${source.baseUrl}/manga/$slug"
         val doc = fetchDocument(url)
-
-        val title = doc.selectFirst("h1")?.text()?.cleanText().orEmpty().ifBlank { slug }
-        val coverUrl = doc.select("img[src*='/covers/'], img[data-src*='/covers/']")
-            .firstOrNull { img ->
-                img.attr("alt").contains(title, ignoreCase = true) ||
-                    img.attr("alt").contains("غلاف مانجا")
-            }
-            ?.let { img ->
-                img.attr("abs:src").ifEmpty {
-                    img.attr("data-src").ifEmpty { img.attr("src") }.absoluteUrl()
-                }
-            }
-            ?.encodeForUrl()
-            .orEmpty()
-
-        val description = extractDescription(doc)
-        val genres = doc.select("a[href*='genres=']")
-            .map { it.text().cleanText().removeSuffix(" مانجا تصفح") }
-            .filter { it.isNotBlank() }
-            .distinct()
+        val rawHtml = fetchRawHtml(url)
 
         val meta = linkedMapOf<String, String>()
         doc.select(".flex.justify-between.items-center").forEach { row ->
             val values = row.select("span, a")
                 .map { it.text().cleanText() }
                 .filter { it.isNotBlank() }
-            if (values.size >= 2) {
-                meta[values.first()] = values.last()
-            }
+            if (values.size >= 2) meta[values.first()] = values.last()
         }
 
-        val chapters = doc.select("a[href^='/reader/']")
-            .mapNotNull { link -> parseChapter(slug, link) }
+        val props = extractIslandProps(rawHtml, "MangaChaptersLoader")
+        val manga = decodeWire(props?.opt("manga")) as? Map<*, *>
+
+        val title = decodeStr(manga?.get("title")).ifBlank {
+            doc.selectFirst("h1")?.text()?.cleanText().orEmpty()
+        }.ifBlank { slug }
+
+        val coverUrl = decodeStr(manga?.get("cover_image")).encodeForUrl().ifBlank {
+            doc.select("img[src*='/covers/'], img[data-src*='/covers/']")
+                .firstOrNull { img ->
+                    img.attr("alt").contains(title, ignoreCase = true) ||
+                        img.attr("alt").contains("غلاف مانجا")
+                }
+                ?.let { img ->
+                    img.attr("abs:src").ifEmpty {
+                        img.attr("data-src").ifEmpty { img.attr("src") }.absoluteUrl()
+                    }
+                }
+                ?.encodeForUrl()
+                .orEmpty()
+        }
+
+        val description = decodeStr(manga?.get("description")).cleanText().ifBlank {
+            extractDescription(doc)
+        }
+
+        val genres = decodeList(manga?.get("Tags"))
+            .mapNotNull { tag ->
+                val tagMap = tag as? Map<*, *> ?: return@mapNotNull null
+                decodeStr(tagMap["name"]).cleanText().ifBlank { null }
+            }
+            .ifEmpty {
+                doc.select("a[href*='genres=']")
+                    .map { it.text().cleanText().removeSuffix(" مانجا تصفح") }
+                    .filter { it.isNotBlank() }
+            }
+            .distinct()
+
+        val chapters = decodeList(manga?.get("MangaChapters"))
+            .mapNotNull { chapter ->
+                val chapterMap = chapter as? Map<*, *> ?: return@mapNotNull null
+                val chapterId = decodeLong(chapterMap["id"]) ?: return@mapNotNull null
+                val chapterText = decodeStr(chapterMap["chapter_number"]).ifBlank {
+                    decodeStr(chapterMap["title"])
+                }
+                val chapterNumber = parseChapterNumber(chapterText) ?: return@mapNotNull null
+                val chapterPath = normalizeChapterPath(chapterText, chapterNumber)
+                val createdAt = decodeStr(chapterMap["created_at"])
+                val dateLong = runCatching {
+                    java.time.Instant.parse(createdAt).toEpochMilli()
+                }.getOrNull()
+
+                Chapter(
+                    id = "${slug}_$chapterId",
+                    mangaId = "mangasid_$slug",
+                    number = chapterNumber,
+                    title = decodeStr(chapterMap["title"]).cleanText().takeIf {
+                        it.isNotBlank() && !it.equals("Chapter $chapterPath", ignoreCase = true)
+                    },
+                    url = "${source.baseUrl}/reader/$slug/$chapterPath",
+                    date = dateLong,
+                    dateText = createdAt.substringBefore('T').takeIf { it.isNotBlank() },
+                    isPaid = decodeLong(chapterMap["price"])?.let { it > 0 } == true
+                )
+            }
+            .ifEmpty {
+                doc.select("a[href^='/reader/']")
+                    .mapNotNull { link -> parseVisibleChapter(slug, link.attr("abs:href").ifEmpty { link.attr("href").absoluteUrl() }, link.text().cleanText()) }
+            }
             .distinctBy { it.url }
             .sortedByDescending { it.number }
-
-        val mergedMetaText = buildString {
-            append(meta["الحالة"].orEmpty())
-            append(' ')
-            append(meta["التصنيف"].orEmpty())
-            append(' ')
-            append(genres.joinToString(" "))
-        }
 
         MangaDetail(
             id = "mangasid_$slug",
@@ -85,9 +127,10 @@ class MangaSidScraper @Inject constructor(
             source = source,
             description = description,
             genres = genres,
-            status = MangaStatus.from(meta["الحالة"]),
-            type = MangaType.from(mergedMetaText),
-            totalChapters = chapters.size,
+            status = MangaStatus.from(decodeStr(manga?.get("status")).ifBlank { meta["الحالة"].orEmpty() }),
+            type = MangaType.from(genres.joinToString(" ")),
+            totalChapters = doc.selectFirst("meta[name='manga:chapters']")?.attr("content")?.toIntOrNull()
+                ?: chapters.size,
             lastUpdated = meta["آخر تحديث"],
             chapters = chapters,
             url = url
@@ -145,8 +188,6 @@ class MangaSidScraper @Inject constructor(
 
     private fun parseCards(doc: Document): List<Pair<MangaItem, LatestChapterItem?>> {
         return doc.select(".manga-card").mapNotNull { card ->
-            val coverLink = card.selectFirst("a.block.relative[href^='/manga/'], a[href^='/manga/']")
-                ?: return@mapNotNull null
             val titleLink = card.selectFirst("h3 a[href^='/manga/'], a.block[href^='/manga/'][dir='auto']")
                 ?: card.select("a[href^='/manga/']").lastOrNull()
                 ?: return@mapNotNull null
@@ -167,8 +208,12 @@ class MangaSidScraper @Inject constructor(
                 .ifBlank { slug }
 
             val statusText = card.selectFirst(".absolute.bottom-0 span")?.text()?.cleanText()
-            val rating = card.selectFirst(".absolute.bottom-0 .fa-star")?.parent()?.selectFirst("span")
-                ?.text()?.cleanText()?.toFloatOrNull()
+            val rating = card.selectFirst(".absolute.bottom-0 .fa-star")
+                ?.parent()
+                ?.selectFirst("span")
+                ?.text()
+                ?.cleanText()
+                ?.toFloatOrNull()
             val genres = card.select(".flex.flex-wrap.gap-1.justify-center.mb-2 span")
                 .map { it.text().cleanText() }
                 .filter { it.isNotBlank() }
@@ -207,29 +252,109 @@ class MangaSidScraper @Inject constructor(
         }.distinctBy { it.first.id }
     }
 
-    private fun parseChapter(slug: String, link: Element): Chapter? {
-        val href = link.attr("abs:href").ifEmpty { link.attr("href").absoluteUrl() }
-        if (!href.contains("/reader/")) return null
-
-        val chapterNumber = parseChapterNumber(href.substringAfterLast("/").substringBefore('?'))
-            ?: parseChapterNumber(link.text())
-            ?: return null
-
-        val container = link.closest("a.manga-chapter, .manga-chapter, li, div")
-        val dateText = container?.text()
-            ?.let { Regex("\\d{1,2}[^0-9A-Za-z]+\\d{1,2}[^0-9A-Za-z]+\\d{4}").find(it)?.value }
-            ?.cleanText()
-
-        return Chapter(
-            id = "${slug}_$chapterNumber",
-            mangaId = "mangasid_$slug",
-            number = chapterNumber,
-            title = link.selectFirst("h3, span")?.text()?.cleanText()?.ifBlank { null }
-                ?: link.text().cleanText().ifBlank { null },
-            url = href,
-            dateText = dateText
-        )
+    private suspend fun fetchRawHtml(url: String): String = withContext(Dispatchers.IO) {
+        val cookies = getCookiesForDomain(url)
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "text/html,application/xhtml+xml")
+            .header("Accept-Language", "ar,en;q=0.9")
+            .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
+            .build()
+        val response = client.newCall(request).execute()
+        val body = response.body?.string() ?: ""
+        response.close()
+        body
     }
+
+    private fun extractIslandProps(rawHtml: String, componentToken: String): JSONObject? {
+        var pos = 0
+        while (true) {
+            val tagStart = rawHtml.indexOf("<astro-island", pos)
+            if (tagStart < 0) return null
+            val tagEnd = findOpenTagEnd(rawHtml, tagStart)
+            if (tagEnd < 0) return null
+            pos = tagEnd + 1
+
+            val tagContent = rawHtml.substring(tagStart, tagEnd + 1)
+            val componentUrl = extractAttrValue(tagContent, "component-url") ?: continue
+            if (!componentUrl.contains(componentToken)) continue
+            val propsValue = extractAttrValue(tagContent, "props") ?: continue
+            return runCatching { JSONObject(propsValue.htmlUnesc()) }.getOrNull()
+        }
+    }
+
+    private fun findOpenTagEnd(html: String, start: Int): Int {
+        var index = start
+        var inQuote = false
+        var quoteChar = ' '
+        while (index < html.length) {
+            val char = html[index]
+            when {
+                inQuote -> if (char == quoteChar) inQuote = false
+                char == '"' || char == '\'' -> {
+                    inQuote = true
+                    quoteChar = char
+                }
+                char == '>' -> return index
+            }
+            index++
+        }
+        return -1
+    }
+
+    private fun extractAttrValue(tagContent: String, name: String): String? {
+        val marker = "$name=\""
+        val start = tagContent.indexOf(marker)
+        if (start < 0) return null
+        val valueStart = start + marker.length
+        val valueEnd = tagContent.indexOf('"', valueStart)
+        if (valueEnd < 0) return null
+        return tagContent.substring(valueStart, valueEnd)
+    }
+
+    private fun String.htmlUnesc(): String = replace("&quot;", "\"")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&#39;", "'")
+        .replace("&#x27;", "'")
+
+    private fun decodeWire(value: Any?): Any? {
+        return when {
+            value is JSONArray && value.length() == 2 -> when (value.getInt(0)) {
+                0 -> {
+                    val inner = value.get(1)
+                    when {
+                        inner == JSONObject.NULL -> null
+                        inner is JSONObject -> decodeWire(inner)
+                        inner is JSONArray -> decodeWire(inner)
+                        else -> inner
+                    }
+                }
+
+                1 -> {
+                    val innerArray = value.getJSONArray(1)
+                    (0 until innerArray.length()).map { decodeWire(innerArray.get(it)) }
+                }
+
+                else -> value
+            }
+
+            value is JSONObject -> value.keys().asSequence().associateWith { key ->
+                decodeWire(value.opt(key))
+            }
+
+            else -> value
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun decodeList(value: Any?): List<Any?> = decodeWire(value) as? List<Any?> ?: emptyList()
+
+    private fun decodeStr(value: Any?): String = decodeWire(value)?.toString().orEmpty()
+
+    private fun decodeLong(value: Any?): Long? = (decodeWire(value) as? Number)?.toLong()
 
     private fun extractDescription(doc: Document): String {
         val heading = doc.select("h3").firstOrNull { it.text().contains("نبذة عن العمل") }
@@ -238,14 +363,35 @@ class MangaSidScraper @Inject constructor(
             heading?.parent()?.selectFirst("p"),
             doc.selectFirst("meta[name=description]")
         )
-            .mapNotNull { el ->
-                when (el) {
-                    null -> null
-                    else -> el.text().cleanText().ifBlank { el.attr("content").cleanText() }
-                }
+            .mapNotNull { element ->
+                element?.text()?.cleanText()?.ifBlank { element.attr("content").cleanText() }
             }
             .firstOrNull { it.length > 20 }
             .orEmpty()
+    }
+
+    private fun parseVisibleChapter(slug: String, href: String, text: String): Chapter? {
+        if (!href.contains("/reader/")) return null
+        val chapterNumber = parseChapterNumber(href.substringAfterLast('/').substringBefore('?'))
+            ?: parseChapterNumber(text)
+            ?: return null
+        return Chapter(
+            id = "${slug}_${href.hashCode()}",
+            mangaId = "mangasid_$slug",
+            number = chapterNumber,
+            title = text.ifBlank { null },
+            url = href
+        )
+    }
+
+    private fun normalizeChapterPath(chapterText: String, chapterNumber: Float): String {
+        val raw = chapterText.trim()
+        if (raw.matches(Regex("\\d+(?:\\.\\d+)?"))) return raw
+        return if (chapterNumber == chapterNumber.toInt().toFloat()) {
+            chapterNumber.toInt().toString()
+        } else {
+            chapterNumber.toString()
+        }
     }
 
     private fun parseChapterNumber(text: String): Float? =

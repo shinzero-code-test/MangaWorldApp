@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="search_manga"
+        android:shortcutLongLabel="@string/shortcut_search_long"
+        android:shortcutShortLabel="@string/shortcut_search_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="mangaworld://screen/search"
+            android:targetClass="com.exapps.mangaworld.MainActivity"
+            android:targetPackage="com.exapps.mangaworld" />
+    </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="downloads"
+        android:shortcutLongLabel="@string/shortcut_downloads_long"
+        android:shortcutShortLabel="@string/shortcut_downloads_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="mangaworld://screen/downloads"
+            android:targetClass="com.exapps.mangaworld.MainActivity"
+            android:targetPackage="com.exapps.mangaworld" />
+    </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="latest_updates"
+        android:shortcutLongLabel="@string/shortcut_latest_long"
+        android:shortcutShortLabel="@string/shortcut_latest_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="mangaworld://screen/latest-updates"
+            android:targetClass="com.exapps.mangaworld.MainActivity"
+            android:targetPackage="com.exapps.mangaworld" />
+    </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="random_manga"
+        android:shortcutLongLabel="@string/shortcut_random_long"
+        android:shortcutShortLabel="@string/shortcut_random_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.exapps.mangaworld.core.integration.RandomShortcutActivity"
+            android:targetPackage="com.exapps.mangaworld" />
+    </shortcut>
+</shortcuts>

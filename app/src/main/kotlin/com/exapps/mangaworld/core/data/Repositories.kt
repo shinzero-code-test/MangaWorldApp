@@ -138,9 +138,11 @@ class MangaRepositoryImpl @Inject constructor(
     override suspend fun getPopularManga(source: MangaSource) =
         scraper(source).getPopularManga()
 
-    override suspend fun getGenres(source: MangaSource?): List<String> {
+    override suspend fun getGenres(source: MangaSource?, enabledSourceIds: Set<String>?): List<String> {
+        val allowed = enabledSourceIds ?: MangaSource.entries.map { it.id }.toSet()
         val sources = if (source != null) listOf(source) else MangaSource.values().toList()
         return sources.flatMap { s ->
+            if (s.id !in allowed) return@flatMap emptyList()
             val sc = scrapers[s.id] ?: return@flatMap emptyList()
             sc.getGenres().getOrDefault(emptyList())
         }.distinct().sorted()
@@ -173,8 +175,12 @@ class MangaPagingSource(
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, MangaItem> {
         val page = params.key ?: 1
         return try {
-            val sources = if (filters.source != null) listOf(filters.source)
-            else MangaSource.values().toList()
+            val allowedSourceIds = filters.enabledSourceIds
+            val sources = if (filters.source != null) {
+                listOfNotNull(filters.source.takeIf { it.id in allowedSourceIds })
+            } else {
+                MangaSource.values().filter { it.id in allowedSourceIds }
+            }
 
             // getPopularManga has no pagination — only load page 1
             if (filters.query.isEmpty() && filters.genre == null && page > 1) {
@@ -265,16 +271,27 @@ class LibraryRepositoryImpl @Inject constructor(
                 totalChapters = if (totalChapters > 0) totalChapters else existing?.totalChapters ?: 0
             )
         )
+        favoriteDao.getById(mangaId)?.let { favorite ->
+            favoriteDao.updateProgress(
+                mangaId = mangaId,
+                read = readCount,
+                total = if (totalChapters > 0) totalChapters else favorite.totalChapters
+            )
+        }
     }
 
     override suspend fun clearHistory() = historyDao.clearAll()
     override suspend fun removeFromHistory(mangaId: String) = historyDao.delete(mangaId)
 
-    override suspend fun markChapterRead(mangaId: String, chapterNumber: Float) =
+    override suspend fun markChapterRead(mangaId: String, chapterNumber: Float) {
         readChapterDao.markRead(ReadChapterEntity(mangaId, chapterNumber))
+        syncFavoriteProgress(mangaId)
+    }
 
-    override suspend fun markChapterUnread(mangaId: String, chapterNumber: Float) =
+    override suspend fun markChapterUnread(mangaId: String, chapterNumber: Float) {
         readChapterDao.markUnread(mangaId, chapterNumber)
+        syncFavoriteProgress(mangaId)
+    }
 
     override fun getReadChapters(mangaId: String): Flow<Set<Float>> =
         readChapterDao.getReadChapters(mangaId).map { it.toSet() }
@@ -289,6 +306,13 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun getReadingProgressMap(mangaId: String): Map<Float, Pair<Int, Int>> =
         progressDao.getAllForManga(mangaId).associate { it.chapterNumber to Pair(it.currentPage, it.totalPages) }
+
+    private suspend fun syncFavoriteProgress(mangaId: String) {
+        val favorite = favoriteDao.getById(mangaId) ?: return
+        val readCount = readChapterDao.getReadChapters(mangaId).first().size
+        val total = historyDao.getByMangaId(mangaId)?.totalChapters?.takeIf { it > 0 } ?: favorite.totalChapters
+        favoriteDao.updateProgress(mangaId, readCount, total)
+    }
 }
 
 // ─── SettingsRepository ───────────────────────────────────────────────────────

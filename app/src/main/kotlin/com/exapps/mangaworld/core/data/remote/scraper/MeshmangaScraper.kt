@@ -195,7 +195,7 @@ class MeshmangaScraper @Inject constructor(
         val createdAt = obj.optString("created_at").ifBlank { null }
         val date = createdAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
         return Chapter(
-            id = "${seriesId}_$chapterNumber",
+            id = "${seriesId}_$chapterId",
             mangaId = "meshmanga_$seriesId",
             number = chapterNumber,
             title = obj.optString("title").cleanText().ifBlank { null },

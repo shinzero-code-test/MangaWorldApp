@@ -2,4 +2,12 @@
 <resources>
     <string name="app_name">MangaWorld</string>
     <string name="splash_tagline">اقرأ المانجا العربية</string>
+    <string name="shortcut_search_short">بحث</string>
+    <string name="shortcut_search_long">ابحث عن مانجا</string>
+    <string name="shortcut_downloads_short">التنزيلات</string>
+    <string name="shortcut_downloads_long">افتح التنزيلات</string>
+    <string name="shortcut_latest_short">أحدث التحديثات</string>
+    <string name="shortcut_latest_long">افتح أحدث التحديثات</string>
+    <string name="shortcut_random_short">مانجا عشوائية</string>
+    <string name="shortcut_random_long">افتح مانجا عشوائية</string>
 </resources>

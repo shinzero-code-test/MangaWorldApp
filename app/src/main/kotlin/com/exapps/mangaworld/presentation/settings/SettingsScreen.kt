@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.webview.WebViewSolverActivity
 import com.exapps.mangaworld.presentation.components.GradientDivider
@@ -32,7 +33,12 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val context = LocalContext.current
     val cfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            // Cookies are automatically stored in the system CookieManager
+            val cookies = result.data?.getStringExtra(WebViewSolverActivity.RESULT_COOKIES).orEmpty()
+            val domain = result.data?.getStringExtra(WebViewSolverActivity.EXTRA_DOMAIN).orEmpty()
+            if (cookies.isNotBlank() && domain.isNotBlank()) {
+                CookieCache.put(domain, cookies)
+                viewModel.saveCookies(domain, cookies)
+            }
         }
     }
 

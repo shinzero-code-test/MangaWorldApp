@@ -34,6 +34,7 @@ sealed class Screen(val route: String) {
         fun createRoute(sourceId: String, mangaId: String, chapterUrl: String) =
             "reader/$sourceId/$mangaId/${java.net.URLEncoder.encode(chapterUrl, "UTF-8")}"
     }
+    object ReaderDeepLink : Screen("reader_deep_link?sourceId={sourceId}&mangaId={mangaId}&chapterUrl={chapterUrl}")
 }
 
 val bottomNavItems: List<Triple<Screen, String, ImageVector>> = listOf(
@@ -56,7 +57,13 @@ fun MangaNavGraph(navController: NavHostController) {
         popEnterTransition  = { fadeIn(tween(220)) + slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(220)) },
         popExitTransition   = { fadeOut(tween(180)) + slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(180)) }
     ) {
-        composable(Screen.Home.route) {
+        composable(
+            route = Screen.Home.route,
+            deepLinks = listOf(
+                navDeepLink { uriPattern = "mangaworld://screen/home" },
+                navDeepLink { uriPattern = "mangaworld://screen/latest-updates" }
+            )
+        ) {
             HomeScreen(
                 onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) },
                 onSeeAllLatest = { navController.navigate(Screen.Browse.route) }
@@ -67,7 +74,10 @@ fun MangaNavGraph(navController: NavHostController) {
                 onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) }
             )
         }
-        composable(Screen.Search.route) {
+        composable(
+            route = Screen.Search.route,
+            deepLinks = listOf(navDeepLink { uriPattern = "mangaworld://screen/search" })
+        ) {
             SearchScreen(
                 onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) }
             )
@@ -79,18 +89,22 @@ fun MangaNavGraph(navController: NavHostController) {
             )
         }
         composable(Screen.Settings.route)    { SettingsScreen() }
-        composable(Screen.Downloads.route)   { DownloadsScreen() }
+        composable(
+            route = Screen.Downloads.route,
+            deepLinks = listOf(navDeepLink { uriPattern = "mangaworld://screen/downloads" })
+        ) { DownloadsScreen() }
         composable(Screen.LocalStorage.route) {
             LocalStorageScreen(
                 onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) }
             )
         }
         composable(
-            Screen.Detail.route,
+            route = Screen.Detail.route,
             arguments = listOf(
                 navArgument("sourceId") { type = NavType.StringType },
                 navArgument("slug")     { type = NavType.StringType }
-            )
+            ),
+            deepLinks = listOf(navDeepLink { uriPattern = "mangaworld://manga/{sourceId}/{slug}" })
         ) { back ->
             val sourceId = back.arguments?.getString("sourceId") ?: return@composable
             val slug     = back.arguments?.getString("slug") ?: return@composable
@@ -118,6 +132,29 @@ fun MangaNavGraph(navController: NavHostController) {
             ReaderScreen(
                 source = MangaSource.fromId(sourceId), mangaId = mangaId,
                 chapterUrl = chapterUrl, onBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            route = Screen.ReaderDeepLink.route,
+            arguments = listOf(
+                navArgument("sourceId") { type = NavType.StringType },
+                navArgument("mangaId") { type = NavType.StringType },
+                navArgument("chapterUrl") { type = NavType.StringType }
+            ),
+            deepLinks = listOf(
+                navDeepLink {
+                    uriPattern = "mangaworld://reader?sourceId={sourceId}&mangaId={mangaId}&chapterUrl={chapterUrl}"
+                }
+            )
+        ) { back ->
+            val sourceId = back.arguments?.getString("sourceId") ?: return@composable
+            val mangaId = back.arguments?.getString("mangaId") ?: return@composable
+            val chapterUrl = back.arguments?.getString("chapterUrl") ?: return@composable
+            ReaderScreen(
+                source = MangaSource.fromId(sourceId),
+                mangaId = mangaId,
+                chapterUrl = chapterUrl,
+                onBack = { navController.popBackStack() }
             )
         }
     }
