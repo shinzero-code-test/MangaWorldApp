@@ -17,7 +17,7 @@ class FirebaseTelemetry @Inject constructor() {
         crashlytics.recordException(throwable)
     }
 
-    inline fun <T> trace(name: String, block: () -> T): T {
+    fun <T> trace(name: String, block: () -> T): T {
         val trace = performance.newTrace(name)
         trace.start()
         return try {
