@@ -1,9 +1,7 @@
 package com.exapps.mangaworld.core.firebase
 
-import com.google.firebase.ktx.Firebase
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
-import com.google.firebase.remoteconfig.ktx.remoteConfig
-import com.google.firebase.remoteconfig.ktx.remoteConfigSettings
+import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,7 +11,7 @@ import javax.inject.Singleton
 
 @Singleton
 class FirebaseRemoteConfigManager @Inject constructor() {
-    private val remoteConfig: FirebaseRemoteConfig = Firebase.remoteConfig
+    private val remoteConfig: FirebaseRemoteConfig = FirebaseRemoteConfig.getInstance()
 
     private val _disabledSourceIds = MutableStateFlow<Set<String>>(emptySet())
     val disabledSourceIds: StateFlow<Set<String>> = _disabledSourceIds.asStateFlow()
@@ -26,9 +24,9 @@ class FirebaseRemoteConfigManager @Inject constructor() {
 
     init {
         remoteConfig.setConfigSettingsAsync(
-            remoteConfigSettings {
-                minimumFetchIntervalInSeconds = 3600
-            }
+            FirebaseRemoteConfigSettings.Builder()
+                .setMinimumFetchIntervalInSeconds(3600)
+                .build()
         )
         remoteConfig.setDefaultsAsync(
             mapOf(
