@@ -65,6 +65,23 @@ data class ReadingProgressEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "reader_annotations", primaryKeys = ["mangaId", "chapterUrl", "pageIndex"])
+data class ReaderAnnotationEntity(
+    val mangaId: String,
+    val chapterUrl: String,
+    val pageIndex: Int,
+    val note: String = "",
+    val isBookmarked: Boolean = false,
+    val updatedAt: Long = System.currentTimeMillis()
+) {
+    fun toDomain() = ReaderPageAnnotation(
+        pageIndex = pageIndex,
+        note = note.ifBlank { null },
+        isBookmarked = isBookmarked,
+        updatedAt = updatedAt
+    )
+}
+
 @Entity(tableName = "manga_cache")
 data class MangaCacheEntity(
     @PrimaryKey val mangaId: String,

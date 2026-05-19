@@ -30,6 +30,7 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
+import com.exapps.mangaworld.presentation.theme.rememberDominantColor
 import com.exapps.mangaworld.presentation.webview.WebViewSolverActivity
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
@@ -129,6 +130,7 @@ private fun DetailContent(
 ) {
     val ctx = LocalContext.current
     var descExpanded by remember { mutableStateOf(false) }
+    val dominantColor = rememberDominantColor(manga.coverUrl)
 
     LazyColumn(Modifier.fillMaxSize()) {
         // ── Header ──────────────────────────────────────────────────────────
@@ -143,7 +145,7 @@ private fun DetailContent(
                 Box(
                     Modifier.fillMaxSize().background(
                         Brush.verticalGradient(
-                            listOf(Color(0x88000000), MangaColors.Background),
+                            listOf((dominantColor ?: Color(0x88000000)).copy(alpha = 0.72f), MangaColors.Background),
                             startY = 0f, endY = Float.POSITIVE_INFINITY
                         )
                     )

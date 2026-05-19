@@ -3,6 +3,7 @@ package com.exapps.mangaworld.presentation.reader
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
+import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -21,7 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -46,6 +49,10 @@ fun ReaderScreen(
     LaunchedEffect(chapterUrl) { viewModel.loadChapter(chapterUrl, mangaId, source) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val activity = ctx as? Activity
+    var noteDialog by remember { mutableStateOf(false) }
+    var noteText by remember { mutableStateOf("") }
     val solverLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val cookies = result.data?.getStringExtra(WebViewSolverActivity.RESULT_COOKIES).orEmpty()
@@ -63,6 +70,26 @@ fun ReaderScreen(
         Modifier.fillMaxSize().background(Color.Black)
             .systemBarsPadding()
     ) {
+        DisposableEffect(state.secureReaderEnabled, activity) {
+            val window = activity?.window
+            if (state.secureReaderEnabled) {
+                window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            } else {
+                window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+            onDispose {
+                if (state.secureReaderEnabled) {
+                    window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                }
+            }
+        }
+
+        SideEffect {
+            activity?.window?.attributes = activity.window.attributes.apply {
+                screenBrightness = state.brightness.coerceIn(0.05f, 1f)
+            }
+        }
+
         when {
             state.isLoading -> ReaderLoading()
             state.error != null -> {
@@ -89,7 +116,10 @@ fun ReaderScreen(
             else -> ReaderContent(
                 state = state,
                 onPageChanged = viewModel::onPageChanged,
-                onTap = viewModel::toggleControls,
+                onTap = {
+                    if (state.hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    viewModel.toggleControls()
+                },
                 onModeChange = viewModel::setReaderMode
             )
         }
@@ -111,7 +141,26 @@ fun ReaderScreen(
                 downloadInProgress = state.downloadInProgress,
                 onCancelDownload = viewModel::cancelDownload,
                 onRetryDownload = viewModel::retryCurrentChapterDownload,
-                canRetry = state.downloadMessage?.startsWith("فشل") == true
+                canRetry = state.downloadMessage?.startsWith("فشل") == true,
+                brightness = state.brightness,
+                onBrightnessChange = viewModel::setBrightness,
+                imageFilter = state.imageFilter,
+                onImageFilterChange = viewModel::setImageFilter,
+                incognitoMode = state.incognitoMode,
+                onIncognitoChange = viewModel::setIncognito,
+                hasBookmark = state.currentPage in state.bookmarkedPages,
+                onToggleBookmark = {
+                    if (state.hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    viewModel.toggleBookmarkCurrentPage()
+                },
+                onEditNote = {
+                    noteText = state.pageNotes[state.currentPage].orEmpty()
+                    noteDialog = true
+                },
+                hasPreviousChapter = state.prevChapterUrl != null,
+                hasNextChapter = state.nextChapterUrl != null,
+                onPreviousChapter = viewModel::openPreviousChapter,
+                onNextChapter = viewModel::openNextChapter
             )
         }
 
@@ -140,6 +189,40 @@ fun ReaderScreen(
                     .padding(bottom = 70.dp)
             )
         }
+
+        if (noteDialog) {
+            AlertDialog(
+                onDismissRequest = { noteDialog = false },
+                title = { Text("ملاحظة الصفحة ${state.currentPage + 1}") },
+                text = {
+                    OutlinedTextField(
+                        value = noteText,
+                        onValueChange = { noteText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = MangaColors.OnSurface,
+                            unfocusedTextColor = MangaColors.OnSurface
+                        )
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.saveCurrentPageNote(noteText)
+                        noteDialog = false
+                    }) { Text("حفظ") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { noteDialog = false }) { Text("إلغاء") }
+                }
+            )
+        }
+    }
+
+    LaunchedEffect(state.currentPage, state.totalPages, state.hapticsEnabled) {
+        if (state.hapticsEnabled && state.totalPages > 0 && state.currentPage == state.totalPages - 1) {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
     }
 }
 
@@ -155,13 +238,13 @@ private fun ReaderContent(
 ) {
     when (state.readerMode) {
         ReaderMode.VERTICAL_SCROLL, ReaderMode.WEBTOON ->
-            WebtoonReader(pages = state.pages, onTap = onTap, onPageChanged = onPageChanged)
+            WebtoonReader(pages = state.pages, imageFilter = state.imageFilter, onTap = onTap, onPageChanged = onPageChanged)
         ReaderMode.HORIZONTAL_RTL ->
             HorizontalReader(pages = state.pages, rtl = true,
-                initialPage = state.currentPage, onPageChanged = onPageChanged, onTap = onTap)
+                initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap)
         ReaderMode.HORIZONTAL_LTR ->
             HorizontalReader(pages = state.pages, rtl = false,
-                initialPage = state.currentPage, onPageChanged = onPageChanged, onTap = onTap)
+                initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap)
     }
 }
 
@@ -170,6 +253,7 @@ private fun ReaderContent(
 @Composable
 private fun WebtoonReader(
     pages: List<ChapterPage>,
+    imageFilter: ReaderImageFilter,
     onTap: () -> Unit,
     onPageChanged: (Int) -> Unit
 ) {
@@ -186,10 +270,7 @@ private fun WebtoonReader(
             interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) { onTap() }
     ) {
         items(pages, key = { it.index }) { page ->
-            MangaPageImage(
-                page = page,
-                modifier = Modifier.fillMaxWidth()
-            )
+            MangaPageImage(page = page, imageFilter = imageFilter, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -202,6 +283,7 @@ private fun HorizontalReader(
     pages: List<ChapterPage>,
     rtl: Boolean,
     initialPage: Int,
+    imageFilter: ReaderImageFilter,
     onPageChanged: (Int) -> Unit,
     onTap: () -> Unit
 ) {
@@ -221,6 +303,7 @@ private fun HorizontalReader(
     ) { pageIndex ->
         MangaPageImage(
             page = orderedPages[pageIndex],
+            imageFilter = imageFilter,
             modifier = Modifier.fillMaxSize()
         )
     }
@@ -229,7 +312,7 @@ private fun HorizontalReader(
 // ─── Single Page Image ────────────────────────────────────────────────────────
 
 @Composable
-private fun MangaPageImage(page: ChapterPage, modifier: Modifier = Modifier) {
+private fun MangaPageImage(page: ChapterPage, imageFilter: ReaderImageFilter, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     var isLoading by remember { mutableStateOf(true) }
     var isError by remember { mutableStateOf(false) }
@@ -242,12 +325,14 @@ private fun MangaPageImage(page: ChapterPage, modifier: Modifier = Modifier) {
                 .allowHardware(false)
                 .bitmapConfig(Bitmap.Config.RGB_565)
                 .precision(Precision.INEXACT)
+                .size(1600, 4096)
                 .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
                 .build(),
             imageLoader = ctx.imageLoader,
             contentDescription = "Page ${page.index + 1}",
             contentScale = ContentScale.FillWidth,
             modifier = Modifier.fillMaxWidth(),
+            colorFilter = imageFilter.toColorFilter(),
             onLoading = { isLoading = true; isError = false },
             onSuccess = { isLoading = false; isError = false },
             onError = { isLoading = false; isError = true }
@@ -287,7 +372,20 @@ private fun ReaderTopBar(
     downloadInProgress: Boolean,
     onCancelDownload: () -> Unit,
     onRetryDownload: () -> Unit,
-    canRetry: Boolean
+    canRetry: Boolean,
+    brightness: Float,
+    onBrightnessChange: (Float) -> Unit,
+    imageFilter: ReaderImageFilter,
+    onImageFilterChange: (ReaderImageFilter) -> Unit,
+    incognitoMode: Boolean,
+    onIncognitoChange: (Boolean) -> Unit,
+    hasBookmark: Boolean,
+    onToggleBookmark: () -> Unit,
+    onEditNote: () -> Unit,
+    hasPreviousChapter: Boolean,
+    hasNextChapter: Boolean,
+    onPreviousChapter: () -> Unit,
+    onNextChapter: () -> Unit
 ) {
     var showModeMenu by remember { mutableStateOf(false) }
 
@@ -309,8 +407,20 @@ private fun ReaderTopBar(
                     style = MaterialTheme.typography.bodyMedium, color = Color.White)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onPreviousChapter, enabled = hasPreviousChapter) {
+                    Icon(Icons.Filled.NavigateBefore, "الفصل السابق", tint = Color.White)
+                }
+                IconButton(onClick = onNextChapter, enabled = hasNextChapter) {
+                    Icon(Icons.Filled.NavigateNext, "الفصل التالي", tint = Color.White)
+                }
                 IconButton(onClick = onDownload, enabled = !downloadInProgress) {
                     Icon(Icons.Filled.Download, "تنزيل", tint = Color.White)
+                }
+                IconButton(onClick = onToggleBookmark) {
+                    Icon(if (hasBookmark) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, "إشارة", tint = Color.White)
+                }
+                IconButton(onClick = onEditNote) {
+                    Icon(Icons.Filled.EditNote, "ملاحظة", tint = Color.White)
                 }
                 if (downloadInProgress) {
                     IconButton(onClick = onCancelDownload) {
@@ -346,11 +456,59 @@ private fun ReaderTopBar(
                             onClick = { onModeChange(mode); showModeMenu = false }
                         )
                     }
+                    DropdownMenuItem(
+                        text = { Text("وضع خفي: ${if (incognitoMode) "مفعل" else "معطل"}") },
+                        onClick = { onIncognitoChange(!incognitoMode) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("الفلتر: ${imageFilter.label}") },
+                        onClick = { }
+                    )
+                    ReaderImageFilter.values().forEach { filter ->
+                        DropdownMenuItem(
+                            text = { Text(filter.label) },
+                            onClick = { onImageFilterChange(filter) }
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text("السطوع")
+                                Slider(
+                                    value = brightness,
+                                    onValueChange = onBrightnessChange,
+                                    valueRange = 0.05f..1f,
+                                    modifier = Modifier.width(180.dp)
+                                )
+                            }
+                        },
+                        onClick = { }
+                    )
                 }
                 }
             }
         }
     }
+}
+
+private fun ReaderImageFilter.toColorFilter(): ColorFilter? {
+    val matrix = when (this) {
+        ReaderImageFilter.NONE -> return null
+        ReaderImageFilter.GRAYSCALE -> ColorMatrix().apply { setToSaturation(0f) }
+        ReaderImageFilter.SEPIA -> ColorMatrix(floatArrayOf(
+            0.393f, 0.769f, 0.189f, 0f, 0f,
+            0.349f, 0.686f, 0.168f, 0f, 0f,
+            0.272f, 0.534f, 0.131f, 0f, 0f,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        ReaderImageFilter.HIGH_CONTRAST -> ColorMatrix(floatArrayOf(
+            1.4f, 0f, 0f, 0f, -20f,
+            0f, 1.4f, 0f, 0f, -20f,
+            0f, 0f, 1.4f, 0f, -20f,
+            0f, 0f, 0f, 1f, 0f
+        ))
+    }
+    return ColorFilter.colorMatrix(matrix)
 }
 
 // ─── Bottom Bar ───────────────────────────────────────────────────────────────

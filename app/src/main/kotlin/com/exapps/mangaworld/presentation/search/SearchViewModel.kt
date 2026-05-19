@@ -23,9 +23,12 @@ class SearchViewModel @Inject constructor(
     private val _source = MutableStateFlow<MangaSource?>(null)
     private val _reloadToken = MutableStateFlow(0)
 
+    private val appSettings: StateFlow<AppSettings> = settingsRepo.getAppSettings()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
+
     val query: StateFlow<String> = _query.asStateFlow()
     val source: StateFlow<MangaSource?> = _source.asStateFlow()
-    val enabledSources: StateFlow<List<MangaSource>> = settingsRepo.getAppSettings()
+    val enabledSources: StateFlow<List<MangaSource>> = appSettings
         .map { settings -> MangaSource.entries.filter { it.id in settings.enabledSources } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, MangaSource.entries.toList())
 
@@ -53,8 +56,8 @@ class SearchViewModel @Inject constructor(
      * Source-only changes also trigger a new search.
      */
     val results: Flow<PagingData<MangaItem>> =
-        combine(_query, _source, enabledSources, _reloadToken) { q, s, enabled, reload ->
-            SearchRequest(q, s, enabled, reload)
+        combine(_query, _source, enabledSources, appSettings, _reloadToken) { q, s, enabled, settings, reload ->
+            SearchRequest(q, s, enabled, settings, reload)
         }
             .debounce(400)
             .filter { it.query.length >= 2 }
@@ -64,7 +67,8 @@ class SearchViewModel @Inject constructor(
                     SearchFilters(
                         query = request.query,
                         source = selectedSource,
-                        enabledSourceIds = request.enabledSources.map { it.id }.toSet()
+                        enabledSourceIds = request.enabledSources.map { it.id }.toSet(),
+                        blockedKeywords = request.appSettings.contentBlacklist
                     )
                 )
             }
@@ -94,5 +98,6 @@ private data class SearchRequest(
     val query: String,
     val source: MangaSource?,
     val enabledSources: List<MangaSource>,
+    val appSettings: AppSettings,
     val reloadToken: Int
 )

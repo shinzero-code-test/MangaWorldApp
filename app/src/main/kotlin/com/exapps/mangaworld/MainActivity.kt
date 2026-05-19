@@ -4,10 +4,11 @@ import android.Manifest
 import android.content.Intent
 import android.os.Bundle
 import android.os.Build
-import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -18,13 +19,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
@@ -34,6 +38,7 @@ import com.exapps.mangaworld.presentation.navigation.*
 import com.exapps.mangaworld.presentation.onboarding.OnboardingScreen
 import com.exapps.mangaworld.presentation.theme.*
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -41,7 +46,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     @Inject lateinit var settingsRepository: SettingsRepository
     private val deepLinkIntents = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
@@ -103,17 +108,49 @@ private fun MangaApp(
         AppTheme.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
     }
 
-    MangaWorldTheme(darkTheme = isDark) {
-        if (!settings.onboardingCompleted) {
-            OnboardingScreen(
-                onFinish = {
-                    scope.launch {
-                        settingsRepo.setOnboardingCompleted(true)
+    val biometricSupported = remember {
+        BiometricManager.from(LocalContext.current).canAuthenticate(
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        ) == BiometricManager.BIOMETRIC_SUCCESS
+    }
+    var isLocked by rememberSaveable(settings.biometricLockEnabled) {
+        mutableStateOf(settings.biometricLockEnabled && biometricSupported)
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    LaunchedEffect(settings.biometricLockEnabled, biometricSupported) {
+        if (!settings.biometricLockEnabled || !biometricSupported) {
+            isLocked = false
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, settings.biometricLockEnabled, biometricSupported) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (settings.biometricLockEnabled && biometricSupported && event == Lifecycle.Event.ON_STOP) {
+                isLocked = true
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    MangaWorldTheme(darkTheme = isDark, useDynamicColors = settings.useDynamicColors) {
+        Box(Modifier.fillMaxSize()) {
+            if (!settings.onboardingCompleted) {
+                OnboardingScreen(
+                    onFinish = {
+                        scope.launch {
+                            settingsRepo.setOnboardingCompleted(true)
+                        }
                     }
-                }
-            )
-        } else {
-            MangaWorldContent(launchIntent = launchIntent, deepLinkIntents = deepLinkIntents)
+                )
+            } else {
+                MangaWorldContent(launchIntent = launchIntent, deepLinkIntents = deepLinkIntents)
+            }
+
+            if (settings.biometricLockEnabled && biometricSupported && isLocked) {
+                BiometricLockOverlay(onUnlocked = { isLocked = false })
+            }
         }
     }
 }
@@ -221,6 +258,70 @@ private fun MangaBottomBar(
                     indicatorColor = Color.Transparent
                 )
             )
+        }
+    }
+}
+
+@Composable
+private fun BiometricLockOverlay(onUnlocked: () -> Unit) {
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity ?: return
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    fun launchPrompt() {
+        val prompt = BiometricPrompt(
+            activity,
+            ContextCompat.getMainExecutor(activity),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    errorMessage = null
+                    onUnlocked()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    if (errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
+                        errorCode != BiometricPrompt.ERROR_CANCELED
+                    ) {
+                        errorMessage = errString.toString()
+                    }
+                }
+            }
+        )
+
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("فتح MangaWorld")
+            .setSubtitle("استخدم البصمة أو قفل الجهاز للمتابعة")
+            .setAllowedAuthenticators(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            )
+            .build()
+        prompt.authenticate(info)
+    }
+
+    LaunchedEffect(Unit) { launchPrompt() }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xEE09090E))
+            .padding(24.dp),
+        contentAlignment = androidx.compose.ui.Alignment.Center
+    ) {
+        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MangaColors.Surface)) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text("التطبيق مقفل", style = MaterialTheme.typography.titleLarge, color = MangaColors.OnSurface)
+                Text(
+                    errorMessage ?: "افتح التطبيق باستخدام البصمة أو قفل الجهاز.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MangaColors.OnSurfaceVariant
+                )
+                Button(onClick = ::launchPrompt) { Text("إعادة المحاولة") }
+            }
         }
     }
 }

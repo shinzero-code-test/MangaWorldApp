@@ -19,7 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.exapps.mangaworld.R
 import com.exapps.mangaworld.presentation.components.GradientButton
+import com.exapps.mangaworld.presentation.theme.rememberDominantColor
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import kotlinx.coroutines.launch
 
@@ -68,10 +70,11 @@ fun OnboardingScreen(onFinish: () -> Unit) {
     val pagerState = rememberPagerState { onboardingPages.size }
     val scope = rememberCoroutineScope()
     val isLast = pagerState.currentPage == onboardingPages.size - 1
+    val dominant = rememberDominantColor(R.mipmap.ic_launcher)
 
     Box(
         Modifier.fillMaxSize().background(
-            Brush.verticalGradient(listOf(MangaColors.Background, Color(0xFF0D0D1A)))
+            Brush.verticalGradient(listOf(dominant ?: MangaColors.Background, Color(0xFF0D0D1A)))
         )
     ) {
         Column(Modifier.fillMaxSize()) {

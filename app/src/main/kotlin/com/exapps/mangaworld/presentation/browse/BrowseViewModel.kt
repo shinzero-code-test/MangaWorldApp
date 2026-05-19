@@ -21,6 +21,7 @@ data class BrowseUiState(
     val sortBy: SortBy = SortBy.LATEST,
     val isGridView: Boolean = true,
     val enabledSourceIds: Set<String> = MangaSource.entries.map { it.id }.toSet(),
+    val blockedKeywords: Set<String> = emptySet(),
     val genres: List<String> = listOf("الكل")
 ) {
     val filters get() = SearchFilters(
@@ -30,7 +31,8 @@ data class BrowseUiState(
         type = selectedType,
         source = selectedSource,
         sortBy = sortBy,
-        enabledSourceIds = enabledSourceIds
+        enabledSourceIds = enabledSourceIds,
+        blockedKeywords = blockedKeywords
     )
 }
 
@@ -51,14 +53,15 @@ class BrowseViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settingsRepo.getAppSettings()
-                .map { it.enabledSources }
+                .map { settings -> settings.enabledSources to settings.contentBlacklist }
                 .distinctUntilChanged()
-                .collectLatest { enabledSources ->
+                .collectLatest { (enabledSources, blacklist) ->
                     val loaded = repo.getGenres(enabledSourceIds = enabledSources)
                     val availableGenres = listOf("الكل") + loaded
                     _uiState.update {
                         it.copy(
                             enabledSourceIds = enabledSources,
+                            blockedKeywords = blacklist,
                             selectedSource = it.selectedSource?.takeIf { src -> src.id in enabledSources },
                             selectedGenre = it.selectedGenre?.takeIf { genre -> genre in loaded },
                             genres = availableGenres

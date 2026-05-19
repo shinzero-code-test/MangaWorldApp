@@ -27,10 +27,16 @@ import com.exapps.mangaworld.presentation.components.GradientDivider
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(
+    onOpenDiagnostics: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel()
+) {
     val app by viewModel.appSettings.collectAsStateWithLifecycle()
     val reader by viewModel.readerSettings.collectAsStateWithLifecycle()
+    val cacheSizeBytes by viewModel.imageCacheSizeBytes.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var blacklistDialog by remember { mutableStateOf(false) }
+    var blacklistText by remember(app.contentBlacklist) { mutableStateOf(app.contentBlacklist.joinToString("\n")) }
     val cfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val cookies = result.data?.getStringExtra(WebViewSolverActivity.RESULT_COOKIES).orEmpty()
@@ -80,6 +86,32 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     }
                 }
             }
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.ColorLens,
+                title = "ألوان ديناميكية (Material You)",
+                subtitle = "مطابقة ألوان النظام على Android 12+",
+                checked = app.useDynamicColors,
+                onCheckedChange = viewModel::setDynamicColors
+            )
+        }
+
+        SettingsSection("الخصوصية والحماية") {
+            SwitchItem(
+                icon = Icons.Filled.Fingerprint,
+                title = "قفل التطبيق بالبصمة",
+                subtitle = "يطلب المصادقة عند العودة للتطبيق",
+                checked = app.biometricLockEnabled,
+                onCheckedChange = viewModel::setBiometricLock
+            )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.Security,
+                title = "حماية القارئ من اللقطات",
+                subtitle = "منع لقطات الشاشة وتسجيل القارئ",
+                checked = app.secureReaderEnabled,
+                onCheckedChange = viewModel::setSecureReader
+            )
         }
 
         // ── Reader ────────────────────────────────────────────────────────────
@@ -118,6 +150,51 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 subtitle = "تغيير وضع القراءة تلقائياً",
                 checked = reader.autoWebtoonDetection,
                 onCheckedChange = viewModel::setAutoWebtoon)
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.VisibilityOff,
+                title = "وضع التصفح الخفي",
+                subtitle = "لا يحفظ التقدم أو السجل أثناء القراءة",
+                checked = reader.incognitoMode,
+                onCheckedChange = viewModel::setIncognito
+            )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.FlashOn,
+                title = "التحميل المسبق للفصل التالي",
+                subtitle = "يبدأ عند تجاوز 50% من الفصل الحالي",
+                checked = reader.smartPrefetchEnabled,
+                onCheckedChange = viewModel::setSmartPrefetch
+            )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.TouchApp,
+                title = "الاهتزازات اللمسية",
+                subtitle = "ردود فعل عند الإشارات والإكمال",
+                checked = reader.hapticsEnabled,
+                onCheckedChange = viewModel::setReaderHaptics
+            )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SettingsItem(icon = Icons.Filled.Tune, title = "فلتر الصور", subtitle = reader.imageFilter.label) {
+                var expanded by remember { mutableStateOf(false) }
+                Box {
+                    TextButton(onClick = { expanded = true }) {
+                        Text(reader.imageFilter.label, color = MangaColors.Cyan)
+                        Icon(Icons.Filled.ArrowDropDown, null, tint = MangaColors.Cyan)
+                    }
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(MangaColors.SurfaceContainer)) {
+                        ReaderImageFilter.values().forEach { filter ->
+                            DropdownMenuItem(
+                                text = { Text(filter.label, color = MangaColors.OnSurface) },
+                                onClick = { viewModel.setImageFilter(filter); expanded = false },
+                                leadingIcon = {
+                                    if (filter == reader.imageFilter) Icon(Icons.Filled.Check, null, tint = MangaColors.Primary)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         // ── Sources ───────────────────────────────────────────────────────────
@@ -170,6 +247,66 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 subtitle = "توفير البيانات الخلوية",
                 checked = app.downloadOnWifiOnly,
                 onCheckedChange = viewModel::setWifiOnly)
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.DeleteSweep,
+                title = "حذف التنزيلات المقروءة تلقائياً",
+                subtitle = "بعد فترة من إنهاء الفصل",
+                checked = app.autoCleanupReadDownloads,
+                onCheckedChange = viewModel::setAutoCleanup
+            )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SettingsItem(
+                icon = Icons.Filled.Schedule,
+                title = "فترة الحذف التلقائي",
+                subtitle = "${app.cleanupAfterHours} ساعة"
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(24, 48, 72).forEach { hours ->
+                        FilterChip(
+                            selected = app.cleanupAfterHours == hours,
+                            onClick = { viewModel.setCleanupHours(hours) },
+                            label = { Text("$hours") }
+                        )
+                    }
+                }
+            }
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SettingsItem(
+                icon = Icons.Filled.Cached,
+                title = "حجم كاش الصور",
+                subtitle = formatBytes(cacheSizeBytes)
+            ) {
+                OutlinedButton(onClick = viewModel::clearImageCache) { Text("مسح") }
+            }
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SettingsItem(
+                icon = Icons.Filled.Storage,
+                title = "حد كاش الصور",
+                subtitle = "${app.imageCacheLimitMb} MB"
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(128, 250, 500).forEach { size ->
+                        FilterChip(
+                            selected = app.imageCacheLimitMb == size,
+                            onClick = { viewModel.setImageCacheLimit(size) },
+                            label = { Text("$size") }
+                        )
+                    }
+                }
+            }
+        }
+
+        SettingsSection("التحكم بالمحتوى") {
+            SettingsItem(
+                icon = Icons.Filled.Block,
+                title = "الكلمات المحجوبة",
+                subtitle = if (app.contentBlacklist.isEmpty()) "لا توجد كلمات محجوبة" else "${app.contentBlacklist.size} كلمة"
+            ) {
+                OutlinedButton(onClick = { blacklistText = app.contentBlacklist.joinToString("\n"); blacklistDialog = true }) {
+                    Text("إدارة")
+                }
+            }
         }
 
         // ── Notifications ─────────────────────────────────────────────────────
@@ -187,10 +324,53 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(icon = Icons.Filled.Code, title = "com.exapps.mangaworld",
                 subtitle = "مبني بـ Kotlin + Jetpack Compose") {}
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SettingsItem(icon = Icons.Filled.BugReport, title = "التشخيص وصحة المصادر", subtitle = "فحص المصادر والودجت والكاش") {
+                OutlinedButton(onClick = onOpenDiagnostics) { Text("فتح") }
+            }
         }
 
         Spacer(Modifier.height(80.dp))
     }
+
+    if (blacklistDialog) {
+        AlertDialog(
+            onDismissRequest = { blacklistDialog = false },
+            title = { Text("الكلمات المحجوبة") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("أدخل كلمة أو عبارة في كل سطر لإخفائها من الرئيسية/التصفح/التحديثات.")
+                    OutlinedTextField(
+                        value = blacklistText,
+                        onValueChange = { blacklistText = it },
+                        modifier = Modifier.fillMaxWidth().height(180.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MangaColors.Primary,
+                            focusedTextColor = MangaColors.OnSurface,
+                            unfocusedTextColor = MangaColors.OnSurface
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setContentBlacklist(
+                        blacklistText.lines().map { it.trim() }.filter { it.isNotBlank() }.toSet()
+                    )
+                    blacklistDialog = false
+                }) { Text("حفظ") }
+            },
+            dismissButton = {
+                TextButton(onClick = { blacklistDialog = false }) { Text("إلغاء") }
+            }
+        )
+    }
+}
+
+private fun formatBytes(bytes: Long): String {
+    val kb = bytes / 1024.0
+    val mb = kb / 1024.0
+    return if (mb >= 1) String.format(java.util.Locale.US, "%.1f MB", mb) else String.format(java.util.Locale.US, "%.0f KB", kb)
 }
 
 // ─── Section Container ────────────────────────────────────────────────────────

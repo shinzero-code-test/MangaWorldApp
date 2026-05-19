@@ -210,6 +210,10 @@ dependencies {
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)
 
+    // Extras
+    implementation(libs.androidx.biometric)
+    implementation(libs.androidx.palette.ktx)
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.ext)

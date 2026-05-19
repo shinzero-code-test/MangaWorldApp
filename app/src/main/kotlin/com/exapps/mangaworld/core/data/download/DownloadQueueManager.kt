@@ -165,6 +165,11 @@ class DownloadQueueManager @Inject constructor(
 
     suspend fun clearCompleted() = downloadTaskDao.clearCompleted()
 
+    suspend fun getDownloadedChapterDir(mangaId: String, chapterUrl: String): String? =
+        downloadTaskDao.getLatestByChapter(chapterUrl, mangaId)
+            ?.targetDir
+            ?.takeIf { File(it).exists() && File(it, ".completed").exists() }
+
     /**
      * Delete ALL downloaded content for a manga: files on disk, task records,
      * and the downloaded_manga metadata row.
@@ -177,6 +182,12 @@ class DownloadQueueManager @Inject constructor(
         // Remove DB records
         downloadTaskDao.deleteByMangaId(mangaId)
         downloadedMangaDao.delete(mangaId)
+    }
+
+    suspend fun deleteDownloadedChapterDir(mangaId: String, targetDir: String) {
+        val dir = File(targetDir)
+        if (dir.exists()) dir.deleteRecursively()
+        refreshDownloadedCount(mangaId)
     }
 
     /** Update the chapter count in the downloaded_manga table after a chapter completes. */

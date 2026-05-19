@@ -89,6 +89,21 @@ interface ReadingProgressDao {
 }
 
 @Dao
+interface ReaderAnnotationDao {
+    @Query("SELECT * FROM reader_annotations WHERE mangaId = :mangaId AND chapterUrl = :chapterUrl ORDER BY pageIndex ASC")
+    fun observeChapterAnnotations(mangaId: String, chapterUrl: String): Flow<List<ReaderAnnotationEntity>>
+
+    @Query("SELECT * FROM reader_annotations WHERE mangaId = :mangaId AND chapterUrl = :chapterUrl AND pageIndex = :pageIndex LIMIT 1")
+    suspend fun get(mangaId: String, chapterUrl: String, pageIndex: Int): ReaderAnnotationEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: ReaderAnnotationEntity)
+
+    @Query("DELETE FROM reader_annotations WHERE mangaId = :mangaId AND chapterUrl = :chapterUrl AND pageIndex = :pageIndex")
+    suspend fun delete(mangaId: String, chapterUrl: String, pageIndex: Int)
+}
+
+@Dao
 interface MangaCacheDao {
     @Query("SELECT * FROM manga_cache WHERE mangaId = :mangaId")
     suspend fun get(mangaId: String): MangaCacheEntity?
@@ -116,6 +131,9 @@ interface DownloadTaskDao {
 
     @Query("SELECT * FROM download_tasks WHERE chapterUrl = :chapterUrl AND mangaId = :mangaId AND (status = 'queued' OR status = 'running') LIMIT 1")
     suspend fun getPendingByChapter(chapterUrl: String, mangaId: String): DownloadTaskEntity?
+
+    @Query("SELECT * FROM download_tasks WHERE chapterUrl = :chapterUrl AND mangaId = :mangaId ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun getLatestByChapter(chapterUrl: String, mangaId: String): DownloadTaskEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(task: DownloadTaskEntity)

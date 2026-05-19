@@ -306,25 +306,7 @@ class OlympusScraper @Inject constructor(
             val parsed = if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
                 parseJsonSearchResults(body)
             } else {
-                // HTML fragment fallback: parse with base URL so abs:href resolves correctly
-                val doc = Jsoup.parse(body, source.baseUrl)
-                doc.select("a[href*=\"/series/\"]").mapNotNull { a ->
-                    val href = a.attr("abs:href").ifEmpty { a.attr("href").absoluteUrl() }
-                    val slug = href.substringAfterLast("/series/").trimEnd('/')
-                    if (slug.isEmpty()) return@mapNotNull null
-                    val title = a.selectFirst("h4, h3, .title, span")?.text()?.cleanText()
-                        ?: a.selectFirst("img[alt]")?.attr("alt")?.cleanText()
-                        ?: a.attr("title").cleanText().ifEmpty { return@mapNotNull null }
-                    val coverUrl = a.selectFirst("img")?.let { img ->
-                        img.attr("abs:src").ifEmpty {
-                            img.attr("data-src").ifEmpty { img.attr("src") }.absoluteUrl()
-                        }
-                    }?.encodeForUrl().orEmpty()
-                    MangaItem(
-                        id = "olympus_$slug", slug = slug, title = title,
-                        coverUrl = coverUrl, source = source, url = href
-                    )
-                }
+                parseAjaxSearchHtml(body)
             }
             if (parsed.isNotEmpty()) parsed else fetchDocument("${source.baseUrl}/series?keyword=$encoded").let(::parseMangaGrid)
         }
@@ -474,5 +456,29 @@ class OlympusScraper @Inject constructor(
                 runCatching { parseItem(array.getJSONObject(i)) }.getOrNull()
             }
         }.getOrElse { emptyList() }
+    }
+
+    private fun parseAjaxSearchHtml(body: String): List<MangaItem> {
+        val doc = Jsoup.parse(body, source.baseUrl)
+        return doc.select("a.group[href*='/series/'], a[href*='/series/']").mapNotNull { a ->
+            val href = a.attr("abs:href").ifEmpty { a.attr("href").absoluteUrl() }
+            val slug = href.substringAfterLast("/series/").trimEnd('/').takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val title = a.selectFirst("h4")?.text()?.cleanText()
+                ?: a.selectFirst("img[alt]")?.attr("alt")?.cleanText()
+                ?: a.attr("title").cleanText().ifEmpty { return@mapNotNull null }
+            val coverUrl = a.selectFirst("img")?.let { img ->
+                img.attr("abs:src").ifEmpty {
+                    img.attr("data-src").ifEmpty { img.attr("src") }.absoluteUrl()
+                }
+            }?.encodeForUrl().orEmpty()
+            MangaItem(
+                id = "olympus_$slug",
+                slug = slug,
+                title = title,
+                coverUrl = coverUrl,
+                source = source,
+                url = href
+            )
+        }.distinctBy { it.url }
     }
 }

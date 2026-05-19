@@ -32,9 +32,9 @@ class HomeViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settingsRepo.getAppSettings()
-                .map { settings -> MangaSource.entries.filter { it.id in settings.enabledSources } }
+                .map { settings -> settings to MangaSource.entries.filter { it.id in settings.enabledSources } }
                 .distinctUntilChanged()
-                .collectLatest { enabledSources ->
+                .collectLatest { (settings, enabledSources) ->
                     val current = _state.value.activeSource
                     _state.update { it.copy(availableSources = enabledSources) }
                     val nextSource = when {
@@ -53,24 +53,27 @@ class HomeViewModel @Inject constructor(
                             )
                         }
                     } else {
-                        loadHome(nextSource)
+                        loadHome(nextSource, settings.contentBlacklist)
                     }
                 }
         }
     }
 
-    fun loadHome(source: MangaSource = _state.value.activeSource) {
+    fun loadHome(source: MangaSource = _state.value.activeSource, blockedKeywords: Set<String> = emptySet()) {
         viewModelScope.launch {
             if (source !in _state.value.availableSources) return@launch
             _state.update { it.copy(isLoading = true, error = null) }
             repo.getHomeData(source)
                 .onSuccess { data ->
+                    val filteredFeatured = data.featured.filterNot { it.isBlockedBy(blockedKeywords) }
+                    val filteredLatest = data.latestChapters.filterNot { it.isBlockedBy(blockedKeywords) }
+                    val filteredTrending = data.trending.filterNot { it.isBlockedBy(blockedKeywords) }
                     _state.update {
                         it.copy(
                             isLoading = false,
-                            featured = data.featured,
-                            latestChapters = data.latestChapters,
-                            trending = data.trending,
+                            featured = filteredFeatured,
+                            latestChapters = filteredLatest,
+                            trending = filteredTrending,
                             activeSource = source
                         )
                     }
@@ -81,8 +84,15 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun refresh() = loadHome(_state.value.activeSource)
+    fun refresh() = viewModelScope.launch {
+        val blacklist = settingsRepo.getAppSettings().first().contentBlacklist
+        loadHome(_state.value.activeSource, blacklist)
+    }
     fun selectSource(source: MangaSource) {
-        if (source in _state.value.availableSources) loadHome(source)
+        if (source in _state.value.availableSources) {
+            viewModelScope.launch {
+                loadHome(source, settingsRepo.getAppSettings().first().contentBlacklist)
+            }
+        }
     }
 }

@@ -2,9 +2,12 @@ package com.exapps.mangaworld.presentation.latest
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +24,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +44,7 @@ import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
 import com.exapps.mangaworld.domain.model.LatestChapterItem
 import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.repository.LibraryRepository
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.components.EmptyState
@@ -59,7 +64,12 @@ import javax.inject.Inject
 
 data class LatestUpdatesUiState(
     val isLoading: Boolean = true,
+    val allItems: List<LatestChapterItem> = emptyList(),
     val items: List<LatestChapterItem> = emptyList(),
+    val readStates: Map<String, Boolean> = emptyMap(),
+    val availableSources: List<MangaSource> = MangaSource.entries.toList(),
+    val selectedSource: MangaSource? = null,
+    val unreadOnly: Boolean = false,
     val error: String? = null
 )
 
@@ -67,6 +77,7 @@ data class LatestUpdatesUiState(
 class LatestUpdatesViewModel @Inject constructor(
     private val mangaRepository: MangaRepository,
     private val settingsRepository: SettingsRepository,
+    private val libraryRepository: LibraryRepository,
     private val widgetShortcutCoordinator: WidgetShortcutCoordinator
 ) : ViewModel() {
     private val _state = MutableStateFlow(LatestUpdatesUiState())
@@ -78,7 +89,8 @@ class LatestUpdatesViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             val result = runCatching {
-                val enabled = settingsRepository.getAppSettings().first().enabledSources
+                val settings = settingsRepository.getAppSettings().first()
+                val enabled = settings.enabledSources
                 val sources = MangaSource.entries.filter { it.id in enabled }
                 coroutineScope {
                     sources.map { source ->
@@ -87,10 +99,25 @@ class LatestUpdatesViewModel @Inject constructor(
                 }
                     .distinctBy { it.chapterUrl }
                     .sortedByDescending { it.publishedAt ?: 0L }
+                    .filterNot { it.isBlockedBy(settings.contentBlacklist) }
+                    .let { items -> sources to items }
             }
 
-            result.onSuccess { items ->
-                _state.update { it.copy(isLoading = false, items = items) }
+            result.onSuccess { (sources, items) ->
+                val readStates = items.associate { item ->
+                    item.chapterUrl to libraryRepository.isChapterRead(item.mangaId, item.chapterNumber)
+                }
+                _state.update {
+                    val next = it.copy(
+                        isLoading = false,
+                        allItems = items,
+                        readStates = readStates,
+                        availableSources = sources,
+                        selectedSource = it.selectedSource?.takeIf { src -> src in sources },
+                        error = null
+                    )
+                    next.copy(items = filterItems(next))
+                }
             }.onFailure { e ->
                 _state.update { it.copy(isLoading = false, error = e.message ?: "تعذر تحميل التحديثات") }
             }
@@ -98,6 +125,29 @@ class LatestUpdatesViewModel @Inject constructor(
             if (result.isSuccess) {
                 widgetShortcutCoordinator.refreshWidgets()
             }
+        }
+    }
+
+    fun setSource(source: MangaSource?) {
+        _state.update { current ->
+            val next = current.copy(selectedSource = source)
+            next.copy(items = filterItems(next))
+        }
+    }
+
+    fun setUnreadOnly(enabled: Boolean) {
+        viewModelScope.launch {
+            _state.update { current ->
+                val next = current.copy(unreadOnly = enabled)
+                next.copy(items = filterItems(next))
+            }
+        }
+    }
+
+    private fun filterItems(state: LatestUpdatesUiState): List<LatestChapterItem> {
+        return state.allItems.filter { item ->
+            (state.selectedSource == null || item.source == state.selectedSource) &&
+                (!state.unreadOnly || state.readStates[item.chapterUrl] != true)
         }
     }
 }
@@ -134,6 +184,33 @@ fun LatestUpdatesScreen(
             IconButton(onClick = viewModel::refresh) {
                 Icon(Icons.Filled.Refresh, contentDescription = "تحديث", tint = MangaColors.OnSurface)
             }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilterChip(
+                selected = state.selectedSource == null,
+                onClick = { viewModel.setSource(null) },
+                label = { Text("الكل") }
+            )
+            state.availableSources.forEach { src ->
+                FilterChip(
+                    selected = state.selectedSource == src,
+                    onClick = { viewModel.setSource(src) },
+                    label = { Text(src.displayName) }
+                )
+            }
+            FilterChip(
+                selected = state.unreadOnly,
+                onClick = { viewModel.setUnreadOnly(!state.unreadOnly) },
+                label = { Text("غير المقروء") }
+            )
         }
 
         when {

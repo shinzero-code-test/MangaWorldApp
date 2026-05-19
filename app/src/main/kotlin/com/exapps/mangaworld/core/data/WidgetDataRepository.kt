@@ -3,6 +3,7 @@ package com.exapps.mangaworld.core.data
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.core.graphics.drawable.toBitmap
+import coil.disk.DiskCache
 import coil.ImageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
@@ -25,6 +26,7 @@ import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import okhttp3.OkHttpClient
@@ -44,8 +46,15 @@ class WidgetDataRepository @Inject constructor(
 ) {
 
     private val imageLoader by lazy {
+        val limitMb = runCatching { kotlinx.coroutines.runBlocking { settingsRepository.getAppSettings().first().imageCacheLimitMb } }.getOrDefault(250)
         ImageLoader.Builder(context)
             .okHttpClient(okHttpClient)
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(File(context.cacheDir, "coil_image_cache"))
+                    .maxSizeBytes(limitMb.coerceAtLeast(64).toLong() * 1024L * 1024L)
+                    .build()
+            }
             .crossfade(true)
             .build()
     }
@@ -148,7 +157,8 @@ class WidgetDataRepository @Inject constructor(
     }
 
     suspend fun refreshRemoteSnapshot(): RemoteWidgetsSnapshot = coroutineScope {
-        val enabledSourceIds = settingsRepository.getAppSettings().first().enabledSources
+        val settings = settingsRepository.getAppSettings().first()
+        val enabledSourceIds = settings.enabledSources
         val sources = MangaSource.entries.filter { it.id in enabledSourceIds }
 
         val homeData = sources.map { source ->
@@ -159,10 +169,13 @@ class WidgetDataRepository @Inject constructor(
 
         val featured = validHomes.flatMap { (source, data) -> data.featured.map { source to it } }
             .distinctBy { it.second.id }
+            .filterNot { it.second.isBlockedBy(settings.contentBlacklist) }
         val trending = validHomes.flatMap { (source, data) -> data.trending.map { source to it } }
             .distinctBy { it.second.id }
+            .filterNot { it.second.isBlockedBy(settings.contentBlacklist) }
         val latest = validHomes.flatMap { (_, data) -> data.latestChapters }
             .distinctBy { it.chapterUrl }
+            .filterNot { it.isBlockedBy(settings.contentBlacklist) }
 
         val recentMangaIds = historyDao.getRecent(10).map { it.mangaId }.toSet()
 

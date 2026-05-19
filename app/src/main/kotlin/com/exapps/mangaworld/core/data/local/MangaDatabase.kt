@@ -11,11 +11,12 @@ import com.exapps.mangaworld.core.data.local.entity.*
         ReadingHistoryEntity::class,
         ReadChapterEntity::class,
         ReadingProgressEntity::class,
+        ReaderAnnotationEntity::class,
         MangaCacheEntity::class,
         DownloadTaskEntity::class,
         DownloadedMangaEntity::class,
     ],
-    version = 5,          // v5: added lastChapterUrl to reading_history
+    version = 6,          // v6: added reader annotations
     exportSchema = false
 )
 abstract class MangaDatabase : RoomDatabase() {
@@ -23,6 +24,7 @@ abstract class MangaDatabase : RoomDatabase() {
     abstract fun readingHistoryDao(): ReadingHistoryDao
     abstract fun readChapterDao(): ReadChapterDao
     abstract fun readingProgressDao(): ReadingProgressDao
+    abstract fun readerAnnotationDao(): ReaderAnnotationDao
     abstract fun mangaCacheDao(): MangaCacheDao
     abstract fun downloadTaskDao(): DownloadTaskDao
     abstract fun downloadedMangaDao(): DownloadedMangaDao

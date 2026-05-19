@@ -8,7 +8,9 @@ import com.exapps.mangaworld.domain.model.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,12 +29,23 @@ class AppPreferences @Inject constructor(
         val KEY_AUTO_DOWNLOAD = booleanPreferencesKey("auto_download")
         val KEY_NOTIFICATIONS = booleanPreferencesKey("notifications")
         val KEY_ENABLED_SOURCES = stringPreferencesKey("enabled_sources")
+        val KEY_DYNAMIC_COLORS = booleanPreferencesKey("dynamic_colors")
+        val KEY_BIOMETRIC_LOCK = booleanPreferencesKey("biometric_lock")
+        val KEY_SECURE_READER = booleanPreferencesKey("secure_reader")
+        val KEY_AUTO_CLEANUP = booleanPreferencesKey("auto_cleanup_downloads")
+        val KEY_CLEANUP_HOURS = intPreferencesKey("cleanup_hours")
+        val KEY_IMAGE_CACHE_LIMIT_MB = intPreferencesKey("image_cache_limit_mb")
+        val KEY_CONTENT_BLACKLIST = stringPreferencesKey("content_blacklist")
 
         val KEY_READER_MODE = stringPreferencesKey("reader_mode")
         val KEY_BRIGHTNESS = floatPreferencesKey("brightness")
         val KEY_KEEP_SCREEN = booleanPreferencesKey("keep_screen")
         val KEY_SHOW_PAGE_NUM = booleanPreferencesKey("show_page_num")
         val KEY_AUTO_WEBTOON = booleanPreferencesKey("auto_webtoon")
+        val KEY_INCOGNITO = booleanPreferencesKey("reader_incognito")
+        val KEY_SMART_PREFETCH = booleanPreferencesKey("smart_prefetch")
+        val KEY_HAPTICS = booleanPreferencesKey("reader_haptics")
+        val KEY_IMAGE_FILTER = stringPreferencesKey("reader_image_filter")
 
         fun cookieKey(domain: String) = stringPreferencesKey("cookie_$domain")
     }
@@ -49,7 +62,19 @@ class AppPreferences @Inject constructor(
                 enabledSources = prefs[KEY_ENABLED_SOURCES]
                     ?.split(",")?.toSet()
                     ?: MangaSource.values().map { it.id }.toSet(),
-                onboardingCompleted = prefs[KEY_ONBOARDING_DONE] ?: false
+                onboardingCompleted = prefs[KEY_ONBOARDING_DONE] ?: false,
+                useDynamicColors = prefs[KEY_DYNAMIC_COLORS] ?: true,
+                biometricLockEnabled = prefs[KEY_BIOMETRIC_LOCK] ?: false,
+                secureReaderEnabled = prefs[KEY_SECURE_READER] ?: false,
+                autoCleanupReadDownloads = prefs[KEY_AUTO_CLEANUP] ?: false,
+                cleanupAfterHours = prefs[KEY_CLEANUP_HOURS] ?: 24,
+                imageCacheLimitMb = prefs[KEY_IMAGE_CACHE_LIMIT_MB] ?: 250,
+                contentBlacklist = prefs[KEY_CONTENT_BLACKLIST]
+                    ?.split("\n")
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotBlank() }
+                    ?.toSet()
+                    ?: emptySet()
             )
         }
 
@@ -62,7 +87,13 @@ class AppPreferences @Inject constructor(
                 brightness = prefs[KEY_BRIGHTNESS] ?: 1.0f,
                 keepScreenOn = prefs[KEY_KEEP_SCREEN] ?: true,
                 showPageNumber = prefs[KEY_SHOW_PAGE_NUM] ?: true,
-                autoWebtoonDetection = prefs[KEY_AUTO_WEBTOON] ?: true
+                autoWebtoonDetection = prefs[KEY_AUTO_WEBTOON] ?: true,
+                incognitoMode = prefs[KEY_INCOGNITO] ?: false,
+                smartPrefetchEnabled = prefs[KEY_SMART_PREFETCH] ?: true,
+                hapticsEnabled = prefs[KEY_HAPTICS] ?: true,
+                imageFilter = prefs[KEY_IMAGE_FILTER]
+                    ?.let { name -> ReaderImageFilter.values().firstOrNull { it.name == name } }
+                    ?: ReaderImageFilter.NONE
             )
         }
 
@@ -80,6 +111,27 @@ class AppPreferences @Inject constructor(
 
     suspend fun setNotifications(v: Boolean) =
         dataStore.edit { it[KEY_NOTIFICATIONS] = v }
+
+    suspend fun setDynamicColors(v: Boolean) =
+        dataStore.edit { it[KEY_DYNAMIC_COLORS] = v }
+
+    suspend fun setBiometricLock(v: Boolean) =
+        dataStore.edit { it[KEY_BIOMETRIC_LOCK] = v }
+
+    suspend fun setSecureReader(v: Boolean) =
+        dataStore.edit { it[KEY_SECURE_READER] = v }
+
+    suspend fun setAutoCleanup(v: Boolean) =
+        dataStore.edit { it[KEY_AUTO_CLEANUP] = v }
+
+    suspend fun setCleanupHours(v: Int) =
+        dataStore.edit { it[KEY_CLEANUP_HOURS] = v }
+
+    suspend fun setImageCacheLimitMb(v: Int) =
+        dataStore.edit { it[KEY_IMAGE_CACHE_LIMIT_MB] = v }
+
+    suspend fun setContentBlacklist(values: Set<String>) =
+        dataStore.edit { it[KEY_CONTENT_BLACKLIST] = values.joinToString("\n") }
 
     suspend fun toggleSource(sourceId: String, enabled: Boolean) = dataStore.edit { prefs ->
         val current = prefs[KEY_ENABLED_SOURCES]?.split(",")?.toMutableSet()
@@ -103,6 +155,18 @@ class AppPreferences @Inject constructor(
     suspend fun setAutoWebtoon(v: Boolean) =
         dataStore.edit { it[KEY_AUTO_WEBTOON] = v }
 
+    suspend fun setIncognito(v: Boolean) =
+        dataStore.edit { it[KEY_INCOGNITO] = v }
+
+    suspend fun setSmartPrefetch(v: Boolean) =
+        dataStore.edit { it[KEY_SMART_PREFETCH] = v }
+
+    suspend fun setReaderHaptics(v: Boolean) =
+        dataStore.edit { it[KEY_HAPTICS] = v }
+
+    suspend fun setImageFilter(v: ReaderImageFilter) =
+        dataStore.edit { it[KEY_IMAGE_FILTER] = v.name }
+
     fun getCookies(domain: String): Flow<String?> = dataStore.data
         .catch { emit(emptyPreferences()) }
         .map { it[cookieKey(domain)] }
@@ -112,4 +176,8 @@ class AppPreferences @Inject constructor(
 
     suspend fun clearCookies(domain: String) =
         dataStore.edit { it.remove(cookieKey(domain)) }
+
+    fun currentImageCacheLimitMbBlocking(): Int = runBlocking {
+        appSettings.map { it.imageCacheLimitMb }.first()
+    }
 }

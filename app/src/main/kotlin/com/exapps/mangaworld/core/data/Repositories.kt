@@ -208,6 +208,9 @@ class MangaPagingSource(
             }.distinctBy { it.id }
 
             var filtered = rawResults
+            if (filters.blockedKeywords.isNotEmpty()) {
+                filtered = filtered.filterNot { it.isBlockedBy(filters.blockedKeywords) }
+            }
             if (filters.status != null) filtered = filtered.filter { it.status == filters.status }
             if (filters.type != null)   filtered = filtered.filter { it.type == filters.type }
 
@@ -242,7 +245,8 @@ class LibraryRepositoryImpl @Inject constructor(
     private val favoriteDao: FavoriteDao,
     private val historyDao: ReadingHistoryDao,
     private val readChapterDao: ReadChapterDao,
-    private val progressDao: ReadingProgressDao
+    private val progressDao: ReadingProgressDao,
+    private val readerAnnotationDao: ReaderAnnotationDao
 ) : LibraryRepository {
 
     override fun getFavorites(): Flow<List<FavoriteManga>> =
@@ -294,6 +298,9 @@ class LibraryRepositoryImpl @Inject constructor(
         syncFavoriteProgress(mangaId)
     }
 
+    override suspend fun isChapterRead(mangaId: String, chapterNumber: Float): Boolean =
+        readChapterDao.isRead(mangaId, chapterNumber)
+
     override fun getReadChapters(mangaId: String): Flow<Set<Float>> =
         readChapterDao.getReadChapters(mangaId).map { it.toSet() }
 
@@ -307,6 +314,53 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun getReadingProgressMap(mangaId: String): Map<Float, Pair<Int, Int>> =
         progressDao.getAllForManga(mangaId).associate { it.chapterNumber to Pair(it.currentPage, it.totalPages) }
+
+    override fun observeReaderAnnotations(mangaId: String, chapterUrl: String): Flow<List<ReaderPageAnnotation>> =
+        readerAnnotationDao.observeChapterAnnotations(mangaId, chapterUrl)
+            .map { list -> list.map { it.toDomain() } }
+
+    override suspend fun togglePageBookmark(mangaId: String, chapterUrl: String, pageIndex: Int) {
+        val current = readerAnnotationDao.get(mangaId, chapterUrl, pageIndex)
+        val nextBookmark = !(current?.isBookmarked ?: false)
+        val nextNote = current?.note.orEmpty()
+        if (!nextBookmark && nextNote.isBlank()) {
+            readerAnnotationDao.delete(mangaId, chapterUrl, pageIndex)
+        } else {
+            readerAnnotationDao.upsert(
+                ReaderAnnotationEntity(
+                    mangaId = mangaId,
+                    chapterUrl = chapterUrl,
+                    pageIndex = pageIndex,
+                    note = nextNote,
+                    isBookmarked = nextBookmark,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    override suspend fun savePageNote(mangaId: String, chapterUrl: String, pageIndex: Int, note: String) {
+        val current = readerAnnotationDao.get(mangaId, chapterUrl, pageIndex)
+        val normalized = note.trim()
+        val keepBookmark = current?.isBookmarked ?: false
+        if (normalized.isBlank() && !keepBookmark) {
+            readerAnnotationDao.delete(mangaId, chapterUrl, pageIndex)
+        } else {
+            readerAnnotationDao.upsert(
+                ReaderAnnotationEntity(
+                    mangaId = mangaId,
+                    chapterUrl = chapterUrl,
+                    pageIndex = pageIndex,
+                    note = normalized,
+                    isBookmarked = keepBookmark,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    override suspend fun getPageAnnotation(mangaId: String, chapterUrl: String, pageIndex: Int): ReaderPageAnnotation? =
+        readerAnnotationDao.get(mangaId, chapterUrl, pageIndex)?.toDomain()
 
     private suspend fun syncFavoriteProgress(mangaId: String) {
         val favorite = favoriteDao.getById(mangaId) ?: return
@@ -329,11 +383,22 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setAutoDownloadNewChapters(enabled: Boolean) { prefs.setAutoDownload(enabled) }
     override suspend fun setNotificationsEnabled(enabled: Boolean) { prefs.setNotifications(enabled) }
     override suspend fun toggleSource(sourceId: String, enabled: Boolean) { prefs.toggleSource(sourceId, enabled) }
+    override suspend fun setDynamicColors(enabled: Boolean) { prefs.setDynamicColors(enabled) }
+    override suspend fun setBiometricLock(enabled: Boolean) { prefs.setBiometricLock(enabled) }
+    override suspend fun setSecureReader(enabled: Boolean) { prefs.setSecureReader(enabled) }
+    override suspend fun setAutoCleanupReadDownloads(enabled: Boolean) { prefs.setAutoCleanup(enabled) }
+    override suspend fun setCleanupAfterHours(hours: Int) { prefs.setCleanupHours(hours) }
+    override suspend fun setImageCacheLimitMb(limitMb: Int) { prefs.setImageCacheLimitMb(limitMb) }
+    override suspend fun setContentBlacklist(values: Set<String>) { prefs.setContentBlacklist(values) }
     override fun getReaderSettings() = prefs.readerSettings
     override suspend fun updateReaderMode(mode: ReaderMode) { prefs.setReaderMode(mode) }
     override suspend fun updateBrightness(brightness: Float) { prefs.setBrightness(brightness) }
     override suspend fun updateKeepScreenOn(enabled: Boolean) { prefs.setKeepScreen(enabled) }
     override suspend fun updateAutoWebtoon(enabled: Boolean) { prefs.setAutoWebtoon(enabled) }
+    override suspend fun updateIncognitoMode(enabled: Boolean) { prefs.setIncognito(enabled) }
+    override suspend fun updateSmartPrefetch(enabled: Boolean) { prefs.setSmartPrefetch(enabled) }
+    override suspend fun updateReaderHaptics(enabled: Boolean) { prefs.setReaderHaptics(enabled) }
+    override suspend fun updateImageFilter(filter: ReaderImageFilter) { prefs.setImageFilter(filter) }
     override fun getCookies(domain: String) = prefs.getCookies(domain)
     override suspend fun saveCookies(domain: String, cookies: String) { prefs.saveCookies(domain, cookies) }
     override suspend fun clearCookies(domain: String) { prefs.clearCookies(domain) }

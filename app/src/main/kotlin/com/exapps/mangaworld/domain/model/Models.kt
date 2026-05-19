@@ -159,7 +159,8 @@ data class SearchFilters(
     val type: MangaType? = null,
     val sortBy: SortBy = SortBy.LATEST,
     val source: MangaSource? = null,
-    val enabledSourceIds: Set<String> = MangaSource.entries.map { it.id }.toSet()
+    val enabledSourceIds: Set<String> = MangaSource.entries.map { it.id }.toSet(),
+    val blockedKeywords: Set<String> = emptySet()
 )
 
 enum class SortBy(val label: String) {
@@ -212,13 +213,31 @@ enum class ReaderMode(val label: String) {
     WEBTOON("ويب تون")
 }
 
+enum class ReaderImageFilter(val label: String) {
+    NONE("بدون"),
+    GRAYSCALE("تدرج رمادي"),
+    SEPIA("سيبيا"),
+    HIGH_CONTRAST("تباين عال")
+}
+
+data class ReaderPageAnnotation(
+    val pageIndex: Int,
+    val note: String? = null,
+    val isBookmarked: Boolean = false,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 data class ReaderSettings(
     val mode: ReaderMode = ReaderMode.VERTICAL_SCROLL,
     val brightness: Float = 1.0f,
     val pageSpacing: Int = 0,
     val keepScreenOn: Boolean = true,
     val showPageNumber: Boolean = true,
-    val autoWebtoonDetection: Boolean = true
+    val autoWebtoonDetection: Boolean = true,
+    val incognitoMode: Boolean = false,
+    val smartPrefetchEnabled: Boolean = true,
+    val hapticsEnabled: Boolean = true,
+    val imageFilter: ReaderImageFilter = ReaderImageFilter.NONE
 )
 
 // ─── App Settings ─────────────────────────────────────────────────────────────
@@ -231,5 +250,12 @@ data class AppSettings(
     val autoDownloadNewChapters: Boolean = false,
     val enableNotifications: Boolean = true,
     val enabledSources: Set<String> = MangaSource.values().map { it.id }.toSet(),
-    val onboardingCompleted: Boolean = false
+    val onboardingCompleted: Boolean = false,
+    val useDynamicColors: Boolean = true,
+    val biometricLockEnabled: Boolean = false,
+    val secureReaderEnabled: Boolean = false,
+    val autoCleanupReadDownloads: Boolean = false,
+    val cleanupAfterHours: Int = 24,
+    val imageCacheLimitMb: Int = 250,
+    val contentBlacklist: Set<String> = emptySet()
 )

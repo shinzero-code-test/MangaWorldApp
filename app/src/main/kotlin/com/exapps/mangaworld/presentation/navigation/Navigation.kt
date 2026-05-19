@@ -11,6 +11,7 @@ import androidx.navigation.compose.*
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.browse.BrowseScreen
 import com.exapps.mangaworld.presentation.detail.MangaDetailScreen
+import com.exapps.mangaworld.presentation.diagnostics.DiagnosticsScreen
 import com.exapps.mangaworld.presentation.downloads.DownloadsScreen
 import com.exapps.mangaworld.presentation.home.HomeScreen
 import com.exapps.mangaworld.presentation.library.LibraryScreen
@@ -26,6 +27,7 @@ sealed class Screen(val route: String) {
     object Search      : Screen("search")
     object Library     : Screen("library")
     object Settings    : Screen("settings")
+    object Diagnostics : Screen("diagnostics")
     object Downloads   : Screen("downloads")
     object LocalStorage: Screen("local_storage")
     object LatestUpdates : Screen("latest_updates")
@@ -87,7 +89,12 @@ fun MangaNavGraph(navController: NavHostController) {
                 onBrowseClick = { navController.navigate(Screen.Browse.route) }
             )
         }
-        composable(Screen.Settings.route)    { SettingsScreen() }
+        composable(Screen.Settings.route)    {
+            SettingsScreen(onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) })
+        }
+        composable(Screen.Diagnostics.route) {
+            DiagnosticsScreen(onBack = { navController.popBackStack() })
+        }
         composable(
             route = Screen.Downloads.route,
             deepLinks = listOf(navDeepLink { uriPattern = "mangaworld://screen/downloads" })
