@@ -26,4 +26,14 @@ class FirebaseTelemetry @Inject constructor() {
             trace.stop()
         }
     }
+
+    suspend fun <T> traceSuspend(name: String, block: suspend () -> T): T {
+        val trace = performance.newTrace(name)
+        trace.start()
+        return try {
+            block()
+        } finally {
+            trace.stop()
+        }
+    }
 }

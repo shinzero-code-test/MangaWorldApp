@@ -89,7 +89,7 @@ class MangaRepositoryImpl @Inject constructor(
         scrapers[source.id] ?: error("No scraper for ${source.id}")
 
     override suspend fun getHomeData(source: MangaSource) =
-        runCatching { firebaseTelemetry.trace("home_${source.id}") { scraper(source).getHomeData().getOrThrow() } }
+        runCatching { firebaseTelemetry.traceSuspend("home_${source.id}") { scraper(source).getHomeData().getOrThrow() } }
 
     override fun searchManga(filters: SearchFilters): Flow<PagingData<MangaItem>> = Pager(
         config = PagingConfig(pageSize = 24, enablePlaceholders = false)
