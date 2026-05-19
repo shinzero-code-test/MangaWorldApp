@@ -2,8 +2,11 @@ package com.exapps.mangaworld.presentation.theme
 
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
@@ -17,24 +20,27 @@ import kotlinx.coroutines.withContext
 @Composable
 fun rememberDominantColor(data: Any?): Color? {
     val context = LocalContext.current
-    val state by produceState<Color?>(initialValue = null, key1 = data) {
-        value = if (data == null) {
+    var dominantColor by remember(data) { mutableStateOf<Color?>(null) }
+    LaunchedEffect(data) {
+        dominantColor = if (data == null) {
             null
-        } else withContext(Dispatchers.IO) {
-            runCatching {
-                val result = context.imageLoader.execute(
-                    ImageRequest.Builder(context)
-                        .data(data)
-                        .allowHardware(false)
-                        .size(300, 300)
-                        .build()
-                )
-                val bitmap = result.drawable?.toBitmap(width = 300, height = 300) ?: return@runCatching null
-                bitmap.extractDominantColor()
-            }.getOrNull()
+        } else {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val result = context.imageLoader.execute(
+                        ImageRequest.Builder(context)
+                            .data(data)
+                            .allowHardware(false)
+                            .size(300, 300)
+                            .build()
+                    )
+                    val bitmap = result.drawable?.toBitmap(width = 300, height = 300) ?: return@runCatching null
+                    bitmap.extractDominantColor()
+                }.getOrNull()
+            }
         }
     }
-    return state
+    return dominantColor
 }
 
 private fun Bitmap.extractDominantColor(): Color? {
