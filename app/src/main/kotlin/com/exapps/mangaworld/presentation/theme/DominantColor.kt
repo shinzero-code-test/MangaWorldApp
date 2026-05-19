@@ -18,8 +18,9 @@ import kotlinx.coroutines.withContext
 fun rememberDominantColor(data: Any?): Color? {
     val context = LocalContext.current
     val state by produceState<Color?>(initialValue = null, key1 = data) {
-        if (data == null) return@produceState
-        value = withContext(Dispatchers.IO) {
+        value = if (data == null) {
+            null
+        } else withContext(Dispatchers.IO) {
             runCatching {
                 val result = context.imageLoader.execute(
                     ImageRequest.Builder(context)
