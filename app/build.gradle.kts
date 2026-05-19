@@ -17,8 +17,8 @@ fun env(vararg names: String): String =
 val keystoreBase64   = env("KEYSTORE_BASE64")
 val keystorePathEnv  = env("KEYSTORE_PATH", "KEYSTORE_FILE")
 val keystorePassword = env("KEYSTORE_PASSWORD", "KEY_STORE_PASSWORD")
-val keyAlias         = env("KEYSTORE_ALIAS", "KEY_ALIAS", "KEY_ALIAS_NAME")
-val keyPassword      = env("KEY_PASSWORD", "KEY_ALIAS_PASSWORD")
+val releaseKeyAlias    = env("KEYSTORE_ALIAS", "KEY_ALIAS", "KEY_ALIAS_NAME")
+val releaseKeyPassword = env("KEY_PASSWORD", "KEY_ALIAS_PASSWORD")
 
 val resolvedKeystoreFile: File? by lazy {
     when {
@@ -35,7 +35,7 @@ val resolvedKeystoreFile: File? by lazy {
 }
 
 val canSign = resolvedKeystoreFile != null && keystorePassword.isNotBlank() &&
-              keyAlias.isNotBlank() && keyPassword.isNotBlank()
+              releaseKeyAlias.isNotBlank() && releaseKeyPassword.isNotBlank()
 
 // Auto-generate a debug keystore so the release APK is always installable
 val debugKeystore: File by lazy {
@@ -81,8 +81,8 @@ android {
             create("release") {
                 storeFile     = resolvedKeystoreFile
                 storePassword = keystorePassword
-                keyAlias      = keyAlias
-                keyPassword   = keyPassword
+                keyAlias      = releaseKeyAlias
+                keyPassword   = releaseKeyPassword
             }
         }
         getByName("debug") {
