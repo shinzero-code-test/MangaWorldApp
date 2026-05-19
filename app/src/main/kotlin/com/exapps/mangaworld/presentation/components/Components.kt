@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
@@ -138,6 +139,7 @@ fun MangaCover(
             .crossfade(300)
             .apply { headers.forEach { (k, v) -> addHeader(k, v) } }
             .build(),
+        imageLoader = ctx.imageLoader,
         contentDescription = contentDescription,
         contentScale = ContentScale.Crop,
         modifier = modifier.background(MangaColors.SurfaceContainer)

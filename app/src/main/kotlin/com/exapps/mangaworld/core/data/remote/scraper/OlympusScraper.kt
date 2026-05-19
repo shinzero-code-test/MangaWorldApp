@@ -56,40 +56,48 @@ class OlympusScraper @Inject constructor(
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
         val doc = fetchDocument(source.baseUrl)
 
-        // Latest updates: .box > .uta containers
-        val latestChapters = doc.select(".box").take(40).mapNotNull { box ->
-            val imgEl = box.selectFirst(".imgu img") ?: return@mapNotNull null
-            val linkEl = box.selectFirst(".imgu a") ?: return@mapNotNull null
-            val titleEl = box.selectFirst(".info h3") ?: return@mapNotNull null
-            val chapterEl = box.selectFirst(".info ul li a.new, .info ul li:first-child a")
+        // Latest updates: skip empty hero slots and '#' placeholders.
+        val latestChapters = doc.select(".box:has(.imgu a[href*='/series/']):has(.info h3)")
+            .take(40)
+            .mapNotNull { box ->
+                val imgEl = box.selectFirst(".imgu img") ?: return@mapNotNull null
+                val linkEl = box.selectFirst(".imgu a[href*='/series/']") ?: return@mapNotNull null
+                val titleEl = box.selectFirst(".info h3") ?: return@mapNotNull null
 
-            val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-            val slug = href.substringAfterLast("/series/").trimEnd('/')
-            val mangaId = "olympus_$slug"
-            // Confirmed from real HTML: <a class="new" href="/series/{slug}/{N}">
-            // Chapter URL is already embedded in the link — do NOT reconstruct it.
-            val chapterHref = chapterEl?.attr("abs:href")
-                ?.ifEmpty { chapterEl.attr("href").absoluteUrl() } ?: ""
-            val chapterNumber = chapterHref.trimEnd('/').substringAfterLast("/")
-                .toFloatOrNull()
-                ?: chapterEl?.text()?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull()
-                ?: 0f
-            val timeText = box.selectFirst(".info ul li .post-on, .info .post-on")?.text()
-                ?.cleanText() ?: ""
-            val isPaid = box.selectFirst(".fa-lock") != null
+                val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
+                val slug = href.substringAfterLast("/series/").trimEnd('/').takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val mangaId = "olympus_$slug"
 
-            LatestChapterItem(
-                mangaId = mangaId,
-                mangaSlug = slug,
-                mangaTitle = titleEl.text().cleanText(),
-                coverUrl = imgEl.attr("abs:src").ifEmpty { imgEl.attr("src").absoluteUrl() },
-                chapterNumber = chapterNumber,
-                chapterUrl = chapterHref,
-                timeAgo = timeText,
-                source = source,
-                isNew = timeText.contains("ساعة") || timeText.contains("hour")
-            )
-        }
+                val chapterEl = box.select(".info a[href*='/series/']")
+                    .firstOrNull { anchor ->
+                        val candidate = anchor.attr("abs:href").ifEmpty { anchor.attr("href").absoluteUrl() }
+                        candidate.contains("/series/$slug/") && candidate.substringAfterLast('/').toFloatOrNull() != null
+                    }
+
+                val chapterHref = chapterEl?.attr("abs:href")
+                    ?.ifEmpty { chapterEl.attr("href").absoluteUrl() }
+                    ?.takeIf { it.contains("/series/$slug/") }
+                    ?: return@mapNotNull null
+
+                val chapterNumber = chapterHref.trimEnd('/').substringAfterLast("/").toFloatOrNull()
+                    ?: chapterEl.text().replace("[^0-9.]".toRegex(), "").toFloatOrNull()
+                    ?: return@mapNotNull null
+
+                val timeText = box.selectFirst(".info ul li .post-on, .info .post-on")?.text()?.cleanText().orEmpty()
+
+                LatestChapterItem(
+                    mangaId = mangaId,
+                    mangaSlug = slug,
+                    mangaTitle = titleEl.text().cleanText(),
+                    coverUrl = imgEl.attr("abs:src").ifEmpty { imgEl.attr("src").absoluteUrl() }.encodeForUrl(),
+                    chapterNumber = chapterNumber,
+                    chapterUrl = chapterHref,
+                    timeAgo = timeText,
+                    source = source,
+                    isNew = timeText.contains("ساعة") || timeText.contains("hour")
+                )
+            }
+            .distinctBy { it.chapterUrl }
 
         // Popular manga: .popular-manga .entry-box
         val popular = doc.select(".popular-manga .entry-box, .entry-box.entry-box-1").take(10)
@@ -104,11 +112,12 @@ class OlympusScraper @Inject constructor(
                     id = "olympus_$slug",
                     slug = slug,
                     title = titleEl.text().cleanText(),
-                    coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() },
+                    coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() }.encodeForUrl(),
                     source = source,
                     url = href
                 )
             }
+            .distinctBy { it.url }
 
         HomeData(
             featured = popular.take(5),
@@ -282,7 +291,9 @@ class OlympusScraper @Inject constructor(
         val body = response.body?.string() ?: ""
         response.close()
 
-        if (body.isBlank()) emptyList()
+        if (body.isBlank()) {
+            fetchDocument("${source.baseUrl}/series?keyword=$encoded").let(::parseMangaGrid)
+        }
         else if (
             body.contains("Just a moment", ignoreCase = true) ||
             body.contains("Attention Required", ignoreCase = true) ||
@@ -292,7 +303,7 @@ class OlympusScraper @Inject constructor(
         } else {
             // /ajax/search returns JSON on olympustaff.com — try JSON first, fall back to HTML
             val trimmed = body.trimStart()
-            if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+            val parsed = if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
                 parseJsonSearchResults(body)
             } else {
                 // HTML fragment fallback: parse with base URL so abs:href resolves correctly
@@ -315,6 +326,7 @@ class OlympusScraper @Inject constructor(
                     )
                 }
             }
+            if (parsed.isNotEmpty()) parsed else fetchDocument("${source.baseUrl}/series?keyword=$encoded").let(::parseMangaGrid)
         }
     }
 
@@ -352,22 +364,26 @@ class OlympusScraper @Inject constructor(
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     private fun parseMangaGrid(doc: org.jsoup.nodes.Document): List<MangaItem> {
-        return doc.select(".box").mapNotNull { box ->
+        return doc.select(".box:has(.imgu a[href*='/series/']):has(.info h3)").mapNotNull { box ->
             val imgEl = box.selectFirst(".imgu img") ?: return@mapNotNull null
-            val linkEl = box.selectFirst(".imgu a") ?: return@mapNotNull null
+            val linkEl = box.selectFirst(".imgu a[href*='/series/']") ?: return@mapNotNull null
             val titleEl = box.selectFirst(".info h3") ?: return@mapNotNull null
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-            val slug = href.substringAfterLast("/series/").trimEnd('/')
-            val chapterEl = box.selectFirst(".info ul li:first-child a")
+            val slug = href.substringAfterLast("/series/").trimEnd('/').takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val chapterEl = box.select(".info a[href*='/series/']")
+                .firstOrNull { anchor ->
+                    val candidate = anchor.attr("abs:href").ifEmpty { anchor.attr("href").absoluteUrl() }
+                    candidate.contains("/series/$slug/")
+                }
             MangaItem(
                 id = "olympus_$slug", slug = slug,
                 title = titleEl.text().cleanText(),
-                coverUrl = imgEl.attr("abs:src").ifEmpty { imgEl.attr("src").absoluteUrl() },
+                coverUrl = imgEl.attr("abs:src").ifEmpty { imgEl.attr("src").absoluteUrl() }.encodeForUrl(),
                 source = source,
-                latestChapter = chapterEl?.text()?.replace("[^0-9]".toRegex(), "")?.toIntOrNull(),
+                latestChapter = chapterEl?.text()?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull()?.toInt(),
                 url = href
             )
-        }
+        }.distinctBy { it.url }
     }
 
     /**

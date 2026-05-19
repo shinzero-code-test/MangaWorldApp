@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.os.Build
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import coil.ImageLoader
+import coil.ImageLoaderFactory
 import com.exapps.mangaworld.core.widget.AppShortcutManager
 import com.exapps.mangaworld.core.widget.WidgetRefreshScheduler
 import dagger.hilt.android.HiltAndroidApp
@@ -13,14 +15,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 @HiltAndroidApp
-class MangaWorldApp : Application(), Configuration.Provider {
+class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var widgetRefreshScheduler: WidgetRefreshScheduler
     @Inject lateinit var appShortcutManager: AppShortcutManager
+    @Inject lateinit var okHttpClient: OkHttpClient
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -28,6 +32,11 @@ class MangaWorldApp : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
+
+    override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
+        .okHttpClient(okHttpClient)
+        .crossfade(true)
+        .build()
 
     override fun onCreate() {
         super.onCreate()

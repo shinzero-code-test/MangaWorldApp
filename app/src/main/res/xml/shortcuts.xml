@@ -2,7 +2,7 @@
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut
         android:enabled="true"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/ic_shortcut_search"
         android:shortcutId="search_manga"
         android:shortcutLongLabel="@string/shortcut_search_long"
         android:shortcutShortLabel="@string/shortcut_search_short">
@@ -15,7 +15,7 @@
 
     <shortcut
         android:enabled="true"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/ic_shortcut_downloads"
         android:shortcutId="downloads"
         android:shortcutLongLabel="@string/shortcut_downloads_long"
         android:shortcutShortLabel="@string/shortcut_downloads_short">
@@ -28,20 +28,20 @@
 
     <shortcut
         android:enabled="true"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/ic_shortcut_updates"
         android:shortcutId="latest_updates"
         android:shortcutLongLabel="@string/shortcut_latest_long"
         android:shortcutShortLabel="@string/shortcut_latest_short">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="mangaworld://screen/latest-updates"
+            android:data="mangaworld://screen/latest_updates"
             android:targetClass="com.exapps.mangaworld.MainActivity"
             android:targetPackage="com.exapps.mangaworld" />
     </shortcut>
 
     <shortcut
         android:enabled="true"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/ic_shortcut_random"
         android:shortcutId="random_manga"
         android:shortcutLongLabel="@string/shortcut_random_long"
         android:shortcutShortLabel="@string/shortcut_random_short">

@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
@@ -238,6 +239,7 @@ private fun MangaPageImage(page: ChapterPage, modifier: Modifier = Modifier) {
                 .crossfade(200)
                 .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
                 .build(),
+            imageLoader = ctx.imageLoader,
             contentDescription = "Page ${page.index + 1}",
             contentScale = ContentScale.FillWidth,
             modifier = Modifier.fillMaxWidth(),

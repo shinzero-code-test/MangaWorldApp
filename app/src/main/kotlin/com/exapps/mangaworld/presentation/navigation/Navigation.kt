@@ -14,6 +14,7 @@ import com.exapps.mangaworld.presentation.detail.MangaDetailScreen
 import com.exapps.mangaworld.presentation.downloads.DownloadsScreen
 import com.exapps.mangaworld.presentation.home.HomeScreen
 import com.exapps.mangaworld.presentation.library.LibraryScreen
+import com.exapps.mangaworld.presentation.latest.LatestUpdatesScreen
 import com.exapps.mangaworld.presentation.localstorage.LocalStorageScreen
 import com.exapps.mangaworld.presentation.reader.ReaderScreen
 import com.exapps.mangaworld.presentation.search.SearchScreen
@@ -27,6 +28,7 @@ sealed class Screen(val route: String) {
     object Settings    : Screen("settings")
     object Downloads   : Screen("downloads")
     object LocalStorage: Screen("local_storage")
+    object LatestUpdates : Screen("latest_updates")
     object Detail : Screen("detail/{sourceId}/{slug}") {
         fun createRoute(sourceId: String, slug: String) = "detail/$sourceId/$slug"
     }
@@ -59,14 +61,11 @@ fun MangaNavGraph(navController: NavHostController) {
     ) {
         composable(
             route = Screen.Home.route,
-            deepLinks = listOf(
-                navDeepLink { uriPattern = "mangaworld://screen/home" },
-                navDeepLink { uriPattern = "mangaworld://screen/latest-updates" }
-            )
+            deepLinks = listOf(navDeepLink { uriPattern = "mangaworld://screen/home" })
         ) {
             HomeScreen(
                 onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) },
-                onSeeAllLatest = { navController.navigate(Screen.Browse.route) }
+                onSeeAllLatest = { navController.navigate(Screen.LatestUpdates.route) }
             )
         }
         composable(Screen.Browse.route) {
@@ -93,6 +92,18 @@ fun MangaNavGraph(navController: NavHostController) {
             route = Screen.Downloads.route,
             deepLinks = listOf(navDeepLink { uriPattern = "mangaworld://screen/downloads" })
         ) { DownloadsScreen() }
+        composable(
+            route = Screen.LatestUpdates.route,
+            deepLinks = listOf(
+                navDeepLink { uriPattern = "mangaworld://screen/latest_updates" },
+                navDeepLink { uriPattern = "mangaworld://screen/latest-updates" }
+            )
+        ) {
+            LatestUpdatesScreen(
+                onBack = { navController.popBackStack() },
+                onOpenManga = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) }
+            )
+        }
         composable(Screen.LocalStorage.route) {
             LocalStorageScreen(
                 onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) }

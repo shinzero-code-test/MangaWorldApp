@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
@@ -135,6 +136,7 @@ private fun DetailContent(
             Box(Modifier.fillMaxWidth().height(320.dp)) {
                 AsyncImage(
                     model = ImageRequest.Builder(ctx).data(manga.coverUrl).crossfade(true).build(),
+                    imageLoader = ctx.imageLoader,
                     contentDescription = null, contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize().blur(20.dp)
                 )
@@ -159,6 +161,7 @@ private fun DetailContent(
                     ) {
                         AsyncImage(
                             model = ImageRequest.Builder(ctx).data(manga.coverUrl).crossfade(true).build(),
+                            imageLoader = ctx.imageLoader,
                             contentDescription = manga.title, contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
                         )

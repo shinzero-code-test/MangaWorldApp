@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
@@ -201,6 +202,7 @@ private fun FeaturedCard(manga: MangaItem, onClick: () -> Unit) {
         Box(Modifier.fillMaxSize()) {
             AsyncImage(
                 model = ImageRequest.Builder(ctx).data(manga.coverUrl).crossfade(true).build(),
+                imageLoader = ctx.imageLoader,
                 contentDescription = manga.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

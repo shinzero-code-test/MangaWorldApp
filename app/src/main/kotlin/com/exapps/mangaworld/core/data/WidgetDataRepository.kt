@@ -27,6 +27,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
+import okhttp3.OkHttpClient
 
 @Singleton
 class WidgetDataRepository @Inject constructor(
@@ -38,10 +39,16 @@ class WidgetDataRepository @Inject constructor(
     private val mangaRepository: MangaRepository,
     private val settingsRepository: SettingsRepository,
     private val snapshotStore: WidgetSnapshotStore,
-    private val readingStatsStore: ReadingStatsStore
+    private val readingStatsStore: ReadingStatsStore,
+    okHttpClient: OkHttpClient
 ) {
 
-    private val imageLoader by lazy { ImageLoader(context) }
+    private val imageLoader by lazy {
+        ImageLoader.Builder(context)
+            .okHttpClient(okHttpClient)
+            .crossfade(true)
+            .build()
+    }
 
     suspend fun getContinueReading(): ContinueReadingWidgetData? {
         val latest = historyDao.getLatest() ?: return null
@@ -209,6 +216,7 @@ class WidgetDataRepository @Inject constructor(
         source: MangaSource
     ): Chapter? {
         val detail = cacheDao.get(item.mangaId)?.toDetail(source)
+            ?: mangaRepository.getMangaDetail(item.slug, source).getOrNull()
         return detail?.chapters
             ?.minByOrNull { kotlin.math.abs(it.number - item.lastChapterNumber) }
     }

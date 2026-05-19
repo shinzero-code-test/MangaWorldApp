@@ -23,6 +23,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
@@ -159,6 +160,7 @@ private fun LocalMangaCard(
             AsyncImage(
                 model = ImageRequest.Builder(ctx).data(manga.localCoverPath ?: manga.coverUrl)
                     .crossfade(true).build(),
+                imageLoader = ctx.imageLoader,
                 contentDescription = manga.title, contentScale = ContentScale.Crop,
                 modifier = Modifier.size(72.dp, 100.dp).clip(RoundedCornerShape(10.dp))
                     .background(MangaColors.SurfaceContainer)
