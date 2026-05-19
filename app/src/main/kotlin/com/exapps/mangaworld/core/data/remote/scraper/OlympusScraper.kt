@@ -364,7 +364,7 @@ class OlympusScraper @Inject constructor(
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     private fun parseMangaGrid(doc: org.jsoup.nodes.Document): List<MangaItem> {
-        return doc.select(".box:has(.imgu a[href*='/series/']):has(.info h3)").mapNotNull { box ->
+        val homeStyle = doc.select(".box:has(.imgu a[href*='/series/']):has(.info h3)").mapNotNull { box ->
             val imgEl = box.selectFirst(".imgu img") ?: return@mapNotNull null
             val linkEl = box.selectFirst(".imgu a[href*='/series/']") ?: return@mapNotNull null
             val titleEl = box.selectFirst(".info h3") ?: return@mapNotNull null
@@ -383,7 +383,30 @@ class OlympusScraper @Inject constructor(
                 latestChapter = chapterEl?.text()?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull()?.toInt(),
                 url = href
             )
-        }.distinctBy { it.url }
+        }
+
+        val seriesListStyle = doc.select(".listupd .bsx").mapNotNull { card ->
+            val linkEl = card.selectFirst("a[href*='/series/']") ?: return@mapNotNull null
+            val imgEl = card.selectFirst("img") ?: return@mapNotNull null
+            val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
+            val slug = href.substringAfterLast("/series/").trimEnd('/').takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val title = card.selectFirst(".tt")?.text()?.cleanText()
+                ?: imgEl.attr("alt").cleanText().ifBlank { return@mapNotNull null }
+            val statusText = card.selectFirst(".status")?.text()?.cleanText()
+            val typeText = card.selectFirst(".type")?.text()?.cleanText()
+            MangaItem(
+                id = "olympus_$slug",
+                slug = slug,
+                title = title,
+                coverUrl = imgEl.attr("abs:src").ifEmpty { imgEl.attr("src").absoluteUrl() }.encodeForUrl(),
+                source = source,
+                status = MangaStatus.from(statusText),
+                type = MangaType.from(typeText),
+                url = href
+            )
+        }
+
+        return (homeStyle + seriesListStyle).distinctBy { it.url }
     }
 
     /**

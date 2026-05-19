@@ -86,6 +86,7 @@ class LatestUpdatesViewModel @Inject constructor(
                     }.awaitAll().flatten()
                 }
                     .distinctBy { it.chapterUrl }
+                    .sortedByDescending { it.publishedAt ?: 0L }
             }
 
             result.onSuccess { items ->
@@ -104,7 +105,7 @@ class LatestUpdatesViewModel @Inject constructor(
 @Composable
 fun LatestUpdatesScreen(
     onBack: () -> Unit,
-    onOpenManga: (sourceId: String, slug: String) -> Unit,
+    onOpenChapter: (sourceId: String, mangaId: String, chapterUrl: String) -> Unit,
     viewModel: LatestUpdatesViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -157,7 +158,7 @@ fun LatestUpdatesScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onOpenManga(item.source.id, item.mangaSlug) },
+                            .clickable { onOpenChapter(item.source.id, item.mangaId, item.chapterUrl) },
                         shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.cardColors(containerColor = MangaColors.CardBg)
                     ) {

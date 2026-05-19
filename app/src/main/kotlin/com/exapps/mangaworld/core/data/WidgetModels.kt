@@ -17,6 +17,7 @@ data class WidgetLatestUpdateEntry(
     val coverUrl: String = "",
     val chapterLabel: String,
     val chapterUrl: String,
+    val publishedAt: Long? = null,
     val timeAgo: String? = null
 )
 

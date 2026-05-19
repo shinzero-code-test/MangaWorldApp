@@ -230,6 +230,7 @@ class AzoraScraper @Inject constructor(
                         chapterTitle = decodeStr(obj["chapterTitle"]).ifBlank { null },
                         chapterUrl   = "${source.baseUrl}/series/$seriesSlug/$chapterSlug",
                         timeAgo      = createdAt.take(10),
+                        publishedAt  = dateLong,
                         source       = source,
                         isNew        = isNew
                     )

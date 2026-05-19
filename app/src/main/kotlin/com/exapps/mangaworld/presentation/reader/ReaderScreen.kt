@@ -2,6 +2,7 @@ package com.exapps.mangaworld.presentation.reader
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -28,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
+import coil.size.Precision
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
@@ -237,6 +239,9 @@ private fun MangaPageImage(page: ChapterPage, modifier: Modifier = Modifier) {
             model = ImageRequest.Builder(ctx)
                 .data(page.url)
                 .crossfade(200)
+                .allowHardware(false)
+                .bitmapConfig(Bitmap.Config.RGB_565)
+                .precision(Precision.INEXACT)
                 .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
                 .build(),
             imageLoader = ctx.imageLoader,

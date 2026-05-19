@@ -15,7 +15,7 @@ import com.exapps.mangaworld.core.data.local.entity.*
         DownloadTaskEntity::class,
         DownloadedMangaEntity::class,
     ],
-    version = 4,          // v4: added downloaded_manga table
+    version = 5,          // v5: added lastChapterUrl to reading_history
     exportSchema = false
 )
 abstract class MangaDatabase : RoomDatabase() {

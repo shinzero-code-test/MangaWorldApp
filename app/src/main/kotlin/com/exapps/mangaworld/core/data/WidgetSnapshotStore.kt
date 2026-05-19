@@ -63,6 +63,7 @@ private fun WidgetLatestUpdateEntry.toJson(): JSONObject = JSONObject().apply {
     put("coverUrl", coverUrl)
     put("chapterLabel", chapterLabel)
     put("chapterUrl", chapterUrl)
+    put("publishedAt", publishedAt)
     put("timeAgo", timeAgo)
 }
 
@@ -95,5 +96,6 @@ private fun JSONObject.toWidgetLatestUpdateEntry() = WidgetLatestUpdateEntry(
     coverUrl = optString("coverUrl"),
     chapterLabel = getString("chapterLabel"),
     chapterUrl = getString("chapterUrl"),
+    publishedAt = optLong("publishedAt").takeIf { it > 0L },
     timeAgo = optString("timeAgo").ifBlank { null }
 )

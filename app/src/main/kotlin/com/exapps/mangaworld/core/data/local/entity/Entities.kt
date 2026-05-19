@@ -36,6 +36,7 @@ data class ReadingHistoryEntity(
     val coverUrl: String,
     val sourceId: String,
     val lastChapterNumber: Float,
+    val lastChapterUrl: String = "",
     val lastReadAt: Long,
     val readChapters: Int = 0,
     val totalChapters: Int = 0
@@ -43,6 +44,7 @@ data class ReadingHistoryEntity(
     fun toDomain() = ReadingHistoryItem(
         mangaId = mangaId, slug = slug, title = title, coverUrl = coverUrl,
         source = MangaSource.fromId(sourceId), lastChapterNumber = lastChapterNumber,
+        lastChapterUrl = lastChapterUrl,
         lastReadAt = lastReadAt, readChapters = readChapters, totalChapters = totalChapters
     )
 }

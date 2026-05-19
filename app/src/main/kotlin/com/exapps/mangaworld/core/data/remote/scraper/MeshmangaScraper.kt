@@ -173,6 +173,9 @@ class MeshmangaScraper @Inject constructor(
         val chapterId = obj.optLong("id").takeIf { it > 0 } ?: return null
         val chapterNumber = parseChapterNumber(obj.optString("chapter").ifBlank { obj.optString("title") })
             ?: return null
+        val publishedAt = obj.optString("created_at").takeIf { it.isNotBlank() }?.let {
+            runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
+        }
         return LatestChapterItem(
             mangaId = "meshmanga_$seriesId",
             mangaSlug = seriesId,
@@ -182,6 +185,7 @@ class MeshmangaScraper @Inject constructor(
             chapterTitle = obj.optString("title").cleanText().ifBlank { null },
             chapterUrl = buildChapterUrl(seriesId, chapterId, chapterNumber),
             timeAgo = obj.optString("created_at_humanized"),
+            publishedAt = publishedAt,
             source = source,
             isNew = obj.optString("created_at_humanized").contains("ساعة")
         )

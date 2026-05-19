@@ -199,7 +199,10 @@ class WidgetDataRepository @Inject constructor(
 
     private suspend fun com.exapps.mangaworld.core.data.local.entity.ReadingHistoryEntity.toContinueReadingData(): ContinueReadingWidgetData? {
         val source = MangaSource.fromId(sourceId)
-        val chapter = resolveChapter(this, source) ?: return null
+        val chapterUrl = lastChapterUrl.ifBlank {
+            resolveChapter(this, source)?.url.orEmpty()
+        }
+        if (chapterUrl.isBlank()) return null
         return ContinueReadingWidgetData(
             mangaId = mangaId,
             sourceId = source.id,
@@ -207,7 +210,7 @@ class WidgetDataRepository @Inject constructor(
             title = title,
             coverUrl = coverUrl,
             chapterLabel = "الفصل ${formatChapterNumber(lastChapterNumber)}",
-            chapterUrl = chapter.url
+            chapterUrl = chapterUrl
         )
     }
 
@@ -254,6 +257,7 @@ class WidgetDataRepository @Inject constructor(
         coverUrl = coverUrl,
         chapterLabel = "الفصل ${formatChapterNumber(chapterNumber)}",
         chapterUrl = chapterUrl,
+        publishedAt = publishedAt,
         timeAgo = timeAgo.ifBlank { null }
     )
 

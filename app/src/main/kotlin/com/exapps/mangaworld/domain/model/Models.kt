@@ -145,6 +145,7 @@ data class LatestChapterItem(
     val chapterTitle: String? = null,
     val chapterUrl: String,
     val timeAgo: String,
+    val publishedAt: Long? = null,
     val source: MangaSource,
     val isNew: Boolean = false
 )
@@ -192,6 +193,7 @@ data class ReadingHistoryItem(
     val coverUrl: String,
     val source: MangaSource,
     val lastChapterNumber: Float,
+    val lastChapterUrl: String = "",
     val lastReadAt: Long,
     val readChapters: Int = 0,
     val totalChapters: Int = 0

@@ -101,7 +101,9 @@ fun MangaNavGraph(navController: NavHostController) {
         ) {
             LatestUpdatesScreen(
                 onBack = { navController.popBackStack() },
-                onOpenManga = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) }
+                onOpenChapter = { src, mangaId, chapterUrl ->
+                    navController.navigate(Screen.Reader.createRoute(src, mangaId, chapterUrl))
+                }
             )
         }
         composable(Screen.LocalStorage.route) {

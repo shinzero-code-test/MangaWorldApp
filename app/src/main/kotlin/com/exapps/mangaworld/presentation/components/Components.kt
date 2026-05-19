@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.presentation.components
 
+import android.graphics.Bitmap
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
+import coil.size.Precision
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
@@ -137,6 +139,9 @@ fun MangaCover(
         model = ImageRequest.Builder(ctx)
             .data(url)
             .crossfade(300)
+            .allowHardware(false)
+            .bitmapConfig(Bitmap.Config.RGB_565)
+            .precision(Precision.INEXACT)
             .apply { headers.forEach { (k, v) -> addHeader(k, v) } }
             .build(),
         imageLoader = ctx.imageLoader,

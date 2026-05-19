@@ -95,6 +95,7 @@ class ReaderViewModel @Inject constructor(
                                 title = cached.title, coverUrl = cached.coverUrl,
                                 source = MangaSource.fromId(cached.sourceId),
                                 chapterNumber = chNum,
+                                chapterUrl = chapterUrl,
                                 totalChapters = cached.totalChapters ?: 0
                             )
                         }
