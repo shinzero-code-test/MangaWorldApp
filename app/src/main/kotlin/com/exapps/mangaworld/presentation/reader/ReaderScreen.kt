@@ -53,6 +53,7 @@ fun ReaderScreen(
     val activity = ctx as? Activity
     var noteDialog by remember { mutableStateOf(false) }
     var noteText by remember { mutableStateOf("") }
+    var annotationsSheetOpen by remember { mutableStateOf(false) }
     val solverLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val cookies = result.data?.getStringExtra(WebViewSolverActivity.RESULT_COOKIES).orEmpty()
@@ -157,6 +158,7 @@ fun ReaderScreen(
                     noteText = state.pageNotes[state.currentPage].orEmpty()
                     noteDialog = true
                 },
+                onBrowseAnnotations = { annotationsSheetOpen = true },
                 hasPreviousChapter = state.prevChapterUrl != null,
                 hasNextChapter = state.nextChapterUrl != null,
                 onPreviousChapter = viewModel::openPreviousChapter,
@@ -216,6 +218,40 @@ fun ReaderScreen(
                     TextButton(onClick = { noteDialog = false }) { Text("إلغاء") }
                 }
             )
+        }
+
+        if (annotationsSheetOpen) {
+            ModalBottomSheet(onDismissRequest = { annotationsSheetOpen = false }) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text("الإشارات والملاحظات", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(12.dp))
+                    val annotatedPages = state.pages.filter { page ->
+                        page.index in state.bookmarkedPages || !state.pageNotes[page.index].isNullOrBlank()
+                    }
+                    if (annotatedPages.isEmpty()) {
+                        Text("لا توجد إشارات أو ملاحظات في هذا الفصل.", color = MangaColors.Muted)
+                    } else {
+                        annotatedPages.forEach { page ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)
+                            ) {
+                                Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                                    Text(
+                                        text = "الصفحة ${page.index + 1}${if (page.index in state.bookmarkedPages) " • محفوظة" else ""}",
+                                        color = MangaColors.OnSurface,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    state.pageNotes[page.index]?.takeIf { it.isNotBlank() }?.let { note ->
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(note, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -382,6 +418,7 @@ private fun ReaderTopBar(
     hasBookmark: Boolean,
     onToggleBookmark: () -> Unit,
     onEditNote: () -> Unit,
+    onBrowseAnnotations: () -> Unit,
     hasPreviousChapter: Boolean,
     hasNextChapter: Boolean,
     onPreviousChapter: () -> Unit,
@@ -421,6 +458,9 @@ private fun ReaderTopBar(
                 }
                 IconButton(onClick = onEditNote) {
                     Icon(Icons.Filled.EditNote, "ملاحظة", tint = Color.White)
+                }
+                IconButton(onClick = onBrowseAnnotations) {
+                    Icon(Icons.Filled.FormatListBulleted, "الإشارات والملاحظات", tint = Color.White)
                 }
                 if (downloadInProgress) {
                     IconButton(onClick = onCancelDownload) {

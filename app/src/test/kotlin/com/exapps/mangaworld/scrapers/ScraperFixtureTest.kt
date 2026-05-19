@@ -67,6 +67,26 @@ class ScraperFixtureTest {
     }
 
     @Test
+    fun olympusSearchPageFixtureUsesCurrentListupdCards() {
+        val html = javaClass.getResource("/scrapers/olympus_search_page_sample.html")!!.readText()
+        val doc = Jsoup.parse(html)
+        val cards = doc.select(".listupd .bsx")
+        assertEquals(2, cards.size)
+        assertEquals("Solo Leveling", cards.first()!!.selectFirst(".tt")!!.text())
+        assertEquals("مانهوا", cards.first()!!.selectFirst(".type")!!.text())
+    }
+
+    @Test
+    fun olympusAjaxSearchFixtureFindsSoloResults() {
+        val html = javaClass.getResource("/scrapers/olympus_ajax_search_sample.html")!!.readText()
+        val doc = Jsoup.parse(html, "https://olympustaff.com")
+        val results = doc.select("a.group[href*='/series/']")
+        assertEquals(2, results.size)
+        assertTrue(results.any { it.attr("abs:href").endsWith("/series/solo-leveling") })
+        assertTrue(results.any { it.selectFirst("h4")?.text() == "Solo Leveling: Ragnarok" })
+    }
+
+    @Test
     fun starzGenreSelectorFixture() {
         val html = javaClass.getResource("/scrapers/starz_genre_sample.html")!!.readText()
         val doc = Jsoup.parse(html)

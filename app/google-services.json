@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "585544727612",
+    "project_id": "mangaworld-live-260519",
+    "storage_bucket": "mangaworld-live-260519.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:585544727612:android:de9dd597de95a4d2409739",
+        "android_client_info": {
+          "package_name": "com.exapps.mangaworld"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCWWD81ktZr-qCHv5CK9msTWX-aSGtjS08"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

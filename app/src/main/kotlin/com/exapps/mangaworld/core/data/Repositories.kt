@@ -1,6 +1,8 @@
 package com.exapps.mangaworld.core.data
 
 import androidx.paging.*
+import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
+import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.core.data.local.AppPreferences
 import com.exapps.mangaworld.core.data.local.dao.*
 import com.exapps.mangaworld.core.data.local.entity.*
@@ -79,14 +81,15 @@ internal fun MangaDetail.toCacheEntity() = MangaCacheEntity(
 @Singleton
 class MangaRepositoryImpl @Inject constructor(
     private val scrapers: Map<String, @JvmSuppressWildcards MangaScraper>,
-    private val cacheDao: MangaCacheDao
+    private val cacheDao: MangaCacheDao,
+    private val firebaseTelemetry: FirebaseTelemetry
 ) : MangaRepository {
 
     private fun scraper(source: MangaSource): MangaScraper =
         scrapers[source.id] ?: error("No scraper for ${source.id}")
 
     override suspend fun getHomeData(source: MangaSource) =
-        scraper(source).getHomeData()
+        runCatching { firebaseTelemetry.trace("home_${source.id}") { scraper(source).getHomeData().getOrThrow() } }
 
     override fun searchManga(filters: SearchFilters): Flow<PagingData<MangaItem>> = Pager(
         config = PagingConfig(pageSize = 24, enablePlaceholders = false)
@@ -127,6 +130,7 @@ class MangaRepositoryImpl @Inject constructor(
                 runCatching { cacheDao.insert(detail.toCacheEntity()) }
             }
             .recoverCatching { e ->
+                firebaseTelemetry.logScraperFailure(source.id, "detail", e)
                 // Network failed — return cache if available, else re-throw
                 cached ?: throw e
             }
@@ -374,9 +378,12 @@ class LibraryRepositoryImpl @Inject constructor(
 
 @Singleton
 class SettingsRepositoryImpl @Inject constructor(
-    private val prefs: AppPreferences
+    private val prefs: AppPreferences,
+    private val remoteConfigManager: FirebaseRemoteConfigManager
 ) : SettingsRepository {
-    override fun getAppSettings() = prefs.appSettings
+    override fun getAppSettings() = combine(prefs.appSettings, remoteConfigManager.disabledSourceIds) { local, remoteDisabled ->
+        local.copy(enabledSources = local.enabledSources - remoteDisabled)
+    }
     override suspend fun updateTheme(theme: AppTheme) { prefs.setTheme(theme) }
     override suspend fun setOnboardingCompleted(completed: Boolean) { prefs.setOnboardingDone(completed) }
     override suspend fun setDownloadOnWifiOnly(enabled: Boolean) { prefs.setDownloadWifiOnly(enabled) }

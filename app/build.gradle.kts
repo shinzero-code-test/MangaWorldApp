@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.google.services)
 }
 
 // ─── Signing from environment variables or Gradle properties ─────────────────
@@ -213,6 +214,15 @@ dependencies {
     // Extras
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.palette.ktx)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth.ktx)
+    implementation(libs.firebase.firestore.ktx)
+    implementation(libs.firebase.config.ktx)
+    implementation(libs.firebase.messaging.ktx)
+    implementation(libs.firebase.crashlytics.ktx)
+    implementation(libs.firebase.analytics.ktx)
+    implementation(libs.firebase.perf.ktx)
+    implementation(libs.play.services.auth)
 
     // Testing
     testImplementation(libs.junit)

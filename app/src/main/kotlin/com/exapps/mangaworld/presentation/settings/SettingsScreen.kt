@@ -25,6 +25,8 @@ import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.webview.WebViewSolverActivity
 import com.exapps.mangaworld.presentation.components.GradientDivider
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.utils.formatDiagnosticBytes
+import com.exapps.mangaworld.presentation.utils.normalizeBlacklistInput
 
 @Composable
 fun SettingsScreen(
@@ -353,10 +355,8 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.setContentBlacklist(
-                        blacklistText.lines().map { it.trim() }.filter { it.isNotBlank() }.toSet()
-                    )
+                    TextButton(onClick = {
+                    viewModel.setContentBlacklist(normalizeBlacklistInput(blacklistText))
                     blacklistDialog = false
                 }) { Text("حفظ") }
             },
@@ -367,11 +367,7 @@ fun SettingsScreen(
     }
 }
 
-private fun formatBytes(bytes: Long): String {
-    val kb = bytes / 1024.0
-    val mb = kb / 1024.0
-    return if (mb >= 1) String.format(java.util.Locale.US, "%.1f MB", mb) else String.format(java.util.Locale.US, "%.0f KB", kb)
-}
+private fun formatBytes(bytes: Long): String = formatDiagnosticBytes(bytes)
 
 // ─── Section Container ────────────────────────────────────────────────────────
 

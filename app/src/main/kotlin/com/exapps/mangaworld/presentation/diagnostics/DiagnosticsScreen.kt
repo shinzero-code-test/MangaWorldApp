@@ -40,6 +40,7 @@ import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.utils.formatDiagnosticBytes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -153,7 +154,7 @@ fun DiagnosticsScreen(
         DiagnosticsSectionCard(title = "الحالة العامة") {
             DiagnosticLine("المصادر المفعلة", state.appSettings.enabledSources.size.toString())
             DiagnosticLine("الكلمات المحجوبة", state.appSettings.contentBlacklist.size.toString())
-            DiagnosticLine("حجم كاش الصور", formatBytes(state.imageCacheSizeBytes))
+            DiagnosticLine("حجم كاش الصور", formatDiagnosticBytes(state.imageCacheSizeBytes))
             DiagnosticLine("آخر تحديث لويدجت", if (state.widgetSnapshotUpdatedAt > 0) java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(state.widgetSnapshotUpdatedAt)) else "لا يوجد")
             DiagnosticLine("القفل البيومتري", if (state.appSettings.biometricLockEnabled) "مفعل" else "معطل")
         }
@@ -197,10 +198,4 @@ private fun DiagnosticLine(label: String, value: String) {
         Text(value, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }
     Spacer(Modifier.height(4.dp))
-}
-
-private fun formatBytes(bytes: Long): String {
-    val kb = bytes / 1024.0
-    val mb = kb / 1024.0
-    return if (mb >= 1) String.format(java.util.Locale.US, "%.1f MB", mb) else String.format(java.util.Locale.US, "%.0f KB", kb)
 }

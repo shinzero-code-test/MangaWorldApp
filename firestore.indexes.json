@@ -1,0 +1,19 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "readingHistory",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lastReadAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "favorites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "addedAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

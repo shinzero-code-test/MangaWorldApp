@@ -51,6 +51,7 @@ import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.components.EmptyState
 import com.exapps.mangaworld.presentation.components.MangaCover
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.utils.filterLatestUpdates
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -146,10 +147,7 @@ class LatestUpdatesViewModel @Inject constructor(
     }
 
     private fun filterItems(state: LatestUpdatesUiState): List<LatestChapterItem> {
-        return state.allItems.filter { item ->
-            (state.selectedSource == null || item.source == state.selectedSource) &&
-                (!state.unreadOnly || state.readStates[item.chapterUrl] != true)
-        }
+        return filterLatestUpdates(state.allItems, state.selectedSource, state.unreadOnly, state.readStates)
     }
 }
 

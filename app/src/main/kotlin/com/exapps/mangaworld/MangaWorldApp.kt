@@ -5,10 +5,16 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Constraints
 import androidx.work.Configuration
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import coil.disk.DiskCache
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import com.exapps.mangaworld.core.firebase.FirebaseStartupCoordinator
+import com.exapps.mangaworld.core.firebase.FirebaseSyncWorker
 import com.exapps.mangaworld.core.widget.AppShortcutManager
 import com.exapps.mangaworld.core.widget.WidgetRefreshScheduler
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -21,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import java.io.File
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -31,6 +38,7 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     @Inject lateinit var appShortcutManager: AppShortcutManager
     @Inject lateinit var okHttpClient: OkHttpClient
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var firebaseStartupCoordinator: FirebaseStartupCoordinator
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -57,9 +65,22 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
         super.onCreate()
         createNotificationChannels()
         widgetRefreshScheduler.schedule()
+        scheduleFirebaseSync()
         applicationScope.launch {
             appShortcutManager.refreshDynamicShortcuts()
+            firebaseStartupCoordinator.initialize()
         }
+    }
+
+    private fun scheduleFirebaseSync() {
+        val constraints = Constraints.Builder().build()
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "firebase_sync_periodic",
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<FirebaseSyncWorker>(12, TimeUnit.HOURS)
+                .setConstraints(constraints)
+                .build()
+        )
     }
 
     private fun createNotificationChannels() {

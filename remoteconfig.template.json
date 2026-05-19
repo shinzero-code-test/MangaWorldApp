@@ -1,0 +1,16 @@
+{
+  "conditions": [],
+  "parameters": {
+    "source_olympus_enabled": { "defaultValue": { "value": "true" } },
+    "source_azora_enabled": { "defaultValue": { "value": "true" } },
+    "source_starz_enabled": { "defaultValue": { "value": "true" } },
+    "source_mangasid_enabled": { "defaultValue": { "value": "true" } },
+    "source_meshmanga_enabled": { "defaultValue": { "value": "true" } },
+    "scraper_selector_overrides": { "defaultValue": { "value": "{}" } },
+    "home_layout_variant": { "defaultValue": { "value": "default" } },
+    "remote_alert_message": { "defaultValue": { "value": "" } }
+  },
+  "version": {
+    "versionNumber": "1"
+  }
+}
