@@ -75,28 +75,38 @@ class FirebaseSyncManager @Inject constructor(
         history.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }.forEach { historyDao.insertOrUpdate(it) }
 
         profile.getString("theme")?.let { name ->
-            AppTheme.values().firstOrNull { it.name == name }?.let(settingsRepository::updateTheme)
+            AppTheme.values().firstOrNull { it.name == name }?.let { theme ->
+                settingsRepository.updateTheme(theme)
+            }
         }
-        (profile.get("enabledSources") as? List<*>)?.mapNotNull { it?.toString() }?.toSet()?.let(settingsRepository::setEnabledSources)
-        profile.getBoolean("useDynamicColors")?.let(settingsRepository::setDynamicColors)
-        profile.getBoolean("biometricLockEnabled")?.let(settingsRepository::setBiometricLock)
-        profile.getBoolean("secureReaderEnabled")?.let(settingsRepository::setSecureReader)
-        profile.getBoolean("autoCleanupReadDownloads")?.let(settingsRepository::setAutoCleanupReadDownloads)
-        profile.getLong("cleanupAfterHours")?.toInt()?.let(settingsRepository::setCleanupAfterHours)
-        profile.getLong("imageCacheLimitMb")?.toInt()?.let(settingsRepository::setImageCacheLimitMb)
-        (profile.get("contentBlacklist") as? List<*>)?.mapNotNull { it?.toString() }?.toSet()?.let(settingsRepository::setContentBlacklist)
+        (profile.get("enabledSources") as? List<*>)?.mapNotNull { it?.toString() }?.toSet()?.let { sourceIds ->
+            settingsRepository.setEnabledSources(sourceIds)
+        }
+        profile.getBoolean("useDynamicColors")?.let { settingsRepository.setDynamicColors(it) }
+        profile.getBoolean("biometricLockEnabled")?.let { settingsRepository.setBiometricLock(it) }
+        profile.getBoolean("secureReaderEnabled")?.let { settingsRepository.setSecureReader(it) }
+        profile.getBoolean("autoCleanupReadDownloads")?.let { settingsRepository.setAutoCleanupReadDownloads(it) }
+        profile.getLong("cleanupAfterHours")?.toInt()?.let { settingsRepository.setCleanupAfterHours(it) }
+        profile.getLong("imageCacheLimitMb")?.toInt()?.let { settingsRepository.setImageCacheLimitMb(it) }
+        (profile.get("contentBlacklist") as? List<*>)?.mapNotNull { it?.toString() }?.toSet()?.let { blacklist ->
+            settingsRepository.setContentBlacklist(blacklist)
+        }
 
         readerPrefs.getString("mode")?.let { name ->
-            com.exapps.mangaworld.domain.model.ReaderMode.values().firstOrNull { it.name == name }?.let(settingsRepository::updateReaderMode)
+            com.exapps.mangaworld.domain.model.ReaderMode.values().firstOrNull { it.name == name }?.let { mode ->
+                settingsRepository.updateReaderMode(mode)
+            }
         }
-        readerPrefs.getDouble("brightness")?.toFloat()?.let(settingsRepository::updateBrightness)
-        readerPrefs.getBoolean("keepScreenOn")?.let(settingsRepository::updateKeepScreenOn)
-        readerPrefs.getBoolean("autoWebtoonDetection")?.let(settingsRepository::updateAutoWebtoon)
-        readerPrefs.getBoolean("incognitoMode")?.let(settingsRepository::updateIncognitoMode)
-        readerPrefs.getBoolean("smartPrefetchEnabled")?.let(settingsRepository::updateSmartPrefetch)
-        readerPrefs.getBoolean("hapticsEnabled")?.let(settingsRepository::updateReaderHaptics)
+        readerPrefs.getDouble("brightness")?.toFloat()?.let { settingsRepository.updateBrightness(it) }
+        readerPrefs.getBoolean("keepScreenOn")?.let { settingsRepository.updateKeepScreenOn(it) }
+        readerPrefs.getBoolean("autoWebtoonDetection")?.let { settingsRepository.updateAutoWebtoon(it) }
+        readerPrefs.getBoolean("incognitoMode")?.let { settingsRepository.updateIncognitoMode(it) }
+        readerPrefs.getBoolean("smartPrefetchEnabled")?.let { settingsRepository.updateSmartPrefetch(it) }
+        readerPrefs.getBoolean("hapticsEnabled")?.let { settingsRepository.updateReaderHaptics(it) }
         readerPrefs.getString("imageFilter")?.let { name ->
-            com.exapps.mangaworld.domain.model.ReaderImageFilter.values().firstOrNull { it.name == name }?.let(settingsRepository::updateImageFilter)
+            com.exapps.mangaworld.domain.model.ReaderImageFilter.values().firstOrNull { it.name == name }?.let { filter ->
+                settingsRepository.updateImageFilter(filter)
+            }
         }
     }
 }
