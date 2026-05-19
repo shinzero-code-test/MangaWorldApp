@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -99,6 +100,7 @@ private fun MangaApp(
     deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val settings by settingsRepo.getAppSettings().collectAsStateWithLifecycle(
         initialValue = com.exapps.mangaworld.domain.model.AppSettings()
     )
@@ -109,7 +111,7 @@ private fun MangaApp(
     }
 
     val biometricSupported = remember {
-        BiometricManager.from(LocalContext.current).canAuthenticate(
+        BiometricManager.from(context).canAuthenticate(
             BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
         ) == BiometricManager.BIOMETRIC_SUCCESS
     }

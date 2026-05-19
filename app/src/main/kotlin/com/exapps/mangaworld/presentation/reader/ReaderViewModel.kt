@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.ImagePrefetcher
 import com.exapps.mangaworld.core.data.ReadingStatsStore
+import com.exapps.mangaworld.core.data.toDetail
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.core.data.download.ChapterCleanupWorker
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
