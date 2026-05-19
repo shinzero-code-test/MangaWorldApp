@@ -17,6 +17,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoMap
 import dagger.multibindings.StringKey
+import com.exapps.mangaworld.core.firebase.FirebaseNetworkInterceptor
 import okhttp3.Cache
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -30,7 +31,7 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(@ApplicationContext ctx: Context): OkHttpClient {
+    fun provideOkHttpClient(@ApplicationContext ctx: Context, firebaseNetworkInterceptor: FirebaseNetworkInterceptor): OkHttpClient {
         val cacheDir = File(ctx.cacheDir, "http_cache")
         val cache = Cache(cacheDir, 50L * 1024 * 1024) // 50MB
 
@@ -44,6 +45,7 @@ object NetworkModule {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
             .addInterceptor(logging)
+            .addNetworkInterceptor(firebaseNetworkInterceptor)
             .addInterceptor { chain ->
                 val req = chain.request().newBuilder()
                     .header("User-Agent", BaseScraperImpl.USER_AGENT)

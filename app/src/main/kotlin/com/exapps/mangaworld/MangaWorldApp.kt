@@ -104,11 +104,20 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
                     NotificationManager.IMPORTANCE_DEFAULT
                 ).apply { description = "الفصول المكتملة والفاشلة" }
             )
+
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    CLOUD_CHANNEL_ID,
+                    "إشعارات السحابة والمصادر",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply { description = "تحديثات الفصول والتنبيهات العامة" }
+            )
         }
     }
 
     companion object {
         const val DOWNLOAD_CHANNEL_ID = "download_channel"
         const val COMPLETE_CHANNEL_ID = "complete_channel"
+        const val CLOUD_CHANNEL_ID = "cloud_channel"
     }
 }

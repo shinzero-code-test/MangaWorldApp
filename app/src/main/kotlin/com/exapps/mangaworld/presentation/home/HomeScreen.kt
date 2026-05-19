@@ -46,6 +46,23 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
+                if (state.remoteAlertMessage.isNotBlank()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MangaColors.GlowPurple),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text(
+                                text = state.remoteAlertMessage,
+                                color = MangaColors.OnSurface,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(14.dp)
+                            )
+                        }
+                    }
+                }
+
                 // Source selector chips
                 item {
                     SourceSelectorRow(
@@ -62,6 +79,23 @@ fun HomeScreen(
                             items = state.featured,
                             onMangaClick = { m -> onMangaClick(m.source.id, m.slug) },
                             modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    }
+                }
+
+                val trendingFirst = state.homeLayoutVariant == "trending_first"
+                if (trendingFirst && state.trending.isNotEmpty()) {
+                    item {
+                        SectionHeader(
+                            title = "الأكثر قراءة",
+                            onSeeAll = { onSeeAllLatest() },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    item {
+                        TrendingRow(
+                            items = state.trending,
+                            onMangaClick = { m -> onMangaClick(m.source.id, m.slug) }
                         )
                     }
                 }
@@ -84,7 +118,7 @@ fun HomeScreen(
                 }
 
                 // Trending header
-                if (state.trending.isNotEmpty()) {
+                if (!trendingFirst && state.trending.isNotEmpty()) {
                     item {
                         Spacer(Modifier.height(8.dp))
                         SectionHeader(

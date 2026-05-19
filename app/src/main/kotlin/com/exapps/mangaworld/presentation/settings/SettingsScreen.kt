@@ -31,6 +31,7 @@ import com.exapps.mangaworld.presentation.utils.normalizeBlacklistInput
 @Composable
 fun SettingsScreen(
     onOpenDiagnostics: () -> Unit,
+    onOpenCloudSync: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val app by viewModel.appSettings.collectAsStateWithLifecycle()
@@ -326,6 +327,10 @@ fun SettingsScreen(
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(icon = Icons.Filled.Code, title = "com.exapps.mangaworld",
                 subtitle = "مبني بـ Kotlin + Jetpack Compose") {}
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SettingsItem(icon = Icons.Filled.CloudSync, title = "السحابة والمزامنة", subtitle = "الحساب، Google Sign-In، ونسخ المكتبة") {
+                OutlinedButton(onClick = onOpenCloudSync) { Text("فتح") }
+            }
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(icon = Icons.Filled.BugReport, title = "التشخيص وصحة المصادر", subtitle = "فحص المصادر والودجت والكاش") {
                 OutlinedButton(onClick = onOpenDiagnostics) { Text("فتح") }

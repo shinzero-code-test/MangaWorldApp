@@ -390,6 +390,7 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setAutoDownloadNewChapters(enabled: Boolean) { prefs.setAutoDownload(enabled) }
     override suspend fun setNotificationsEnabled(enabled: Boolean) { prefs.setNotifications(enabled) }
     override suspend fun toggleSource(sourceId: String, enabled: Boolean) { prefs.toggleSource(sourceId, enabled) }
+    override suspend fun setEnabledSources(sourceIds: Set<String>) { prefs.setEnabledSources(sourceIds) }
     override suspend fun setDynamicColors(enabled: Boolean) { prefs.setDynamicColors(enabled) }
     override suspend fun setBiometricLock(enabled: Boolean) { prefs.setBiometricLock(enabled) }
     override suspend fun setSecureReader(enabled: Boolean) { prefs.setSecureReader(enabled) }

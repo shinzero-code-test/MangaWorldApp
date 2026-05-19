@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.CacheManager
 import com.exapps.mangaworld.core.data.WidgetDataRepository
+import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -17,6 +18,7 @@ class SettingsViewModel @Inject constructor(
     private val repo: SettingsRepository,
     private val cacheManager: CacheManager,
     private val widgetDataRepository: WidgetDataRepository,
+    private val firebaseSyncManager: FirebaseSyncManager,
     private val widgetShortcutCoordinator: WidgetShortcutCoordinator
 ) : ViewModel() {
     val appSettings: StateFlow<AppSettings> = repo.getAppSettings()
@@ -28,29 +30,29 @@ class SettingsViewModel @Inject constructor(
 
     init { refreshCacheStats() }
 
-    fun setTheme(theme: AppTheme) = viewModelScope.launch { repo.updateTheme(theme) }
-    fun setDynamicColors(v: Boolean) = viewModelScope.launch { repo.setDynamicColors(v) }
-    fun setBiometricLock(v: Boolean) = viewModelScope.launch { repo.setBiometricLock(v) }
-    fun setSecureReader(v: Boolean) = viewModelScope.launch { repo.setSecureReader(v) }
-    fun setWifiOnly(v: Boolean) = viewModelScope.launch { repo.setDownloadOnWifiOnly(v) }
-    fun setNotifications(v: Boolean) = viewModelScope.launch { repo.setNotificationsEnabled(v) }
-    fun setAutoCleanup(v: Boolean) = viewModelScope.launch { repo.setAutoCleanupReadDownloads(v) }
-    fun setCleanupHours(v: Int) = viewModelScope.launch { repo.setCleanupAfterHours(v) }
-    fun setImageCacheLimit(limitMb: Int) = viewModelScope.launch { repo.setImageCacheLimitMb(limitMb) }
-    fun setContentBlacklist(values: Set<String>) = viewModelScope.launch { repo.setContentBlacklist(values) }
+    fun setTheme(theme: AppTheme) = saveAndSync { repo.updateTheme(theme) }
+    fun setDynamicColors(v: Boolean) = saveAndSync { repo.setDynamicColors(v) }
+    fun setBiometricLock(v: Boolean) = saveAndSync { repo.setBiometricLock(v) }
+    fun setSecureReader(v: Boolean) = saveAndSync { repo.setSecureReader(v) }
+    fun setWifiOnly(v: Boolean) = saveAndSync { repo.setDownloadOnWifiOnly(v) }
+    fun setNotifications(v: Boolean) = saveAndSync { repo.setNotificationsEnabled(v) }
+    fun setAutoCleanup(v: Boolean) = saveAndSync { repo.setAutoCleanupReadDownloads(v) }
+    fun setCleanupHours(v: Int) = saveAndSync { repo.setCleanupAfterHours(v) }
+    fun setImageCacheLimit(limitMb: Int) = saveAndSync { repo.setImageCacheLimitMb(limitMb) }
+    fun setContentBlacklist(values: Set<String>) = saveAndSync { repo.setContentBlacklist(values) }
     fun toggleSource(id: String, enabled: Boolean) = viewModelScope.launch {
         repo.toggleSource(id, enabled)
         runCatching { widgetDataRepository.refreshRemoteSnapshot() }
         widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
     }
-    fun setReaderMode(m: ReaderMode) = viewModelScope.launch { repo.updateReaderMode(m) }
-    fun setBrightness(v: Float) = viewModelScope.launch { repo.updateBrightness(v) }
-    fun setKeepScreen(v: Boolean) = viewModelScope.launch { repo.updateKeepScreenOn(v) }
-    fun setAutoWebtoon(v: Boolean) = viewModelScope.launch { repo.updateAutoWebtoon(v) }
-    fun setIncognito(v: Boolean) = viewModelScope.launch { repo.updateIncognitoMode(v) }
-    fun setSmartPrefetch(v: Boolean) = viewModelScope.launch { repo.updateSmartPrefetch(v) }
-    fun setReaderHaptics(v: Boolean) = viewModelScope.launch { repo.updateReaderHaptics(v) }
-    fun setImageFilter(v: ReaderImageFilter) = viewModelScope.launch { repo.updateImageFilter(v) }
+    fun setReaderMode(m: ReaderMode) = saveAndSync { repo.updateReaderMode(m) }
+    fun setBrightness(v: Float) = saveAndSync { repo.updateBrightness(v) }
+    fun setKeepScreen(v: Boolean) = saveAndSync { repo.updateKeepScreenOn(v) }
+    fun setAutoWebtoon(v: Boolean) = saveAndSync { repo.updateAutoWebtoon(v) }
+    fun setIncognito(v: Boolean) = saveAndSync { repo.updateIncognitoMode(v) }
+    fun setSmartPrefetch(v: Boolean) = saveAndSync { repo.updateSmartPrefetch(v) }
+    fun setReaderHaptics(v: Boolean) = saveAndSync { repo.updateReaderHaptics(v) }
+    fun setImageFilter(v: ReaderImageFilter) = saveAndSync { repo.updateImageFilter(v) }
     fun saveCookies(domain: String, cookies: String) = viewModelScope.launch { repo.saveCookies(domain, cookies) }
 
     fun refreshCacheStats() = viewModelScope.launch {
@@ -60,5 +62,10 @@ class SettingsViewModel @Inject constructor(
     fun clearImageCache() = viewModelScope.launch {
         cacheManager.clearImageCache()
         refreshCacheStats()
+    }
+
+    private fun saveAndSync(block: suspend () -> Unit) = viewModelScope.launch {
+        block()
+        runCatching { firebaseSyncManager.pushLocalSnapshot() }
     }
 }

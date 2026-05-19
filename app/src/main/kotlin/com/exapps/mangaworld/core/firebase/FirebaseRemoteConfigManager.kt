@@ -2,6 +2,7 @@ package com.exapps.mangaworld.core.firebase
 
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
+import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +23,9 @@ class FirebaseRemoteConfigManager @Inject constructor() {
     private val _remoteAlertMessage = MutableStateFlow("")
     val remoteAlertMessage: StateFlow<String> = _remoteAlertMessage.asStateFlow()
 
+    private val _homeLayoutVariant = MutableStateFlow("default")
+    val homeLayoutVariant: StateFlow<String> = _homeLayoutVariant.asStateFlow()
+
     init {
         remoteConfig.setConfigSettingsAsync(
             FirebaseRemoteConfigSettings.Builder()
@@ -36,6 +40,7 @@ class FirebaseRemoteConfigManager @Inject constructor() {
                 "source_mangasid_enabled" to true,
                 "source_meshmanga_enabled" to true,
                 "scraper_selector_overrides" to "{}",
+                "home_layout_variant" to "default",
                 "remote_alert_message" to ""
             )
         )
@@ -58,7 +63,23 @@ class FirebaseRemoteConfigManager @Inject constructor() {
             if (!remoteConfig.getBoolean("source_meshmanga_enabled")) add("meshmanga")
         }
         _disabledSourceIds.value = disabled
-        _selectorOverridesJson.value = remoteConfig.getString("scraper_selector_overrides")
+        val overridesJson = remoteConfig.getString("scraper_selector_overrides")
+        _selectorOverridesJson.value = overridesJson
+        _homeLayoutVariant.value = remoteConfig.getString("home_layout_variant").ifBlank { "default" }
         _remoteAlertMessage.value = remoteConfig.getString("remote_alert_message")
+        RemoteSelectorOverridesStore.replaceAll(parseOverrides(overridesJson))
     }
+
+    private fun parseOverrides(json: String): Map<String, Map<String, String>> = runCatching {
+        val root = JSONObject(json)
+        buildMap {
+            root.keys().forEach { sourceId ->
+                val obj = root.optJSONObject(sourceId) ?: return@forEach
+                val nested = buildMap<String, String> {
+                    obj.keys().forEach { key -> put(key, obj.optString(key)) }
+                }
+                put(sourceId, nested)
+            }
+        }
+    }.getOrDefault(emptyMap())
 }

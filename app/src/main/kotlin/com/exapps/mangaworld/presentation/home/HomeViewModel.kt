@@ -3,6 +3,7 @@ package com.exapps.mangaworld.presentation.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.isBlockedBy
+import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -18,13 +19,16 @@ data class HomeUiState(
     val trending: List<MangaItem> = emptyList(),
     val availableSources: List<MangaSource> = MangaSource.entries.toList(),
     val activeSource: MangaSource = MangaSource.AZORA,
+    val remoteAlertMessage: String = "",
+    val homeLayoutVariant: String = "default",
     val error: String? = null
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repo: MangaRepository,
-    private val settingsRepo: SettingsRepository
+    private val settingsRepo: SettingsRepository,
+    private val remoteConfigManager: FirebaseRemoteConfigManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -57,6 +61,16 @@ class HomeViewModel @Inject constructor(
                         loadHome(nextSource, settings.contentBlacklist)
                     }
                 }
+        }
+        viewModelScope.launch {
+            remoteConfigManager.remoteAlertMessage.collect { message ->
+                _state.update { it.copy(remoteAlertMessage = message) }
+            }
+        }
+        viewModelScope.launch {
+            remoteConfigManager.homeLayoutVariant.collect { variant ->
+                _state.update { it.copy(homeLayoutVariant = variant) }
+            }
         }
     }
 

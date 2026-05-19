@@ -140,6 +140,10 @@ class AppPreferences @Inject constructor(
         prefs[KEY_ENABLED_SOURCES] = current.joinToString(",")
     }
 
+    suspend fun setEnabledSources(sourceIds: Set<String>) = dataStore.edit { prefs ->
+        prefs[KEY_ENABLED_SOURCES] = sourceIds.joinToString(",")
+    }
+
     suspend fun setReaderMode(mode: ReaderMode) =
         dataStore.edit { it[KEY_READER_MODE] = mode.name }
 

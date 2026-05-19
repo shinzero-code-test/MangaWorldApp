@@ -64,6 +64,7 @@ interface SettingsRepository {
     suspend fun setAutoDownloadNewChapters(enabled: Boolean)
     suspend fun setNotificationsEnabled(enabled: Boolean)
     suspend fun toggleSource(sourceId: String, enabled: Boolean)
+    suspend fun setEnabledSources(sourceIds: Set<String>)
     suspend fun setDynamicColors(enabled: Boolean)
     suspend fun setBiometricLock(enabled: Boolean)
     suspend fun setSecureReader(enabled: Boolean)

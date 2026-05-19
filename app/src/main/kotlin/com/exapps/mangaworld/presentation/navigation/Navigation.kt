@@ -10,6 +10,7 @@ import androidx.navigation.*
 import androidx.navigation.compose.*
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.browse.BrowseScreen
+import com.exapps.mangaworld.presentation.cloud.CloudSyncScreen
 import com.exapps.mangaworld.presentation.detail.MangaDetailScreen
 import com.exapps.mangaworld.presentation.diagnostics.DiagnosticsScreen
 import com.exapps.mangaworld.presentation.downloads.DownloadsScreen
@@ -28,6 +29,7 @@ sealed class Screen(val route: String) {
     object Library     : Screen("library")
     object Settings    : Screen("settings")
     object Diagnostics : Screen("diagnostics")
+    object CloudSync : Screen("cloud_sync")
     object Downloads   : Screen("downloads")
     object LocalStorage: Screen("local_storage")
     object LatestUpdates : Screen("latest_updates")
@@ -90,10 +92,16 @@ fun MangaNavGraph(navController: NavHostController) {
             )
         }
         composable(Screen.Settings.route)    {
-            SettingsScreen(onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) })
+            SettingsScreen(
+                onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
+                onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) }
+            )
         }
         composable(Screen.Diagnostics.route) {
             DiagnosticsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.CloudSync.route) {
+            CloudSyncScreen(onBack = { navController.popBackStack() })
         }
         composable(
             route = Screen.Downloads.route,

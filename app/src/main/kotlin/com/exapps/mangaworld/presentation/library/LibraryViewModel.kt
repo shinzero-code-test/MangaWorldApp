@@ -2,6 +2,8 @@ package com.exapps.mangaworld.presentation.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
+import com.exapps.mangaworld.core.firebase.FirebaseTopicManager
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.LibraryRepository
@@ -22,6 +24,8 @@ data class LibraryUiState(
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val repo: LibraryRepository,
+    private val firebaseSyncManager: FirebaseSyncManager,
+    private val firebaseTopicManager: FirebaseTopicManager,
     private val widgetShortcutCoordinator: WidgetShortcutCoordinator
 ) : ViewModel() {
 
@@ -44,16 +48,20 @@ class LibraryViewModel @Inject constructor(
     fun selectTab(tab: LibraryTab) = _state.update { it.copy(activeTab = tab) }
     fun removeFavorite(id: String) = viewModelScope.launch {
         repo.removeFavorite(id)
+        runCatching { firebaseTopicManager.unsubscribeFromManga(id) }
+        runCatching { firebaseSyncManager.pushLocalSnapshot() }
         widgetShortcutCoordinator.refreshWidgets()
     }
 
     fun removeHistory(id: String) = viewModelScope.launch {
         repo.removeFromHistory(id)
+        runCatching { firebaseSyncManager.pushLocalSnapshot() }
         widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
     }
 
     fun clearHistory() = viewModelScope.launch {
         repo.clearHistory()
+        runCatching { firebaseSyncManager.pushLocalSnapshot() }
         widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
     }
 }

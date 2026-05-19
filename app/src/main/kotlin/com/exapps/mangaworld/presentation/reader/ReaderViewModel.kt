@@ -12,6 +12,7 @@ import com.exapps.mangaworld.core.data.ReadingStatsStore
 import com.exapps.mangaworld.core.data.toDetail
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.core.data.download.ChapterCleanupWorker
+import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
@@ -60,6 +61,7 @@ class ReaderViewModel @Inject constructor(
     private val cacheDao: MangaCacheDao,
     private val readingStatsStore: ReadingStatsStore,
     private val imagePrefetcher: ImagePrefetcher,
+    private val firebaseSyncManager: FirebaseSyncManager,
     private val widgetShortcutCoordinator: WidgetShortcutCoordinator
 ) : ViewModel() {
 
@@ -157,6 +159,9 @@ class ReaderViewModel @Inject constructor(
                     observeAnnotations(mangaId, chapterUrl)
                     computeAdjacentChapters(mangaId, chapterUrl, source)
                     beginSession(mangaId, chapterUrl)
+                    if (!_state.value.incognitoMode) {
+                        viewModelScope.launch { runCatching { firebaseSyncManager.pushLocalSnapshot() } }
+                    }
                     viewModelScope.launch { widgetShortcutCoordinator.refreshWidgetsAndShortcuts() }
                 }
                 .onFailure { e ->
@@ -195,6 +200,7 @@ class ReaderViewModel @Inject constructor(
                 if (!st.incognitoMode) {
                     libraryRepo.markChapterRead(st.mangaId, chNum)
                     scheduleAutoCleanupIfNeeded(st.mangaId, st.chapterUrl)
+                    runCatching { firebaseSyncManager.pushLocalSnapshot() }
                 }
                 widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
             }

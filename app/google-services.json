@@ -12,7 +12,28 @@
           "package_name": "com.exapps.mangaworld"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "585544727612-hbcgf8tq3vetlqvs8jhm82hokje3e730.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.exapps.mangaworld",
+            "certificate_hash": "797445fb57cd24cf1920a780d0f72edf9a0a3e1b"
+          }
+        },
+        {
+          "client_id": "585544727612-kpc9i4v0l28cmdtlqn3ulrd642f0bght.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.exapps.mangaworld",
+            "certificate_hash": "6383ddf573e020f07dab7851be9d2b33adf98f23"
+          }
+        },
+        {
+          "client_id": "585544727612-o9dan2eg7id902nsej22puj64hadgvui.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCWWD81ktZr-qCHv5CK9msTWX-aSGtjS08"
@@ -20,7 +41,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "585544727612-o9dan2eg7id902nsej22puj64hadgvui.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

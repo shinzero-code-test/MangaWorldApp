@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
+import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
+import com.exapps.mangaworld.core.firebase.FirebaseTopicManager
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
 import kotlinx.coroutines.flow.first
@@ -36,6 +38,8 @@ class MangaDetailViewModel @Inject constructor(
     private val libraryRepo: LibraryRepository,
     private val settingsRepo: SettingsRepository,
     private val downloadQueueManager: DownloadQueueManager,
+    private val firebaseSyncManager: FirebaseSyncManager,
+    private val firebaseTopicManager: FirebaseTopicManager,
     private val widgetShortcutCoordinator: WidgetShortcutCoordinator
 ) : ViewModel() {
 
@@ -128,6 +132,7 @@ class MangaDetailViewModel @Inject constructor(
         viewModelScope.launch {
             if (_state.value.isFavorite) {
                 libraryRepo.removeFavorite(currentMangaId)
+                runCatching { firebaseTopicManager.unsubscribeFromManga(currentMangaId) }
             } else {
                 libraryRepo.addFavorite(
                     FavoriteManga(
@@ -136,7 +141,9 @@ class MangaDetailViewModel @Inject constructor(
                         source = manga.source, totalChapters = manga.totalChapters
                     )
                 )
+                runCatching { firebaseTopicManager.subscribeToManga(currentMangaId) }
             }
+            runCatching { firebaseSyncManager.pushLocalSnapshot() }
             widgetShortcutCoordinator.refreshWidgets()
         }
     }

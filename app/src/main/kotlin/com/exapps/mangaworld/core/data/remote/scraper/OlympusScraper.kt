@@ -57,18 +57,23 @@ class OlympusScraper @Inject constructor(
         val doc = fetchDocument(source.baseUrl)
 
         // Latest updates: skip empty hero slots and '#' placeholders.
-        val latestChapters = doc.select(".box:has(.imgu a[href*='/series/']):has(.info h3)")
+        val latestBoxSelector = remoteSelector("home_latest_boxes", ".box:has(.imgu a[href*='/series/']):has(.info h3)")
+        val latestTitleSelector = remoteSelector("home_latest_title", ".info h3")
+        val latestLinkSelector = remoteSelector("home_latest_link", ".imgu a[href*='/series/']")
+        val latestImageSelector = remoteSelector("home_latest_image", ".imgu img")
+        val latestChapterSelector = remoteSelector("home_latest_chapter_links", ".info a[href*='/series/']")
+        val latestChapters = doc.select(latestBoxSelector)
             .take(40)
             .mapNotNull { box ->
-                val imgEl = box.selectFirst(".imgu img") ?: return@mapNotNull null
-                val linkEl = box.selectFirst(".imgu a[href*='/series/']") ?: return@mapNotNull null
-                val titleEl = box.selectFirst(".info h3") ?: return@mapNotNull null
+                val imgEl = box.selectFirst(latestImageSelector) ?: return@mapNotNull null
+                val linkEl = box.selectFirst(latestLinkSelector) ?: return@mapNotNull null
+                val titleEl = box.selectFirst(latestTitleSelector) ?: return@mapNotNull null
 
                 val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
                 val slug = href.substringAfterLast("/series/").trimEnd('/').takeIf { it.isNotBlank() } ?: return@mapNotNull null
                 val mangaId = "olympus_$slug"
 
-                val chapterEl = box.select(".info a[href*='/series/']")
+                val chapterEl = box.select(latestChapterSelector)
                     .firstOrNull { anchor ->
                         val candidate = anchor.attr("abs:href").ifEmpty { anchor.attr("href").absoluteUrl() }
                         candidate.contains("/series/$slug/") && candidate.substringAfterLast('/').toFloatOrNull() != null
@@ -100,11 +105,11 @@ class OlympusScraper @Inject constructor(
             .distinctBy { it.chapterUrl }
 
         // Popular manga: .popular-manga .entry-box
-        val popular = doc.select(".popular-manga .entry-box, .entry-box.entry-box-1").take(10)
+        val popular = doc.select(remoteSelector("popular_cards", ".popular-manga .entry-box, .entry-box.entry-box-1")).take(10)
             .mapNotNull { box ->
-                val img = box.selectFirst("img.best-img") ?: return@mapNotNull null
-                val titleEl = box.selectFirst(".entry-title a, h3 a") ?: return@mapNotNull null
-                val linkEl = box.selectFirst("a.box, .entry-image a") ?: return@mapNotNull null
+                val img = box.selectFirst(remoteSelector("popular_image", "img.best-img")) ?: return@mapNotNull null
+                val titleEl = box.selectFirst(remoteSelector("popular_title", ".entry-title a, h3 a")) ?: return@mapNotNull null
+                val linkEl = box.selectFirst(remoteSelector("popular_link", "a.box, .entry-image a")) ?: return@mapNotNull null
 
                 val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
                 val slug = href.substringAfterLast("/series/").trimEnd('/')
@@ -346,13 +351,18 @@ class OlympusScraper @Inject constructor(
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     private fun parseMangaGrid(doc: org.jsoup.nodes.Document): List<MangaItem> {
-        val homeStyle = doc.select(".box:has(.imgu a[href*='/series/']):has(.info h3)").mapNotNull { box ->
-            val imgEl = box.selectFirst(".imgu img") ?: return@mapNotNull null
-            val linkEl = box.selectFirst(".imgu a[href*='/series/']") ?: return@mapNotNull null
-            val titleEl = box.selectFirst(".info h3") ?: return@mapNotNull null
+        val latestBoxSelector = remoteSelector("home_latest_boxes", ".box:has(.imgu a[href*='/series/']):has(.info h3)")
+        val latestTitleSelector = remoteSelector("home_latest_title", ".info h3")
+        val latestLinkSelector = remoteSelector("home_latest_link", ".imgu a[href*='/series/']")
+        val latestImageSelector = remoteSelector("home_latest_image", ".imgu img")
+        val latestChapterSelector = remoteSelector("home_latest_chapter_links", ".info a[href*='/series/']")
+        val homeStyle = doc.select(latestBoxSelector).mapNotNull { box ->
+            val imgEl = box.selectFirst(latestImageSelector) ?: return@mapNotNull null
+            val linkEl = box.selectFirst(latestLinkSelector) ?: return@mapNotNull null
+            val titleEl = box.selectFirst(latestTitleSelector) ?: return@mapNotNull null
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
             val slug = href.substringAfterLast("/series/").trimEnd('/').takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val chapterEl = box.select(".info a[href*='/series/']")
+            val chapterEl = box.select(latestChapterSelector)
                 .firstOrNull { anchor ->
                     val candidate = anchor.attr("abs:href").ifEmpty { anchor.attr("href").absoluteUrl() }
                     candidate.contains("/series/$slug/")
@@ -367,15 +377,21 @@ class OlympusScraper @Inject constructor(
             )
         }
 
-        val seriesListStyle = doc.select(".listupd .bsx").mapNotNull { card ->
-            val linkEl = card.selectFirst("a[href*='/series/']") ?: return@mapNotNull null
-            val imgEl = card.selectFirst("img") ?: return@mapNotNull null
+        val searchCardSelector = remoteSelector("search_cards", ".listupd .bsx")
+        val searchLinkSelector = remoteSelector("search_link", "a[href*='/series/']")
+        val searchImageSelector = remoteSelector("search_image", "img")
+        val searchTitleSelector = remoteSelector("search_title", ".tt")
+        val searchStatusSelector = remoteSelector("search_status", ".status")
+        val searchTypeSelector = remoteSelector("search_type", ".type")
+        val seriesListStyle = doc.select(searchCardSelector).mapNotNull { card ->
+            val linkEl = card.selectFirst(searchLinkSelector) ?: return@mapNotNull null
+            val imgEl = card.selectFirst(searchImageSelector) ?: return@mapNotNull null
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
             val slug = href.substringAfterLast("/series/").trimEnd('/').takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val title = card.selectFirst(".tt")?.text()?.cleanText()
+            val title = card.selectFirst(searchTitleSelector)?.text()?.cleanText()
                 ?: imgEl.attr("alt").cleanText().ifBlank { return@mapNotNull null }
-            val statusText = card.selectFirst(".status")?.text()?.cleanText()
-            val typeText = card.selectFirst(".type")?.text()?.cleanText()
+            val statusText = card.selectFirst(searchStatusSelector)?.text()?.cleanText()
+            val typeText = card.selectFirst(searchTypeSelector)?.text()?.cleanText()
             MangaItem(
                 id = "olympus_$slug",
                 slug = slug,

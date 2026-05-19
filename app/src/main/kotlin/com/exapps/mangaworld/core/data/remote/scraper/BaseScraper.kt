@@ -2,6 +2,7 @@ package com.exapps.mangaworld.core.data.remote.scraper
 
 import com.exapps.mangaworld.core.data.resolveCookieForDomain
 import com.exapps.mangaworld.core.data.resolveCookieForUrl
+import com.exapps.mangaworld.core.firebase.RemoteSelectorOverridesStore
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -116,4 +117,7 @@ abstract class BaseScraperImpl(
         }
         return headers
     }
+
+    protected fun remoteSelector(key: String, default: String): String =
+        RemoteSelectorOverridesStore.selector(source.id, key, default)
 }
