@@ -19,6 +19,7 @@ import com.exapps.mangaworld.presentation.home.HomeScreen
 import com.exapps.mangaworld.presentation.library.LibraryScreen
 import com.exapps.mangaworld.presentation.latest.LatestUpdatesScreen
 import com.exapps.mangaworld.presentation.localstorage.LocalStorageScreen
+import com.exapps.mangaworld.presentation.profile.UserProfileScreen
 import com.exapps.mangaworld.presentation.reader.ReaderScreen
 import com.exapps.mangaworld.presentation.search.SearchScreen
 import com.exapps.mangaworld.presentation.settings.SettingsScreen
@@ -31,6 +32,7 @@ sealed class Screen(val route: String) {
     object Settings    : Screen("settings")
     object Diagnostics : Screen("diagnostics")
     object CloudSync : Screen("cloud_sync")
+    object Profile : Screen("profile")
     object Downloads   : Screen("downloads")
     object LocalStorage: Screen("local_storage")
     object LatestUpdates : Screen("latest_updates")
@@ -57,6 +59,7 @@ val bottomNavItems: List<Triple<Screen, String, ImageVector>> = listOf(
     Triple(Screen.Library,      "المكتبة",      Icons.Filled.BookmarkBorder),
     Triple(Screen.Downloads,    "التنزيلات",    Icons.Filled.Download),
     Triple(Screen.LocalStorage, "المحلي",       Icons.Filled.FolderOpen),
+    Triple(Screen.Profile,      "الملف",        Icons.Filled.Person),
     Triple(Screen.Settings,     "الإعدادات",    Icons.Filled.Settings),
 )
 
@@ -96,6 +99,12 @@ fun MangaNavGraph(navController: NavHostController) {
             LibraryScreen(
                 onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) },
                 onBrowseClick = { navController.navigate(Screen.Browse.route) }
+            )
+        }
+        composable(Screen.Profile.route) {
+            UserProfileScreen(
+                onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) },
+                onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) }
             )
         }
         composable(Screen.Settings.route)    {

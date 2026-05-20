@@ -180,7 +180,7 @@ private fun MangaWorldContent(
     val topLevelRoutes = setOf(
         Screen.Home.route, Screen.Browse.route, Screen.Search.route,
         Screen.Library.route, Screen.Downloads.route,
-        Screen.LocalStorage.route, Screen.Settings.route
+        Screen.LocalStorage.route, Screen.Profile.route, Screen.Settings.route
     )
     val showBottomBar = currentDest?.route in topLevelRoutes
 
