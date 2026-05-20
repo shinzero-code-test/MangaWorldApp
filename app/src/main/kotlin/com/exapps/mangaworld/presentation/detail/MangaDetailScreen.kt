@@ -89,6 +89,7 @@ fun MangaDetailScreen(
                 onDownloadChapter = viewModel::downloadChapter,
                 onShowDownloadDialog = viewModel::showDownloadDialog,
                 onOpenCommunity = { onOpenCommunity("${source.id}_$slug") },
+                onOpenChapterCommunity = onOpenChapterCommunity,
                 onShowAddToList = viewModel::showAddToListDialog,
                 onChapterClick = { ch -> onChapterClick(ch.url, "${source.id}_$slug") }
             )
