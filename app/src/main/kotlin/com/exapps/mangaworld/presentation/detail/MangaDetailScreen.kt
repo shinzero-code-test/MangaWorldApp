@@ -155,6 +155,7 @@ private fun DetailContent(
     onDownloadChapter: (Chapter) -> Unit,
     onShowDownloadDialog: () -> Unit,
     onOpenCommunity: () -> Unit,
+    onOpenChapterCommunity: (mangaId: String, chapterUrl: String) -> Unit,
     onShowAddToList: () -> Unit,
     onChapterClick: (Chapter) -> Unit
 ) {
