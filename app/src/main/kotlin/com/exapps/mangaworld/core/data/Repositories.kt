@@ -25,6 +25,7 @@ private fun Chapter.toJson(): JSONObject = JSONObject().apply {
     put("id", id); put("mangaId", mangaId); put("number", number.toDouble())
     put("title", title ?: JSONObject.NULL)
     put("url", url)
+    put("coverUrl", coverUrl)
     put("date", date ?: JSONObject.NULL)
     put("dateText", dateText ?: JSONObject.NULL)
 }
@@ -36,6 +37,7 @@ private fun JSONObject.toChapter(): Chapter? = runCatching {
         number = getDouble("number").toFloat(),
         title = optString("title").ifBlank { null },
         url = getString("url"),
+        coverUrl = optString("coverUrl"),
         date = if (isNull("date")) null else getLong("date"),
         dateText = optString("dateText").ifBlank { null }
     )
@@ -58,6 +60,9 @@ internal fun MangaCacheEntity.toDetail(source: MangaSource) = MangaDetail(
     id = mangaId, slug = slug, title = title, coverUrl = coverUrl,
     source = source, description = description,
     genres = runCatching {
+        val a = JSONArray(genresJson); (0 until a.length()).map { a.getString(it) }
+    }.getOrDefault(emptyList()),
+    tags = runCatching {
         val a = JSONArray(genresJson); (0 until a.length()).map { a.getString(it) }
     }.getOrDefault(emptyList()),
     status = runCatching { MangaStatus.valueOf(statusStr) }.getOrDefault(MangaStatus.UNKNOWN),
@@ -96,6 +101,9 @@ class MangaRepositoryImpl @Inject constructor(
     ) {
         MangaPagingSource(scrapers, filters)
     }.flow
+
+    override suspend fun searchMangaDirect(query: String, source: MangaSource, page: Int): Result<List<MangaItem>> =
+        scraper(source).searchManga(query, page)
 
     override suspend fun getMangaByGenre(genre: String, source: MangaSource, page: Int) =
         scraper(source).getMangaByGenre(genre, page)

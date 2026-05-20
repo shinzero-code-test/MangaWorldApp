@@ -90,8 +90,12 @@ data class MangaDetail(
     val title: String,
     val coverUrl: String,
     val source: MangaSource,
+    val alternativeTitles: List<String> = emptyList(),
+    val authorName: String? = null,
+    val artistName: String? = null,
     val description: String = "",
     val genres: List<String> = emptyList(),
+    val tags: List<String> = emptyList(),
     val status: MangaStatus = MangaStatus.UNKNOWN,
     val type: MangaType = MangaType.UNKNOWN,
     val rating: Float? = null,
@@ -99,6 +103,7 @@ data class MangaDetail(
     val views: String? = null,
     val lastUpdated: String? = null,
     val chapters: List<Chapter> = emptyList(),
+    val relatedManga: List<MangaItem> = emptyList(),
     val url: String = ""
 )
 
@@ -108,6 +113,7 @@ data class Chapter(
     val number: Float,
     val title: String? = null,
     val url: String,
+    val coverUrl: String = "",
     val date: Long? = null,
     val dateText: String? = null,
     val views: Int? = null,

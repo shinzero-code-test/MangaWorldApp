@@ -209,6 +209,9 @@ fun MangaNavGraph(navController: NavHostController) {
                 onOpenChapterCommunity = { mangaId, chapterUrl ->
                     navController.navigate(Screen.Community.createRoute(sourceId, mangaId, slug, chapterUrl))
                 },
+                onOpenOtherSource = { otherSourceId, otherSlug ->
+                    navController.navigate(Screen.Detail.createRoute(otherSourceId, otherSlug))
+                },
                 onBack = { navController.popBackStack() }
             )
         }

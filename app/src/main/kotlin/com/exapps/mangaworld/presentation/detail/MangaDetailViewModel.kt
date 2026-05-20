@@ -20,6 +20,7 @@ import javax.inject.Inject
 data class DetailUiState(
     val isLoading: Boolean = true,
     val manga: MangaDetail? = null,
+    val otherSourceMatches: List<MangaItem> = emptyList(),
     val isFavorite: Boolean = false,
     val readChapters: Set<Float> = emptySet(),
     val downloadedChapters: Set<String> = emptySet(),
@@ -114,6 +115,10 @@ class MangaDetailViewModel @Inject constructor(
                             _state.update { it.copy(downloadedChapters = downloaded) }
                         }
                         launch {
+                            val matches = loadOtherSourceMatches(detail)
+                            _state.update { it.copy(otherSourceMatches = matches) }
+                        }
+                        launch {
                             communityRepository.observeUserLists().collect { lists ->
                                 _state.update { it.copy(userLists = lists) }
                             }
@@ -181,6 +186,24 @@ class MangaDetailViewModel @Inject constructor(
             _state.update { it.copy(showAddToListDialog = false) }
         }
     }
+
+    private suspend fun loadOtherSourceMatches(detail: MangaDetail): List<MangaItem> = coroutineScope {
+        val title = detail.title.trim()
+        if (title.length < 2) return@coroutineScope emptyList()
+        val normalizedTarget = normalizeTitle(title)
+        val results = MangaSource.entries.filter { it != detail.source }.map { source ->
+            async {
+                mangaRepo.searchMangaDirect(title, source).getOrDefault(emptyList())
+                    .filter { normalizeTitle(it.title) == normalizedTarget || normalizeTitle(it.title).contains(normalizedTarget) || normalizedTarget.contains(normalizeTitle(it.title)) }
+                    .firstOrNull()
+            }
+        }.awaitAll().filterNotNull()
+        results.distinctBy { it.source.id }.take(5)
+    }
+
+    private fun normalizeTitle(value: String): String = value.lowercase()
+        .replace("[\\u064B-\\u065F]".toRegex(), "")
+        .replace("[^\\p{L}\\p{Nd}]".toRegex(), "")
 
     fun sortedChapters(): List<Chapter> {
         val state = _state.value

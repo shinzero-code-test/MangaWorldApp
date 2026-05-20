@@ -157,6 +157,21 @@ class StarzScraper @Inject constructor(
         val statusText = statusEl?.selectFirst(".summary-content")?.text()?.cleanText()
         val status = MangaStatus.from(statusText)
 
+        fun metaValue(label: String): String? {
+            return doc.select(".post-content_item").firstOrNull { item ->
+                item.selectFirst(".summary-heading")?.text()?.contains(label) == true
+            }?.selectFirst(".summary-content")?.text()?.cleanText()?.ifBlank { null }
+        }
+
+        val alternativeTitles = metaValue("Alternative")
+            ?.split("/", "|", "،", ",")
+            ?.map { it.cleanText() }
+            ?.filter { it.isNotBlank() }
+            ?.distinct()
+            ?: emptyList()
+        val authorName = metaValue("الكاتب") ?: metaValue("Author")
+        val artistName = metaValue("الرسام") ?: metaValue("Artist")
+
         // Genres: Madara/WP-Manga confirmed structure — .genres-content a exists in this theme version
         // Fallback: .post-content_item containing "التصنيف" heading
         val genres = doc.select(".genres-content a, .c-cat-list a").map { it.text().cleanText() }
@@ -318,19 +333,41 @@ class StarzScraper @Inject constructor(
             .distinctBy { it.url }
             .sortedByDescending { it.number }
 
+        val related = doc.select(".related-posts .post-title a, .recommendation-summary .post-title a")
+            .mapNotNull { a ->
+                val href = a.attr("abs:href").ifEmpty { a.attr("href").absoluteUrl() }
+                val relatedSlug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/').takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                MangaItem(
+                    id = "starz_$relatedSlug",
+                    slug = relatedSlug,
+                    title = a.text().cleanText().ifBlank { relatedSlug },
+                    coverUrl = a.closest(".page-item-detail, .popular-item-wrap")?.selectFirst("img")?.attr("abs:src")
+                        ?.ifBlank { a.closest(".page-item-detail, .popular-item-wrap")?.selectFirst("img")?.attr("src")?.absoluteUrl() }
+                        .orEmpty(),
+                    source = source,
+                    url = href
+                )
+            }
+            .distinctBy { it.id }
+
         MangaDetail(
             id = "starz_$slug",
             slug = slug,
             title = title,
             coverUrl = coverUrl,
             source = source,
+            alternativeTitles = alternativeTitles,
+            authorName = authorName,
+            artistName = artistName,
             description = description,
             genres = genres,
+            tags = genres,
             status = status,
             type = type,
             views = viewsText,
             totalChapters = chapters.size,
             chapters = chapters,
+            relatedManga = related,
             url = url
         )
     }

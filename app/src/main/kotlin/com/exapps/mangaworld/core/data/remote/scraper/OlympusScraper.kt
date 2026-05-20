@@ -149,6 +149,15 @@ class OlympusScraper @Inject constructor(
 
         // Genres: confirmed selector from real HTML — a.subtitle inside .review-author-info
         val genres = doc.select(".review-author-info a.subtitle").map { it.text().cleanText() }
+        val tags = genres
+
+        fun fullInfoValue(label: String): String? {
+            return doc.select(".full-list-info").firstOrNull { info ->
+                info.selectFirst("small")?.text()?.contains(label) == true
+            }?.select("small")?.getOrNull(1)?.text()?.cleanText()?.ifBlank { null }
+        }
+
+        val artistName = fullInfoValue("الرسام")
 
         // Description: first long paragraph anywhere in the detail column
         val description = doc.select("p")
@@ -183,6 +192,10 @@ class OlympusScraper @Inject constructor(
                 chapterLink.attr("href").absoluteUrl()
             }
             val chapterTitle = card.selectFirst(".chapter-title")?.text()?.cleanText()
+            val chapterCover = card.selectFirst("img.chapter-image")?.attr("abs:src")
+                ?.ifBlank { card.selectFirst("img.chapter-image")?.attr("src")?.absoluteUrl() }
+                ?.encodeForUrl()
+                .orEmpty()
             val dateStr = card.selectFirst(".chapter-date span")?.text()?.cleanText()
             val dateTimestamp = card.attr("data-date").toLongOrNull()?.times(1000L)
             val isPaid = card.selectFirst(".fa-lock") != null
@@ -193,6 +206,7 @@ class OlympusScraper @Inject constructor(
                 number = chapterNum,
                 title = chapterTitle,
                 url = chapterHref,
+                coverUrl = chapterCover,
                 date = dateTimestamp,
                 dateText = dateStr,
                 views = card.attr("data-views").toIntOrNull(),
@@ -236,8 +250,10 @@ class OlympusScraper @Inject constructor(
             title = title,
             coverUrl = coverUrl,
             source = source,
+            artistName = artistName,
             description = description,
             genres = genres,
+            tags = tags,
             status = status,
             type = type,
             views = viewsText,

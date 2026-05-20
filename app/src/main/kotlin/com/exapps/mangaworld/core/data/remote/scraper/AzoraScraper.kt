@@ -306,6 +306,12 @@ class AzoraScraper @Inject constructor(
                 decodeStr(gm["name"]).cleanText().ifBlank { null }
             }
         }
+        val tags = genres
+        val altTitles = decodeStr(post["alternativeTitles"]).split("/", "|", "،", ",")
+            .map { it.cleanText() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        val artistName = decodeStr(post["artist"]).cleanText().ifBlank { null }
 
         // Description: postContent is HTML — strip tags
         val description = decodeStr(post["postContent"])
@@ -328,6 +334,9 @@ class AzoraScraper @Inject constructor(
             val num  = decodeFloat(obj["number"]).takeIf { it > 0 } ?: return@mapNotNull null
             val cslug= decodeStr(obj["slug"]).ifBlank { "chapter-${num.toInt()}" }
             val chUrl= "${source.baseUrl}/series/$slug/$cslug"
+            val chapterCover = (decodeWire(obj["mangaPost"]) as? Map<*, *>)?.let { mp ->
+                decodeStr(mp["featuredImage"]).ifBlank { null }
+            }.orEmpty()
             val cdate= decodeStr(obj["createdAt"])
             val dateLong = runCatching {
                 java.time.Instant.parse(cdate).toEpochMilli()
@@ -341,10 +350,31 @@ class AzoraScraper @Inject constructor(
                 number    = num,
                 title     = decodeStr(obj["title"]).cleanText().ifBlank { null },
                 url       = chUrl,
+                coverUrl  = chapterCover,
                 date      = dateLong,
                 dateText  = cdate.take(10).ifBlank { null },
                 isPaid    = locked
             )
+        }
+
+        val related = run {
+            val recProps = extractIslandProps(rawHtml, "SeriesRecommendationsIsland")
+            val recPosts = decodeList(recProps?.opt("posts"))
+            recPosts.mapNotNull { p ->
+                val obj = p as? Map<*, *> ?: return@mapNotNull null
+                val rslug = decodeStr(obj["slug"]).ifBlank { return@mapNotNull null }
+                MangaItem(
+                    id = "azora_$rslug",
+                    slug = rslug,
+                    title = decodeStr(obj["postTitle"]).cleanText().ifBlank { rslug },
+                    coverUrl = decodeStr(obj["featuredImage"]),
+                    source = source,
+                    genres = decodeList(obj["genres"]).mapNotNull { g -> (g as? Map<*, *>)?.let { gm -> decodeStr(gm["name"]).cleanText().ifBlank { null } } },
+                    status = MangaStatus.from(decodeStr(obj["seriesStatus"])),
+                    type = MangaType.from(decodeStr(obj["seriesType"])),
+                    url = "${source.baseUrl}/series/$rslug"
+                )
+            }.distinctBy { it.id }
         }
 
         MangaDetail(
@@ -353,14 +383,18 @@ class AzoraScraper @Inject constructor(
             title        = title.ifBlank { slug },
             coverUrl     = coverUrl,
             source       = source,
+            alternativeTitles = altTitles,
+            artistName   = artistName,
             description  = description,
             genres       = genres,
+            tags         = tags,
             status       = MangaStatus.from(seriesStatus),
             type         = MangaType.from(seriesType),
             rating       = avgRating,
             views        = totalViews,
             totalChapters= totalFromProp.takeIf { it > 0 } ?: chapterCount,
             chapters     = chapters.sortedByDescending { it.number },
+            relatedManga = related,
             url          = url
         )
     }

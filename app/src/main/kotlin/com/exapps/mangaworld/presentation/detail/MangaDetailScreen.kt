@@ -41,6 +41,7 @@ fun MangaDetailScreen(
     onChapterClick: (chapterUrl: String, mangaId: String) -> Unit,
     onOpenCommunity: (mangaId: String) -> Unit,
     onOpenChapterCommunity: (mangaId: String, chapterUrl: String) -> Unit,
+    onOpenOtherSource: (sourceId: String, slug: String) -> Unit,
     onBack: () -> Unit,
     viewModel: MangaDetailViewModel = hiltViewModel()
 ) {
@@ -80,6 +81,7 @@ fun MangaDetailScreen(
             state.manga != null -> DetailContent(
                 manga = state.manga!!,
                 isFavorite = state.isFavorite,
+                otherSourceMatches = state.otherSourceMatches,
                 readChapters = state.readChapters,
                 chaptersReversed = state.chaptersReversed,
                 sortedChapters = viewModel.sortedChapters(),
@@ -90,6 +92,7 @@ fun MangaDetailScreen(
                 onShowDownloadDialog = viewModel::showDownloadDialog,
                 onOpenCommunity = { onOpenCommunity("${source.id}_$slug") },
                 onOpenChapterCommunity = onOpenChapterCommunity,
+                onOpenOtherSource = onOpenOtherSource,
                 onShowAddToList = viewModel::showAddToListDialog,
                 onChapterClick = { ch -> onChapterClick(ch.url, "${source.id}_$slug") }
             )
@@ -147,6 +150,7 @@ fun MangaDetailScreen(
 private fun DetailContent(
     manga: MangaDetail,
     isFavorite: Boolean,
+    otherSourceMatches: List<MangaItem>,
     readChapters: Set<Float>,
     chaptersReversed: Boolean,
     sortedChapters: List<Chapter>,
@@ -157,6 +161,7 @@ private fun DetailContent(
     onShowDownloadDialog: () -> Unit,
     onOpenCommunity: () -> Unit,
     onOpenChapterCommunity: (mangaId: String, chapterUrl: String) -> Unit,
+    onOpenOtherSource: (sourceId: String, slug: String) -> Unit,
     onShowAddToList: () -> Unit,
     onChapterClick: (Chapter) -> Unit
 ) {
@@ -327,6 +332,68 @@ private fun DetailContent(
             }
         }
 
+        if (manga.authorName != null || manga.artistName != null || manga.alternativeTitles.isNotEmpty()) {
+            item {
+                GradientDivider(Modifier.padding(horizontal = 16.dp))
+                Spacer(Modifier.height(12.dp))
+                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("معلومات إضافية", style = MaterialTheme.typography.titleSmall, color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold)
+                    manga.authorName?.let { InfoRow("المؤلف", it) }
+                    manga.artistName?.let { InfoRow("الرسام", it) }
+                    if (manga.alternativeTitles.isNotEmpty()) InfoRow("أسماء بديلة", manga.alternativeTitles.joinToString(" • "))
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+
+        if (otherSourceMatches.isNotEmpty()) {
+            item {
+                GradientDivider(Modifier.padding(horizontal = 16.dp))
+                Spacer(Modifier.height(12.dp))
+                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("اقرأ من مصادر أخرى", style = MaterialTheme.typography.titleSmall, color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold)
+                    otherSourceMatches.forEach { item ->
+                        Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(item.source.displayName, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
+                                    Text(item.title, color = MangaColors.OnSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                }
+                                OutlinedButton(onClick = { onOpenOtherSource(item.source.id, item.slug) }) {
+                                    Text("فتح")
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+
+        if (manga.relatedManga.isNotEmpty()) {
+            item {
+                GradientDivider(Modifier.padding(horizontal = 16.dp))
+                Spacer(Modifier.height(12.dp))
+                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("أعمال مشابهة", style = MaterialTheme.typography.titleSmall, color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold)
+                    manga.relatedManga.take(8).forEach { item ->
+                        Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(item.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
+                                    Text(item.source.displayName, color = MangaColors.OnSurfaceVariant)
+                                }
+                                OutlinedButton(onClick = { onOpenOtherSource(item.source.id, item.slug) }) {
+                                    Text("فتح")
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+
         // ── Chapter list header ───────────────────────────────────────────────
         item {
             GradientDivider(Modifier.padding(horizontal = 16.dp))
@@ -402,6 +469,14 @@ private fun ChapterItem(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            if (chapter.coverUrl.isNotBlank()) {
+                MangaCover(
+                    url = chapter.coverUrl,
+                    contentDescription = chapter.title ?: "Chapter cover",
+                    modifier = Modifier.size(56.dp, 72.dp).clip(RoundedCornerShape(10.dp))
+                )
+                Spacer(Modifier.width(12.dp))
+            }
             Box(
                 Modifier.size(8.dp).clip(CircleShape).background(
                     if (isRead) MangaColors.Muted else MangaColors.Primary
@@ -548,6 +623,15 @@ private fun StatItem(
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Icon(icon, null, tint = MangaColors.PrimaryLight, modifier = Modifier.size(14.dp))
         Text("$value $label", style = MaterialTheme.typography.labelSmall, color = MangaColors.OnSurfaceVariant)
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+        Text(label, color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.width(12.dp))
+        Text(value, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
     }
 }
 

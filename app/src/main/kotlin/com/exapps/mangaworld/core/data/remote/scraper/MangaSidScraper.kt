@@ -65,6 +65,12 @@ class MangaSidScraper @Inject constructor(
             extractDescription(doc)
         }
 
+        val altTitles = decodeStr(manga?.get("alternative_titles"))
+            .split("/", "|", "،", ",")
+            .map { it.cleanText() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
         val genres = decodeList(manga?.get("Tags"))
             .mapNotNull { tag ->
                 val tagMap = tag as? Map<*, *> ?: return@mapNotNull null
@@ -111,20 +117,39 @@ class MangaSidScraper @Inject constructor(
             .distinctBy { it.url }
             .sortedByDescending { it.number }
 
+        val related = decodeList(manga?.get("similarManga")).mapNotNull { item ->
+            val map = item as? Map<*, *> ?: return@mapNotNull null
+            val relatedSlug = decodeStr(map["slug"]).ifBlank { return@mapNotNull null }
+            MangaItem(
+                id = "mangasid_$relatedSlug",
+                slug = relatedSlug,
+                title = decodeStr(map["title"]).cleanText().ifBlank { relatedSlug },
+                coverUrl = decodeStr(map["cover_image"]).encodeForUrl(),
+                source = source,
+                genres = emptyList(),
+                status = MangaStatus.from(decodeStr(map["status"])),
+                url = "${source.baseUrl}/manga/$relatedSlug"
+            )
+        }.distinctBy { it.id }
+
         MangaDetail(
             id = "mangasid_$slug",
             slug = slug,
             title = title,
             coverUrl = coverUrl,
             source = source,
+            alternativeTitles = altTitles,
+            authorName = decodeStr(manga?.get("author")).cleanText().ifBlank { null },
             description = description,
             genres = genres,
+            tags = genres,
             status = MangaStatus.from(decodeStr(manga?.get("status")).ifBlank { meta["الحالة"].orEmpty() }),
             type = MangaType.from(genres.joinToString(" ")),
             totalChapters = doc.selectFirst("meta[name='manga:chapters']")?.attr("content")?.toIntOrNull()
                 ?: chapters.size,
             lastUpdated = meta["آخر تحديث"],
             chapters = chapters,
+            relatedManga = related,
             url = url
         )
     }
