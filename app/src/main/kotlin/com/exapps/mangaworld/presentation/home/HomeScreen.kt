@@ -117,6 +117,23 @@ fun HomeScreen(
                     )
                 }
 
+                if (state.suggested.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(8.dp))
+                        SectionHeader(
+                            title = "مقترح لك",
+                            onSeeAll = { onSeeAllLatest() },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    item {
+                        TrendingRow(
+                            items = state.suggested,
+                            onMangaClick = { m -> onMangaClick(m.source.id, m.slug) }
+                        )
+                    }
+                }
+
                 // Trending header
                 if (!trendingFirst && state.trending.isNotEmpty()) {
                     item {

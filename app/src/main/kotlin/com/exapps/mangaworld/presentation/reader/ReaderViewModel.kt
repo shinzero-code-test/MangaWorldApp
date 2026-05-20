@@ -55,6 +55,10 @@ data class ReaderUiState(
     val autoOpenNextChapter: Boolean = false,
     val showLiveReadersOverlay: Boolean = true,
     val showReactionOverlay: Boolean = true,
+    val dualPageLandscape: Boolean = false,
+    val webtoonAutoStitch: Boolean = true,
+    val spoilerCollapseDefault: Boolean = true,
+    val chapterComments: List<CommunityComment> = emptyList(),
     val lastTapNormalizedX: Float = 0.5f,
     val lastTapNormalizedY: Float = 0.5f
 )
@@ -83,6 +87,7 @@ class ReaderViewModel @Inject constructor(
     private var annotationsJob: Job? = null
     private var presenceJob: Job? = null
     private var reactionsJob: Job? = null
+    private var commentsJob: Job? = null
     private var prefetchedNextChapterUrl: String? = null
 
     init {
@@ -98,7 +103,9 @@ class ReaderViewModel @Inject constructor(
                         smartPrefetchEnabled = settings.smartPrefetchEnabled,
                         autoOpenNextChapter = settings.autoOpenNextChapter,
                         showLiveReadersOverlay = settings.showLiveReadersOverlay,
-                        showReactionOverlay = settings.showReactionOverlay
+                        showReactionOverlay = settings.showReactionOverlay,
+                        dualPageLandscape = settings.dualPageLandscape,
+                        webtoonAutoStitch = settings.webtoonAutoStitch
                     )
                 }
             }
@@ -108,7 +115,8 @@ class ReaderViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         downloadOnWifiOnly = settings.downloadOnWifiOnly,
-                        secureReaderEnabled = settings.secureReaderEnabled
+                        secureReaderEnabled = settings.secureReaderEnabled,
+                        spoilerCollapseDefault = settings.spoilerCollapseDefault
                     )
                 }
             }
@@ -267,6 +275,23 @@ class ReaderViewModel @Inject constructor(
         downloadCurrentChapter()
     }
 
+    fun postReaderComment(text: String, spoiler: Boolean) {
+        val st = _state.value
+        val slug = st.mangaId.substringAfter('_')
+        viewModelScope.launch {
+            runCatching {
+                communityRepository.postChapterComment(
+                    mangaId = st.mangaId,
+                    slug = slug,
+                    sourceId = currentSource.id,
+                    chapterUrl = st.chapterUrl,
+                    text = text,
+                    spoiler = spoiler
+                )
+            }
+        }
+    }
+
     fun setBrightness(value: Float) = viewModelScope.launch {
         settingsRepo.updateBrightness(value)
     }
@@ -285,6 +310,14 @@ class ReaderViewModel @Inject constructor(
 
     fun setShowReactionOverlay(enabled: Boolean) = viewModelScope.launch {
         settingsRepo.updateShowReactionOverlay(enabled)
+    }
+
+    fun setDualPageLandscape(enabled: Boolean) = viewModelScope.launch {
+        settingsRepo.updateDualPageLandscape(enabled)
+    }
+
+    fun setWebtoonAutoStitch(enabled: Boolean) = viewModelScope.launch {
+        settingsRepo.updateWebtoonAutoStitch(enabled)
     }
 
     fun setIncognito(enabled: Boolean) = viewModelScope.launch {
@@ -371,6 +404,7 @@ class ReaderViewModel @Inject constructor(
     private fun observeCommunity(mangaId: String, chapterUrl: String) {
         presenceJob?.cancel()
         reactionsJob?.cancel()
+        commentsJob?.cancel()
         presenceJob = viewModelScope.launch {
             runCatching { communityRepository.setReaderPresence(mangaId, chapterUrl, true) }
             communityRepository.observeReaderPresenceCount(mangaId, chapterUrl).collect { count ->
@@ -378,6 +412,11 @@ class ReaderViewModel @Inject constructor(
             }
         }
         observeReactions(mangaId, chapterUrl, _state.value.currentPage)
+        commentsJob = viewModelScope.launch {
+            communityRepository.observeChapterComments(mangaId, chapterUrl).collect { comments ->
+                _state.update { it.copy(chapterComments = comments) }
+            }
+        }
     }
 
     private fun observeReactions(mangaId: String, chapterUrl: String, pageIndex: Int) {
@@ -466,6 +505,7 @@ class ReaderViewModel @Inject constructor(
         if (mangaId.isBlank() || chapterUrl.isBlank()) return
         presenceJob?.cancel()
         reactionsJob?.cancel()
+        commentsJob?.cancel()
         viewModelScope.launch {
             runCatching { communityRepository.setReaderPresence(mangaId, chapterUrl, false) }
         }

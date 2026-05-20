@@ -32,21 +32,21 @@ class DownloadQueueManager @Inject constructor(
 
     // ─── Chapter key (trim trailing slash so WordPress URLs work) ─────────────
 
-    private fun chapterKey(chapterUrl: String): String =
-        chapterUrl.trimEnd('/').substringAfterLast("/").ifBlank { "chapter" }
+    private val downloadsRoot: File
+        get() = File(app.getExternalFilesDir(null), "downloads")
 
     /** Safe folder name: strip forbidden chars, limit length. */
     private fun safeName(name: String): String =
         name.replace(Regex("""[/\\\\:*?""<>|]"""), "_").trim().take(80).ifBlank { "manga" }
 
-    /** Returns the manga root dir: downloads/<sanitised_title>/  */
-    private fun mangaDir(mangaId: String, title: String? = null): File {
-        val name = if (title != null) safeName(title) else safeName(mangaId)
-        return File(app.getExternalFilesDir(null), "downloads/$name")
-    }
+    private fun mangaDir(mangaId: String, title: String? = null): File =
+        DownloadStorage.resolveExistingMangaDir(downloadsRoot, mangaId, title)
+
+    private fun canonicalMangaDir(mangaId: String): File =
+        DownloadStorage.canonicalMangaDir(downloadsRoot, mangaId)
 
     private fun chapterDir(mangaId: String, chapterUrl: String, title: String? = null): File =
-        File(mangaDir(mangaId, title), chapterKey(chapterUrl))
+        DownloadStorage.resolveExistingChapterDir(downloadsRoot, mangaId, chapterUrl, title)
 
     // ─── Read ─────────────────────────────────────────────────────────────────
 
@@ -89,14 +89,19 @@ class DownloadQueueManager @Inject constructor(
     ) {
         if (downloadTaskDao.getPendingByChapter(chapterUrl, mangaId) != null) return
 
-        val targetDir = chapterDir(mangaId, chapterUrl, mangaTitle)
+        DownloadStorage.migrateLegacyDirectoryIfNeeded(downloadsRoot, mangaId, mangaTitle)
+
+        val targetDir = DownloadStorage.canonicalChapterDir(downloadsRoot, mangaId, chapterUrl)
         downloadTaskDao.upsert(
             DownloadTaskEntity(
                 id = taskId,
                 mangaId = mangaId,
+                mangaTitle = mangaTitle,
                 chapterUrl = chapterUrl,
                 chapterTitle = chapterTitle,
                 targetDir = targetDir.absolutePath,
+                referer = referer,
+                pagesJson = JSONArray(pages.map { it.url }).toString(),
                 status = "queued"
             )
         )
@@ -111,7 +116,7 @@ class DownloadQueueManager @Inject constructor(
                 )
             )
             // Save cover + metadata.json for offline access
-            saveCoverAndMetadata(mangaDir(mangaId, mangaTitle), mangaMetadata)
+            saveCoverAndMetadata(canonicalMangaDir(mangaId), mangaMetadata)
         }
 
         val constraints = Constraints.Builder()
@@ -123,6 +128,7 @@ class DownloadQueueManager @Inject constructor(
             .putString(ChapterDownloadWorker.KEY_CHAPTER_URL, chapterUrl)
             .putString(ChapterDownloadWorker.KEY_CHAPTER_TITLE, chapterTitle)
             .putString(ChapterDownloadWorker.KEY_REFERER, referer)
+            .putString(ChapterDownloadWorker.KEY_TARGET_DIR, targetDir.absolutePath)
             .putStringArray(ChapterDownloadWorker.KEY_PAGES, pages.map { it.url }.toTypedArray())
             .build()
         val request = OneTimeWorkRequestBuilder<ChapterDownloadWorker>()
@@ -142,7 +148,7 @@ class DownloadQueueManager @Inject constructor(
             task.copy(status = "cancelled", updatedAt = System.currentTimeMillis(),
                 errorMessage = "Cancelled by user")
         )
-        chapterDir(task.mangaId, task.chapterUrl).deleteRecursively()
+        File(task.targetDir).deleteRecursively()
         WorkManager.getInstance(app).cancelAllWorkByTag(taskId)
     }
 
@@ -157,8 +163,18 @@ class DownloadQueueManager @Inject constructor(
                     .putString(ChapterDownloadWorker.KEY_MANGA_ID, task.mangaId)
                     .putString(ChapterDownloadWorker.KEY_CHAPTER_URL, task.chapterUrl)
                     .putString(ChapterDownloadWorker.KEY_CHAPTER_TITLE, task.chapterTitle)
+                    .putString(ChapterDownloadWorker.KEY_REFERER, task.referer)
+                    .putString(ChapterDownloadWorker.KEY_TARGET_DIR, task.targetDir)
+                    .putStringArray(
+                        ChapterDownloadWorker.KEY_PAGES,
+                        runCatching {
+                            val arr = JSONArray(task.pagesJson)
+                            Array(arr.length()) { idx -> arr.getString(idx) }
+                        }.getOrDefault(emptyArray())
+                    )
                     .build())
                 .addTag(taskId)
+                .addTag("manga_${task.mangaId}")
                 .build()
         )
     }
@@ -178,7 +194,10 @@ class DownloadQueueManager @Inject constructor(
         // Cancel any active work
         WorkManager.getInstance(app).cancelAllWorkByTag("manga_$mangaId")
         // Delete files
-        mangaDir(mangaId).deleteRecursively()
+        canonicalMangaDir(mangaId).deleteRecursively()
+        downloadedMangaDao.get(mangaId)?.title?.let { title ->
+            DownloadStorage.legacyMangaDir(downloadsRoot, title)?.deleteRecursively()
+        }
         // Remove DB records
         downloadTaskDao.deleteByMangaId(mangaId)
         downloadedMangaDao.delete(mangaId)

@@ -106,9 +106,12 @@ data class MangaCacheEntity(
 data class DownloadTaskEntity(
     @PrimaryKey val id: String,
     val mangaId: String,
+    val mangaTitle: String? = null,
     val chapterUrl: String,
     val chapterTitle: String? = null,
     val targetDir: String,
+    val referer: String = "",
+    val pagesJson: String = "[]",
     val status: String = "queued", // queued|running|completed|failed|cancelled
     val progress: Float = 0f,
     val totalPages: Int = 0,

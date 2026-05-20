@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import coil.transform.Transformation
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -57,6 +59,10 @@ fun ReaderScreen(
     var noteDialog by remember { mutableStateOf(false) }
     var noteText by remember { mutableStateOf("") }
     var annotationsSheetOpen by remember { mutableStateOf(false) }
+    var commentsSheetOpen by remember { mutableStateOf(false) }
+    var settingsSheetOpen by remember { mutableStateOf(false) }
+    var commentText by remember { mutableStateOf("") }
+    var commentSpoiler by remember { mutableStateOf(false) }
     val solverLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val cookies = result.data?.getStringExtra(WebViewSolverActivity.RESULT_COOKIES).orEmpty()
@@ -163,7 +169,8 @@ fun ReaderScreen(
                     noteDialog = true
                 },
                 onBrowseAnnotations = { annotationsSheetOpen = true },
-                onOpenCommunity = onOpenCommunity,
+                onOpenComments = { commentsSheetOpen = true },
+                onOpenSettings = { settingsSheetOpen = true },
                 liveReaders = state.liveReaders,
                 hasPreviousChapter = state.prevChapterUrl != null,
                 hasNextChapter = state.nextChapterUrl != null,
@@ -300,6 +307,45 @@ fun ReaderScreen(
                 }
             }
         }
+
+        if (commentsSheetOpen) {
+            ModalBottomSheet(onDismissRequest = { commentsSheetOpen = false }) {
+                ReaderCommentsSheet(
+                    comments = state.chapterComments,
+                    collapseSpoilersByDefault = state.spoilerCollapseDefault,
+                    commentText = commentText,
+                    onCommentTextChange = { commentText = it },
+                    spoiler = commentSpoiler,
+                    onSpoilerChange = { commentSpoiler = it },
+                    onSend = {
+                        viewModel.postReaderComment(commentText, commentSpoiler)
+                        commentText = ""
+                        commentSpoiler = false
+                    },
+                    onOpenCommunity = {
+                        commentsSheetOpen = false
+                        onOpenCommunity()
+                    }
+                )
+            }
+        }
+
+        if (settingsSheetOpen) {
+            ModalBottomSheet(onDismissRequest = { settingsSheetOpen = false }) {
+                ReaderSettingsSheet(
+                    state = state,
+                    onModeChange = viewModel::setReaderMode,
+                    onFilterChange = viewModel::setImageFilter,
+                    onBrightnessChange = viewModel::setBrightness,
+                    onIncognitoChange = viewModel::setIncognito,
+                    onAutoNextChange = viewModel::setAutoOpenNextChapter,
+                    onLiveReadersChange = viewModel::setShowLiveReadersOverlay,
+                    onReactionsChange = viewModel::setShowReactionOverlay,
+                    onDualPageChange = viewModel::setDualPageLandscape,
+                    onWebtoonStitchChange = viewModel::setWebtoonAutoStitch
+                )
+            }
+        }
     }
 
     LaunchedEffect(state.currentPage, state.totalPages, state.hapticsEnabled) {
@@ -319,15 +365,45 @@ private fun ReaderContent(
     onTap: (Float, Float) -> Unit,
     onModeChange: (ReaderMode) -> Unit
 ) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
     when (state.readerMode) {
         ReaderMode.VERTICAL_SCROLL, ReaderMode.WEBTOON ->
-            WebtoonReader(pages = state.pages, imageFilter = state.imageFilter, onTap = onTap, onPageChanged = onPageChanged)
+            WebtoonReader(
+                pages = state.pages,
+                imageFilter = state.imageFilter,
+                autoStitch = state.webtoonAutoStitch,
+                onTap = onTap,
+                onPageChanged = onPageChanged
+            )
         ReaderMode.HORIZONTAL_RTL ->
-            HorizontalReader(pages = state.pages, rtl = true,
-                initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap)
+            if (state.dualPageLandscape && isLandscape) {
+                DualPageReader(
+                    pages = state.pages,
+                    rtl = true,
+                    initialPage = state.currentPage,
+                    imageFilter = state.imageFilter,
+                    onPageChanged = onPageChanged,
+                    onTap = onTap
+                )
+            } else {
+                HorizontalReader(pages = state.pages, rtl = true,
+                    initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap)
+            }
         ReaderMode.HORIZONTAL_LTR ->
-            HorizontalReader(pages = state.pages, rtl = false,
-                initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap)
+            if (state.dualPageLandscape && isLandscape) {
+                DualPageReader(
+                    pages = state.pages,
+                    rtl = false,
+                    initialPage = state.currentPage,
+                    imageFilter = state.imageFilter,
+                    onPageChanged = onPageChanged,
+                    onTap = onTap
+                )
+            } else {
+                HorizontalReader(pages = state.pages, rtl = false,
+                    initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap)
+            }
     }
 }
 
@@ -337,6 +413,7 @@ private fun ReaderContent(
 private fun WebtoonReader(
     pages: List<ChapterPage>,
     imageFilter: ReaderImageFilter,
+    autoStitch: Boolean,
     onTap: (Float, Float) -> Unit,
     onPageChanged: (Int) -> Unit
 ) {
@@ -349,6 +426,7 @@ private fun WebtoonReader(
 
     LazyColumn(
         state = listState,
+        verticalArrangement = Arrangement.spacedBy(if (autoStitch) 0.dp else 6.dp),
         modifier = Modifier.fillMaxSize().pointerInput(Unit) {
             detectTapGestures { offset ->
                 val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
@@ -359,6 +437,48 @@ private fun WebtoonReader(
     ) {
         items(pages, key = { it.index }) { page ->
             MangaPageImage(page = page, imageFilter = imageFilter, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun DualPageReader(
+    pages: List<ChapterPage>,
+    rtl: Boolean,
+    initialPage: Int,
+    imageFilter: ReaderImageFilter,
+    onPageChanged: (Int) -> Unit,
+    onTap: (Float, Float) -> Unit
+) {
+    val orderedPages = if (rtl) pages.reversed() else pages
+    val spreadPages = orderedPages.chunked(2)
+    val initialSpread = (initialPage / 2).coerceIn(0, maxOf(0, spreadPages.size - 1))
+    val pagerState = rememberPagerState(initialPage = initialSpread) { spreadPages.size }
+
+    LaunchedEffect(pagerState.currentPage) {
+        val logicalIndex = pagerState.currentPage * 2
+        val realIndex = if (rtl) orderedPages.size - 1 - logicalIndex else logicalIndex
+        onPageChanged(realIndex.coerceIn(0, maxOf(0, pages.size - 1)))
+    }
+
+    HorizontalPager(
+        state = pagerState,
+        modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+            detectTapGestures { offset ->
+                val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
+                val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
+                onTap(nx, ny)
+            }
+        }
+    ) { spreadIndex ->
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            spreadPages[spreadIndex].forEach { page ->
+                MangaPageImage(page = page, imageFilter = imageFilter, modifier = Modifier.weight(1f).fillMaxHeight())
+            }
+            if (spreadPages[spreadIndex].size == 1) {
+                Box(Modifier.weight(1f).fillMaxHeight())
+            }
         }
     }
 }
@@ -409,6 +529,9 @@ private fun MangaPageImage(page: ChapterPage, imageFilter: ReaderImageFilter, mo
     val ctx = LocalContext.current
     var isLoading by remember { mutableStateOf(true) }
     var isError by remember { mutableStateOf(false) }
+    val transformations: List<Transformation> = remember(imageFilter) {
+        if (imageFilter == ReaderImageFilter.SMART_CROP) listOf(SmartCropTransformation()) else emptyList()
+    }
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         AsyncImage(
@@ -419,6 +542,7 @@ private fun MangaPageImage(page: ChapterPage, imageFilter: ReaderImageFilter, mo
                 .bitmapConfig(Bitmap.Config.RGB_565)
                 .precision(Precision.INEXACT)
                 .size(1600, 4096)
+                .apply { if (transformations.isNotEmpty()) transformations(transformations) }
                 .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
                 .build(),
             imageLoader = ctx.imageLoader,
@@ -476,7 +600,8 @@ private fun ReaderTopBar(
     onToggleBookmark: () -> Unit,
     onEditNote: () -> Unit,
     onBrowseAnnotations: () -> Unit,
-    onOpenCommunity: () -> Unit,
+    onOpenComments: () -> Unit,
+    onOpenSettings: () -> Unit,
     liveReaders: Int,
     hasPreviousChapter: Boolean,
     hasNextChapter: Boolean,
@@ -524,7 +649,7 @@ private fun ReaderTopBar(
                 IconButton(onClick = onBrowseAnnotations) {
                     Icon(Icons.Filled.FormatListBulleted, "الإشارات والملاحظات", tint = Color.White)
                 }
-                IconButton(onClick = onOpenCommunity) {
+                IconButton(onClick = onOpenComments) {
                     Icon(Icons.Filled.Forum, "نقاش الفصل", tint = Color.White)
                 }
                 if (downloadInProgress) {
@@ -537,58 +662,8 @@ private fun ReaderTopBar(
                     }
                 }
                 Box {
-                IconButton(onClick = { showModeMenu = true }) {
+                IconButton(onClick = onOpenSettings) {
                     Icon(Icons.Filled.MoreVert, "إعدادات", tint = Color.White)
-                }
-                DropdownMenu(
-                    expanded = showModeMenu,
-                    onDismissRequest = { showModeMenu = false },
-                    modifier = Modifier.background(MangaColors.SurfaceContainer)
-                ) {
-                    ReaderMode.values().forEach { mode ->
-                        DropdownMenuItem(
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    if (mode == currentMode)
-                                        Icon(Icons.Filled.Check, null, tint = MangaColors.Primary,
-                                            modifier = Modifier.size(16.dp))
-                                    else Spacer(Modifier.size(16.dp))
-                                    Text(mode.label, color = MangaColors.OnSurface,
-                                        style = MaterialTheme.typography.bodyMedium)
-                                }
-                            },
-                            onClick = { onModeChange(mode); showModeMenu = false }
-                        )
-                    }
-                    DropdownMenuItem(
-                        text = { Text("وضع خفي: ${if (incognitoMode) "مفعل" else "معطل"}") },
-                        onClick = { onIncognitoChange(!incognitoMode) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("الفلتر: ${imageFilter.label}") },
-                        onClick = { }
-                    )
-                    ReaderImageFilter.values().forEach { filter ->
-                        DropdownMenuItem(
-                            text = { Text(filter.label) },
-                            onClick = { onImageFilterChange(filter) }
-                        )
-                    }
-                    DropdownMenuItem(
-                        text = {
-                            Column {
-                                Text("السطوع")
-                                Slider(
-                                    value = brightness,
-                                    onValueChange = onBrightnessChange,
-                                    valueRange = 0.05f..1f,
-                                    modifier = Modifier.width(180.dp)
-                                )
-                            }
-                        },
-                        onClick = { }
-                    )
                 }
                 }
             }
@@ -596,9 +671,108 @@ private fun ReaderTopBar(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReaderSettingsSheet(
+    state: ReaderUiState,
+    onModeChange: (ReaderMode) -> Unit,
+    onFilterChange: (ReaderImageFilter) -> Unit,
+    onBrightnessChange: (Float) -> Unit,
+    onIncognitoChange: (Boolean) -> Unit,
+    onAutoNextChange: (Boolean) -> Unit,
+    onLiveReadersChange: (Boolean) -> Unit,
+    onReactionsChange: (Boolean) -> Unit,
+    onDualPageChange: (Boolean) -> Unit,
+    onWebtoonStitchChange: (Boolean) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("إعدادات القارئ", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("وضع القراءة", color = MangaColors.Muted)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            ReaderMode.values().forEachIndexed { index, mode ->
+                SegmentedButton(
+                    selected = state.readerMode == mode,
+                    onClick = { onModeChange(mode) },
+                    shape = SegmentedButtonDefaults.itemShape(index, ReaderMode.values().size)
+                ) { Text(mode.label) }
+            }
+        }
+        Text("فلتر الصورة", color = MangaColors.Muted)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            ReaderImageFilter.values().forEachIndexed { index, filter ->
+                SegmentedButton(
+                    selected = state.imageFilter == filter,
+                    onClick = { onFilterChange(filter) },
+                    shape = SegmentedButtonDefaults.itemShape(index, ReaderImageFilter.values().size)
+                ) { Text(filter.label) }
+            }
+        }
+        Text("السطوع", color = MangaColors.Muted)
+        Slider(value = state.brightness, onValueChange = onBrightnessChange, valueRange = 0.05f..1f)
+        SwitchRow("وضع خفي", state.incognitoMode, onIncognitoChange)
+        SwitchRow("الانتقال التلقائي للفصل التالي", state.autoOpenNextChapter, onAutoNextChange)
+        SwitchRow("إظهار عداد القراء", state.showLiveReadersOverlay, onLiveReadersChange)
+        SwitchRow("إظهار التفاعلات", state.showReactionOverlay, onReactionsChange)
+        SwitchRow("وضع الصفحتين أفقياً", state.dualPageLandscape, onDualPageChange)
+        SwitchRow("دمج صفحات الويب تون", state.webtoonAutoStitch, onWebtoonStitchChange)
+    }
+}
+
+@Composable
+private fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = MangaColors.OnSurface)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun ReaderCommentsSheet(
+    comments: List<CommunityComment>,
+    collapseSpoilersByDefault: Boolean,
+    commentText: String,
+    onCommentTextChange: (String) -> Unit,
+    spoiler: Boolean,
+    onSpoilerChange: (Boolean) -> Unit,
+    onSend: () -> Unit,
+    onOpenCommunity: () -> Unit
+) {
+    val expandedSpoilers = remember { mutableStateListOf<String>() }
+    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("تعليقات الفصل", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onOpenCommunity) { Text("فتح المجتمع") }
+        }
+        if (comments.isEmpty()) {
+            Text("لا توجد تعليقات بعد.", color = MangaColors.Muted)
+        } else {
+            comments.takeLast(20).forEach { comment ->
+                Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = RoundedCornerShape(14.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(comment.authorName, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
+                        if (comment.spoiler && collapseSpoilersByDefault && comment.id !in expandedSpoilers) {
+                            TextButton(onClick = { expandedSpoilers.add(comment.id) }) { Text("إظهار السبويْلر") }
+                        } else {
+                            Text(comment.text, color = MangaColors.OnSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+        OutlinedTextField(value = commentText, onValueChange = onCommentTextChange, modifier = Modifier.fillMaxWidth(), label = { Text("أضف تعليقاً") })
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = spoiler, onCheckedChange = onSpoilerChange)
+                Text("سبويْلر")
+            }
+            Button(onClick = onSend, enabled = commentText.isNotBlank()) { Text("إرسال") }
+        }
+    }
+}
+
 private fun ReaderImageFilter.toColorFilter(): ColorFilter? {
     val matrix = when (this) {
-        ReaderImageFilter.NONE -> return null
+        ReaderImageFilter.NONE, ReaderImageFilter.SMART_CROP -> return null
         ReaderImageFilter.GRAYSCALE -> ColorMatrix().apply { setToSaturation(0f) }
         ReaderImageFilter.SEPIA -> ColorMatrix(floatArrayOf(
             0.393f, 0.769f, 0.189f, 0f, 0f,

@@ -16,7 +16,7 @@ import com.exapps.mangaworld.core.data.local.entity.*
         DownloadTaskEntity::class,
         DownloadedMangaEntity::class,
     ],
-    version = 6,          // v6: added reader annotations
+    version = 7,          // v7: enriched download task metadata for retries
     exportSchema = false
 )
 abstract class MangaDatabase : RoomDatabase() {

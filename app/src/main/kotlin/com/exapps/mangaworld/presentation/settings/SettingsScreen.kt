@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,6 +39,7 @@ fun SettingsScreen(
     val app by viewModel.appSettings.collectAsStateWithLifecycle()
     val reader by viewModel.readerSettings.collectAsStateWithLifecycle()
     val cacheSizeBytes by viewModel.imageCacheSizeBytes.collectAsStateWithLifecycle()
+    val backupMessage by viewModel.backupMessage.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var blacklistDialog by remember { mutableStateOf(false) }
     var blacklistText by remember(app.contentBlacklist) { mutableStateOf(app.contentBlacklist.joinToString("\n")) }
@@ -49,6 +52,12 @@ fun SettingsScreen(
                 viewModel.saveCookies(domain, cookies)
             }
         }
+    }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        uri?.let(viewModel::exportBackup)
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(viewModel::importBackup)
     }
 
     Column(
@@ -230,6 +239,22 @@ fun SettingsScreen(
                 checked = reader.showReactionOverlay,
                 onCheckedChange = viewModel::setShowReactionOverlay
             )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.ViewCarousel,
+                title = "وضع الصفحتين أفقياً",
+                subtitle = "عرض صفحتين معاً على الشاشات العريضة",
+                checked = reader.dualPageLandscape,
+                onCheckedChange = viewModel::setDualPageLandscape
+            )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.VerticalAlignCenter,
+                title = "دمج صفحات الويب تون",
+                subtitle = "إزالة الفراغات بين الصور في وضع الويب تون",
+                checked = reader.webtoonAutoStitch,
+                onCheckedChange = viewModel::setWebtoonAutoStitch
+            )
         }
 
         // ── Sources ───────────────────────────────────────────────────────────
@@ -332,6 +357,24 @@ fun SettingsScreen(
             }
         }
 
+        SettingsSection("النسخ الاحتياطي المحلي") {
+            SettingsItem(
+                icon = Icons.Filled.Backup,
+                title = "تصدير النسخة الاحتياطية",
+                subtitle = "المفضلة، السجل، التقدم، الإعدادات، والملاحظات"
+            ) {
+                OutlinedButton(onClick = { exportLauncher.launch("MangaWorld-backup.json") }) { Text("تصدير") }
+            }
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SettingsItem(
+                icon = Icons.Filled.Restore,
+                title = "استيراد نسخة احتياطية",
+                subtitle = "دمج البيانات المحلية مع الملف المستورد"
+            ) {
+                OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json")) }) { Text("استيراد") }
+            }
+        }
+
         SettingsSection("الإشعارات") {
             SettingsItem(
                 icon = Icons.Filled.Notifications,
@@ -392,7 +435,7 @@ fun SettingsScreen(
 
         // ── About ─────────────────────────────────────────────────────────────
         SettingsSection("عن التطبيق") {
-            SettingsItem(icon = Icons.Filled.Info, title = "الإصدار", subtitle = "1.0.0") {}
+            SettingsItem(icon = Icons.Filled.Info, title = "الإصدار", subtitle = "2.0.0") {}
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(icon = Icons.Filled.Code, title = "com.exapps.mangaworld",
                 subtitle = "مبني بـ Kotlin + Jetpack Compose") {}
@@ -438,6 +481,18 @@ fun SettingsScreen(
                 TextButton(onClick = { blacklistDialog = false }) { Text("إلغاء") }
             }
         )
+    }
+
+    backupMessage?.let { message ->
+        LaunchedEffect(message) {
+            kotlinx.coroutines.delay(2500)
+            viewModel.clearBackupMessage()
+        }
+        Snackbar(
+            modifier = Modifier.padding(16.dp),
+            containerColor = MangaColors.SurfaceContainer,
+            contentColor = MangaColors.OnSurface
+        ) { Text(message) }
     }
 }
 

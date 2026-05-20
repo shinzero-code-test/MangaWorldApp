@@ -89,6 +89,8 @@ interface SettingsRepository {
     suspend fun updateAutoOpenNextChapter(enabled: Boolean)
     suspend fun updateShowLiveReadersOverlay(enabled: Boolean)
     suspend fun updateShowReactionOverlay(enabled: Boolean)
+    suspend fun updateDualPageLandscape(enabled: Boolean)
+    suspend fun updateWebtoonAutoStitch(enabled: Boolean)
 
     fun getCookies(domain: String): Flow<String?>
     suspend fun saveCookies(domain: String, cookies: String)

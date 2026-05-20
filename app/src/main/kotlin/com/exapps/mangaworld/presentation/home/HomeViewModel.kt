@@ -3,8 +3,10 @@ package com.exapps.mangaworld.presentation.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.isBlockedBy
+import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.domain.model.*
+import com.exapps.mangaworld.domain.repository.LibraryRepository
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,6 +19,7 @@ data class HomeUiState(
     val featured: List<MangaItem> = emptyList(),
     val latestChapters: List<LatestChapterItem> = emptyList(),
     val trending: List<MangaItem> = emptyList(),
+    val suggested: List<MangaItem> = emptyList(),
     val availableSources: List<MangaSource> = MangaSource.entries.toList(),
     val activeSource: MangaSource = MangaSource.AZORA,
     val remoteAlertMessage: String = "",
@@ -27,6 +30,8 @@ data class HomeUiState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repo: MangaRepository,
+    private val libraryRepo: LibraryRepository,
+    private val cacheDao: MangaCacheDao,
     private val settingsRepo: SettingsRepository,
     private val remoteConfigManager: FirebaseRemoteConfigManager
 ) : ViewModel() {
@@ -83,12 +88,14 @@ class HomeViewModel @Inject constructor(
                     val filteredFeatured = data.featured.filterNot { it.isBlockedBy(blockedKeywords) }
                     val filteredLatest = data.latestChapters.filterNot { it.isBlockedBy(blockedKeywords) }
                     val filteredTrending = data.trending.filterNot { it.isBlockedBy(blockedKeywords) }
+                    val suggested = buildSuggestions(filteredFeatured + filteredTrending)
                     _state.update {
                         it.copy(
                             isLoading = false,
                             featured = filteredFeatured,
                             latestChapters = filteredLatest,
                             trending = filteredTrending,
+                            suggested = suggested,
                             activeSource = source
                         )
                     }
@@ -109,5 +116,24 @@ class HomeViewModel @Inject constructor(
                 loadHome(source, settingsRepo.getAppSettings().first().contentBlacklist)
             }
         }
+    }
+
+    private suspend fun buildSuggestions(candidates: List<MangaItem>): List<MangaItem> {
+        val favorites = libraryRepo.getFavorites().first()
+        val favoriteIds = favorites.map { it.mangaId }.toSet()
+        val topGenres = cacheDao.getByIds(favorites.map { it.mangaId })
+            .flatMap { runCatching { org.json.JSONArray(it.genresJson) }.getOrNull()?.let { arr -> (0 until arr.length()).map { idx -> arr.getString(idx) } } ?: emptyList() }
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedByDescending { it.value }
+            .take(4)
+            .map { it.key }
+            .toSet()
+        return candidates
+            .filterNot { it.id in favoriteIds }
+            .filter { topGenres.isEmpty() || it.genres.any { genre -> genre in topGenres } }
+            .distinctBy { it.id }
+            .take(12)
     }
 }

@@ -3,6 +3,7 @@ package com.exapps.mangaworld.presentation.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.CacheManager
+import com.exapps.mangaworld.core.data.LocalBackupManager
 import com.exapps.mangaworld.core.data.WidgetDataRepository
 import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
@@ -17,6 +18,7 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val repo: SettingsRepository,
     private val cacheManager: CacheManager,
+    private val localBackupManager: LocalBackupManager,
     private val widgetDataRepository: WidgetDataRepository,
     private val firebaseSyncManager: FirebaseSyncManager,
     private val widgetShortcutCoordinator: WidgetShortcutCoordinator
@@ -27,6 +29,8 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ReaderSettings())
     private val _imageCacheSizeBytes = MutableStateFlow(0L)
     val imageCacheSizeBytes: StateFlow<Long> = _imageCacheSizeBytes.asStateFlow()
+    private val _backupMessage = MutableStateFlow<String?>(null)
+    val backupMessage: StateFlow<String?> = _backupMessage.asStateFlow()
 
     init { refreshCacheStats() }
 
@@ -59,6 +63,8 @@ class SettingsViewModel @Inject constructor(
     fun setAutoOpenNextChapter(v: Boolean) = saveAndSync { repo.updateAutoOpenNextChapter(v) }
     fun setShowLiveReadersOverlay(v: Boolean) = saveAndSync { repo.updateShowLiveReadersOverlay(v) }
     fun setShowReactionOverlay(v: Boolean) = saveAndSync { repo.updateShowReactionOverlay(v) }
+    fun setDualPageLandscape(v: Boolean) = saveAndSync { repo.updateDualPageLandscape(v) }
+    fun setWebtoonAutoStitch(v: Boolean) = saveAndSync { repo.updateWebtoonAutoStitch(v) }
     fun saveCookies(domain: String, cookies: String) = viewModelScope.launch { repo.saveCookies(domain, cookies) }
 
     fun refreshCacheStats() = viewModelScope.launch {
@@ -69,6 +75,25 @@ class SettingsViewModel @Inject constructor(
         cacheManager.clearImageCache()
         refreshCacheStats()
     }
+
+    fun exportBackup(uri: android.net.Uri) = viewModelScope.launch {
+        runCatching { localBackupManager.exportTo(uri) }
+            .onSuccess { _backupMessage.value = "تم تصدير النسخة الاحتياطية بنجاح" }
+            .onFailure { _backupMessage.value = it.message ?: "فشل تصدير النسخة الاحتياطية" }
+    }
+
+    fun importBackup(uri: android.net.Uri) = viewModelScope.launch {
+        runCatching {
+            localBackupManager.importFrom(uri)
+            firebaseSyncManager.pushLocalSnapshot()
+        }.onSuccess {
+            _backupMessage.value = "تم استيراد النسخة الاحتياطية بنجاح"
+        }.onFailure {
+            _backupMessage.value = it.message ?: "فشل استيراد النسخة الاحتياطية"
+        }
+    }
+
+    fun clearBackupMessage() { _backupMessage.value = null }
 
     private fun saveAndSync(block: suspend () -> Unit) = viewModelScope.launch {
         block()

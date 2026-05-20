@@ -1,0 +1,13 @@
+HSPLcom/exapps/mangaworld/MainActivity;
+HSPLcom/exapps/mangaworld/MangaWorldApp;
+HSPLcom/exapps/mangaworld/presentation/navigation/NavigationKt;
+HSPLcom/exapps/mangaworld/presentation/home/HomeScreenKt;
+HSPLcom/exapps/mangaworld/presentation/browse/BrowseScreenKt;
+HSPLcom/exapps/mangaworld/presentation/search/SearchScreenKt;
+HSPLcom/exapps/mangaworld/presentation/detail/MangaDetailScreenKt;
+HSPLcom/exapps/mangaworld/presentation/reader/ReaderScreenKt;
+HSPLcom/exapps/mangaworld/presentation/library/LibraryScreenKt;
+HSPLcom/exapps/mangaworld/presentation/settings/SettingsScreenKt;
+HSPLcom/exapps/mangaworld/core/data/RepositoriesKt;
+HSPLcom/exapps/mangaworld/core/data/download/DownloadQueueManager;
+HSPLcom/exapps/mangaworld/core/data/download/ChapterDownloadWorker;

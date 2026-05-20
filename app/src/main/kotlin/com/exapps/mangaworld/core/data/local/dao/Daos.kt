@@ -74,6 +74,9 @@ interface ReadChapterDao {
 
     @Query("SELECT readAt FROM read_chapters ORDER BY readAt DESC")
     suspend fun getReadTimestamps(): List<Long>
+
+    @Query("SELECT * FROM read_chapters ORDER BY readAt DESC")
+    suspend fun getAll(): List<ReadChapterEntity>
 }
 
 @Dao
@@ -86,6 +89,9 @@ interface ReadingProgressDao {
 
     @Query("SELECT * FROM reading_progress WHERE mangaId = :mangaId")
     suspend fun getAllForManga(mangaId: String): List<ReadingProgressEntity>
+
+    @Query("SELECT * FROM reading_progress ORDER BY updatedAt DESC")
+    suspend fun getAll(): List<ReadingProgressEntity>
 }
 
 @Dao

@@ -223,7 +223,8 @@ enum class ReaderImageFilter(val label: String) {
     NONE("بدون"),
     GRAYSCALE("تدرج رمادي"),
     SEPIA("سيبيا"),
-    HIGH_CONTRAST("تباين عال")
+    HIGH_CONTRAST("تباين عال"),
+    SMART_CROP("قص ذكي للحواف")
 }
 
 data class ReaderPageAnnotation(
@@ -246,7 +247,9 @@ data class ReaderSettings(
     val imageFilter: ReaderImageFilter = ReaderImageFilter.NONE,
     val autoOpenNextChapter: Boolean = false,
     val showLiveReadersOverlay: Boolean = true,
-    val showReactionOverlay: Boolean = true
+    val showReactionOverlay: Boolean = true,
+    val dualPageLandscape: Boolean = false,
+    val webtoonAutoStitch: Boolean = true
 )
 
 enum class NotificationDeliveryMode(val label: String) {

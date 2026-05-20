@@ -52,6 +52,8 @@ class AppPreferences @Inject constructor(
         val KEY_AUTO_OPEN_NEXT = booleanPreferencesKey("reader_auto_next")
         val KEY_SHOW_LIVE_READERS = booleanPreferencesKey("reader_show_live_readers")
         val KEY_SHOW_REACTIONS = booleanPreferencesKey("reader_show_reactions")
+        val KEY_DUAL_PAGE = booleanPreferencesKey("reader_dual_page")
+        val KEY_WEBTOON_STITCH = booleanPreferencesKey("reader_webtoon_stitch")
 
         fun cookieKey(domain: String) = stringPreferencesKey("cookie_$domain")
     }
@@ -112,7 +114,9 @@ class AppPreferences @Inject constructor(
                     ?: ReaderImageFilter.NONE,
                 autoOpenNextChapter = prefs[KEY_AUTO_OPEN_NEXT] ?: false,
                 showLiveReadersOverlay = prefs[KEY_SHOW_LIVE_READERS] ?: true,
-                showReactionOverlay = prefs[KEY_SHOW_REACTIONS] ?: true
+                showReactionOverlay = prefs[KEY_SHOW_REACTIONS] ?: true,
+                dualPageLandscape = prefs[KEY_DUAL_PAGE] ?: false,
+                webtoonAutoStitch = prefs[KEY_WEBTOON_STITCH] ?: true
             )
         }
 
@@ -207,6 +211,12 @@ class AppPreferences @Inject constructor(
 
     suspend fun setShowReactions(v: Boolean) =
         dataStore.edit { it[KEY_SHOW_REACTIONS] = v }
+
+    suspend fun setDualPage(v: Boolean) =
+        dataStore.edit { it[KEY_DUAL_PAGE] = v }
+
+    suspend fun setWebtoonStitch(v: Boolean) =
+        dataStore.edit { it[KEY_WEBTOON_STITCH] = v }
 
     fun getCookies(domain: String): Flow<String?> = dataStore.data
         .catch { emit(emptyPreferences()) }
