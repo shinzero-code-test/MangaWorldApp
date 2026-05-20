@@ -1,14 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
-import com.exapps.mangaworld.domain.model.Chapter
-import com.exapps.mangaworld.domain.model.ChapterPage
-import com.exapps.mangaworld.domain.model.HomeData
-import com.exapps.mangaworld.domain.model.LatestChapterItem
-import com.exapps.mangaworld.domain.model.MangaDetail
-import com.exapps.mangaworld.domain.model.MangaItem
-import com.exapps.mangaworld.domain.model.MangaSource
-import com.exapps.mangaworld.domain.model.MangaStatus
-import com.exapps.mangaworld.domain.model.MangaType
+import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
