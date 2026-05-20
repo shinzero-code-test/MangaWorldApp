@@ -49,14 +49,18 @@ import com.exapps.mangaworld.domain.model.MangaReview
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-private enum class CommunityTab { COMMENTS, REVIEWS }
+enum class CommunityTab { COMMENTS, REVIEWS }
 
 data class CommunityUiState(
     val title: String = "المجتمع",
@@ -84,9 +88,20 @@ class CommunityViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     private val commentsFlow = if (chapterUrl == null) communityRepository.observeMangaComments(mangaId) else communityRepository.observeChapterComments(mangaId, chapterUrl)
     private val reviewsFlow = if (chapterUrl == null) communityRepository.observeReviews(mangaId) else kotlinx.coroutines.flow.flowOf(emptyList())
-    private val profileFlow = kotlinx.coroutines.flow.flow { emit(communityRepository.getCurrentProfile()) }
+    private val profileFlow: Flow<CommunityProfile?> = flow { emit(communityRepository.getCurrentProfile()) }
 
-    val state: StateFlow<CommunityUiState> = combine(commentsFlow, reviewsFlow, profileFlow, _tab, _replyTo, _error) { comments, reviews, profile, tab, replyTo, error ->
+    val state: StateFlow<CommunityUiState> = combine(commentsFlow, reviewsFlow, profileFlow) { comments, reviews, profile ->
+        Triple(comments, reviews, profile)
+    }.combine(_tab) { triple, tab ->
+        Pair(triple, tab)
+    }.combine(_replyTo) { pair, replyTo ->
+        Triple(pair.first, pair.second, replyTo)
+    }.combine(_error) { triple, error ->
+        val comments = triple.first.first
+        val reviews = triple.first.second
+        val profile = triple.first.third
+        val tab = triple.second
+        val replyTo = triple.third
         CommunityUiState(
             title = if (chapterUrl == null) "مراجعات ومناقشات المانجا" else "نقاش الفصل",
             comments = comments,
@@ -97,7 +112,7 @@ class CommunityViewModel @Inject constructor(
             replyTo = replyTo,
             error = error
         )
-    }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, CommunityUiState(chapterMode = chapterUrl != null))
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, CommunityUiState(chapterMode = chapterUrl != null))
 
     fun setTab(tab: CommunityTab) { _tab.value = tab }
     fun setReply(comment: CommunityComment?) { _replyTo.value = comment }
