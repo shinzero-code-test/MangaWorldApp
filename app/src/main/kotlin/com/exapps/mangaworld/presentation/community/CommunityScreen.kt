@@ -92,8 +92,8 @@ class CommunityViewModel @Inject constructor(
     private val mangaId: String = checkNotNull(savedStateHandle["mangaId"])
     private val slug: String = checkNotNull(savedStateHandle["slug"])
     private val sourceId: String = checkNotNull(savedStateHandle["sourceId"])
-    private val chapterUrl: String? = savedStateHandle["chapterUrl"]
-    private val focusCommentId: String? = savedStateHandle["commentId"]?.takeIf { it.isNotBlank() }
+    private val chapterUrl: String? = savedStateHandle.get<String>("chapterUrl")
+    private val focusCommentId: String? = savedStateHandle.get<String>("commentId")?.takeIf { it.isNotBlank() }
 
     private val _tab = MutableStateFlow(if (chapterUrl == null) CommunityTab.REVIEWS else CommunityTab.COMMENTS)
     private val _replyTo = MutableStateFlow<CommunityComment?>(null)
