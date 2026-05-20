@@ -348,6 +348,7 @@ fun CloudSyncScreen(
                     Text("معاينة تعارض الاستعادة", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
                     Text("المفضلة: محلي ${preview.localFavorites} / سحابي ${preview.remoteFavorites}", color = MangaColors.OnSurfaceVariant)
                     Text("السجل: محلي ${preview.localHistory} / سحابي ${preview.remoteHistory}", color = MangaColors.OnSurfaceVariant)
+                    Text("الإشارات والملاحظات: محلي ${preview.localAnnotations} / سحابي ${preview.remoteAnnotations}", color = MangaColors.OnSurfaceVariant)
                     Text("الثيم: محلي ${preview.localTheme.label} / سحابي ${preview.remoteTheme?.label ?: "غير متوفر"}", color = MangaColors.OnSurfaceVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         CloudRestoreStrategy.values().forEach { strategy ->

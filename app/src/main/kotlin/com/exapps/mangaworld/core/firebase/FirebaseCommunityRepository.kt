@@ -1,18 +1,24 @@
 package com.exapps.mangaworld.core.firebase
 
 import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
-import com.exapps.mangaworld.domain.model.CommunityComment
 import com.exapps.mangaworld.domain.model.CommunityChatMessage
+import com.exapps.mangaworld.domain.model.CommunityComment
 import com.exapps.mangaworld.domain.model.CommunityNotification
 import com.exapps.mangaworld.domain.model.CommunityNotificationType
 import com.exapps.mangaworld.domain.model.CommunityProfile
+import com.exapps.mangaworld.domain.model.CustomUserList
+import com.exapps.mangaworld.domain.model.CustomUserListItem
 import com.exapps.mangaworld.domain.model.MangaReview
 import com.exapps.mangaworld.domain.model.ReaderReaction
 import com.exapps.mangaworld.domain.repository.CommunityRepository
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -25,26 +31,26 @@ import javax.inject.Singleton
 @Singleton
 class FirebaseCommunityRepository @Inject constructor(
     private val sessionManager: FirebaseSessionManager,
-    private val readChapterDao: ReadChapterDao
+    private val readChapterDao: ReadChapterDao,
+    private val remoteConfigManager: FirebaseRemoteConfigManager
 ) : CommunityRepository {
 
     private val firestore = FirebaseFirestore.getInstance()
     private val realtimeDb = FirebaseDatabase.getInstance("https://mangaworld-live-260519-default-rtdb.europe-west1.firebasedatabase.app")
 
     override fun observeMangaComments(mangaId: String): Flow<List<CommunityComment>> =
-        observeComments(collectionPath = listOf("community_manga", mangaId, "comments"))
+        observeComments(commentsCollection(mangaId, null))
 
     override fun observeChapterComments(mangaId: String, chapterUrl: String): Flow<List<CommunityComment>> =
-        observeComments(collectionPath = listOf("community_manga", mangaId, "chapters", stableChapterKey(chapterUrl), "comments"))
+        observeComments(commentsCollection(mangaId, chapterUrl))
 
     override fun observeReviews(mangaId: String): Flow<List<MangaReview>> = callbackFlow {
         val reg = firestore.collection("community_manga").document(mangaId)
             .collection("reviews")
-            .orderBy("updatedAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .orderBy("updatedAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) return@addSnapshotListener
-                val items = snapshot?.documents.orEmpty().mapNotNull { it.toReview() }
-                trySend(items)
+                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toReview() })
             }
         awaitClose { reg.remove() }
     }
@@ -63,12 +69,11 @@ class FirebaseCommunityRepository @Inject constructor(
         val reg = firestore.collection("community_presence").document(threadId(mangaId, chapterUrl))
             .collection("reactions")
             .whereEqualTo("pageIndex", pageIndex)
-            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(20)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) return@addSnapshotListener
-                val items = snapshot?.documents.orEmpty().mapNotNull { it.toReaction() }
-                trySend(items)
+                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toReaction() })
             }
         awaitClose { reg.remove() }
     }
@@ -81,7 +86,7 @@ class FirebaseCommunityRepository @Inject constructor(
         }
         val reg = firestore.collection("users").document(uid)
             .collection("notifications")
-            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(limit.toLong())
             .addSnapshotListener { snapshot, error ->
                 if (error != null) return@addSnapshotListener
@@ -92,18 +97,50 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override fun observeChatMessages(roomId: String): Flow<List<CommunityChatMessage>> = callbackFlow {
         val ref = realtimeDb.getReference("chatRooms").child(roomId).child("messages")
-        val listener = object : com.google.firebase.database.ValueEventListener {
-            override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
                 val messages = snapshot.children.mapNotNull { child ->
                     (child.value as? Map<String, Any?>)?.toChatMessage(child.key.orEmpty())
                 }.sortedBy { it.createdAt }.takeLast(100)
                 trySend(messages)
             }
 
-            override fun onCancelled(error: com.google.firebase.database.DatabaseError) = Unit
+            override fun onCancelled(error: DatabaseError) = Unit
         }
         ref.addValueEventListener(listener)
         awaitClose { ref.removeEventListener(listener) }
+    }
+
+    override fun observeUserLists(): Flow<List<CustomUserList>> = callbackFlow {
+        val uid = sessionManager.currentUserId() ?: run {
+            trySend(emptyList())
+            close()
+            return@callbackFlow
+        }
+        val reg = firestore.collection("users").document(uid).collection("lists")
+            .orderBy("updatedAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toCustomUserList() })
+            }
+        awaitClose { reg.remove() }
+    }
+
+    override fun observeListItems(listId: String): Flow<List<CustomUserListItem>> = callbackFlow {
+        val uid = sessionManager.currentUserId() ?: run {
+            trySend(emptyList())
+            close()
+            return@callbackFlow
+        }
+        val reg = firestore.collection("users").document(uid)
+            .collection("lists").document(listId)
+            .collection("items")
+            .orderBy("addedAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toCustomUserListItem() })
+            }
+        awaitClose { reg.remove() }
     }
 
     override suspend fun getCurrentProfile(): CommunityProfile? {
@@ -121,7 +158,8 @@ class FirebaseCommunityRepository @Inject constructor(
         val currentOwner = usernameRef.get().await().getString("uid")
         require(currentOwner == null || currentOwner == uid) { "اسم المستخدم مستخدم بالفعل" }
 
-        val profile = defaultProfile(uid).copy(
+        val existing = getCurrentProfile() ?: defaultProfile(uid)
+        val profile = existing.copy(
             username = username.trim(),
             bio = bio.trim(),
             isPublic = isPublic,
@@ -134,16 +172,81 @@ class FirebaseCommunityRepository @Inject constructor(
         }.await()
     }
 
+    override suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean) {
+        val uid = sessionManager.ensureGuestSession() ?: return
+        val profile = (getCurrentProfile() ?: defaultProfile(uid)).copy(
+            showListsPublic = showListsPublic,
+            showActivityPublic = showActivityPublic,
+            updatedAt = System.currentTimeMillis()
+        )
+        firestore.collection("publicProfiles").document(uid).set(profile.toMap()).await()
+    }
+
+    override suspend fun createOrUpdateList(listId: String?, name: String, description: String, isPublic: Boolean): String {
+        val uid = sessionManager.ensureGuestSession() ?: error("No user")
+        val id = listId ?: UUID.randomUUID().toString()
+        val doc = firestore.collection("users").document(uid).collection("lists").document(id)
+        val existingCount = runCatching { doc.collection("items").get().await().size() }.getOrDefault(0)
+        val payload = CustomUserList(
+            id = id,
+            name = name.trim(),
+            description = description.trim(),
+            isPublic = isPublic,
+            itemCount = existingCount,
+            updatedAt = System.currentTimeMillis()
+        )
+        doc.set(payload.toMap()).await()
+        return id
+    }
+
+    override suspend fun deleteList(listId: String) {
+        val uid = sessionManager.ensureGuestSession() ?: return
+        val doc = firestore.collection("users").document(uid).collection("lists").document(listId)
+        val items = doc.collection("items").get().await().documents
+        firestore.runBatch { batch ->
+            items.forEach { batch.delete(it.reference) }
+            batch.delete(doc)
+        }.await()
+    }
+
+    override suspend fun addMangaToList(listId: String, item: CustomUserListItem) {
+        val uid = sessionManager.ensureGuestSession() ?: return
+        val listDoc = firestore.collection("users").document(uid).collection("lists").document(listId)
+        val itemDoc = listDoc.collection("items").document(item.mangaId)
+        val existed = itemDoc.get().await().exists()
+        itemDoc.set(item.toMap()).await()
+        listDoc.update(
+            mapOf(
+                "itemCount" to FieldValue.increment(if (existed) 0 else 1),
+                "updatedAt" to System.currentTimeMillis()
+            )
+        ).await()
+    }
+
+    override suspend fun removeMangaFromList(listId: String, mangaId: String) {
+        val uid = sessionManager.ensureGuestSession() ?: return
+        val listDoc = firestore.collection("users").document(uid).collection("lists").document(listId)
+        listDoc.collection("items").document(mangaId).delete().await()
+        listDoc.update(
+            mapOf(
+                "itemCount" to FieldValue.increment(-1),
+                "updatedAt" to System.currentTimeMillis()
+            )
+        ).await()
+    }
+
     override suspend fun postMangaComment(mangaId: String, slug: String, sourceId: String, text: String, spoiler: Boolean, parentId: String?) {
-        postComment(mangaId, slug, sourceId, chapterUrl = null, text = text, spoiler = spoiler, parentId = parentId)
+        postComment(mangaId, slug, sourceId, null, text, spoiler, parentId)
     }
 
     override suspend fun postChapterComment(mangaId: String, slug: String, sourceId: String, chapterUrl: String, text: String, spoiler: Boolean, parentId: String?) {
-        postComment(mangaId, slug, sourceId, chapterUrl = chapterUrl, text = text, spoiler = spoiler, parentId = parentId)
+        postComment(mangaId, slug, sourceId, chapterUrl, text, spoiler, parentId)
     }
 
     override suspend fun upsertReview(mangaId: String, slug: String, sourceId: String, rating: Int, title: String, body: String) {
         val profile = currentProfileOrThrow()
+        validateModeration(title)
+        validateModeration(body)
         val review = MangaReview(
             id = profile.uid,
             mangaId = mangaId,
@@ -175,8 +278,7 @@ class FirebaseCommunityRepository @Inject constructor(
             authorName = profile.username
         )
         firestore.collection("community_presence").document(threadId(mangaId, chapterUrl))
-            .collection("reactions")
-            .document(reaction.id)
+            .collection("reactions").document(reaction.id)
             .set(reaction.toMap())
             .await()
     }
@@ -185,6 +287,7 @@ class FirebaseCommunityRepository @Inject constructor(
         val profile = currentProfileOrThrow()
         val trimmed = text.trim()
         require(trimmed.isNotBlank()) { "الرسالة فارغة" }
+        validateModeration(trimmed)
         val ref = realtimeDb.getReference("chatRooms").child(roomId).child("messages").push()
         val message = CommunityChatMessage(
             id = ref.key ?: UUID.randomUUID().toString(),
@@ -198,11 +301,32 @@ class FirebaseCommunityRepository @Inject constructor(
         ref.setValue(message.toMap()).await()
     }
 
+    override suspend fun reportComment(comment: CommunityComment, reason: String) {
+        val reporter = currentProfileOrThrow()
+        val reportId = UUID.randomUUID().toString()
+        firestore.collection("moderationReports").document(reportId)
+            .set(
+                mapOf(
+                    "id" to reportId,
+                    "commentId" to comment.id,
+                    "mangaId" to comment.mangaId,
+                    "chapterUrl" to comment.chapterUrl,
+                    "reportedUid" to comment.authorUid,
+                    "reporterUid" to reporter.uid,
+                    "reason" to reason.trim(),
+                    "createdAt" to System.currentTimeMillis()
+                )
+            ).await()
+        commentsCollection(comment.mangaId, comment.chapterUrl)
+            .document(comment.id)
+            .update("reportedCount", FieldValue.increment(1))
+            .await()
+    }
+
     override suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean) {
         val profile = currentProfileOrThrow()
         val doc = firestore.collection("community_presence").document(threadId(mangaId, chapterUrl))
-            .collection("members")
-            .document(profile.uid)
+            .collection("members").document(profile.uid)
         if (active) {
             doc.set(
                 mapOf(
@@ -224,6 +348,15 @@ class FirebaseCommunityRepository @Inject constructor(
             .await()
     }
 
+    private fun observeComments(collection: com.google.firebase.firestore.CollectionReference): Flow<List<CommunityComment>> = callbackFlow {
+        val reg = collection.orderBy("createdAt", Query.Direction.ASCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toComment() })
+            }
+        awaitClose { reg.remove() }
+    }
+
     private suspend fun postComment(
         mangaId: String,
         slug: String,
@@ -236,6 +369,7 @@ class FirebaseCommunityRepository @Inject constructor(
         val profile = currentProfileOrThrow()
         val trimmed = text.trim()
         require(trimmed.isNotBlank()) { "التعليق فارغ" }
+        validateModeration(trimmed)
         val comment = CommunityComment(
             id = UUID.randomUUID().toString(),
             mangaId = mangaId,
@@ -258,8 +392,8 @@ class FirebaseCommunityRepository @Inject constructor(
                 val parent = collection.document(parentId).get().await().toComment()
                 if (parent != null && parent.authorUid != profile.uid) {
                     createNotification(
-                        targetUid = parent.authorUid,
-                        notification = CommunityNotification(
+                        parent.authorUid,
+                        CommunityNotification(
                             id = UUID.randomUUID().toString(),
                             type = CommunityNotificationType.REPLY,
                             title = "رد جديد على تعليقك",
@@ -267,7 +401,8 @@ class FirebaseCommunityRepository @Inject constructor(
                             mangaId = mangaId,
                             slug = slug,
                             sourceId = sourceId,
-                            chapterUrl = chapterUrl
+                            chapterUrl = chapterUrl,
+                            commentId = comment.id
                         )
                     )
                 }
@@ -278,8 +413,8 @@ class FirebaseCommunityRepository @Inject constructor(
         resolveMentionTargets(comment.mentions).forEach { (uid, username) ->
             if (uid != profile.uid) {
                 createNotification(
-                    targetUid = uid,
-                    notification = CommunityNotification(
+                    uid,
+                    CommunityNotification(
                         id = UUID.randomUUID().toString(),
                         type = CommunityNotificationType.MENTION,
                         title = "تمت الإشارة إليك",
@@ -287,55 +422,27 @@ class FirebaseCommunityRepository @Inject constructor(
                         mangaId = mangaId,
                         slug = slug,
                         sourceId = sourceId,
-                        chapterUrl = chapterUrl
+                        chapterUrl = chapterUrl,
+                        commentId = comment.id
                     )
                 )
             }
         }
     }
 
-    private suspend fun resolveMentionTargets(mentions: List<String>): List<Pair<String, String>> {
-        return mentions.distinct().mapNotNull { username ->
+    private suspend fun resolveMentionTargets(mentions: List<String>): List<Pair<String, String>> =
+        mentions.distinct().mapNotNull { username ->
             val doc = firestore.collection("usernames").document(username.lowercase()).get().await()
             val uid = doc.getString("uid") ?: return@mapNotNull null
             uid to (doc.getString("username") ?: username)
         }
-    }
 
     private suspend fun createNotification(targetUid: String, notification: CommunityNotification) {
         firestore.collection("users").document(targetUid)
-            .collection("notifications")
-            .document(notification.id)
+            .collection("notifications").document(notification.id)
             .set(notification.toMap())
             .await()
     }
-
-    private fun observeComments(collectionPath: List<String>): Flow<List<CommunityComment>> = callbackFlow {
-        var ref = firestore.collection(collectionPath.first())
-        var docRef: com.google.firebase.firestore.DocumentReference? = null
-        // build path alternating collection/document
-        docRef = firestore.collection(collectionPath[0]).document(collectionPath[1])
-        if (collectionPath.size == 3) {
-            ref = docRef.collection(collectionPath[2])
-        } else {
-            ref = docRef.collection(collectionPath[2]).document(collectionPath[3]).collection(collectionPath[4])
-        }
-        val reg = ref.orderBy("createdAt", com.google.firebase.firestore.Query.Direction.ASCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
-                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toComment() })
-            }
-        awaitClose { reg.remove() }
-    }
-
-    private fun commentsCollection(mangaId: String, chapterUrl: String?) =
-        if (chapterUrl == null) {
-            firestore.collection("community_manga").document(mangaId).collection("comments")
-        } else {
-            firestore.collection("community_manga").document(mangaId)
-                .collection("chapters").document(stableChapterKey(chapterUrl))
-                .collection("comments")
-        }
 
     private suspend fun currentProfileOrThrow(): CommunityProfile {
         val uid = sessionManager.ensureGuestSession() ?: error("No user")
@@ -357,9 +464,20 @@ class FirebaseCommunityRepository @Inject constructor(
             avatarUrl = firebaseUser?.photoUrl?.toString(),
             badgeLabel = badge,
             isPublic = true,
+            showListsPublic = true,
+            showActivityPublic = true,
             bio = ""
         )
     }
+
+    private fun commentsCollection(mangaId: String, chapterUrl: String?) =
+        if (chapterUrl == null) {
+            firestore.collection("community_manga").document(mangaId).collection("comments")
+        } else {
+            firestore.collection("community_manga").document(mangaId)
+                .collection("chapters").document(stableChapterKey(chapterUrl))
+                .collection("comments")
+        }
 
     private fun threadId(mangaId: String, chapterUrl: String): String = "$mangaId-${stableChapterKey(chapterUrl)}"
 
@@ -373,14 +491,41 @@ class FirebaseCommunityRepository @Inject constructor(
         .map { it.groupValues[1] }
         .toList()
 
+    private fun validateModeration(text: String) {
+        val banned = remoteConfigManager.bannedKeywords.value
+        require(!containsBannedKeyword(text, banned)) {
+            "المحتوى يحتوي على كلمات محظورة"
+        }
+    }
+
     private fun CommunityProfile.toMap() = mapOf(
         "uid" to uid,
         "username" to username,
         "avatarUrl" to avatarUrl,
         "badgeLabel" to badgeLabel,
         "isPublic" to isPublic,
+        "showListsPublic" to showListsPublic,
+        "showActivityPublic" to showActivityPublic,
         "bio" to bio,
         "updatedAt" to updatedAt
+    )
+
+    private fun CustomUserList.toMap() = mapOf(
+        "id" to id,
+        "name" to name,
+        "description" to description,
+        "isPublic" to isPublic,
+        "itemCount" to itemCount,
+        "updatedAt" to updatedAt
+    )
+
+    private fun CustomUserListItem.toMap() = mapOf(
+        "mangaId" to mangaId,
+        "sourceId" to sourceId,
+        "slug" to slug,
+        "title" to title,
+        "coverUrl" to coverUrl,
+        "addedAt" to addedAt
     )
 
     private fun CommunityComment.toMap() = mapOf(
@@ -395,6 +540,7 @@ class FirebaseCommunityRepository @Inject constructor(
         "text" to text,
         "mentions" to mentions,
         "spoiler" to spoiler,
+        "reportedCount" to reportedCount,
         "createdAt" to createdAt,
         "replyCount" to replyCount
     )
@@ -433,6 +579,7 @@ class FirebaseCommunityRepository @Inject constructor(
         "slug" to slug,
         "sourceId" to sourceId,
         "chapterUrl" to chapterUrl,
+        "commentId" to commentId,
         "createdAt" to createdAt,
         "read" to read
     )
@@ -453,6 +600,8 @@ class FirebaseCommunityRepository @Inject constructor(
             avatarUrl = getString("avatarUrl"),
             badgeLabel = getString("badgeLabel") ?: "Beginner",
             isPublic = getBoolean("isPublic") ?: true,
+            showListsPublic = getBoolean("showListsPublic") ?: true,
+            showActivityPublic = getBoolean("showActivityPublic") ?: true,
             bio = getString("bio") ?: "",
             updatedAt = getLong("updatedAt") ?: 0L
         )
@@ -471,6 +620,7 @@ class FirebaseCommunityRepository @Inject constructor(
             text = getString("text") ?: return null,
             mentions = (get("mentions") as? List<*>)?.mapNotNull { it?.toString() }.orEmpty(),
             spoiler = getBoolean("spoiler") ?: false,
+            reportedCount = (getLong("reportedCount") ?: 0L).toInt(),
             createdAt = getLong("createdAt") ?: 0L,
             replyCount = (getLong("replyCount") ?: 0L).toInt()
         )
@@ -515,8 +665,31 @@ class FirebaseCommunityRepository @Inject constructor(
             slug = getString("slug") ?: "",
             sourceId = getString("sourceId") ?: "azora",
             chapterUrl = getString("chapterUrl"),
+            commentId = getString("commentId"),
             createdAt = getLong("createdAt") ?: 0L,
             read = getBoolean("read") ?: false
+        )
+    }.getOrNull()
+
+    private fun DocumentSnapshot.toCustomUserList(): CustomUserList? = runCatching {
+        CustomUserList(
+            id = getString("id") ?: id,
+            name = getString("name") ?: return null,
+            description = getString("description") ?: "",
+            isPublic = getBoolean("isPublic") ?: false,
+            itemCount = (getLong("itemCount") ?: 0L).toInt(),
+            updatedAt = getLong("updatedAt") ?: 0L
+        )
+    }.getOrNull()
+
+    private fun DocumentSnapshot.toCustomUserListItem(): CustomUserListItem? = runCatching {
+        CustomUserListItem(
+            mangaId = getString("mangaId") ?: return null,
+            sourceId = getString("sourceId") ?: return null,
+            slug = getString("slug") ?: return null,
+            title = getString("title") ?: return null,
+            coverUrl = getString("coverUrl") ?: "",
+            addedAt = getLong("addedAt") ?: 0L
         )
     }.getOrNull()
 

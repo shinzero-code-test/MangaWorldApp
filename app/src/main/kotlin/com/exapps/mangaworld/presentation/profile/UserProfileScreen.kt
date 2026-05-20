@@ -16,8 +16,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -36,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.domain.model.CommunityNotification
 import com.exapps.mangaworld.domain.model.CommunityProfile
+import com.exapps.mangaworld.domain.model.CustomUserList
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -52,9 +55,15 @@ class UserProfileViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val notifications = communityRepository.observeNotifications(20)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val lists = communityRepository.observeUserLists()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun markRead(id: String) {
         viewModelScope.launch { runCatching { communityRepository.markNotificationRead(id) } }
+    }
+
+    fun updatePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean) {
+        viewModelScope.launch { runCatching { communityRepository.updateProfilePrivacy(showListsPublic, showActivityPublic) } }
     }
 }
 
@@ -63,10 +72,15 @@ fun UserProfileScreen(
     onOpenCloudSync: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenCommunityChat: () -> Unit,
+    onOpenNotifications: () -> Unit,
+    onOpenLists: () -> Unit,
     viewModel: UserProfileViewModel = hiltViewModel()
 ) {
     val profile by viewModel.profile.collectAsStateWithLifecycle()
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
+    val lists by viewModel.lists.collectAsStateWithLifecycle()
+    var showListsPublic by remember(profile?.showListsPublic) { mutableStateOf(profile?.showListsPublic ?: true) }
+    var showActivityPublic by remember(profile?.showActivityPublic) { mutableStateOf(profile?.showActivityPublic ?: true) }
 
     Column(
         modifier = Modifier
@@ -98,7 +112,36 @@ fun UserProfileScreen(
                     OutlinedButton(onClick = onOpenCloudSync) { Icon(Icons.Filled.CloudSync, null); Text("السحابة") }
                     OutlinedButton(onClick = onOpenDiagnostics) { Icon(Icons.Filled.Settings, null); Text("التشخيص") }
                 }
-                OutlinedButton(onClick = onOpenCommunityChat) { Text("الدردشة المباشرة") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onOpenCommunityChat) { Text("الدردشة المباشرة") }
+                    OutlinedButton(onClick = onOpenNotifications) { Text("الإشعارات") }
+                }
+                OutlinedButton(onClick = onOpenLists) { Icon(Icons.Filled.List, null); Text("قوائمي") }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = showListsPublic, onCheckedChange = {
+                        showListsPublic = it
+                        viewModel.updatePrivacy(showListsPublic, showActivityPublic)
+                    })
+                    Text("إظهار القوائم للآخرين", color = MangaColors.OnSurfaceVariant)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = showActivityPublic, onCheckedChange = {
+                        showActivityPublic = it
+                        viewModel.updatePrivacy(showListsPublic, showActivityPublic)
+                    })
+                    Text("إظهار النشاط للآخرين", color = MangaColors.OnSurfaceVariant)
+                }
+            }
+        }
+
+        Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("القوائم المخصصة", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
+                if (lists.isEmpty()) {
+                    Text("لا توجد قوائم بعد", color = MangaColors.OnSurfaceVariant)
+                } else {
+                    lists.take(3).forEach { list -> ListCard(list) }
+                }
             }
         }
 
@@ -113,6 +156,17 @@ fun UserProfileScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ListCard(list: CustomUserList) {
+    Card(colors = CardDefaults.cardColors(containerColor = MangaColors.Surface), shape = RoundedCornerShape(14.dp)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+            Text(list.name, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
+            if (list.description.isNotBlank()) Text(list.description, color = MangaColors.OnSurfaceVariant)
+            Text("${list.itemCount} عنصر", color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
         }
     }
 }

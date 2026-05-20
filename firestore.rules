@@ -35,6 +35,18 @@ service cloud.firestore {
       match /notifications/{document=**} {
         allow read, write: if owner(userId);
       }
+
+      match /readerAnnotations/{document=**} {
+        allow read, write: if owner(userId);
+      }
+
+      match /lists/{listId} {
+        allow read, write: if owner(userId);
+
+        match /items/{document=**} {
+          allow read, write: if owner(userId);
+        }
+      }
     }
 
     match /publicProfiles/{userId} {
@@ -82,6 +94,11 @@ service cloud.firestore {
         allow create, update: if canWriteCommunity(request.resource.data.authorUid);
         allow delete: if canWriteCommunity(resource.data.authorUid);
       }
+    }
+
+    match /moderationReports/{reportId} {
+      allow create: if signedIn() && request.resource.data.reporterUid == request.auth.uid;
+      allow read, update, delete: if false;
     }
 
     match /public/{document=**} {

@@ -43,10 +43,13 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.firebase.filterMutedComments
+import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.CommunityComment
 import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.MangaReview
 import com.exapps.mangaworld.domain.repository.CommunityRepository
+import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
@@ -56,6 +59,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -67,6 +71,7 @@ data class CommunityUiState(
     val comments: List<CommunityComment> = emptyList(),
     val reviews: List<MangaReview> = emptyList(),
     val profile: CommunityProfile? = null,
+    val appSettings: AppSettings = AppSettings(),
     val tab: CommunityTab = CommunityTab.COMMENTS,
     val chapterMode: Boolean = false,
     val replyTo: CommunityComment? = null,
@@ -76,7 +81,8 @@ data class CommunityUiState(
 @HiltViewModel
 class CommunityViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val communityRepository: CommunityRepository
+    private val communityRepository: CommunityRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
     private val mangaId: String = checkNotNull(savedStateHandle["mangaId"])
     private val slug: String = checkNotNull(savedStateHandle["slug"])
@@ -89,9 +95,10 @@ class CommunityViewModel @Inject constructor(
     private val commentsFlow = if (chapterUrl == null) communityRepository.observeMangaComments(mangaId) else communityRepository.observeChapterComments(mangaId, chapterUrl)
     private val reviewsFlow = if (chapterUrl == null) communityRepository.observeReviews(mangaId) else kotlinx.coroutines.flow.flowOf(emptyList())
     private val profileFlow: Flow<CommunityProfile?> = flow { emit(communityRepository.getCurrentProfile()) }
+    private val appSettingsFlow = settingsRepository.getAppSettings()
 
-    val state: StateFlow<CommunityUiState> = combine(commentsFlow, reviewsFlow, profileFlow) { comments, reviews, profile ->
-        Triple(comments, reviews, profile)
+    val state: StateFlow<CommunityUiState> = combine(commentsFlow, reviewsFlow, profileFlow, appSettingsFlow) { comments, reviews, profile, appSettings ->
+        Quadruple(comments, reviews, profile, appSettings)
     }.combine(_tab) { triple, tab ->
         Pair(triple, tab)
     }.combine(_replyTo) { pair, replyTo ->
@@ -100,13 +107,15 @@ class CommunityViewModel @Inject constructor(
         val comments = triple.first.first
         val reviews = triple.first.second
         val profile = triple.first.third
+        val appSettings = triple.first.fourth
         val tab = triple.second
         val replyTo = triple.third
         CommunityUiState(
             title = if (chapterUrl == null) "مراجعات ومناقشات المانجا" else "نقاش الفصل",
-            comments = comments,
+            comments = filterMutedComments(comments, appSettings.mutedUserIds),
             reviews = reviews,
             profile = profile,
+            appSettings = appSettings,
             tab = tab,
             chapterMode = chapterUrl != null,
             replyTo = replyTo,
@@ -140,11 +149,28 @@ class CommunityViewModel @Inject constructor(
                 .onFailure { e -> _error.value = e.message ?: "فشل حفظ المراجعة" }
         }
     }
+
+    fun reportComment(comment: CommunityComment, reason: String) {
+        viewModelScope.launch {
+            runCatching { communityRepository.reportComment(comment, reason) }
+                .onFailure { e -> _error.value = e.message ?: "فشل الإبلاغ" }
+        }
+    }
+
+    fun muteUser(uid: String) {
+        viewModelScope.launch {
+            val current = settingsRepository.getAppSettings().first().mutedUserIds
+            settingsRepository.setMutedUserIds(current + uid)
+        }
+    }
 }
+
+private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
 @Composable
 fun CommunityScreen(
     onBack: () -> Unit,
+    onOpenChat: () -> Unit,
     viewModel: CommunityViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -154,6 +180,9 @@ fun CommunityScreen(
     var reviewTitle by remember { mutableStateOf("") }
     var reviewBody by remember { mutableStateOf("") }
     var reviewRating by remember { mutableStateOf(5) }
+    var reportTarget by remember { mutableStateOf<CommunityComment?>(null) }
+    var reportReason by remember { mutableStateOf("") }
+    val expandedSpoilers = remember { mutableStateListOf<String>() }
 
     Column(Modifier.fillMaxSize().background(MangaColors.Background)) {
         Row(
@@ -163,7 +192,7 @@ fun CommunityScreen(
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MangaColors.OnSurface) }
             Text(state.title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(0.dp))
+            Button(onClick = onOpenChat) { Text("الدردشة") }
         }
 
         Row(
@@ -188,9 +217,16 @@ fun CommunityScreen(
                                 }
                                 Text(comment.replyCount.toString() + " رد", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
                             }
-                            Text(if (comment.spoiler) "[Spoiler] ${comment.text}" else comment.text, color = MangaColors.OnSurfaceVariant)
+                            val revealed = comment.id in expandedSpoilers
+                            if (comment.spoiler && state.appSettings.spoilerCollapseDefault && !revealed) {
+                                Button(onClick = { expandedSpoilers.add(comment.id) }) { Text("إظهار السبويْلر") }
+                            } else {
+                                Text(comment.text, color = MangaColors.OnSurfaceVariant)
+                            }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(onClick = { viewModel.setReply(comment) }) { Text("رد") }
+                                Button(onClick = { reportTarget = comment; reportReason = "" }) { Text("إبلاغ") }
+                                Button(onClick = { viewModel.muteUser(comment.authorUid) }) { Text("كتم") }
                             }
                         }
                     }
@@ -267,6 +303,28 @@ fun CommunityScreen(
             },
             dismissButton = {
                 Button(onClick = { reviewDialog = false }) { Text("إلغاء") }
+            }
+        )
+    }
+
+    reportTarget?.let { comment ->
+        AlertDialog(
+            onDismissRequest = { reportTarget = null },
+            title = { Text("الإبلاغ عن تعليق") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(comment.text, color = MangaColors.OnSurfaceVariant)
+                    OutlinedTextField(value = reportReason, onValueChange = { reportReason = it }, label = { Text("السبب") })
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.reportComment(comment, reportReason)
+                    reportTarget = null
+                }, enabled = reportReason.isNotBlank()) { Text("إرسال") }
+            },
+            dismissButton = {
+                Button(onClick = { reportTarget = null }) { Text("إلغاء") }
             }
         )
     }

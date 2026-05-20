@@ -26,6 +26,9 @@ class FirebaseRemoteConfigManager @Inject constructor() {
     private val _homeLayoutVariant = MutableStateFlow("default")
     val homeLayoutVariant: StateFlow<String> = _homeLayoutVariant.asStateFlow()
 
+    private val _bannedKeywords = MutableStateFlow<Set<String>>(emptySet())
+    val bannedKeywords: StateFlow<Set<String>> = _bannedKeywords.asStateFlow()
+
     init {
         remoteConfig.setConfigSettingsAsync(
             FirebaseRemoteConfigSettings.Builder()
@@ -41,6 +44,7 @@ class FirebaseRemoteConfigManager @Inject constructor() {
                 "source_meshmanga_enabled" to true,
                 "scraper_selector_overrides" to "{}",
                 "home_layout_variant" to "default",
+                "community_banned_keywords" to "",
                 "remote_alert_message" to ""
             )
         )
@@ -66,6 +70,11 @@ class FirebaseRemoteConfigManager @Inject constructor() {
         val overridesJson = remoteConfig.getString("scraper_selector_overrides")
         _selectorOverridesJson.value = overridesJson
         _homeLayoutVariant.value = remoteConfig.getString("home_layout_variant").ifBlank { "default" }
+        _bannedKeywords.value = remoteConfig.getString("community_banned_keywords")
+            .split("\n", ",")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toSet()
         _remoteAlertMessage.value = remoteConfig.getString("remote_alert_message")
         RemoteSelectorOverridesStore.replaceAll(parseOverrides(overridesJson))
     }

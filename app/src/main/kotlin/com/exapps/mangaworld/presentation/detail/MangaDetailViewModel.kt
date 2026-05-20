@@ -29,13 +29,16 @@ data class DetailUiState(
     val downloadingChapters: Set<Float> = emptySet(),
     val showDownloadDialog: Boolean = false,
     val cloudflareUrl: String? = null,
-    val cloudfareDomain: String? = null
+    val cloudfareDomain: String? = null,
+    val userLists: List<CustomUserList> = emptyList(),
+    val showAddToListDialog: Boolean = false
 )
 
 @HiltViewModel
 class MangaDetailViewModel @Inject constructor(
     private val mangaRepo: MangaRepository,
     private val libraryRepo: LibraryRepository,
+    private val communityRepository: CommunityRepository,
     private val settingsRepo: SettingsRepository,
     private val downloadQueueManager: DownloadQueueManager,
     private val firebaseSyncManager: FirebaseSyncManager,
@@ -110,6 +113,11 @@ class MangaDetailViewModel @Inject constructor(
                             }
                             _state.update { it.copy(downloadedChapters = downloaded) }
                         }
+                        launch {
+                            communityRepository.observeUserLists().collect { lists ->
+                                _state.update { it.copy(userLists = lists) }
+                            }
+                        }
                     }
                 }
                 .onFailure { e ->
@@ -151,6 +159,28 @@ class MangaDetailViewModel @Inject constructor(
     // ─── Sort ─────────────────────────────────────────────────────────────────
 
     fun toggleChaptersOrder() = _state.update { it.copy(chaptersReversed = !it.chaptersReversed) }
+
+    fun showAddToListDialog() = _state.update { it.copy(showAddToListDialog = true) }
+    fun hideAddToListDialog() = _state.update { it.copy(showAddToListDialog = false) }
+
+    fun addCurrentMangaToList(listId: String) {
+        val manga = _state.value.manga ?: return
+        viewModelScope.launch {
+            runCatching {
+                communityRepository.addMangaToList(
+                    listId,
+                    CustomUserListItem(
+                        mangaId = currentMangaId,
+                        sourceId = manga.source.id,
+                        slug = manga.slug,
+                        title = manga.title,
+                        coverUrl = manga.coverUrl
+                    )
+                )
+            }
+            _state.update { it.copy(showAddToListDialog = false) }
+        }
+    }
 
     fun sortedChapters(): List<Chapter> {
         val state = _state.value

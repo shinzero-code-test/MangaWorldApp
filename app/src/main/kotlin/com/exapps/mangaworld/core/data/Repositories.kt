@@ -398,6 +398,8 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setCleanupAfterHours(hours: Int) { prefs.setCleanupHours(hours) }
     override suspend fun setImageCacheLimitMb(limitMb: Int) { prefs.setImageCacheLimitMb(limitMb) }
     override suspend fun setContentBlacklist(values: Set<String>) { prefs.setContentBlacklist(values) }
+    override suspend fun setSpoilerCollapseDefault(enabled: Boolean) { prefs.setSpoilerCollapseDefault(enabled) }
+    override suspend fun setMutedUserIds(values: Set<String>) { prefs.setMutedUsers(values) }
     override fun getReaderSettings() = prefs.readerSettings
     override suspend fun updateReaderMode(mode: ReaderMode) { prefs.setReaderMode(mode) }
     override suspend fun updateBrightness(brightness: Float) { prefs.setBrightness(brightness) }

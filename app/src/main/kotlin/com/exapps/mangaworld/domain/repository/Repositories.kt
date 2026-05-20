@@ -72,6 +72,8 @@ interface SettingsRepository {
     suspend fun setCleanupAfterHours(hours: Int)
     suspend fun setImageCacheLimitMb(limitMb: Int)
     suspend fun setContentBlacklist(values: Set<String>)
+    suspend fun setSpoilerCollapseDefault(enabled: Boolean)
+    suspend fun setMutedUserIds(values: Set<String>)
 
     fun getReaderSettings(): Flow<ReaderSettings>
     suspend fun updateReaderMode(mode: ReaderMode)
@@ -96,13 +98,21 @@ interface CommunityRepository {
     fun observePageReactions(mangaId: String, chapterUrl: String, pageIndex: Int): Flow<List<ReaderReaction>>
     fun observeNotifications(limit: Int = 50): Flow<List<CommunityNotification>>
     fun observeChatMessages(roomId: String = "global"): Flow<List<CommunityChatMessage>>
+    fun observeUserLists(): Flow<List<CustomUserList>>
+    fun observeListItems(listId: String): Flow<List<CustomUserListItem>>
     suspend fun getCurrentProfile(): CommunityProfile?
     suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean)
+    suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean)
+    suspend fun createOrUpdateList(listId: String?, name: String, description: String, isPublic: Boolean): String
+    suspend fun deleteList(listId: String)
+    suspend fun addMangaToList(listId: String, item: CustomUserListItem)
+    suspend fun removeMangaFromList(listId: String, mangaId: String)
     suspend fun postMangaComment(mangaId: String, slug: String, sourceId: String, text: String, spoiler: Boolean = false, parentId: String? = null)
     suspend fun postChapterComment(mangaId: String, slug: String, sourceId: String, chapterUrl: String, text: String, spoiler: Boolean = false, parentId: String? = null)
     suspend fun upsertReview(mangaId: String, slug: String, sourceId: String, rating: Int, title: String, body: String)
     suspend fun sendPageReaction(mangaId: String, chapterUrl: String, pageIndex: Int, emoji: String)
     suspend fun sendChatMessage(roomId: String = "global", text: String)
+    suspend fun reportComment(comment: CommunityComment, reason: String)
     suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean)
     suspend fun markNotificationRead(notificationId: String)
 }

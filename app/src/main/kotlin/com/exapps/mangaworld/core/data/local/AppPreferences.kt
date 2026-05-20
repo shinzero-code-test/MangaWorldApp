@@ -36,6 +36,8 @@ class AppPreferences @Inject constructor(
         val KEY_CLEANUP_HOURS = intPreferencesKey("cleanup_hours")
         val KEY_IMAGE_CACHE_LIMIT_MB = intPreferencesKey("image_cache_limit_mb")
         val KEY_CONTENT_BLACKLIST = stringPreferencesKey("content_blacklist")
+        val KEY_SPOILER_COLLAPSE_DEFAULT = booleanPreferencesKey("spoiler_collapse_default")
+        val KEY_MUTED_USERS = stringPreferencesKey("muted_users")
 
         val KEY_READER_MODE = stringPreferencesKey("reader_mode")
         val KEY_BRIGHTNESS = floatPreferencesKey("brightness")
@@ -71,6 +73,13 @@ class AppPreferences @Inject constructor(
                 imageCacheLimitMb = prefs[KEY_IMAGE_CACHE_LIMIT_MB] ?: 250,
                 contentBlacklist = prefs[KEY_CONTENT_BLACKLIST]
                     ?.split("\n")
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotBlank() }
+                    ?.toSet()
+                    ?: emptySet(),
+                spoilerCollapseDefault = prefs[KEY_SPOILER_COLLAPSE_DEFAULT] ?: true,
+                mutedUserIds = prefs[KEY_MUTED_USERS]
+                    ?.split(",")
                     ?.map { it.trim() }
                     ?.filter { it.isNotBlank() }
                     ?.toSet()
@@ -132,6 +141,12 @@ class AppPreferences @Inject constructor(
 
     suspend fun setContentBlacklist(values: Set<String>) =
         dataStore.edit { it[KEY_CONTENT_BLACKLIST] = values.joinToString("\n") }
+
+    suspend fun setSpoilerCollapseDefault(value: Boolean) =
+        dataStore.edit { it[KEY_SPOILER_COLLAPSE_DEFAULT] = value }
+
+    suspend fun setMutedUsers(values: Set<String>) =
+        dataStore.edit { it[KEY_MUTED_USERS] = values.joinToString(",") }
 
     suspend fun toggleSource(sourceId: String, enabled: Boolean) = dataStore.edit { prefs ->
         val current = prefs[KEY_ENABLED_SOURCES]?.split(",")?.toMutableSet()

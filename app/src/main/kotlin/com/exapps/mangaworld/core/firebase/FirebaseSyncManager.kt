@@ -2,8 +2,10 @@ package com.exapps.mangaworld.core.firebase
 
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
+import com.exapps.mangaworld.core.data.local.dao.ReaderAnnotationDao
 import com.exapps.mangaworld.core.data.local.entity.FavoriteEntity
 import com.exapps.mangaworld.core.data.local.entity.ReadingHistoryEntity
+import com.exapps.mangaworld.core.data.local.entity.ReaderAnnotationEntity
 import com.exapps.mangaworld.domain.model.AppTheme
 import com.exapps.mangaworld.domain.model.CloudRestorePreview
 import com.exapps.mangaworld.domain.model.CloudRestoreStrategy
@@ -19,6 +21,7 @@ import javax.inject.Singleton
 class FirebaseSyncManager @Inject constructor(
     private val favoriteDao: FavoriteDao,
     private val historyDao: ReadingHistoryDao,
+    private val readerAnnotationDao: ReaderAnnotationDao,
     private val settingsRepository: SettingsRepository,
     private val sessionManager: FirebaseSessionManager
 ) {
@@ -28,6 +31,7 @@ class FirebaseSyncManager @Inject constructor(
         val uid = sessionManager.ensureGuestSession() ?: return
         val favorites = favoriteDao.getFavoritesList()
         val history = historyDao.getRecent(100)
+        val annotations = readerAnnotationDao.getAll(500)
         val settings = settingsRepository.getAppSettings().first()
         val reader = settingsRepository.getReaderSettings().first()
 
@@ -43,7 +47,9 @@ class FirebaseSyncManager @Inject constructor(
                 "autoCleanupReadDownloads" to settings.autoCleanupReadDownloads,
                 "cleanupAfterHours" to settings.cleanupAfterHours,
                 "imageCacheLimitMb" to settings.imageCacheLimitMb,
-                "contentBlacklist" to settings.contentBlacklist.toList()
+                "contentBlacklist" to settings.contentBlacklist.toList(),
+                "spoilerCollapseDefault" to settings.spoilerCollapseDefault,
+                "mutedUserIds" to settings.mutedUserIds.toList()
             ),
             SetOptions.merge()
         ).await()
@@ -63,6 +69,13 @@ class FirebaseSyncManager @Inject constructor(
                 .set(item, SetOptions.merge())
                 .await()
         }
+
+        annotations.forEach { annotation ->
+            val id = annotationDocId(annotation)
+            userRef.collection("readerAnnotations").document(id)
+                .set(annotation, SetOptions.merge())
+                .await()
+        }
     }
 
     suspend fun pullRemoteSnapshot() {
@@ -71,10 +84,12 @@ class FirebaseSyncManager @Inject constructor(
         val profile = userRef.get().await()
         val favorites = userRef.collection("favorites").get().await().documents
         val history = userRef.collection("readingHistory").get().await().documents
+        val annotations = userRef.collection("readerAnnotations").get().await().documents
         val readerPrefs = userRef.collection("preferences").document("reader").get().await()
 
         favorites.mapNotNull { it.toObject(FavoriteEntity::class.java) }.forEach { favoriteDao.insert(it) }
         history.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }.forEach { historyDao.insertOrUpdate(it) }
+        annotations.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }.forEach { readerAnnotationDao.upsert(it) }
 
         profile.getString("theme")?.let { name ->
             AppTheme.values().firstOrNull { it.name == name }?.let { theme ->
@@ -92,6 +107,10 @@ class FirebaseSyncManager @Inject constructor(
         profile.getLong("imageCacheLimitMb")?.toInt()?.let { settingsRepository.setImageCacheLimitMb(it) }
         (profile.get("contentBlacklist") as? List<*>)?.mapNotNull { it?.toString() }?.toSet()?.let { blacklist ->
             settingsRepository.setContentBlacklist(blacklist)
+        }
+        profile.getBoolean("spoilerCollapseDefault")?.let { settingsRepository.setSpoilerCollapseDefault(it) }
+        (profile.get("mutedUserIds") as? List<*>)?.mapNotNull { it?.toString() }?.toSet()?.let { muted ->
+            settingsRepository.setMutedUserIds(muted)
         }
 
         readerPrefs.getString("mode")?.let { name ->
@@ -118,26 +137,37 @@ class FirebaseSyncManager @Inject constructor(
         val profile = userRef.get().await()
         val remoteFavorites = userRef.collection("favorites").get().await().documents.mapNotNull { it.toObject(FavoriteEntity::class.java) }
         val remoteHistory = userRef.collection("readingHistory").get().await().documents.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
+        val remoteAnnotations = userRef.collection("readerAnnotations").get().await().documents.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
 
         val localFavorites = favoriteDao.getFavoritesList()
         val localHistory = historyDao.getRecent(100)
+        val localAnnotations = readerAnnotationDao.getAll(500)
         val localTheme = settingsRepository.getAppSettings().first().theme
         val remoteTheme = profile.getString("theme")?.let { name -> AppTheme.values().firstOrNull { it.name == name } }
 
         val localLatest = localHistory.maxOfOrNull { it.lastReadAt } ?: 0L
         val remoteLatest = remoteHistory.maxOfOrNull { it.lastReadAt } ?: 0L
-        val strategy = when {
-            remoteLatest > localLatest -> CloudRestoreStrategy.MERGE
-            remoteFavorites.size > localFavorites.size -> CloudRestoreStrategy.MERGE
-            else -> CloudRestoreStrategy.KEEP_LOCAL
-        }
+        val localLatestAnnotation = localAnnotations.maxOfOrNull { it.updatedAt } ?: 0L
+        val remoteLatestAnnotation = remoteAnnotations.maxOfOrNull { it.updatedAt } ?: 0L
+        val strategy = suggestCloudRestoreStrategy(
+            localFavorites = localFavorites.size,
+            remoteFavorites = remoteFavorites.size,
+            localLatestHistoryAt = localLatest,
+            remoteLatestHistoryAt = remoteLatest,
+            localLatestAnnotationAt = localLatestAnnotation,
+            remoteLatestAnnotationAt = remoteLatestAnnotation
+        )
         return CloudRestorePreview(
             localFavorites = localFavorites.size,
             remoteFavorites = remoteFavorites.size,
             localHistory = localHistory.size,
             remoteHistory = remoteHistory.size,
+            localAnnotations = localAnnotations.size,
+            remoteAnnotations = remoteAnnotations.size,
             localLatestHistoryAt = localLatest,
             remoteLatestHistoryAt = remoteLatest,
+            localLatestAnnotationAt = localLatestAnnotation,
+            remoteLatestAnnotationAt = remoteLatestAnnotation,
             remoteTheme = remoteTheme,
             localTheme = localTheme,
             suggestedStrategy = strategy
@@ -157,8 +187,10 @@ class FirebaseSyncManager @Inject constructor(
         val userRef = firestore.collection("users").document(uid)
         val remoteFavorites = userRef.collection("favorites").get().await().documents.mapNotNull { it.toObject(FavoriteEntity::class.java) }
         val remoteHistory = userRef.collection("readingHistory").get().await().documents.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
+        val remoteAnnotations = userRef.collection("readerAnnotations").get().await().documents.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
         val localFavorites = favoriteDao.getFavoritesList().associateBy { it.mangaId }
         val localHistory = historyDao.getRecent(200).associateBy { it.mangaId }
+        val localAnnotations = readerAnnotationDao.getAll(500).associateBy { annotationDocId(it) }
 
         (localFavorites + remoteFavorites.associateBy { it.mangaId }).values.forEach { favoriteDao.insert(it) }
         (localHistory + remoteHistory.associateBy { it.mangaId }).values
@@ -167,10 +199,18 @@ class FirebaseSyncManager @Inject constructor(
             .map { list -> list.maxByOrNull { it.lastReadAt } }
             .filterNotNull()
             .forEach { historyDao.insertOrUpdate(it) }
+        (localAnnotations + remoteAnnotations.associateBy { annotationDocId(it) }).values
+            .groupBy { annotationDocId(it) }
+            .values
+            .mapNotNull { items -> items.maxByOrNull { it.updatedAt } }
+            .forEach { readerAnnotationDao.upsert(it) }
 
         val profile = userRef.get().await()
         profile.getString("theme")?.let { name ->
             AppTheme.values().firstOrNull { it.name == name }?.let { theme -> settingsRepository.updateTheme(theme) }
         }
     }
+
+    private fun annotationDocId(entity: ReaderAnnotationEntity): String =
+        listOf(entity.mangaId, entity.chapterUrl.hashCode().toString(), entity.pageIndex.toString()).joinToString("_")
 }

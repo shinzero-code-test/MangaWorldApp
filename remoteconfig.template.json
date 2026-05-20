@@ -8,6 +8,7 @@
     "source_meshmanga_enabled": { "defaultValue": { "value": "true" } },
     "scraper_selector_overrides": { "defaultValue": { "value": "{}" } },
     "home_layout_variant": { "defaultValue": { "value": "default" } },
+    "community_banned_keywords": { "defaultValue": { "value": "" } },
     "remote_alert_message": { "defaultValue": { "value": "" } }
   },
   "version": {

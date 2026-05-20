@@ -20,7 +20,9 @@ import com.exapps.mangaworld.presentation.home.HomeScreen
 import com.exapps.mangaworld.presentation.library.LibraryScreen
 import com.exapps.mangaworld.presentation.latest.LatestUpdatesScreen
 import com.exapps.mangaworld.presentation.localstorage.LocalStorageScreen
+import com.exapps.mangaworld.presentation.notifications.NotificationCenterScreen
 import com.exapps.mangaworld.presentation.profile.UserProfileScreen
+import com.exapps.mangaworld.presentation.profile.UserListsScreen
 import com.exapps.mangaworld.presentation.reader.ReaderScreen
 import com.exapps.mangaworld.presentation.search.SearchScreen
 import com.exapps.mangaworld.presentation.settings.SettingsScreen
@@ -34,7 +36,12 @@ sealed class Screen(val route: String) {
     object Diagnostics : Screen("diagnostics")
     object CloudSync : Screen("cloud_sync")
     object Profile : Screen("profile")
-    object CommunityChat : Screen("community_chat")
+    object Notifications : Screen("notifications")
+    object CommunityChat : Screen("community_chat?roomId={roomId}&title={title}") {
+        fun createRoute(roomId: String, title: String): String =
+            "community_chat?roomId=${java.net.URLEncoder.encode(roomId, "UTF-8")}&title=${java.net.URLEncoder.encode(title, "UTF-8")}"
+    }
+    object UserLists : Screen("user_lists")
     object Downloads   : Screen("downloads")
     object LocalStorage: Screen("local_storage")
     object LatestUpdates : Screen("latest_updates")
@@ -107,10 +114,29 @@ fun MangaNavGraph(navController: NavHostController) {
             UserProfileScreen(
                 onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) },
                 onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
-                onOpenCommunityChat = { navController.navigate(Screen.CommunityChat.route) }
+                onOpenCommunityChat = { navController.navigate(Screen.CommunityChat.createRoute("global", "الدردشة العامة")) },
+                onOpenNotifications = { navController.navigate(Screen.Notifications.route) },
+                onOpenLists = { navController.navigate(Screen.UserLists.route) }
             )
         }
-        composable(Screen.CommunityChat.route) {
+        composable(Screen.UserLists.route) {
+            UserListsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.Notifications.route) {
+            NotificationCenterScreen(
+                onBack = { navController.popBackStack() },
+                onOpenThread = { item ->
+                    navController.navigate(Screen.Community.createRoute(item.sourceId, item.mangaId, item.slug, item.chapterUrl))
+                }
+            )
+        }
+        composable(
+            route = Screen.CommunityChat.route,
+            arguments = listOf(
+                navArgument("roomId") { type = NavType.StringType; defaultValue = "global" },
+                navArgument("title") { type = NavType.StringType; defaultValue = "الدردشة المباشرة" }
+            )
+        ) {
             CommunityChatScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.Settings.route)    {
@@ -165,6 +191,9 @@ fun MangaNavGraph(navController: NavHostController) {
                 },
                 onOpenCommunity = { mangaId ->
                     navController.navigate(Screen.Community.createRoute(sourceId, mangaId, slug))
+                },
+                onOpenChapterCommunity = { mangaId, chapterUrl ->
+                    navController.navigate(Screen.Community.createRoute(sourceId, mangaId, slug, chapterUrl))
                 },
                 onBack = { navController.popBackStack() }
             )
@@ -226,7 +255,12 @@ fun MangaNavGraph(navController: NavHostController) {
                 navArgument("chapterUrl") { type = NavType.StringType; nullable = true; defaultValue = "" }
             )
         ) {
-            CommunityScreen(onBack = { navController.popBackStack() })
+            val mangaId = it.arguments?.getString("mangaId") ?: "global"
+            val slug = it.arguments?.getString("slug") ?: "الدردشة"
+            CommunityScreen(
+                onBack = { navController.popBackStack() },
+                onOpenChat = { navController.navigate(Screen.CommunityChat.createRoute(mangaId, slug)) }
+            )
         }
     }
 }

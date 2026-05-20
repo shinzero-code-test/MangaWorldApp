@@ -115,6 +115,14 @@ fun SettingsScreen(
                 checked = app.secureReaderEnabled,
                 onCheckedChange = viewModel::setSecureReader
             )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.Visibility,
+                title = "إخفاء الحرق افتراضياً",
+                subtitle = "طيّ تعليقات السبويْلر حتى تكشفها يدوياً",
+                checked = app.spoilerCollapseDefault,
+                onCheckedChange = viewModel::setSpoilerCollapseDefault
+            )
         }
 
         // ── Reader ────────────────────────────────────────────────────────────
@@ -308,6 +316,16 @@ fun SettingsScreen(
             ) {
                 OutlinedButton(onClick = { blacklistText = app.contentBlacklist.joinToString("\n"); blacklistDialog = true }) {
                     Text("إدارة")
+                }
+            }
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SettingsItem(
+                icon = Icons.Filled.PersonOff,
+                title = "المستخدمون المكتومون",
+                subtitle = if (app.mutedUserIds.isEmpty()) "لا يوجد كتم" else "${app.mutedUserIds.size} مستخدم"
+            ) {
+                OutlinedButton(onClick = { viewModel.setMutedUserIds(emptySet()) }, enabled = app.mutedUserIds.isNotEmpty()) {
+                    Text("مسح")
                 }
             }
         }

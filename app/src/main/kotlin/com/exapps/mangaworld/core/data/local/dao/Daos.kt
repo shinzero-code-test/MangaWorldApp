@@ -93,6 +93,9 @@ interface ReaderAnnotationDao {
     @Query("SELECT * FROM reader_annotations WHERE mangaId = :mangaId AND chapterUrl = :chapterUrl ORDER BY pageIndex ASC")
     fun observeChapterAnnotations(mangaId: String, chapterUrl: String): Flow<List<ReaderAnnotationEntity>>
 
+    @Query("SELECT * FROM reader_annotations ORDER BY updatedAt DESC LIMIT :limit")
+    suspend fun getAll(limit: Int): List<ReaderAnnotationEntity>
+
     @Query("SELECT * FROM reader_annotations WHERE mangaId = :mangaId AND chapterUrl = :chapterUrl AND pageIndex = :pageIndex LIMIT 1")
     suspend fun get(mangaId: String, chapterUrl: String, pageIndex: Int): ReaderAnnotationEntity?
 

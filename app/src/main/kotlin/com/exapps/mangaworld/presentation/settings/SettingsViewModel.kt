@@ -40,6 +40,8 @@ class SettingsViewModel @Inject constructor(
     fun setCleanupHours(v: Int) = saveAndSync { repo.setCleanupAfterHours(v) }
     fun setImageCacheLimit(limitMb: Int) = saveAndSync { repo.setImageCacheLimitMb(limitMb) }
     fun setContentBlacklist(values: Set<String>) = saveAndSync { repo.setContentBlacklist(values) }
+    fun setSpoilerCollapseDefault(enabled: Boolean) = saveAndSync { repo.setSpoilerCollapseDefault(enabled) }
+    fun setMutedUserIds(values: Set<String>) = saveAndSync { repo.setMutedUserIds(values) }
     fun toggleSource(id: String, enabled: Boolean) = viewModelScope.launch {
         repo.toggleSource(id, enabled)
         runCatching { widgetDataRepository.refreshRemoteSnapshot() }

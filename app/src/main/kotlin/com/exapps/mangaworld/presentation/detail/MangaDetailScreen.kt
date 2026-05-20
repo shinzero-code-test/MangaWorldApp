@@ -40,6 +40,7 @@ fun MangaDetailScreen(
     slug: String,
     onChapterClick: (chapterUrl: String, mangaId: String) -> Unit,
     onOpenCommunity: (mangaId: String) -> Unit,
+    onOpenChapterCommunity: (mangaId: String, chapterUrl: String) -> Unit,
     onBack: () -> Unit,
     viewModel: MangaDetailViewModel = hiltViewModel()
 ) {
@@ -88,6 +89,7 @@ fun MangaDetailScreen(
                 onDownloadChapter = viewModel::downloadChapter,
                 onShowDownloadDialog = viewModel::showDownloadDialog,
                 onOpenCommunity = { onOpenCommunity("${source.id}_$slug") },
+                onShowAddToList = viewModel::showAddToListDialog,
                 onChapterClick = { ch -> onChapterClick(ch.url, "${source.id}_$slug") }
             )
         }
@@ -114,6 +116,30 @@ fun MangaDetailScreen(
             onDismiss = viewModel::hideDownloadDialog
         )
     }
+
+    if (state.showAddToListDialog) {
+        AlertDialog(
+            onDismissRequest = viewModel::hideAddToListDialog,
+            title = { Text("إضافة إلى قائمة") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (state.userLists.isEmpty()) {
+                        Text("أنشئ قائمة مخصصة أولاً من صفحة الملف الشخصي.")
+                    } else {
+                        state.userLists.forEach { list ->
+                            OutlinedButton(onClick = { viewModel.addCurrentMangaToList(list.id) }, modifier = Modifier.fillMaxWidth()) {
+                                Text(list.name)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::hideAddToListDialog) { Text("إغلاق") }
+            },
+            dismissButton = {}
+        )
+    }
 }
 
 @Composable
@@ -129,6 +155,7 @@ private fun DetailContent(
     onDownloadChapter: (Chapter) -> Unit,
     onShowDownloadDialog: () -> Unit,
     onOpenCommunity: () -> Unit,
+    onShowAddToList: () -> Unit,
     onChapterClick: (Chapter) -> Unit
 ) {
     val ctx = LocalContext.current
@@ -242,6 +269,14 @@ private fun DetailContent(
                 ) {
                     Icon(Icons.Filled.Forum, "المجتمع", tint = MangaColors.Cyan)
                 }
+                IconButton(
+                    onClick = onShowAddToList,
+                    modifier = Modifier
+                        .size(50.dp)
+                        .background(MangaColors.SurfaceContainer, RoundedCornerShape(12.dp))
+                ) {
+                    Icon(Icons.Filled.PlaylistAdd, "إضافة لقائمة", tint = MangaColors.Cyan)
+                }
             }
         }
 
@@ -338,7 +373,8 @@ private fun DetailContent(
                 isRead = readChapters.contains(chapter.number),
                 isDownloading = downloadingChapters.contains(chapter.number),
                 onClick = { onChapterClick(chapter) },
-                onDownload = { onDownloadChapter(chapter) }
+                onDownload = { onDownloadChapter(chapter) },
+                onOpenChapterComments = { onOpenChapterCommunity("${manga.source.id}_${manga.slug}", chapter.url) }
             )
         }
         item { Spacer(Modifier.height(80.dp)) }
@@ -351,7 +387,8 @@ private fun ChapterItem(
     isRead: Boolean,
     isDownloading: Boolean,
     onClick: () -> Unit,
-    onDownload: () -> Unit
+    onDownload: () -> Unit,
+    onOpenChapterComments: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -424,6 +461,9 @@ private fun ChapterItem(
                         modifier = Modifier.size(18.dp), tint = MangaColors.Muted
                     )
                 }
+            }
+            IconButton(onClick = onOpenChapterComments, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Filled.Forum, "تعليقات الفصل", modifier = Modifier.size(18.dp), tint = MangaColors.Muted)
             }
         }
     }

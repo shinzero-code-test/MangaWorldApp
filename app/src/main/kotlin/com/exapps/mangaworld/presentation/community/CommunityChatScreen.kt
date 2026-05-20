@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -44,13 +45,16 @@ import javax.inject.Inject
 
 @HiltViewModel
 class CommunityChatViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val communityRepository: CommunityRepository
 ) : ViewModel() {
-    val messages = communityRepository.observeChatMessages("global")
+    val roomId: String = java.net.URLDecoder.decode(savedStateHandle["roomId"] ?: "global", "UTF-8")
+    val title: String = java.net.URLDecoder.decode(savedStateHandle["title"] ?: "الدردشة المباشرة", "UTF-8")
+    val messages = communityRepository.observeChatMessages(roomId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun send(text: String) {
-        viewModelScope.launch { runCatching { communityRepository.sendChatMessage("global", text) } }
+        viewModelScope.launch { runCatching { communityRepository.sendChatMessage(roomId, text) } }
     }
 }
 
@@ -69,7 +73,7 @@ fun CommunityChatScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MangaColors.OnSurface) }
-            Text("الدردشة المباشرة", style = MaterialTheme.typography.titleLarge, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
+            Text(viewModel.title, style = MaterialTheme.typography.titleLarge, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
             Spacer(Modifier.padding(0.dp))
         }
         LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

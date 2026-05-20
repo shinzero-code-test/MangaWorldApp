@@ -257,13 +257,18 @@ data class AppSettings(
     val autoCleanupReadDownloads: Boolean = false,
     val cleanupAfterHours: Int = 24,
     val imageCacheLimitMb: Int = 250,
-    val contentBlacklist: Set<String> = emptySet()
+    val contentBlacklist: Set<String> = emptySet(),
+    val spoilerCollapseDefault: Boolean = true,
+    val mutedUserIds: Set<String> = emptySet()
 )
 
 enum class CommunityNotificationType {
     REPLY,
     MENTION,
-    REVIEW_REACTION
+    REVIEW_REACTION,
+    COMMENT_THREAD,
+    CHAT_MENTION,
+    SYSTEM_ALERT
 }
 
 data class CommunityProfile(
@@ -272,8 +277,28 @@ data class CommunityProfile(
     val avatarUrl: String? = null,
     val badgeLabel: String = "Beginner",
     val isPublic: Boolean = true,
+    val showListsPublic: Boolean = true,
+    val showActivityPublic: Boolean = true,
     val bio: String = "",
     val updatedAt: Long = System.currentTimeMillis()
+)
+
+data class CustomUserList(
+    val id: String,
+    val name: String,
+    val description: String = "",
+    val isPublic: Boolean = false,
+    val itemCount: Int = 0,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+data class CustomUserListItem(
+    val mangaId: String,
+    val sourceId: String,
+    val slug: String,
+    val title: String,
+    val coverUrl: String = "",
+    val addedAt: Long = System.currentTimeMillis()
 )
 
 data class CommunityComment(
@@ -288,6 +313,7 @@ data class CommunityComment(
     val text: String,
     val mentions: List<String> = emptyList(),
     val spoiler: Boolean = false,
+    val reportedCount: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
     val replyCount: Int = 0
 )
@@ -326,6 +352,7 @@ data class CommunityNotification(
     val slug: String,
     val sourceId: String,
     val chapterUrl: String? = null,
+    val commentId: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val read: Boolean = false
 )
@@ -345,8 +372,12 @@ data class CloudRestorePreview(
     val remoteFavorites: Int,
     val localHistory: Int,
     val remoteHistory: Int,
+    val localAnnotations: Int,
+    val remoteAnnotations: Int,
     val localLatestHistoryAt: Long,
     val remoteLatestHistoryAt: Long,
+    val localLatestAnnotationAt: Long,
+    val remoteLatestAnnotationAt: Long,
     val remoteTheme: AppTheme? = null,
     val localTheme: AppTheme,
     val suggestedStrategy: CloudRestoreStrategy
