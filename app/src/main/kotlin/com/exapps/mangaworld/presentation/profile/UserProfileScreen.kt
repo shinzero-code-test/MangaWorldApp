@@ -62,6 +62,7 @@ class UserProfileViewModel @Inject constructor(
 fun UserProfileScreen(
     onOpenCloudSync: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onOpenCommunityChat: () -> Unit,
     viewModel: UserProfileViewModel = hiltViewModel()
 ) {
     val profile by viewModel.profile.collectAsStateWithLifecycle()
@@ -97,6 +98,7 @@ fun UserProfileScreen(
                     OutlinedButton(onClick = onOpenCloudSync) { Icon(Icons.Filled.CloudSync, null); Text("السحابة") }
                     OutlinedButton(onClick = onOpenDiagnostics) { Icon(Icons.Filled.Settings, null); Text("التشخيص") }
                 }
+                OutlinedButton(onClick = onOpenCommunityChat) { Text("الدردشة المباشرة") }
             }
         }
 

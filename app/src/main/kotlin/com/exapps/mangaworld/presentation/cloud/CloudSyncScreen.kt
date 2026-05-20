@@ -52,6 +52,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.domain.model.CloudRestorePreview
 import com.exapps.mangaworld.domain.model.CloudRestoreStrategy
 import com.exapps.mangaworld.domain.repository.CommunityRepository
@@ -80,7 +81,8 @@ class CloudSyncViewModel @Inject constructor(
     private val sessionManager: FirebaseSessionManager,
     private val syncManager: FirebaseSyncManager,
     private val remoteConfigManager: FirebaseRemoteConfigManager,
-    private val communityRepository: CommunityRepository
+    private val communityRepository: CommunityRepository,
+    private val analyticsManager: FirebaseAnalyticsManager
 ) : ViewModel() {
     private val _state = MutableStateFlow(CloudSyncUiState())
     val state: StateFlow<CloudSyncUiState> = _state.asStateFlow()
@@ -105,6 +107,7 @@ class CloudSyncViewModel @Inject constructor(
                 syncManager.pushLocalSnapshot()
                 remoteConfigManager.refresh()
             }.onSuccess {
+                analyticsManager.logEvent("auth_google_success")
                 _state.value = CloudSyncUiState(statusMessage = "تم تسجيل الدخول والمزامنة")
             }.onFailure { e ->
                 _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل تسجيل الدخول عبر Google")
@@ -119,6 +122,7 @@ class CloudSyncViewModel @Inject constructor(
                 sessionManager.signInWithEmail(email, password)
                 syncManager.pushLocalSnapshot()
             }.onSuccess {
+                analyticsManager.logEvent("auth_email_signin")
                 _state.value = CloudSyncUiState(statusMessage = "تم تسجيل الدخول بنجاح")
             }.onFailure { e ->
                 _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل تسجيل الدخول")
@@ -133,6 +137,7 @@ class CloudSyncViewModel @Inject constructor(
                 sessionManager.signUpWithEmail(email, password)
                 syncManager.pushLocalSnapshot()
             }.onSuccess {
+                analyticsManager.logEvent("auth_email_signup")
                 _state.value = CloudSyncUiState(statusMessage = "تم إنشاء الحساب والمزامنة")
             }.onFailure { e ->
                 _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل إنشاء الحساب")
@@ -144,7 +149,10 @@ class CloudSyncViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ رفع البيانات...")
             runCatching { syncManager.pushLocalSnapshot() }
-                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "تم رفع البيانات إلى السحابة") }
+                .onSuccess {
+                    analyticsManager.logEvent("cloud_sync_push")
+                    _state.value = CloudSyncUiState(statusMessage = "تم رفع البيانات إلى السحابة")
+                }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل رفع البيانات") }
         }
     }
@@ -153,7 +161,10 @@ class CloudSyncViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ استرجاع البيانات...")
             runCatching { syncManager.previewRemoteSnapshot() }
-                .onSuccess { preview -> _state.value = CloudSyncUiState(restorePreview = preview, statusMessage = "راجع التعارضات قبل الاستعادة") }
+                .onSuccess { preview ->
+                    analyticsManager.logEvent("cloud_restore_preview")
+                    _state.value = CloudSyncUiState(restorePreview = preview, statusMessage = "راجع التعارضات قبل الاستعادة")
+                }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل استرجاع البيانات") }
         }
     }
@@ -162,7 +173,10 @@ class CloudSyncViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ تطبيق الاستعادة...")
             runCatching { syncManager.applyRemoteRestore(strategy) }
-                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "تم تطبيق الاستعادة بنجاح") }
+                .onSuccess {
+                    analyticsManager.logEvent("cloud_restore_apply", mapOf("strategy" to strategy.name))
+                    _state.value = CloudSyncUiState(statusMessage = "تم تطبيق الاستعادة بنجاح")
+                }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل تطبيق الاستعادة") }
         }
     }
@@ -171,7 +185,10 @@ class CloudSyncViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ حفظ الملف الشخصي...")
             runCatching { communityRepository.upsertProfile(username, bio, isPublic) }
-                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "تم حفظ الملف الشخصي") }
+                .onSuccess {
+                    analyticsManager.logEvent("community_profile_save")
+                    _state.value = CloudSyncUiState(statusMessage = "تم حفظ الملف الشخصي")
+                }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل حفظ الملف الشخصي") }
         }
     }
@@ -186,13 +203,20 @@ class CloudSyncViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ تسجيل الخروج...")
             runCatching { sessionManager.signOut() }
-                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "تم تسجيل الخروج") }
+                .onSuccess {
+                    analyticsManager.logEvent("auth_signout")
+                    _state.value = CloudSyncUiState(statusMessage = "تم تسجيل الخروج")
+                }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل تسجيل الخروج") }
         }
     }
 
     fun clearMessages() {
         _state.value = CloudSyncUiState()
+    }
+
+    fun onScreenViewed() {
+        analyticsManager.logScreen("cloud_sync")
     }
 }
 
@@ -218,6 +242,8 @@ fun CloudSyncScreen(
             viewModel.signInWithGoogleIdToken(account?.idToken)
         }
     }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.onScreenViewed() }
 
     Column(
         modifier = Modifier

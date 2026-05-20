@@ -1,0 +1,14 @@
+{
+  "rules": {
+    "chatRooms": {
+      "$roomId": {
+        ".read": true,
+        "messages": {
+          "$messageId": {
+            ".write": "auth != null"
+          }
+        }
+      }
+    }
+  }
+}

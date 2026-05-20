@@ -330,6 +330,16 @@ data class CommunityNotification(
     val read: Boolean = false
 )
 
+data class CommunityChatMessage(
+    val id: String,
+    val roomId: String,
+    val authorUid: String,
+    val authorName: String,
+    val authorBadge: String = "Beginner",
+    val text: String,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
 data class CloudRestorePreview(
     val localFavorites: Int,
     val remoteFavorites: Int,

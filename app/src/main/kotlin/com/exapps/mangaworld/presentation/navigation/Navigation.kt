@@ -11,6 +11,7 @@ import androidx.navigation.compose.*
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.browse.BrowseScreen
 import com.exapps.mangaworld.presentation.cloud.CloudSyncScreen
+import com.exapps.mangaworld.presentation.community.CommunityChatScreen
 import com.exapps.mangaworld.presentation.community.CommunityScreen
 import com.exapps.mangaworld.presentation.detail.MangaDetailScreen
 import com.exapps.mangaworld.presentation.diagnostics.DiagnosticsScreen
@@ -33,6 +34,7 @@ sealed class Screen(val route: String) {
     object Diagnostics : Screen("diagnostics")
     object CloudSync : Screen("cloud_sync")
     object Profile : Screen("profile")
+    object CommunityChat : Screen("community_chat")
     object Downloads   : Screen("downloads")
     object LocalStorage: Screen("local_storage")
     object LatestUpdates : Screen("latest_updates")
@@ -104,8 +106,12 @@ fun MangaNavGraph(navController: NavHostController) {
         composable(Screen.Profile.route) {
             UserProfileScreen(
                 onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) },
-                onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) }
+                onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
+                onOpenCommunityChat = { navController.navigate(Screen.CommunityChat.route) }
             )
+        }
+        composable(Screen.CommunityChat.route) {
+            CommunityChatScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.Settings.route)    {
             SettingsScreen(

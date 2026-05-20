@@ -2,6 +2,7 @@ package com.exapps.mangaworld.core.firebase
 
 import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
 import com.exapps.mangaworld.domain.model.CommunityComment
+import com.exapps.mangaworld.domain.model.CommunityChatMessage
 import com.exapps.mangaworld.domain.model.CommunityNotification
 import com.exapps.mangaworld.domain.model.CommunityNotificationType
 import com.exapps.mangaworld.domain.model.CommunityProfile
@@ -11,6 +12,7 @@ import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -27,6 +29,7 @@ class FirebaseCommunityRepository @Inject constructor(
 ) : CommunityRepository {
 
     private val firestore = FirebaseFirestore.getInstance()
+    private val realtimeDb = FirebaseDatabase.getInstance("https://mangaworld-live-260519-default-rtdb.europe-west1.firebasedatabase.app")
 
     override fun observeMangaComments(mangaId: String): Flow<List<CommunityComment>> =
         observeComments(collectionPath = listOf("community_manga", mangaId, "comments"))
@@ -85,6 +88,22 @@ class FirebaseCommunityRepository @Inject constructor(
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toNotification() })
             }
         awaitClose { reg.remove() }
+    }
+
+    override fun observeChatMessages(roomId: String): Flow<List<CommunityChatMessage>> = callbackFlow {
+        val ref = realtimeDb.getReference("chatRooms").child(roomId).child("messages")
+        val listener = object : com.google.firebase.database.ValueEventListener {
+            override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+                val messages = snapshot.children.mapNotNull { child ->
+                    (child.value as? Map<String, Any?>)?.toChatMessage(child.key.orEmpty())
+                }.sortedBy { it.createdAt }.takeLast(100)
+                trySend(messages)
+            }
+
+            override fun onCancelled(error: com.google.firebase.database.DatabaseError) = Unit
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
     }
 
     override suspend fun getCurrentProfile(): CommunityProfile? {
@@ -160,6 +179,23 @@ class FirebaseCommunityRepository @Inject constructor(
             .document(reaction.id)
             .set(reaction.toMap())
             .await()
+    }
+
+    override suspend fun sendChatMessage(roomId: String, text: String) {
+        val profile = currentProfileOrThrow()
+        val trimmed = text.trim()
+        require(trimmed.isNotBlank()) { "الرسالة فارغة" }
+        val ref = realtimeDb.getReference("chatRooms").child(roomId).child("messages").push()
+        val message = CommunityChatMessage(
+            id = ref.key ?: UUID.randomUUID().toString(),
+            roomId = roomId,
+            authorUid = profile.uid,
+            authorName = profile.username,
+            authorBadge = profile.badgeLabel,
+            text = trimmed,
+            createdAt = System.currentTimeMillis()
+        )
+        ref.setValue(message.toMap()).await()
     }
 
     override suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean) {
@@ -401,6 +437,15 @@ class FirebaseCommunityRepository @Inject constructor(
         "read" to read
     )
 
+    private fun CommunityChatMessage.toMap() = mapOf(
+        "roomId" to roomId,
+        "authorUid" to authorUid,
+        "authorName" to authorName,
+        "authorBadge" to authorBadge,
+        "text" to text,
+        "createdAt" to createdAt
+    )
+
     private fun DocumentSnapshot.toProfile(): CommunityProfile? = runCatching {
         CommunityProfile(
             uid = getString("uid") ?: id,
@@ -472,6 +517,18 @@ class FirebaseCommunityRepository @Inject constructor(
             chapterUrl = getString("chapterUrl"),
             createdAt = getLong("createdAt") ?: 0L,
             read = getBoolean("read") ?: false
+        )
+    }.getOrNull()
+
+    private fun Map<String, Any?>.toChatMessage(id: String): CommunityChatMessage? = runCatching {
+        CommunityChatMessage(
+            id = id,
+            roomId = this["roomId"]?.toString() ?: "global",
+            authorUid = this["authorUid"]?.toString() ?: return null,
+            authorName = this["authorName"]?.toString() ?: "User",
+            authorBadge = this["authorBadge"]?.toString() ?: "Beginner",
+            text = this["text"]?.toString() ?: return null,
+            createdAt = (this["createdAt"] as? Number)?.toLong() ?: 0L
         )
     }.getOrNull()
 }

@@ -95,12 +95,14 @@ interface CommunityRepository {
     fun observeReaderPresenceCount(mangaId: String, chapterUrl: String): Flow<Int>
     fun observePageReactions(mangaId: String, chapterUrl: String, pageIndex: Int): Flow<List<ReaderReaction>>
     fun observeNotifications(limit: Int = 50): Flow<List<CommunityNotification>>
+    fun observeChatMessages(roomId: String = "global"): Flow<List<CommunityChatMessage>>
     suspend fun getCurrentProfile(): CommunityProfile?
     suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean)
     suspend fun postMangaComment(mangaId: String, slug: String, sourceId: String, text: String, spoiler: Boolean = false, parentId: String? = null)
     suspend fun postChapterComment(mangaId: String, slug: String, sourceId: String, chapterUrl: String, text: String, spoiler: Boolean = false, parentId: String? = null)
     suspend fun upsertReview(mangaId: String, slug: String, sourceId: String, rating: Int, title: String, body: String)
     suspend fun sendPageReaction(mangaId: String, chapterUrl: String, pageIndex: Int, emoji: String)
+    suspend fun sendChatMessage(roomId: String = "global", text: String)
     suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean)
     suspend fun markNotificationRead(notificationId: String)
 }
