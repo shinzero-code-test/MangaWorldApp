@@ -13,6 +13,14 @@
       "fields": [
         { "fieldPath": "addedAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "reactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "pageIndex", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

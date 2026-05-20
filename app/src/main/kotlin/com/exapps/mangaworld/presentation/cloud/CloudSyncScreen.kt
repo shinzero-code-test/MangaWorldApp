@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,13 +22,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +52,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.domain.model.CloudRestorePreview
+import com.exapps.mangaworld.domain.model.CloudRestoreStrategy
+import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
@@ -63,18 +71,24 @@ import javax.inject.Inject
 data class CloudSyncUiState(
     val busy: Boolean = false,
     val statusMessage: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val restorePreview: CloudRestorePreview? = null
 )
 
 @HiltViewModel
 class CloudSyncViewModel @Inject constructor(
     private val sessionManager: FirebaseSessionManager,
     private val syncManager: FirebaseSyncManager,
-    private val remoteConfigManager: FirebaseRemoteConfigManager
+    private val remoteConfigManager: FirebaseRemoteConfigManager,
+    private val communityRepository: CommunityRepository
 ) : ViewModel() {
     private val _state = MutableStateFlow(CloudSyncUiState())
     val state: StateFlow<CloudSyncUiState> = _state.asStateFlow()
     val currentUser = sessionManager.authState.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, sessionManager.currentUser())
+    val profile = kotlinx.coroutines.flow.flow { emit(communityRepository.getCurrentProfile()) }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
+    val notifications = communityRepository.observeNotifications()
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
 
     fun googleSignInIntent(): Intent = sessionManager.googleSignInClient().signInIntent
     fun hasGoogleSignIn(): Boolean = sessionManager.hasGoogleClientId()
@@ -138,9 +152,33 @@ class CloudSyncViewModel @Inject constructor(
     fun restoreFromCloud() {
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ استرجاع البيانات...")
-            runCatching { syncManager.pullRemoteSnapshot() }
-                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "تمت استعادة البيانات السحابية") }
+            runCatching { syncManager.previewRemoteSnapshot() }
+                .onSuccess { preview -> _state.value = CloudSyncUiState(restorePreview = preview, statusMessage = "راجع التعارضات قبل الاستعادة") }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل استرجاع البيانات") }
+        }
+    }
+
+    fun applyRestore(strategy: CloudRestoreStrategy) {
+        viewModelScope.launch {
+            _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ تطبيق الاستعادة...")
+            runCatching { syncManager.applyRemoteRestore(strategy) }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "تم تطبيق الاستعادة بنجاح") }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل تطبيق الاستعادة") }
+        }
+    }
+
+    fun saveProfile(username: String, bio: String, isPublic: Boolean) {
+        viewModelScope.launch {
+            _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ حفظ الملف الشخصي...")
+            runCatching { communityRepository.upsertProfile(username, bio, isPublic) }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "تم حفظ الملف الشخصي") }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل حفظ الملف الشخصي") }
+        }
+    }
+
+    fun markNotificationRead(id: String) {
+        viewModelScope.launch {
+            runCatching { communityRepository.markNotificationRead(id) }
         }
     }
 
@@ -165,8 +203,13 @@ fun CloudSyncScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val user by viewModel.currentUser.collectAsStateWithLifecycle()
+    val profile by viewModel.profile.collectAsStateWithLifecycle()
+    val notifications by viewModel.notifications.collectAsStateWithLifecycle()
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var username by remember(profile?.username) { mutableStateOf(profile?.username.orEmpty()) }
+    var bio by remember(profile?.bio) { mutableStateOf(profile?.bio.orEmpty()) }
+    var isPublic by remember(profile?.isPublic) { mutableStateOf(profile?.isPublic ?: true) }
 
     val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -211,6 +254,27 @@ fun CloudSyncScreen(
             }
         }
 
+        Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Filled.Person, null, tint = MangaColors.Cyan)
+                    Text("الملف الشخصي المجتمعي", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
+                }
+                OutlinedTextField(value = username, onValueChange = { username = it }, modifier = Modifier.fillMaxWidth(), label = { Text("اسم المستخدم") })
+                OutlinedTextField(value = bio, onValueChange = { bio = it }, modifier = Modifier.fillMaxWidth(), label = { Text("نبذة قصيرة") })
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = isPublic, onCheckedChange = { isPublic = it })
+                    Text("إتاحة الملف الشخصي والبادج للآخرين", color = MangaColors.OnSurfaceVariant)
+                }
+                Button(onClick = { viewModel.saveProfile(username, bio, isPublic) }, modifier = Modifier.fillMaxWidth(), enabled = username.isNotBlank() && !state.busy) {
+                    Text("حفظ الملف الشخصي")
+                }
+                profile?.let {
+                    Text("البادج الحالي: ${it.badgeLabel}", color = MangaColors.Cyan)
+                }
+            }
+        }
+
         if (user?.isAnonymous != false) {
             Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -247,6 +311,50 @@ fun CloudSyncScreen(
                     Button(onClick = viewModel::signOut, modifier = Modifier.fillMaxWidth(), enabled = !state.busy) {
                         Icon(Icons.Filled.Logout, null)
                         Text("تسجيل الخروج")
+                    }
+                }
+            }
+        }
+
+        state.restorePreview?.let { preview ->
+            Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("معاينة تعارض الاستعادة", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
+                    Text("المفضلة: محلي ${preview.localFavorites} / سحابي ${preview.remoteFavorites}", color = MangaColors.OnSurfaceVariant)
+                    Text("السجل: محلي ${preview.localHistory} / سحابي ${preview.remoteHistory}", color = MangaColors.OnSurfaceVariant)
+                    Text("الثيم: محلي ${preview.localTheme.label} / سحابي ${preview.remoteTheme?.label ?: "غير متوفر"}", color = MangaColors.OnSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CloudRestoreStrategy.values().forEach { strategy ->
+                            FilterChip(
+                                selected = preview.suggestedStrategy == strategy,
+                                onClick = { viewModel.applyRestore(strategy) },
+                                label = { Text(strategy.name) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Filled.Notifications, null, tint = MangaColors.Cyan)
+                    Text("إشعارات المجتمع", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
+                }
+                if (notifications.isEmpty()) {
+                    Text("لا توجد إشعارات حالياً", color = MangaColors.OnSurfaceVariant)
+                } else {
+                    notifications.take(8).forEach { item ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable { viewModel.markNotificationRead(item.id) },
+                            colors = CardDefaults.cardColors(containerColor = if (item.read) MangaColors.Surface else MangaColors.GlowPurple)
+                        ) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                                Text(item.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
+                                Text(item.body, color = MangaColors.OnSurfaceVariant)
+                            }
+                        }
                     }
                 }
             }

@@ -13,6 +13,7 @@ import com.exapps.mangaworld.core.data.toDetail
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.core.data.download.ChapterCleanupWorker
 import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
+import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
@@ -48,7 +49,9 @@ data class ReaderUiState(
     val prevChapterUrl: String? = null,
     val nextChapterUrl: String? = null,
     val bookmarkedPages: Set<Int> = emptySet(),
-    val pageNotes: Map<Int, String> = emptyMap()
+    val pageNotes: Map<Int, String> = emptyMap(),
+    val liveReaders: Int = 0,
+    val currentPageReactions: List<ReaderReaction> = emptyList()
 )
 
 @HiltViewModel
@@ -57,6 +60,7 @@ class ReaderViewModel @Inject constructor(
     private val mangaRepo: MangaRepository,
     private val libraryRepo: LibraryRepository,
     private val settingsRepo: SettingsRepository,
+    private val communityRepository: CommunityRepository,
     private val downloadQueueManager: DownloadQueueManager,
     private val cacheDao: MangaCacheDao,
     private val readingStatsStore: ReadingStatsStore,
@@ -72,6 +76,8 @@ class ReaderViewModel @Inject constructor(
     private var activeSessionKey: String? = null
     private var sessionCheckpointAt: Long? = null
     private var annotationsJob: Job? = null
+    private var presenceJob: Job? = null
+    private var reactionsJob: Job? = null
     private var prefetchedNextChapterUrl: String? = null
 
     init {
@@ -104,6 +110,7 @@ class ReaderViewModel @Inject constructor(
     fun loadChapter(chapterUrl: String, mangaId: String, source: MangaSource) {
         if (_state.value.chapterUrl != chapterUrl) {
             finishSessionAsync()
+            stopCommunityPresenceAsync(_state.value.mangaId, _state.value.chapterUrl)
         }
         currentSource = source
         prefetchedNextChapterUrl = null
@@ -121,6 +128,7 @@ class ReaderViewModel @Inject constructor(
                     )
                 }
                 observeAnnotations(mangaId, chapterUrl)
+                observeCommunity(mangaId, chapterUrl)
                 computeAdjacentChapters(mangaId, chapterUrl, source)
                 beginSession(mangaId, chapterUrl)
                 return@launch
@@ -157,6 +165,7 @@ class ReaderViewModel @Inject constructor(
                         }
                     }
                     observeAnnotations(mangaId, chapterUrl)
+                    observeCommunity(mangaId, chapterUrl)
                     computeAdjacentChapters(mangaId, chapterUrl, source)
                     beginSession(mangaId, chapterUrl)
                     if (!_state.value.incognitoMode) {
@@ -193,6 +202,7 @@ class ReaderViewModel @Inject constructor(
             if (!st.incognitoMode) {
                 libraryRepo.saveReadingProgress(st.mangaId, chNum, page, st.totalPages)
             }
+            observeReactions(st.mangaId, st.chapterUrl, page)
             if (st.smartPrefetchEnabled && st.totalPages > 0 && page >= (st.totalPages / 2)) {
                 prefetchNextChapterIfNeeded(st)
             }
@@ -285,8 +295,16 @@ class ReaderViewModel @Inject constructor(
         st.nextChapterUrl?.let { loadChapter(it, st.mangaId, currentSource) }
     }
 
+    fun sendReaction(emoji: String) {
+        val st = _state.value
+        viewModelScope.launch {
+            runCatching { communityRepository.sendPageReaction(st.mangaId, st.chapterUrl, st.currentPage, emoji) }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
+        stopCommunityPresenceAsync(_state.value.mangaId, _state.value.chapterUrl)
         finishSessionAsync()
     }
 
@@ -305,6 +323,27 @@ class ReaderViewModel @Inject constructor(
                         pageNotes = annotations.filter { !it.note.isNullOrBlank() }.associate { ann -> ann.pageIndex to ann.note.orEmpty() }
                     )
                 }
+            }
+        }
+    }
+
+    private fun observeCommunity(mangaId: String, chapterUrl: String) {
+        presenceJob?.cancel()
+        reactionsJob?.cancel()
+        presenceJob = viewModelScope.launch {
+            runCatching { communityRepository.setReaderPresence(mangaId, chapterUrl, true) }
+            communityRepository.observeReaderPresenceCount(mangaId, chapterUrl).collect { count ->
+                _state.update { it.copy(liveReaders = count) }
+            }
+        }
+        observeReactions(mangaId, chapterUrl, _state.value.currentPage)
+    }
+
+    private fun observeReactions(mangaId: String, chapterUrl: String, pageIndex: Int) {
+        reactionsJob?.cancel()
+        reactionsJob = viewModelScope.launch {
+            communityRepository.observePageReactions(mangaId, chapterUrl, pageIndex).collect { reactions ->
+                _state.update { it.copy(currentPageReactions = reactions) }
             }
         }
     }
@@ -379,6 +418,15 @@ class ReaderViewModel @Inject constructor(
                 readingStatsStore.addReadingTime(delta)
                 widgetShortcutCoordinator.refreshWidgets()
             }
+        }
+    }
+
+    private fun stopCommunityPresenceAsync(mangaId: String, chapterUrl: String) {
+        if (mangaId.isBlank() || chapterUrl.isBlank()) return
+        presenceJob?.cancel()
+        reactionsJob?.cancel()
+        viewModelScope.launch {
+            runCatching { communityRepository.setReaderPresence(mangaId, chapterUrl, false) }
         }
     }
 }

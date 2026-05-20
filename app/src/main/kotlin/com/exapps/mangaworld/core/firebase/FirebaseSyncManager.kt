@@ -5,6 +5,8 @@ import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
 import com.exapps.mangaworld.core.data.local.entity.FavoriteEntity
 import com.exapps.mangaworld.core.data.local.entity.ReadingHistoryEntity
 import com.exapps.mangaworld.domain.model.AppTheme
+import com.exapps.mangaworld.domain.model.CloudRestorePreview
+import com.exapps.mangaworld.domain.model.CloudRestoreStrategy
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
@@ -107,6 +109,68 @@ class FirebaseSyncManager @Inject constructor(
             com.exapps.mangaworld.domain.model.ReaderImageFilter.values().firstOrNull { it.name == name }?.let { filter ->
                 settingsRepository.updateImageFilter(filter)
             }
+        }
+    }
+
+    suspend fun previewRemoteSnapshot(): CloudRestorePreview {
+        val uid = sessionManager.ensureGuestSession() ?: error("No user")
+        val userRef = firestore.collection("users").document(uid)
+        val profile = userRef.get().await()
+        val remoteFavorites = userRef.collection("favorites").get().await().documents.mapNotNull { it.toObject(FavoriteEntity::class.java) }
+        val remoteHistory = userRef.collection("readingHistory").get().await().documents.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
+
+        val localFavorites = favoriteDao.getFavoritesList()
+        val localHistory = historyDao.getRecent(100)
+        val localTheme = settingsRepository.getAppSettings().first().theme
+        val remoteTheme = profile.getString("theme")?.let { name -> AppTheme.values().firstOrNull { it.name == name } }
+
+        val localLatest = localHistory.maxOfOrNull { it.lastReadAt } ?: 0L
+        val remoteLatest = remoteHistory.maxOfOrNull { it.lastReadAt } ?: 0L
+        val strategy = when {
+            remoteLatest > localLatest -> CloudRestoreStrategy.MERGE
+            remoteFavorites.size > localFavorites.size -> CloudRestoreStrategy.MERGE
+            else -> CloudRestoreStrategy.KEEP_LOCAL
+        }
+        return CloudRestorePreview(
+            localFavorites = localFavorites.size,
+            remoteFavorites = remoteFavorites.size,
+            localHistory = localHistory.size,
+            remoteHistory = remoteHistory.size,
+            localLatestHistoryAt = localLatest,
+            remoteLatestHistoryAt = remoteLatest,
+            remoteTheme = remoteTheme,
+            localTheme = localTheme,
+            suggestedStrategy = strategy
+        )
+    }
+
+    suspend fun applyRemoteRestore(strategy: CloudRestoreStrategy) {
+        when (strategy) {
+            CloudRestoreStrategy.KEEP_LOCAL -> pushLocalSnapshot()
+            CloudRestoreStrategy.REMOTE_OVERWRITE -> pullRemoteSnapshot()
+            CloudRestoreStrategy.MERGE -> mergeRemoteSnapshot()
+        }
+    }
+
+    private suspend fun mergeRemoteSnapshot() {
+        val uid = sessionManager.ensureGuestSession() ?: return
+        val userRef = firestore.collection("users").document(uid)
+        val remoteFavorites = userRef.collection("favorites").get().await().documents.mapNotNull { it.toObject(FavoriteEntity::class.java) }
+        val remoteHistory = userRef.collection("readingHistory").get().await().documents.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
+        val localFavorites = favoriteDao.getFavoritesList().associateBy { it.mangaId }
+        val localHistory = historyDao.getRecent(200).associateBy { it.mangaId }
+
+        (localFavorites + remoteFavorites.associateBy { it.mangaId }).values.forEach { favoriteDao.insert(it) }
+        (localHistory + remoteHistory.associateBy { it.mangaId }).values
+            .groupBy { it.mangaId }
+            .values
+            .map { list -> list.maxByOrNull { it.lastReadAt } }
+            .filterNotNull()
+            .forEach { historyDao.insertOrUpdate(it) }
+
+        val profile = userRef.get().await()
+        profile.getString("theme")?.let { name ->
+            AppTheme.values().firstOrNull { it.name == name }?.let { theme -> settingsRepository.updateTheme(theme) }
         }
     }
 }

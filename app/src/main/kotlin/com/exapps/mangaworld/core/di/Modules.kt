@@ -6,6 +6,7 @@ import com.exapps.mangaworld.core.data.*
 import com.exapps.mangaworld.core.data.local.MangaDatabase
 import com.exapps.mangaworld.core.data.local.dao.*
 import com.exapps.mangaworld.core.data.remote.scraper.*
+import com.exapps.mangaworld.core.firebase.FirebaseCommunityRepository
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.domain.repository.*
@@ -125,4 +126,7 @@ abstract class RepositoryModule {
 
     @Binds @Singleton
     abstract fun bindSettingsRepository(impl: SettingsRepositoryImpl): SettingsRepository
+
+    @Binds @Singleton
+    abstract fun bindCommunityRepository(impl: FirebaseCommunityRepository): CommunityRepository
 }

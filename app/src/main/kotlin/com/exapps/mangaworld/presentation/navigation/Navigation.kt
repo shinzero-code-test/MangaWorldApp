@@ -11,6 +11,7 @@ import androidx.navigation.compose.*
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.browse.BrowseScreen
 import com.exapps.mangaworld.presentation.cloud.CloudSyncScreen
+import com.exapps.mangaworld.presentation.community.CommunityScreen
 import com.exapps.mangaworld.presentation.detail.MangaDetailScreen
 import com.exapps.mangaworld.presentation.diagnostics.DiagnosticsScreen
 import com.exapps.mangaworld.presentation.downloads.DownloadsScreen
@@ -33,6 +34,12 @@ sealed class Screen(val route: String) {
     object Downloads   : Screen("downloads")
     object LocalStorage: Screen("local_storage")
     object LatestUpdates : Screen("latest_updates")
+    object Community : Screen("community/{sourceId}/{mangaId}/{slug}?chapterUrl={chapterUrl}") {
+        fun createRoute(sourceId: String, mangaId: String, slug: String, chapterUrl: String? = null): String {
+            val encoded = chapterUrl?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
+            return "community/$sourceId/$mangaId/$slug?chapterUrl=$encoded"
+        }
+    }
     object Detail : Screen("detail/{sourceId}/{slug}") {
         fun createRoute(sourceId: String, slug: String) = "detail/$sourceId/$slug"
     }
@@ -141,6 +148,9 @@ fun MangaNavGraph(navController: NavHostController) {
                 onChapterClick = { chapterUrl, mangaId ->
                     navController.navigate(Screen.Reader.createRoute(sourceId, mangaId, chapterUrl))
                 },
+                onOpenCommunity = { mangaId ->
+                    navController.navigate(Screen.Community.createRoute(sourceId, mangaId, slug))
+                },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -159,7 +169,11 @@ fun MangaNavGraph(navController: NavHostController) {
             )
             ReaderScreen(
                 source = MangaSource.fromId(sourceId), mangaId = mangaId,
-                chapterUrl = chapterUrl, onBack = { navController.popBackStack() }
+                chapterUrl = chapterUrl,
+                onBack = { navController.popBackStack() },
+                onOpenCommunity = {
+                    navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl))
+                }
             )
         }
         composable(
@@ -182,8 +196,22 @@ fun MangaNavGraph(navController: NavHostController) {
                 source = MangaSource.fromId(sourceId),
                 mangaId = mangaId,
                 chapterUrl = chapterUrl,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onOpenCommunity = {
+                    navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl))
+                }
             )
+        }
+        composable(
+            route = Screen.Community.route,
+            arguments = listOf(
+                navArgument("sourceId") { type = NavType.StringType },
+                navArgument("mangaId") { type = NavType.StringType },
+                navArgument("slug") { type = NavType.StringType },
+                navArgument("chapterUrl") { type = NavType.StringType; nullable = true; defaultValue = "" }
+            )
+        ) {
+            CommunityScreen(onBack = { navController.popBackStack() })
         }
     }
 }

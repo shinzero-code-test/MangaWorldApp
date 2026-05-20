@@ -259,3 +259,91 @@ data class AppSettings(
     val imageCacheLimitMb: Int = 250,
     val contentBlacklist: Set<String> = emptySet()
 )
+
+enum class CommunityNotificationType {
+    REPLY,
+    MENTION,
+    REVIEW_REACTION
+}
+
+data class CommunityProfile(
+    val uid: String,
+    val username: String,
+    val avatarUrl: String? = null,
+    val badgeLabel: String = "Beginner",
+    val isPublic: Boolean = true,
+    val bio: String = "",
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+data class CommunityComment(
+    val id: String,
+    val mangaId: String,
+    val chapterUrl: String? = null,
+    val parentId: String? = null,
+    val authorUid: String,
+    val authorName: String,
+    val authorAvatarUrl: String? = null,
+    val authorBadge: String = "Beginner",
+    val text: String,
+    val mentions: List<String> = emptyList(),
+    val spoiler: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis(),
+    val replyCount: Int = 0
+)
+
+data class MangaReview(
+    val id: String,
+    val mangaId: String,
+    val authorUid: String,
+    val authorName: String,
+    val authorAvatarUrl: String? = null,
+    val authorBadge: String = "Beginner",
+    val rating: Int,
+    val title: String = "",
+    val body: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = createdAt
+)
+
+data class ReaderReaction(
+    val id: String,
+    val mangaId: String,
+    val chapterUrl: String,
+    val pageIndex: Int,
+    val emoji: String,
+    val authorUid: String,
+    val authorName: String,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+data class CommunityNotification(
+    val id: String,
+    val type: CommunityNotificationType,
+    val title: String,
+    val body: String,
+    val mangaId: String,
+    val slug: String,
+    val sourceId: String,
+    val chapterUrl: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val read: Boolean = false
+)
+
+data class CloudRestorePreview(
+    val localFavorites: Int,
+    val remoteFavorites: Int,
+    val localHistory: Int,
+    val remoteHistory: Int,
+    val localLatestHistoryAt: Long,
+    val remoteLatestHistoryAt: Long,
+    val remoteTheme: AppTheme? = null,
+    val localTheme: AppTheme,
+    val suggestedStrategy: CloudRestoreStrategy
+)
+
+enum class CloudRestoreStrategy {
+    MERGE,
+    REMOTE_OVERWRITE,
+    KEEP_LOCAL
+}

@@ -45,6 +45,7 @@ fun ReaderScreen(
     mangaId: String,
     chapterUrl: String,
     onBack: () -> Unit,
+    onOpenCommunity: () -> Unit,
     viewModel: ReaderViewModel = hiltViewModel()
 ) {
     LaunchedEffect(chapterUrl) { viewModel.loadChapter(chapterUrl, mangaId, source) }
@@ -160,6 +161,8 @@ fun ReaderScreen(
                     noteDialog = true
                 },
                 onBrowseAnnotations = { annotationsSheetOpen = true },
+                onOpenCommunity = onOpenCommunity,
+                liveReaders = state.liveReaders,
                 hasPreviousChapter = state.prevChapterUrl != null,
                 hasNextChapter = state.nextChapterUrl != null,
                 onPreviousChapter = viewModel::openPreviousChapter,
@@ -191,6 +194,42 @@ fun ReaderScreen(
                     .padding(horizontal = 10.dp, vertical = 6.dp)
                     .padding(bottom = 70.dp)
             )
+        }
+
+        if (state.currentPageReactions.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 12.dp)
+                    .background(Color(0x88000000), RoundedCornerShape(18.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                state.currentPageReactions.take(4).forEach { reaction ->
+                    Text(reaction.emoji, style = MaterialTheme.typography.titleMedium)
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = state.showControls,
+            modifier = Modifier.align(Alignment.CenterStart),
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(start = 10.dp)
+                    .background(Color(0x88000000), RoundedCornerShape(18.dp))
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("${state.liveReaders} قارئ", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                listOf("🔥", "😂", "😱", "❤️").forEach { emoji ->
+                    TextButton(onClick = { viewModel.sendReaction(emoji) }) { Text(emoji) }
+                }
+            }
         }
 
         if (noteDialog) {
@@ -420,6 +459,8 @@ private fun ReaderTopBar(
     onToggleBookmark: () -> Unit,
     onEditNote: () -> Unit,
     onBrowseAnnotations: () -> Unit,
+    onOpenCommunity: () -> Unit,
+    liveReaders: Int,
     hasPreviousChapter: Boolean,
     hasNextChapter: Boolean,
     onPreviousChapter: () -> Unit,
@@ -441,8 +482,11 @@ private fun ReaderTopBar(
                 Icon(Icons.Filled.ArrowBack, "رجوع", tint = Color.White)
             }
             androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                Text("$currentPage / $totalPages",
-                    style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("$currentPage / $totalPages",
+                        style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                    Text("$liveReaders live", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f))
+                }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onPreviousChapter, enabled = hasPreviousChapter) {
@@ -462,6 +506,9 @@ private fun ReaderTopBar(
                 }
                 IconButton(onClick = onBrowseAnnotations) {
                     Icon(Icons.Filled.FormatListBulleted, "الإشارات والملاحظات", tint = Color.White)
+                }
+                IconButton(onClick = onOpenCommunity) {
+                    Icon(Icons.Filled.Forum, "نقاش الفصل", tint = Color.White)
                 }
                 if (downloadInProgress) {
                     IconButton(onClick = onCancelDownload) {

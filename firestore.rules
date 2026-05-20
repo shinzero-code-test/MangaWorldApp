@@ -9,6 +9,10 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function canWriteCommunity(authorUid) {
+      return signedIn() && request.auth.uid == authorUid;
+    }
+
     match /users/{userId} {
       allow read, write: if owner(userId);
 
@@ -26,6 +30,57 @@ service cloud.firestore {
 
       match /devices/{document=**} {
         allow read, write: if owner(userId);
+      }
+
+      match /notifications/{document=**} {
+        allow read, write: if owner(userId);
+      }
+    }
+
+    match /publicProfiles/{userId} {
+      allow read: if resource.data.isPublic == true || owner(userId);
+      allow write: if owner(userId);
+    }
+
+    match /usernames/{username} {
+      allow read: if true;
+      allow write: if signedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
+    match /community_manga/{mangaId} {
+      allow read: if true;
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create, update: if canWriteCommunity(request.resource.data.authorUid);
+        allow delete: if canWriteCommunity(resource.data.authorUid);
+      }
+
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create, update: if canWriteCommunity(request.resource.data.authorUid);
+        allow delete: if canWriteCommunity(resource.data.authorUid);
+      }
+
+      match /chapters/{chapterKey}/comments/{commentId} {
+        allow read: if true;
+        allow create, update: if canWriteCommunity(request.resource.data.authorUid);
+        allow delete: if canWriteCommunity(resource.data.authorUid);
+      }
+    }
+
+    match /community_presence/{threadId} {
+      allow read: if true;
+
+      match /members/{memberId} {
+        allow read: if true;
+        allow write: if signedIn() && request.auth.uid == memberId;
+      }
+
+      match /reactions/{reactionId} {
+        allow read: if true;
+        allow create, update: if canWriteCommunity(request.resource.data.authorUid);
+        allow delete: if canWriteCommunity(resource.data.authorUid);
       }
     }
 

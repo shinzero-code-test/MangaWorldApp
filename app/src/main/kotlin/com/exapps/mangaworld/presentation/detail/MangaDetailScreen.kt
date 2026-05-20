@@ -39,6 +39,7 @@ fun MangaDetailScreen(
     source: MangaSource,
     slug: String,
     onChapterClick: (chapterUrl: String, mangaId: String) -> Unit,
+    onOpenCommunity: (mangaId: String) -> Unit,
     onBack: () -> Unit,
     viewModel: MangaDetailViewModel = hiltViewModel()
 ) {
@@ -86,6 +87,7 @@ fun MangaDetailScreen(
                 onToggleOrder = viewModel::toggleChaptersOrder,
                 onDownloadChapter = viewModel::downloadChapter,
                 onShowDownloadDialog = viewModel::showDownloadDialog,
+                onOpenCommunity = { onOpenCommunity("${source.id}_$slug") },
                 onChapterClick = { ch -> onChapterClick(ch.url, "${source.id}_$slug") }
             )
         }
@@ -126,6 +128,7 @@ private fun DetailContent(
     onToggleOrder: () -> Unit,
     onDownloadChapter: (Chapter) -> Unit,
     onShowDownloadDialog: () -> Unit,
+    onOpenCommunity: () -> Unit,
     onChapterClick: (Chapter) -> Unit
 ) {
     val ctx = LocalContext.current
@@ -230,6 +233,14 @@ private fun DetailContent(
                         null,
                         tint = if (isFavorite) Color.White else MangaColors.PrimaryLight
                     )
+                }
+                IconButton(
+                    onClick = onOpenCommunity,
+                    modifier = Modifier
+                        .size(50.dp)
+                        .background(MangaColors.SurfaceContainer, RoundedCornerShape(12.dp))
+                ) {
+                    Icon(Icons.Filled.Forum, "المجتمع", tint = MangaColors.Cyan)
                 }
             }
         }
