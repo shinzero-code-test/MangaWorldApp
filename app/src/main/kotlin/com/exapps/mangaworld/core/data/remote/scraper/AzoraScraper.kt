@@ -474,6 +474,31 @@ class AzoraScraper @Inject constructor(
         }
     }
 
+    override suspend fun browseManga(
+        page: Int,
+        genre: String?,
+        status: MangaStatus?,
+        type: MangaType?,
+        sortBy: SortBy
+    ): Result<List<MangaItem>> = runCatching {
+        val baseUrl = buildString {
+            append("${source.baseUrl}/series?page=$page")
+            genre?.takeIf { it.isNotBlank() }?.let {
+                append("&genres=%2B")
+                append(java.net.URLEncoder.encode(it, "UTF-8"))
+            }
+        }
+        val items = parseMangaListPage(fetchDocument(baseUrl))
+            .filter { status == null || it.status == status || it.status == MangaStatus.UNKNOWN }
+            .filter { type == null || it.type == type || it.type == MangaType.UNKNOWN }
+        when (sortBy) {
+            SortBy.RATING -> items.sortedByDescending { it.rating ?: 0f }
+            SortBy.POPULARITY -> items.sortedByDescending { it.latestChapter ?: 0 }
+            SortBy.OLDEST -> items.sortedBy { it.title.lowercase() }
+            SortBy.LATEST -> items
+        }
+    }
+
     override suspend fun getGenres(): Result<List<String>> = runCatching {
         // Genres are rendered as filter links on the series page
         val doc = fetchDocument("${source.baseUrl}/series")

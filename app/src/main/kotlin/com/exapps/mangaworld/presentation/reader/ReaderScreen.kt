@@ -119,7 +119,8 @@ fun ReaderScreen(
             else -> ReaderContent(
                 state = state,
                 onPageChanged = viewModel::onPageChanged,
-                onTap = {
+                onTap = { x, y ->
+                    viewModel.onReaderTap(x, y)
                     if (state.hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     viewModel.toggleControls()
                 },
@@ -196,23 +197,24 @@ fun ReaderScreen(
             )
         }
 
-        if (state.currentPageReactions.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 12.dp)
-                    .background(Color(0x88000000), RoundedCornerShape(18.dp))
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                state.currentPageReactions.take(4).forEach { reaction ->
-                    Text(reaction.emoji, style = MaterialTheme.typography.titleMedium)
+        if (state.showReactionOverlay && state.currentPageReactions.isNotEmpty()) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                state.currentPageReactions.take(8).forEach { reaction ->
+                    Text(
+                        reaction.emoji,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .offset(x = maxWidth * reaction.normalizedX - 12.dp, y = maxHeight * reaction.normalizedY - 20.dp)
+                            .background(Color(0x88000000), RoundedCornerShape(14.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
                 }
             }
         }
 
         AnimatedVisibility(
-            visible = state.showControls,
+            visible = state.showControls && (state.showLiveReadersOverlay || state.showReactionOverlay),
             modifier = Modifier.align(Alignment.CenterStart),
             enter = fadeIn(),
             exit = fadeOut()
@@ -225,9 +227,13 @@ fun ReaderScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("${state.liveReaders} قارئ", color = Color.White, style = MaterialTheme.typography.labelMedium)
-                listOf("🔥", "😂", "😱", "❤️").forEach { emoji ->
-                    TextButton(onClick = { viewModel.sendReaction(emoji) }) { Text(emoji) }
+                if (state.showLiveReadersOverlay) {
+                    Text("${state.liveReaders} قارئ", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                }
+                if (state.showReactionOverlay) {
+                    listOf("🔥", "😂", "😱", "❤️").forEach { emoji ->
+                        TextButton(onClick = { viewModel.sendReaction(emoji) }) { Text(emoji) }
+                    }
                 }
             }
         }
@@ -309,7 +315,7 @@ fun ReaderScreen(
 private fun ReaderContent(
     state: ReaderUiState,
     onPageChanged: (Int) -> Unit,
-    onTap: () -> Unit,
+    onTap: (Float, Float) -> Unit,
     onModeChange: (ReaderMode) -> Unit
 ) {
     when (state.readerMode) {
@@ -330,7 +336,7 @@ private fun ReaderContent(
 private fun WebtoonReader(
     pages: List<ChapterPage>,
     imageFilter: ReaderImageFilter,
-    onTap: () -> Unit,
+    onTap: (Float, Float) -> Unit,
     onPageChanged: (Int) -> Unit
 ) {
     val listState = rememberLazyListState()
@@ -342,8 +348,13 @@ private fun WebtoonReader(
 
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize().clickable(indication = null,
-            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) { onTap() }
+        modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+            detectTapGestures { offset ->
+                val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
+                val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
+                onTap(nx, ny)
+            }
+        }
     ) {
         items(pages, key = { it.index }) { page ->
             MangaPageImage(page = page, imageFilter = imageFilter, modifier = Modifier.fillMaxWidth())
@@ -361,7 +372,7 @@ private fun HorizontalReader(
     initialPage: Int,
     imageFilter: ReaderImageFilter,
     onPageChanged: (Int) -> Unit,
-    onTap: () -> Unit
+    onTap: (Float, Float) -> Unit
 ) {
     val orderedPages = if (rtl) pages.reversed() else pages
     val pagerState = rememberPagerState(initialPage = initialPage.coerceIn(0, maxOf(0, orderedPages.size - 1))) { orderedPages.size }
@@ -374,8 +385,13 @@ private fun HorizontalReader(
     HorizontalPager(
         state = pagerState,
         modifier = Modifier.fillMaxSize()
-            .clickable(indication = null,
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) { onTap() }
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
+                    val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
+                    onTap(nx, ny)
+                }
+            }
     ) { pageIndex ->
         MangaPageImage(
             page = orderedPages[pageIndex],

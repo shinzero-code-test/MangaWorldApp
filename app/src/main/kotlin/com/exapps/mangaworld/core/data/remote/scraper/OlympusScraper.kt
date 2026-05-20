@@ -324,6 +324,31 @@ class OlympusScraper @Inject constructor(
         parseMangaGrid(doc)
     }
 
+    override suspend fun browseManga(
+        page: Int,
+        genre: String?,
+        status: MangaStatus?,
+        type: MangaType?,
+        sortBy: SortBy
+    ): Result<List<MangaItem>> = runCatching {
+        val params = mutableListOf("page=$page")
+        genre?.takeIf { it.isNotBlank() }?.let { params += "genre=${java.net.URLEncoder.encode(it, "UTF-8")}" }
+        status?.takeIf { it != MangaStatus.UNKNOWN }?.let {
+            val raw = when (it) {
+                MangaStatus.ONGOING -> "مستمرة"
+                MangaStatus.COMPLETED -> "مكتمل"
+                MangaStatus.HIATUS -> "متوقف"
+                MangaStatus.CANCELLED -> "متروك"
+                MangaStatus.UNKNOWN -> ""
+            }
+            if (raw.isNotBlank()) params += "state=${java.net.URLEncoder.encode(raw, "UTF-8")}"
+        }
+        val doc = fetchDocument("${source.baseUrl}/series?${params.joinToString("&")}")
+        parseMangaGrid(doc)
+            .filter { type == null || it.type == type || it.type == MangaType.UNKNOWN }
+            .let { applyBrowseSort(it, sortBy) }
+    }
+
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
         val doc = fetchDocument(source.baseUrl)
         doc.select(".popular-manga .entry-box, .entry-box.entry-box-1").mapNotNull { box ->
@@ -496,5 +521,12 @@ class OlympusScraper @Inject constructor(
                 url = href
             )
         }.distinctBy { it.url }
+    }
+
+    private fun applyBrowseSort(items: List<MangaItem>, sortBy: SortBy): List<MangaItem> = when (sortBy) {
+        SortBy.RATING -> items.sortedByDescending { it.rating ?: 0f }
+        SortBy.POPULARITY -> items.sortedByDescending { it.latestChapter ?: 0 }
+        SortBy.OLDEST -> items.sortedBy { it.title.lowercase() }
+        SortBy.LATEST -> items
     }
 }

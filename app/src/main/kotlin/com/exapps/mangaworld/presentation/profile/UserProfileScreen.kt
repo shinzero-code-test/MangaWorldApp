@@ -77,6 +77,7 @@ fun UserProfileScreen(
     onOpenCommunityChat: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenLists: () -> Unit,
+    onOpenModeration: () -> Unit,
     viewModel: UserProfileViewModel = hiltViewModel()
 ) {
     val profile by viewModel.profile.collectAsStateWithLifecycle()
@@ -120,6 +121,9 @@ fun UserProfileScreen(
                     OutlinedButton(onClick = onOpenNotifications) { Text("الإشعارات") }
                 }
                 OutlinedButton(onClick = onOpenLists) { Icon(Icons.Filled.List, null); Text("قوائمي") }
+                if (profile?.role in setOf("moderator", "admin")) {
+                    OutlinedButton(onClick = onOpenModeration) { Text("لوحة الإشراف") }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = showListsPublic, onCheckedChange = {
                         showListsPublic = it

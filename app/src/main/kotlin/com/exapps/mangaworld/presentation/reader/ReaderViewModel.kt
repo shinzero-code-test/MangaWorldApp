@@ -51,7 +51,12 @@ data class ReaderUiState(
     val bookmarkedPages: Set<Int> = emptySet(),
     val pageNotes: Map<Int, String> = emptyMap(),
     val liveReaders: Int = 0,
-    val currentPageReactions: List<ReaderReaction> = emptyList()
+    val currentPageReactions: List<ReaderReaction> = emptyList(),
+    val autoOpenNextChapter: Boolean = false,
+    val showLiveReadersOverlay: Boolean = true,
+    val showReactionOverlay: Boolean = true,
+    val lastTapNormalizedX: Float = 0.5f,
+    val lastTapNormalizedY: Float = 0.5f
 )
 
 @HiltViewModel
@@ -90,7 +95,10 @@ class ReaderViewModel @Inject constructor(
                         incognitoMode = settings.incognitoMode,
                         imageFilter = settings.imageFilter,
                         hapticsEnabled = settings.hapticsEnabled,
-                        smartPrefetchEnabled = settings.smartPrefetchEnabled
+                        smartPrefetchEnabled = settings.smartPrefetchEnabled,
+                        autoOpenNextChapter = settings.autoOpenNextChapter,
+                        showLiveReadersOverlay = settings.showLiveReadersOverlay,
+                        showReactionOverlay = settings.showReactionOverlay
                     )
                 }
             }
@@ -212,6 +220,9 @@ class ReaderViewModel @Inject constructor(
                     scheduleAutoCleanupIfNeeded(st.mangaId, st.chapterUrl)
                     runCatching { firebaseSyncManager.pushLocalSnapshot() }
                 }
+                if (st.autoOpenNextChapter) {
+                    st.nextChapterUrl?.let { next -> loadChapter(next, st.mangaId, currentSource) }
+                }
                 widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
             }
         }
@@ -264,8 +275,29 @@ class ReaderViewModel @Inject constructor(
         settingsRepo.updateImageFilter(filter)
     }
 
+    fun setAutoOpenNextChapter(enabled: Boolean) = viewModelScope.launch {
+        settingsRepo.updateAutoOpenNextChapter(enabled)
+    }
+
+    fun setShowLiveReadersOverlay(enabled: Boolean) = viewModelScope.launch {
+        settingsRepo.updateShowLiveReadersOverlay(enabled)
+    }
+
+    fun setShowReactionOverlay(enabled: Boolean) = viewModelScope.launch {
+        settingsRepo.updateShowReactionOverlay(enabled)
+    }
+
     fun setIncognito(enabled: Boolean) = viewModelScope.launch {
         settingsRepo.updateIncognitoMode(enabled)
+    }
+
+    fun onReaderTap(normalizedX: Float, normalizedY: Float) {
+        _state.update {
+            it.copy(
+                lastTapNormalizedX = normalizedX.coerceIn(0f, 1f),
+                lastTapNormalizedY = normalizedY.coerceIn(0f, 1f)
+            )
+        }
     }
 
     fun toggleBookmarkCurrentPage() {
@@ -298,7 +330,16 @@ class ReaderViewModel @Inject constructor(
     fun sendReaction(emoji: String) {
         val st = _state.value
         viewModelScope.launch {
-            runCatching { communityRepository.sendPageReaction(st.mangaId, st.chapterUrl, st.currentPage, emoji) }
+            runCatching {
+                communityRepository.sendPageReaction(
+                    st.mangaId,
+                    st.chapterUrl,
+                    st.currentPage,
+                    emoji,
+                    st.lastTapNormalizedX,
+                    st.lastTapNormalizedY
+                )
+            }
         }
     }
 

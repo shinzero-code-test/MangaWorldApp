@@ -82,6 +82,47 @@ fun BrowseScreen(
         }
         Spacer(Modifier.height(8.dp))
 
+        androidx.compose.foundation.lazy.LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                FilterChip(
+                    selected = uiState.selectedSource == null,
+                    onClick = { viewModel.setSource(null) },
+                    label = { Text("كل المصادر") }
+                )
+            }
+            items(MangaSource.entries.size) { index ->
+                val src = MangaSource.entries[index]
+                if (uiState.enabledSourceIds.contains(src.id)) {
+                    FilterChip(
+                        selected = uiState.selectedSource == src,
+                        onClick = { viewModel.setSource(src) },
+                        label = { Text(src.displayName) }
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+
+        androidx.compose.foundation.lazy.LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(SortBy.entries.size) { i ->
+                val sort = SortBy.entries[i]
+                FilterChip(
+                    selected = uiState.sortBy == sort,
+                    onClick = { viewModel.setSortBy(sort) },
+                    label = { Text(sort.label) }
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+
         // Filter/Sort row
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -269,7 +310,7 @@ private fun FilterBottomSheet(
             }
             Spacer(Modifier.height(16.dp))
 
-            Text("النوع", style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
+            Text("النوع / الفئة", style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(null to "الكل",

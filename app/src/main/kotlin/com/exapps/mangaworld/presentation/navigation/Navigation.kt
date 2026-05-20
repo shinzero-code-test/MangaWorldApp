@@ -12,6 +12,7 @@ import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.browse.BrowseScreen
 import com.exapps.mangaworld.presentation.cloud.CloudSyncScreen
 import com.exapps.mangaworld.presentation.community.CommunityChatScreen
+import com.exapps.mangaworld.presentation.community.ModerationDashboardScreen
 import com.exapps.mangaworld.presentation.community.CommunityScreen
 import com.exapps.mangaworld.presentation.detail.MangaDetailScreen
 import com.exapps.mangaworld.presentation.diagnostics.DiagnosticsScreen
@@ -21,6 +22,7 @@ import com.exapps.mangaworld.presentation.library.LibraryScreen
 import com.exapps.mangaworld.presentation.latest.LatestUpdatesScreen
 import com.exapps.mangaworld.presentation.localstorage.LocalStorageScreen
 import com.exapps.mangaworld.presentation.notifications.NotificationCenterScreen
+import com.exapps.mangaworld.presentation.profile.PublicProfileScreen
 import com.exapps.mangaworld.presentation.profile.UserProfileScreen
 import com.exapps.mangaworld.presentation.profile.UserListsScreen
 import com.exapps.mangaworld.presentation.reader.ReaderScreen
@@ -42,13 +44,18 @@ sealed class Screen(val route: String) {
             "community_chat?roomId=${java.net.URLEncoder.encode(roomId, "UTF-8")}&title=${java.net.URLEncoder.encode(title, "UTF-8")}"
     }
     object UserLists : Screen("user_lists")
+    object PublicProfile : Screen("public_profile/{userId}") {
+        fun createRoute(userId: String) = "public_profile/$userId"
+    }
+    object ModerationDashboard : Screen("moderation_dashboard")
     object Downloads   : Screen("downloads")
     object LocalStorage: Screen("local_storage")
     object LatestUpdates : Screen("latest_updates")
-    object Community : Screen("community/{sourceId}/{mangaId}/{slug}?chapterUrl={chapterUrl}") {
-        fun createRoute(sourceId: String, mangaId: String, slug: String, chapterUrl: String? = null): String {
+    object Community : Screen("community/{sourceId}/{mangaId}/{slug}?chapterUrl={chapterUrl}&commentId={commentId}") {
+        fun createRoute(sourceId: String, mangaId: String, slug: String, chapterUrl: String? = null, commentId: String? = null): String {
             val encoded = chapterUrl?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
-            return "community/$sourceId/$mangaId/$slug?chapterUrl=$encoded"
+            val encodedComment = commentId?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
+            return "community/$sourceId/$mangaId/$slug?chapterUrl=$encoded&commentId=$encodedComment"
         }
     }
     object Detail : Screen("detail/{sourceId}/{slug}") {
@@ -116,19 +123,26 @@ fun MangaNavGraph(navController: NavHostController) {
                 onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
                 onOpenCommunityChat = { navController.navigate(Screen.CommunityChat.createRoute("global", "الدردشة العامة")) },
                 onOpenNotifications = { navController.navigate(Screen.Notifications.route) },
-                onOpenLists = { navController.navigate(Screen.UserLists.route) }
+                onOpenLists = { navController.navigate(Screen.UserLists.route) },
+                onOpenModeration = { navController.navigate(Screen.ModerationDashboard.route) }
             )
         }
         composable(Screen.UserLists.route) {
             UserListsScreen(onBack = { navController.popBackStack() })
         }
+        composable(Screen.PublicProfile.route, arguments = listOf(navArgument("userId") { type = NavType.StringType })) {
+            PublicProfileScreen(onBack = { navController.popBackStack() })
+        }
         composable(Screen.Notifications.route) {
             NotificationCenterScreen(
                 onBack = { navController.popBackStack() },
                 onOpenThread = { item ->
-                    navController.navigate(Screen.Community.createRoute(item.sourceId, item.mangaId, item.slug, item.chapterUrl))
+                    navController.navigate(Screen.Community.createRoute(item.sourceId, item.mangaId, item.slug, item.chapterUrl, item.commentId))
                 }
             )
+        }
+        composable(Screen.ModerationDashboard.route) {
+            ModerationDashboardScreen(onBack = { navController.popBackStack() })
         }
         composable(
             route = Screen.CommunityChat.route,
@@ -252,14 +266,16 @@ fun MangaNavGraph(navController: NavHostController) {
                 navArgument("sourceId") { type = NavType.StringType },
                 navArgument("mangaId") { type = NavType.StringType },
                 navArgument("slug") { type = NavType.StringType },
-                navArgument("chapterUrl") { type = NavType.StringType; nullable = true; defaultValue = "" }
+                navArgument("chapterUrl") { type = NavType.StringType; nullable = true; defaultValue = "" },
+                navArgument("commentId") { type = NavType.StringType; nullable = true; defaultValue = "" }
             )
         ) {
             val mangaId = it.arguments?.getString("mangaId") ?: "global"
             val slug = it.arguments?.getString("slug") ?: "الدردشة"
             CommunityScreen(
                 onBack = { navController.popBackStack() },
-                onOpenChat = { navController.navigate(Screen.CommunityChat.createRoute(mangaId, slug)) }
+                onOpenChat = { navController.navigate(Screen.CommunityChat.createRoute(mangaId, slug)) },
+                onOpenProfile = { userId -> navController.navigate(Screen.PublicProfile.createRoute(userId)) }
             )
         }
     }

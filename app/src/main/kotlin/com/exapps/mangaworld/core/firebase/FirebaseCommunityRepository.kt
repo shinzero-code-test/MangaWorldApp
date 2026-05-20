@@ -6,6 +6,7 @@ import com.exapps.mangaworld.domain.model.CommunityComment
 import com.exapps.mangaworld.domain.model.CommunityNotification
 import com.exapps.mangaworld.domain.model.CommunityNotificationType
 import com.exapps.mangaworld.domain.model.CommunityProfile
+import com.exapps.mangaworld.domain.model.ModerationReport
 import com.exapps.mangaworld.domain.model.CustomUserList
 import com.exapps.mangaworld.domain.model.CustomUserListItem
 import com.exapps.mangaworld.domain.model.MangaReview
@@ -122,6 +123,49 @@ class FirebaseCommunityRepository @Inject constructor(
             .addSnapshotListener { snapshot, error ->
                 if (error != null) return@addSnapshotListener
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toCustomUserList() })
+            }
+        awaitClose { reg.remove() }
+    }
+
+    override fun observePublicProfile(userId: String): Flow<CommunityProfile?> = callbackFlow {
+        val reg = firestore.collection("publicProfiles").document(userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                trySend(snapshot?.toProfile())
+            }
+        awaitClose { reg.remove() }
+    }
+
+    override fun observePublicLists(userId: String): Flow<List<CustomUserList>> = callbackFlow {
+        val reg = firestore.collection("users").document(userId).collection("lists")
+            .whereEqualTo("isPublic", true)
+            .orderBy("updatedAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toCustomUserList() })
+            }
+        awaitClose { reg.remove() }
+    }
+
+    override fun observePublicActivity(userId: String): Flow<List<CommunityComment>> = callbackFlow {
+        val reg = firestore.collectionGroup("comments")
+            .whereEqualTo("authorUid", userId)
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(30)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toComment() })
+            }
+        awaitClose { reg.remove() }
+    }
+
+    override fun observeModerationReports(): Flow<List<ModerationReport>> = callbackFlow {
+        val reg = firestore.collection("moderationReports")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(100)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toModerationReport() })
             }
         awaitClose { reg.remove() }
     }
@@ -266,7 +310,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .await()
     }
 
-    override suspend fun sendPageReaction(mangaId: String, chapterUrl: String, pageIndex: Int, emoji: String) {
+    override suspend fun sendPageReaction(mangaId: String, chapterUrl: String, pageIndex: Int, emoji: String, normalizedX: Float, normalizedY: Float) {
         val profile = currentProfileOrThrow()
         val reaction = ReaderReaction(
             id = UUID.randomUUID().toString(),
@@ -275,7 +319,9 @@ class FirebaseCommunityRepository @Inject constructor(
             pageIndex = pageIndex,
             emoji = emoji,
             authorUid = profile.uid,
-            authorName = profile.username
+            authorName = profile.username,
+            normalizedX = normalizedX.coerceIn(0f, 1f),
+            normalizedY = normalizedY.coerceIn(0f, 1f)
         )
         firestore.collection("community_presence").document(threadId(mangaId, chapterUrl))
             .collection("reactions").document(reaction.id)
@@ -314,12 +360,19 @@ class FirebaseCommunityRepository @Inject constructor(
                     "reportedUid" to comment.authorUid,
                     "reporterUid" to reporter.uid,
                     "reason" to reason.trim(),
-                    "createdAt" to System.currentTimeMillis()
+                    "createdAt" to System.currentTimeMillis(),
+                    "status" to "open"
                 )
             ).await()
         commentsCollection(comment.mangaId, comment.chapterUrl)
             .document(comment.id)
             .update("reportedCount", FieldValue.increment(1))
+            .await()
+    }
+
+    override suspend fun resolveModerationReport(reportId: String, status: String) {
+        firestore.collection("moderationReports").document(reportId)
+            .update("status", status)
             .await()
     }
 
@@ -463,6 +516,7 @@ class FirebaseCommunityRepository @Inject constructor(
             username = firebaseUser?.displayName?.takeIf { it.isNotBlank() } ?: "reader_${uid.takeLast(6)}",
             avatarUrl = firebaseUser?.photoUrl?.toString(),
             badgeLabel = badge,
+            role = "reader",
             isPublic = true,
             showListsPublic = true,
             showActivityPublic = true,
@@ -503,6 +557,7 @@ class FirebaseCommunityRepository @Inject constructor(
         "username" to username,
         "avatarUrl" to avatarUrl,
         "badgeLabel" to badgeLabel,
+        "role" to role,
         "isPublic" to isPublic,
         "showListsPublic" to showListsPublic,
         "showActivityPublic" to showActivityPublic,
@@ -567,6 +622,8 @@ class FirebaseCommunityRepository @Inject constructor(
         "emoji" to emoji,
         "authorUid" to authorUid,
         "authorName" to authorName,
+        "normalizedX" to normalizedX,
+        "normalizedY" to normalizedY,
         "createdAt" to createdAt
     )
 
@@ -599,6 +656,7 @@ class FirebaseCommunityRepository @Inject constructor(
             username = getString("username") ?: return null,
             avatarUrl = getString("avatarUrl"),
             badgeLabel = getString("badgeLabel") ?: "Beginner",
+            role = getString("role") ?: "reader",
             isPublic = getBoolean("isPublic") ?: true,
             showListsPublic = getBoolean("showListsPublic") ?: true,
             showActivityPublic = getBoolean("showActivityPublic") ?: true,
@@ -651,6 +709,8 @@ class FirebaseCommunityRepository @Inject constructor(
             emoji = getString("emoji") ?: return null,
             authorUid = getString("authorUid") ?: return null,
             authorName = getString("authorName") ?: "User",
+            normalizedX = (getDouble("normalizedX") ?: 0.5).toFloat(),
+            normalizedY = (getDouble("normalizedY") ?: 0.5).toFloat(),
             createdAt = getLong("createdAt") ?: 0L
         )
     }.getOrNull()
@@ -690,6 +750,20 @@ class FirebaseCommunityRepository @Inject constructor(
             title = getString("title") ?: return null,
             coverUrl = getString("coverUrl") ?: "",
             addedAt = getLong("addedAt") ?: 0L
+        )
+    }.getOrNull()
+
+    private fun DocumentSnapshot.toModerationReport(): ModerationReport? = runCatching {
+        ModerationReport(
+            id = getString("id") ?: id,
+            commentId = getString("commentId") ?: return null,
+            mangaId = getString("mangaId") ?: return null,
+            chapterUrl = getString("chapterUrl"),
+            reportedUid = getString("reportedUid") ?: return null,
+            reporterUid = getString("reporterUid") ?: return null,
+            reason = getString("reason") ?: return null,
+            createdAt = getLong("createdAt") ?: 0L,
+            status = getString("status") ?: "open"
         )
     }.getOrNull()
 

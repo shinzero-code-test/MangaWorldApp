@@ -52,11 +52,10 @@ class BrowseViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            settingsRepo.getAppSettings()
-                .map { settings -> settings.enabledSources to settings.contentBlacklist }
+            combine(settingsRepo.getAppSettings(), _uiState) { settings, ui -> Triple(settings.enabledSources, settings.contentBlacklist, ui.selectedSource) }
                 .distinctUntilChanged()
-                .collectLatest { (enabledSources, blacklist) ->
-                    val loaded = repo.getGenres(enabledSourceIds = enabledSources)
+                .collectLatest { (enabledSources, blacklist, selectedSource) ->
+                    val loaded = repo.getGenres(source = selectedSource, enabledSourceIds = enabledSources)
                     val availableGenres = listOf("الكل") + loaded
                     _uiState.update {
                         it.copy(

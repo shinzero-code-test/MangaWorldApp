@@ -32,6 +32,7 @@ class AppPreferences @Inject constructor(
         val KEY_DYNAMIC_COLORS = booleanPreferencesKey("dynamic_colors")
         val KEY_BIOMETRIC_LOCK = booleanPreferencesKey("biometric_lock")
         val KEY_SECURE_READER = booleanPreferencesKey("secure_reader")
+        val KEY_NOTIFICATION_MODE = stringPreferencesKey("notification_mode")
         val KEY_AUTO_CLEANUP = booleanPreferencesKey("auto_cleanup_downloads")
         val KEY_CLEANUP_HOURS = intPreferencesKey("cleanup_hours")
         val KEY_IMAGE_CACHE_LIMIT_MB = intPreferencesKey("image_cache_limit_mb")
@@ -48,6 +49,9 @@ class AppPreferences @Inject constructor(
         val KEY_SMART_PREFETCH = booleanPreferencesKey("smart_prefetch")
         val KEY_HAPTICS = booleanPreferencesKey("reader_haptics")
         val KEY_IMAGE_FILTER = stringPreferencesKey("reader_image_filter")
+        val KEY_AUTO_OPEN_NEXT = booleanPreferencesKey("reader_auto_next")
+        val KEY_SHOW_LIVE_READERS = booleanPreferencesKey("reader_show_live_readers")
+        val KEY_SHOW_REACTIONS = booleanPreferencesKey("reader_show_reactions")
 
         fun cookieKey(domain: String) = stringPreferencesKey("cookie_$domain")
     }
@@ -68,6 +72,9 @@ class AppPreferences @Inject constructor(
                 useDynamicColors = prefs[KEY_DYNAMIC_COLORS] ?: true,
                 biometricLockEnabled = prefs[KEY_BIOMETRIC_LOCK] ?: false,
                 secureReaderEnabled = prefs[KEY_SECURE_READER] ?: false,
+                notificationDeliveryMode = prefs[KEY_NOTIFICATION_MODE]
+                    ?.let { name -> NotificationDeliveryMode.values().firstOrNull { it.name == name } }
+                    ?: NotificationDeliveryMode.INSTANT,
                 autoCleanupReadDownloads = prefs[KEY_AUTO_CLEANUP] ?: false,
                 cleanupAfterHours = prefs[KEY_CLEANUP_HOURS] ?: 24,
                 imageCacheLimitMb = prefs[KEY_IMAGE_CACHE_LIMIT_MB] ?: 250,
@@ -102,7 +109,10 @@ class AppPreferences @Inject constructor(
                 hapticsEnabled = prefs[KEY_HAPTICS] ?: true,
                 imageFilter = prefs[KEY_IMAGE_FILTER]
                     ?.let { name -> ReaderImageFilter.values().firstOrNull { it.name == name } }
-                    ?: ReaderImageFilter.NONE
+                    ?: ReaderImageFilter.NONE,
+                autoOpenNextChapter = prefs[KEY_AUTO_OPEN_NEXT] ?: false,
+                showLiveReadersOverlay = prefs[KEY_SHOW_LIVE_READERS] ?: true,
+                showReactionOverlay = prefs[KEY_SHOW_REACTIONS] ?: true
             )
         }
 
@@ -129,6 +139,9 @@ class AppPreferences @Inject constructor(
 
     suspend fun setSecureReader(v: Boolean) =
         dataStore.edit { it[KEY_SECURE_READER] = v }
+
+    suspend fun setNotificationMode(v: NotificationDeliveryMode) =
+        dataStore.edit { it[KEY_NOTIFICATION_MODE] = v.name }
 
     suspend fun setAutoCleanup(v: Boolean) =
         dataStore.edit { it[KEY_AUTO_CLEANUP] = v }
@@ -185,6 +198,15 @@ class AppPreferences @Inject constructor(
 
     suspend fun setImageFilter(v: ReaderImageFilter) =
         dataStore.edit { it[KEY_IMAGE_FILTER] = v.name }
+
+    suspend fun setAutoOpenNext(v: Boolean) =
+        dataStore.edit { it[KEY_AUTO_OPEN_NEXT] = v }
+
+    suspend fun setShowLiveReaders(v: Boolean) =
+        dataStore.edit { it[KEY_SHOW_LIVE_READERS] = v }
+
+    suspend fun setShowReactions(v: Boolean) =
+        dataStore.edit { it[KEY_SHOW_REACTIONS] = v }
 
     fun getCookies(domain: String): Flow<String?> = dataStore.data
         .catch { emit(emptyPreferences()) }

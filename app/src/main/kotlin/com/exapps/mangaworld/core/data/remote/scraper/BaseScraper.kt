@@ -20,6 +20,17 @@ interface MangaScraper {
     suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>>
     suspend fun searchManga(query: String, page: Int = 1): Result<List<MangaItem>>
     suspend fun getMangaByGenre(genre: String, page: Int = 1): Result<List<MangaItem>>
+    suspend fun browseManga(
+        page: Int = 1,
+        genre: String? = null,
+        status: MangaStatus? = null,
+        type: MangaType? = null,
+        sortBy: SortBy = SortBy.LATEST
+    ): Result<List<MangaItem>> = when {
+        genre != null -> getMangaByGenre(genre, page)
+        page == 1 -> getPopularManga()
+        else -> Result.success(emptyList())
+    }
     suspend fun getPopularManga(): Result<List<MangaItem>>
     suspend fun getGenres(): Result<List<String>>
 }

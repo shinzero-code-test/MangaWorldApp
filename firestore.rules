@@ -13,6 +13,10 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == authorUid;
     }
 
+    function canModerate() {
+      return signedIn() && get(/databases/$(database)/documents/publicProfiles/$(request.auth.uid)).data.role in ['moderator', 'admin'];
+    }
+
     match /users/{userId} {
       allow read, write: if owner(userId);
 
@@ -41,10 +45,12 @@ service cloud.firestore {
       }
 
       match /lists/{listId} {
-        allow read, write: if owner(userId);
+        allow read: if owner(userId) || get(/databases/$(database)/documents/publicProfiles/$(userId)).data.showListsPublic == true;
+        allow write: if owner(userId);
 
         match /items/{document=**} {
-          allow read, write: if owner(userId);
+          allow read: if owner(userId) || get(/databases/$(database)/documents/publicProfiles/$(userId)).data.showListsPublic == true;
+          allow write: if owner(userId);
         }
       }
     }
@@ -98,7 +104,7 @@ service cloud.firestore {
 
     match /moderationReports/{reportId} {
       allow create: if signedIn() && request.resource.data.reporterUid == request.auth.uid;
-      allow read, update, delete: if false;
+      allow read, update, delete: if canModerate();
     }
 
     match /public/{document=**} {

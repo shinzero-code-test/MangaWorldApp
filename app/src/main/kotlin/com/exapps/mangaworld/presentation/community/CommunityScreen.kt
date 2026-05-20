@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -75,6 +76,7 @@ data class CommunityUiState(
     val appSettings: AppSettings = AppSettings(),
     val tab: CommunityTab = CommunityTab.COMMENTS,
     val chapterMode: Boolean = false,
+    val focusCommentId: String? = null,
     val replyTo: CommunityComment? = null,
     val error: String? = null
 )
@@ -89,6 +91,7 @@ class CommunityViewModel @Inject constructor(
     private val slug: String = checkNotNull(savedStateHandle["slug"])
     private val sourceId: String = checkNotNull(savedStateHandle["sourceId"])
     private val chapterUrl: String? = savedStateHandle["chapterUrl"]
+    private val focusCommentId: String? = savedStateHandle["commentId"]?.takeIf { it.isNotBlank() }
 
     private val _tab = MutableStateFlow(if (chapterUrl == null) CommunityTab.REVIEWS else CommunityTab.COMMENTS)
     private val _replyTo = MutableStateFlow<CommunityComment?>(null)
@@ -119,6 +122,7 @@ class CommunityViewModel @Inject constructor(
             appSettings = appSettings,
             tab = tab,
             chapterMode = chapterUrl != null,
+            focusCommentId = focusCommentId,
             replyTo = replyTo,
             error = error
         )
@@ -172,6 +176,7 @@ private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third:
 fun CommunityScreen(
     onBack: () -> Unit,
     onOpenChat: () -> Unit,
+    onOpenProfile: (String) -> Unit,
     viewModel: CommunityViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -184,6 +189,13 @@ fun CommunityScreen(
     var reportTarget by remember { mutableStateOf<CommunityComment?>(null) }
     var reportReason by remember { mutableStateOf("") }
     val expandedSpoilers = remember { mutableStateListOf<String>() }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(state.comments, state.focusCommentId) {
+        val target = state.focusCommentId ?: return@LaunchedEffect
+        val index = state.comments.indexOfFirst { it.id == target }
+        if (index >= 0) listState.animateScrollToItem(index)
+    }
 
     Column(Modifier.fillMaxSize().background(MangaColors.Background)) {
         Row(
@@ -207,13 +219,22 @@ fun CommunityScreen(
         }
 
         if (state.tab == CommunityTab.COMMENTS) {
-            LazyColumn(modifier = Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(state.comments, key = { it.id }) { comment ->
-                    Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = RoundedCornerShape(16.dp)) {
+                    val focused = state.focusCommentId == comment.id
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = if (focused) MangaColors.GlowPurple else MangaColors.SurfaceContainer),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
                         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Column {
-                                    Text(comment.authorName, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        comment.authorName,
+                                        color = MangaColors.OnSurface,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.clickable { onOpenProfile(comment.authorUid) }
+                                    )
                                     Text(comment.authorBadge, color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
                                 }
                                 Text(comment.replyCount.toString() + " رد", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
@@ -266,7 +287,12 @@ fun CommunityScreen(
                 state.reviews.forEach { review ->
                     Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = RoundedCornerShape(16.dp)) {
                         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(review.authorName, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
+                            Text(
+                                review.authorName,
+                                color = MangaColors.OnSurface,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.clickable { onOpenProfile(review.authorUid) }
+                            )
                             Text("${review.rating}/5 • ${review.authorBadge}", color = MangaColors.Cyan)
                             if (review.title.isNotBlank()) Text(review.title, color = MangaColors.OnSurface)
                             if (review.body.isNotBlank()) Text(review.body, color = MangaColors.OnSurfaceVariant)

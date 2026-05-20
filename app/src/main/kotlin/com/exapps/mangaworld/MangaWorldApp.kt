@@ -15,6 +15,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import com.exapps.mangaworld.core.firebase.FirebaseStartupCoordinator
 import com.exapps.mangaworld.core.firebase.FirebaseSyncWorker
+import com.exapps.mangaworld.core.firebase.FavoriteDigestWorker
 import com.exapps.mangaworld.core.widget.AppShortcutManager
 import com.exapps.mangaworld.core.widget.WidgetRefreshScheduler
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -78,6 +79,14 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
             "firebase_sync_periodic",
             ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<FirebaseSyncWorker>(12, TimeUnit.HOURS)
+                .setConstraints(constraints)
+                .build()
+        )
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "favorite_digest_periodic",
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<FavoriteDigestWorker>(24, TimeUnit.HOURS)
                 .setConstraints(constraints)
                 .build()
         )

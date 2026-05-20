@@ -186,11 +186,6 @@ class MangaPagingSource(
                 MangaSource.values().filter { it.id in allowedSourceIds }
             }
 
-            // getPopularManga has no pagination — only load page 1
-            if (filters.query.isEmpty() && filters.genre == null && page > 1) {
-                return LoadResult.Page(data = emptyList(), prevKey = page - 1, nextKey = null)
-            }
-
             // Run all source queries in parallel, tolerate CF errors per-source
             val rawResults: List<MangaItem> = coroutineScope {
                 val deferred: List<kotlinx.coroutines.Deferred<List<MangaItem>>> = sources.map { source ->
@@ -198,8 +193,7 @@ class MangaPagingSource(
                         val scraper = scrapers[source.id] ?: return@async emptyList<MangaItem>()
                         val result = when {
                             filters.query.isNotEmpty() -> scraper.searchManga(filters.query, page)
-                            filters.genre != null -> scraper.getMangaByGenre(filters.genre, page)
-                            else -> scraper.getPopularManga()
+                            else -> scraper.browseManga(page, filters.genre, filters.status, filters.type, filters.sortBy)
                         }
 
                         result.getOrElse { e ->
@@ -231,7 +225,7 @@ class MangaPagingSource(
             LoadResult.Page(
                 data = sorted,
                 prevKey = if (page == 1) null else page - 1,
-                nextKey = if (sorted.size < 20) null else page + 1
+                nextKey = if (sorted.isEmpty()) null else page + 1
             )
         } catch (e: Exception) {
             LoadResult.Error(e)
@@ -394,6 +388,7 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setDynamicColors(enabled: Boolean) { prefs.setDynamicColors(enabled) }
     override suspend fun setBiometricLock(enabled: Boolean) { prefs.setBiometricLock(enabled) }
     override suspend fun setSecureReader(enabled: Boolean) { prefs.setSecureReader(enabled) }
+    override suspend fun setNotificationDeliveryMode(mode: NotificationDeliveryMode) { prefs.setNotificationMode(mode) }
     override suspend fun setAutoCleanupReadDownloads(enabled: Boolean) { prefs.setAutoCleanup(enabled) }
     override suspend fun setCleanupAfterHours(hours: Int) { prefs.setCleanupHours(hours) }
     override suspend fun setImageCacheLimitMb(limitMb: Int) { prefs.setImageCacheLimitMb(limitMb) }
@@ -409,6 +404,9 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun updateSmartPrefetch(enabled: Boolean) { prefs.setSmartPrefetch(enabled) }
     override suspend fun updateReaderHaptics(enabled: Boolean) { prefs.setReaderHaptics(enabled) }
     override suspend fun updateImageFilter(filter: ReaderImageFilter) { prefs.setImageFilter(filter) }
+    override suspend fun updateAutoOpenNextChapter(enabled: Boolean) { prefs.setAutoOpenNext(enabled) }
+    override suspend fun updateShowLiveReadersOverlay(enabled: Boolean) { prefs.setShowLiveReaders(enabled) }
+    override suspend fun updateShowReactionOverlay(enabled: Boolean) { prefs.setShowReactions(enabled) }
     override fun getCookies(domain: String) = prefs.getCookies(domain)
     override suspend fun saveCookies(domain: String, cookies: String) { prefs.saveCookies(domain, cookies) }
     override suspend fun clearCookies(domain: String) { prefs.clearCookies(domain) }

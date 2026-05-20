@@ -177,6 +177,25 @@ class MangaSidScraper @Inject constructor(
         parseCards(doc).map { it.first }
     }
 
+    override suspend fun browseManga(
+        page: Int,
+        genre: String?,
+        status: MangaStatus?,
+        type: MangaType?,
+        sortBy: SortBy
+    ): Result<List<MangaItem>> = runCatching {
+        val sort = when (sortBy) {
+            SortBy.POPULARITY -> "views"
+            SortBy.OLDEST -> "title&sortOrder=ASC"
+            else -> "latest"
+        }
+        val params = mutableListOf("page=$page", "sort=$sort")
+        genre?.takeIf { it.isNotBlank() }?.let { params += "genres=${java.net.URLEncoder.encode(it, "UTF-8")}" }
+        val items = parseCards(fetchDocument("${source.baseUrl}/manga-list?${params.joinToString("&")}")).map { it.first }
+        items.filter { status == null || it.status == status || it.status == MangaStatus.UNKNOWN }
+            .filter { type == null || it.type == type || it.type == MangaType.UNKNOWN }
+    }
+
     override suspend fun getGenres(): Result<List<String>> = runCatching {
         fetchDocument("${source.baseUrl}/genres")
             .select("a[href*='genres=']")

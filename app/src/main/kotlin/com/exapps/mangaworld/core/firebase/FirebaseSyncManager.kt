@@ -44,6 +44,7 @@ class FirebaseSyncManager @Inject constructor(
                 "useDynamicColors" to settings.useDynamicColors,
                 "biometricLockEnabled" to settings.biometricLockEnabled,
                 "secureReaderEnabled" to settings.secureReaderEnabled,
+                "notificationDeliveryMode" to settings.notificationDeliveryMode.name,
                 "autoCleanupReadDownloads" to settings.autoCleanupReadDownloads,
                 "cleanupAfterHours" to settings.cleanupAfterHours,
                 "imageCacheLimitMb" to settings.imageCacheLimitMb,
@@ -102,6 +103,11 @@ class FirebaseSyncManager @Inject constructor(
         profile.getBoolean("useDynamicColors")?.let { settingsRepository.setDynamicColors(it) }
         profile.getBoolean("biometricLockEnabled")?.let { settingsRepository.setBiometricLock(it) }
         profile.getBoolean("secureReaderEnabled")?.let { settingsRepository.setSecureReader(it) }
+        profile.getString("notificationDeliveryMode")?.let { name ->
+            com.exapps.mangaworld.domain.model.NotificationDeliveryMode.values().firstOrNull { it.name == name }?.let { mode ->
+                settingsRepository.setNotificationDeliveryMode(mode)
+            }
+        }
         profile.getBoolean("autoCleanupReadDownloads")?.let { settingsRepository.setAutoCleanupReadDownloads(it) }
         profile.getLong("cleanupAfterHours")?.toInt()?.let { settingsRepository.setCleanupAfterHours(it) }
         profile.getLong("imageCacheLimitMb")?.toInt()?.let { settingsRepository.setImageCacheLimitMb(it) }
@@ -124,6 +130,9 @@ class FirebaseSyncManager @Inject constructor(
         readerPrefs.getBoolean("incognitoMode")?.let { settingsRepository.updateIncognitoMode(it) }
         readerPrefs.getBoolean("smartPrefetchEnabled")?.let { settingsRepository.updateSmartPrefetch(it) }
         readerPrefs.getBoolean("hapticsEnabled")?.let { settingsRepository.updateReaderHaptics(it) }
+        readerPrefs.getBoolean("autoOpenNextChapter")?.let { settingsRepository.updateAutoOpenNextChapter(it) }
+        readerPrefs.getBoolean("showLiveReadersOverlay")?.let { settingsRepository.updateShowLiveReadersOverlay(it) }
+        readerPrefs.getBoolean("showReactionOverlay")?.let { settingsRepository.updateShowReactionOverlay(it) }
         readerPrefs.getString("imageFilter")?.let { name ->
             com.exapps.mangaworld.domain.model.ReaderImageFilter.values().firstOrNull { it.name == name }?.let { filter ->
                 settingsRepository.updateImageFilter(filter)

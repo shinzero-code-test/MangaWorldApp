@@ -384,6 +384,26 @@ class StarzScraper @Inject constructor(
         parseMangaGrid(doc)
     }
 
+    override suspend fun browseManga(
+        page: Int,
+        genre: String?,
+        status: MangaStatus?,
+        type: MangaType?,
+        sortBy: SortBy
+    ): Result<List<MangaItem>> = runCatching {
+        val order = when (sortBy) {
+            SortBy.POPULARITY -> "views"
+            SortBy.RATING -> "rating"
+            SortBy.OLDEST -> "alphabet"
+            SortBy.LATEST -> "latest"
+        }
+        val pagePart = if (page <= 1) "${source.baseUrl}/manga/" else "${source.baseUrl}/manga/page/$page/"
+        val params = mutableListOf("m_orderby=$order")
+        genre?.takeIf { it.isNotBlank() }?.let { params += "genre=${java.net.URLEncoder.encode(it, "UTF-8")}" }
+        val doc = fetchDocument(pagePart + "?" + params.joinToString("&"))
+        parseMangaGrid(doc)
+    }
+
     override suspend fun getGenres(): Result<List<String>> = runCatching {
         val doc = fetchDocument("${source.baseUrl}/manga/")
         doc.select("ul.genre-scroll-list li a, .genres-content a")

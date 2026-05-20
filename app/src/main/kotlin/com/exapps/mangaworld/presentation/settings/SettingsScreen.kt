@@ -206,6 +206,30 @@ fun SettingsScreen(
                     }
                 }
             }
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.SkipNext,
+                title = "الانتقال التلقائي للفصل التالي",
+                subtitle = "افتح الفصل التالي عند إنهاء الحالي",
+                checked = reader.autoOpenNextChapter,
+                onCheckedChange = viewModel::setAutoOpenNextChapter
+            )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.Groups,
+                title = "إظهار عداد القراء المباشر",
+                subtitle = "إظهار عدد القراء المتواجدين حالياً",
+                checked = reader.showLiveReadersOverlay,
+                onCheckedChange = viewModel::setShowLiveReadersOverlay
+            )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.EmojiEmotions,
+                title = "إظهار طبقة التفاعلات",
+                subtitle = "إظهار التفاعلات المباشرة داخل الفصل",
+                checked = reader.showReactionOverlay,
+                onCheckedChange = viewModel::setShowReactionOverlay
+            )
         }
 
         // ── Sources ───────────────────────────────────────────────────────────
@@ -303,6 +327,33 @@ fun SettingsScreen(
                             onClick = { viewModel.setImageCacheLimit(size) },
                             label = { Text("$size") }
                         )
+                    }
+                }
+            }
+        }
+
+        SettingsSection("الإشعارات") {
+            SettingsItem(
+                icon = Icons.Filled.Notifications,
+                title = "وضع التنبيهات",
+                subtitle = app.notificationDeliveryMode.label
+            ) {
+                var expanded by remember { mutableStateOf(false) }
+                Box {
+                    TextButton(onClick = { expanded = true }) {
+                        Text(app.notificationDeliveryMode.label, color = MangaColors.Cyan)
+                        Icon(Icons.Filled.ArrowDropDown, null, tint = MangaColors.Cyan)
+                    }
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(MangaColors.SurfaceContainer)) {
+                        NotificationDeliveryMode.values().forEach { mode ->
+                            DropdownMenuItem(
+                                text = { Text(mode.label, color = MangaColors.OnSurface) },
+                                onClick = { viewModel.setNotificationMode(mode); expanded = false },
+                                leadingIcon = {
+                                    if (mode == app.notificationDeliveryMode) Icon(Icons.Filled.Check, null, tint = MangaColors.Primary)
+                                }
+                            )
+                        }
                     }
                 }
             }

@@ -102,6 +102,26 @@ class MeshmangaScraper @Inject constructor(
         fetchSeriesPage("$apiBase/series/?is_hot=true&page_size=30")
     }
 
+    override suspend fun browseManga(
+        page: Int,
+        genre: String?,
+        status: MangaStatus?,
+        type: MangaType?,
+        sortBy: SortBy
+    ): Result<List<MangaItem>> = runCatching {
+        val params = mutableListOf("page=$page", "page_size=30")
+        genre?.takeIf { it.isNotBlank() }?.let { resolveGenreId(it)?.let { id -> params += "genre=$id" } }
+        when (sortBy) {
+            SortBy.POPULARITY -> params += "ordering=-views_count"
+            SortBy.RATING -> params += "ordering=-rating"
+            SortBy.OLDEST -> params += "ordering=title"
+            SortBy.LATEST -> params += "ordering=-updated_at"
+        }
+        fetchSeriesPage("$apiBase/series/?${params.joinToString("&")}")
+            .filter { status == null || it.status == status || it.status == MangaStatus.UNKNOWN }
+            .filter { type == null || it.type == type || it.type == MangaType.UNKNOWN }
+    }
+
     override suspend fun getGenres(): Result<List<String>> = runCatching {
         val genres = apiGetArray("$apiBase/genres/?page_size=200").orEmpty()
         val mapped = genres

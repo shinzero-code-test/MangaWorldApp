@@ -237,8 +237,17 @@ data class ReaderSettings(
     val incognitoMode: Boolean = false,
     val smartPrefetchEnabled: Boolean = true,
     val hapticsEnabled: Boolean = true,
-    val imageFilter: ReaderImageFilter = ReaderImageFilter.NONE
+    val imageFilter: ReaderImageFilter = ReaderImageFilter.NONE,
+    val autoOpenNextChapter: Boolean = false,
+    val showLiveReadersOverlay: Boolean = true,
+    val showReactionOverlay: Boolean = true
 )
+
+enum class NotificationDeliveryMode(val label: String) {
+    INSTANT("فوري"),
+    DAILY_DIGEST("ملخص يومي"),
+    SILENT("صامت")
+}
 
 // ─── App Settings ─────────────────────────────────────────────────────────────
 
@@ -254,6 +263,7 @@ data class AppSettings(
     val useDynamicColors: Boolean = true,
     val biometricLockEnabled: Boolean = false,
     val secureReaderEnabled: Boolean = false,
+    val notificationDeliveryMode: NotificationDeliveryMode = NotificationDeliveryMode.INSTANT,
     val autoCleanupReadDownloads: Boolean = false,
     val cleanupAfterHours: Int = 24,
     val imageCacheLimitMb: Int = 250,
@@ -276,6 +286,7 @@ data class CommunityProfile(
     val username: String,
     val avatarUrl: String? = null,
     val badgeLabel: String = "Beginner",
+    val role: String = "reader",
     val isPublic: Boolean = true,
     val showListsPublic: Boolean = true,
     val showActivityPublic: Boolean = true,
@@ -340,6 +351,8 @@ data class ReaderReaction(
     val emoji: String,
     val authorUid: String,
     val authorName: String,
+    val normalizedX: Float = 0.5f,
+    val normalizedY: Float = 0.5f,
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -355,6 +368,18 @@ data class CommunityNotification(
     val commentId: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val read: Boolean = false
+)
+
+data class ModerationReport(
+    val id: String,
+    val commentId: String,
+    val mangaId: String,
+    val chapterUrl: String? = null,
+    val reportedUid: String,
+    val reporterUid: String,
+    val reason: String,
+    val createdAt: Long,
+    val status: String = "open"
 )
 
 data class CommunityChatMessage(

@@ -34,6 +34,7 @@ class SettingsViewModel @Inject constructor(
     fun setDynamicColors(v: Boolean) = saveAndSync { repo.setDynamicColors(v) }
     fun setBiometricLock(v: Boolean) = saveAndSync { repo.setBiometricLock(v) }
     fun setSecureReader(v: Boolean) = saveAndSync { repo.setSecureReader(v) }
+    fun setNotificationMode(v: NotificationDeliveryMode) = saveAndSync { repo.setNotificationDeliveryMode(v) }
     fun setWifiOnly(v: Boolean) = saveAndSync { repo.setDownloadOnWifiOnly(v) }
     fun setNotifications(v: Boolean) = saveAndSync { repo.setNotificationsEnabled(v) }
     fun setAutoCleanup(v: Boolean) = saveAndSync { repo.setAutoCleanupReadDownloads(v) }
@@ -55,6 +56,9 @@ class SettingsViewModel @Inject constructor(
     fun setSmartPrefetch(v: Boolean) = saveAndSync { repo.updateSmartPrefetch(v) }
     fun setReaderHaptics(v: Boolean) = saveAndSync { repo.updateReaderHaptics(v) }
     fun setImageFilter(v: ReaderImageFilter) = saveAndSync { repo.updateImageFilter(v) }
+    fun setAutoOpenNextChapter(v: Boolean) = saveAndSync { repo.updateAutoOpenNextChapter(v) }
+    fun setShowLiveReadersOverlay(v: Boolean) = saveAndSync { repo.updateShowLiveReadersOverlay(v) }
+    fun setShowReactionOverlay(v: Boolean) = saveAndSync { repo.updateShowReactionOverlay(v) }
     fun saveCookies(domain: String, cookies: String) = viewModelScope.launch { repo.saveCookies(domain, cookies) }
 
     fun refreshCacheStats() = viewModelScope.launch {
