@@ -51,6 +51,9 @@ interface ReadingHistoryDao {
     @Query("SELECT * FROM reading_history ORDER BY lastReadAt DESC LIMIT :limit")
     suspend fun getRecent(limit: Int): List<ReadingHistoryEntity>
 
+    @Query("SELECT * FROM reading_history ORDER BY lastReadAt DESC")
+    suspend fun getAll(): List<ReadingHistoryEntity>
+
     @Query("SELECT * FROM reading_history ORDER BY lastReadAt DESC LIMIT 1")
     suspend fun getLatest(): ReadingHistoryEntity?
 }
@@ -101,6 +104,9 @@ interface ReaderAnnotationDao {
 
     @Query("SELECT * FROM reader_annotations ORDER BY updatedAt DESC LIMIT :limit")
     suspend fun getAll(limit: Int): List<ReaderAnnotationEntity>
+
+    @Query("SELECT * FROM reader_annotations ORDER BY updatedAt DESC")
+    suspend fun getAll(): List<ReaderAnnotationEntity>
 
     @Query("SELECT * FROM reader_annotations WHERE mangaId = :mangaId AND chapterUrl = :chapterUrl AND pageIndex = :pageIndex LIMIT 1")
     suspend fun get(mangaId: String, chapterUrl: String, pageIndex: Int): ReaderAnnotationEntity?

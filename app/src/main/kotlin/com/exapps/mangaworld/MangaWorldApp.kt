@@ -18,14 +18,11 @@ import com.exapps.mangaworld.core.firebase.FirebaseSyncWorker
 import com.exapps.mangaworld.core.firebase.FavoriteDigestWorker
 import com.exapps.mangaworld.core.widget.AppShortcutManager
 import com.exapps.mangaworld.core.widget.WidgetRefreshScheduler
-import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -38,7 +35,6 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     @Inject lateinit var widgetRefreshScheduler: WidgetRefreshScheduler
     @Inject lateinit var appShortcutManager: AppShortcutManager
     @Inject lateinit var okHttpClient: OkHttpClient
-    @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var firebaseStartupCoordinator: FirebaseStartupCoordinator
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -49,13 +45,12 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
             .build()
 
     override fun newImageLoader(): ImageLoader {
-        val limitMb = runBlocking { settingsRepository.getAppSettings().first().imageCacheLimitMb }
         return ImageLoader.Builder(this)
             .okHttpClient(okHttpClient)
             .diskCache {
                 DiskCache.Builder()
                     .directory(File(cacheDir, "coil_image_cache"))
-                    .maxSizeBytes(limitMb.coerceAtLeast(64).toLong() * 1024L * 1024L)
+                    .maxSizeBytes(DEFAULT_IMAGE_CACHE_MB.toLong() * 1024L * 1024L)
                     .build()
             }
             .crossfade(true)
@@ -128,5 +123,6 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
         const val DOWNLOAD_CHANNEL_ID = "download_channel"
         const val COMPLETE_CHANNEL_ID = "complete_channel"
         const val CLOUD_CHANNEL_ID = "cloud_channel"
+        private const val DEFAULT_IMAGE_CACHE_MB = 250
     }
 }

@@ -357,7 +357,7 @@ fun SettingsScreen(
 
         SettingsSection("النسخ الاحتياطي المحلي") {
             SettingsItem(
-                icon = Icons.Filled.Backup,
+                icon = Icons.Filled.CloudUpload,
                 title = "تصدير النسخة الاحتياطية",
                 subtitle = "المفضلة، السجل، التقدم، الإعدادات، والملاحظات"
             ) {
@@ -365,7 +365,7 @@ fun SettingsScreen(
             }
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(
-                icon = Icons.Filled.Restore,
+                icon = Icons.Filled.FileOpen,
                 title = "استيراد نسخة احتياطية",
                 subtitle = "دمج البيانات المحلية مع الملف المستورد"
             ) {

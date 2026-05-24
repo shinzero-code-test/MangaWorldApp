@@ -87,6 +87,7 @@ internal fun MangaDetail.toCacheEntity() = MangaCacheEntity(
 class MangaRepositoryImpl @Inject constructor(
     private val scrapers: Map<String, @JvmSuppressWildcards MangaScraper>,
     private val cacheDao: MangaCacheDao,
+    private val favoriteDao: FavoriteDao,
     private val firebaseTelemetry: FirebaseTelemetry
 ) : MangaRepository {
 
@@ -150,6 +151,25 @@ class MangaRepositoryImpl @Inject constructor(
     override suspend fun getPopularManga(source: MangaSource) =
         scraper(source).getPopularManga()
 
+    override suspend fun getSuggestedManga(candidates: List<MangaItem>, limit: Int): List<MangaItem> {
+        val favorites = favoriteDao.getFavoritesList()
+        val favoriteIds = favorites.map { it.mangaId }.toSet()
+        val topGenres = cacheDao.getByIds(favorites.map { it.mangaId })
+            .flatMap { cache -> runCatching { JSONArray(cache.genresJson) }.getOrNull()?.let { arr -> (0 until arr.length()).map { idx -> arr.getString(idx) } } ?: emptyList() }
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedByDescending { it.value }
+            .take(4)
+            .map { it.key }
+            .toSet()
+        return candidates
+            .filterNot { it.id in favoriteIds }
+            .filter { topGenres.isEmpty() || it.genres.any { genre -> genre in topGenres } }
+            .distinctBy { it.id }
+            .take(limit)
+    }
+
     override suspend fun getGenres(source: MangaSource?, enabledSourceIds: Set<String>?): List<String> {
         val allowed = enabledSourceIds ?: MangaSource.entries.map { it.id }.toSet()
         val sources = if (source != null) listOf(source) else MangaSource.values().toList()
@@ -167,6 +187,9 @@ class MangaPagingSource(
     private val scrapers: Map<String, MangaScraper>,
     private val filters: SearchFilters
 ) : PagingSource<Int, MangaItem>() {
+
+    private val needsLocalFiltering: Boolean
+        get() = filters.query.isEmpty() && (filters.status != null || filters.type != null)
 
     private fun normalize(text: String): String = text.lowercase()
         .replace("[\\u064B-\\u065F]".toRegex(), "")
@@ -199,15 +222,30 @@ class MangaPagingSource(
                 val deferred: List<kotlinx.coroutines.Deferred<List<MangaItem>>> = sources.map { source ->
                     async {
                         val scraper = scrapers[source.id] ?: return@async emptyList<MangaItem>()
-                        val result = when {
-                            filters.query.isNotEmpty() -> scraper.searchManga(filters.query, page)
-                            else -> scraper.browseManga(page, filters.genre, filters.status, filters.type, filters.sortBy)
-                        }
+                        val fetched = if (needsLocalFiltering) {
+                            val aggregate = mutableListOf<MangaItem>()
+                            for (subPage in page until page + 3) {
+                                val result = scraper.browseManga(subPage, filters.genre, filters.status, filters.type, filters.sortBy)
+                                val items = result.getOrElse { e ->
+                                    if (filters.source != null) throw e
+                                    emptyList()
+                                }
+                                if (items.isEmpty()) break
+                                aggregate += items
+                            }
+                            aggregate
+                        } else {
+                            val result = when {
+                                filters.query.isNotEmpty() -> scraper.searchManga(filters.query, page)
+                                else -> scraper.browseManga(page, filters.genre, filters.status, filters.type, filters.sortBy)
+                            }
 
-                        result.getOrElse { e ->
-                            if (filters.source != null) throw e
-                            emptyList()
+                            result.getOrElse { e ->
+                                if (filters.source != null) throw e
+                                emptyList()
+                            }
                         }
+                        fetched
                     }
                 }
                 deferred.awaitAll().flatMap { it }

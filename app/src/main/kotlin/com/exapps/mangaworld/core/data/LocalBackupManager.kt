@@ -40,10 +40,10 @@ class LocalBackupManager @Inject constructor(
             put("schemaVersion", 1)
             put("exportedAt", System.currentTimeMillis())
             put("favorites", JSONArray(favoriteDao.getFavoritesList().map { it.toJson() }))
-            put("history", JSONArray(historyDao.getRecent(500).map { it.toJson() }))
+            put("history", JSONArray(historyDao.getAll().map { it.toJson() }))
             put("readChapters", JSONArray(readChapterDao.getAll().map { it.toJson() }))
             put("progress", JSONArray(progressDao.getAll().map { it.toJson() }))
-            put("annotations", JSONArray(annotationDao.getAll(2000).map { it.toJson() }))
+            put("annotations", JSONArray(annotationDao.getAll().map { it.toJson() }))
             put("appSettings", settingsRepository.getAppSettings().first().toJson())
             put("readerSettings", settingsRepository.getReaderSettings().first().toJson())
         }

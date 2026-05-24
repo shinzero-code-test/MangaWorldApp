@@ -10,8 +10,9 @@ import com.exapps.mangaworld.domain.model.AppTheme
 import com.exapps.mangaworld.domain.model.CloudRestorePreview
 import com.exapps.mangaworld.domain.model.CloudRestoreStrategy
 import com.exapps.mangaworld.domain.repository.SettingsRepository
-import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.WriteBatch
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
@@ -30,53 +31,33 @@ class FirebaseSyncManager @Inject constructor(
     suspend fun pushLocalSnapshot() {
         val uid = sessionManager.ensureGuestSession() ?: return
         val favorites = favoriteDao.getFavoritesList()
-        val history = historyDao.getRecent(100)
-        val annotations = readerAnnotationDao.getAll(500)
+        val history = historyDao.getAll()
+        val annotations = readerAnnotationDao.getAll()
         val settings = settingsRepository.getAppSettings().first()
         val reader = settingsRepository.getReaderSettings().first()
 
         val userRef = firestore.collection("users").document(uid)
-        userRef.set(
-            mapOf(
-                "updatedAt" to System.currentTimeMillis(),
-                "enabledSources" to settings.enabledSources.toList(),
-                "theme" to settings.theme.name,
-                "useDynamicColors" to settings.useDynamicColors,
-                "biometricLockEnabled" to settings.biometricLockEnabled,
-                "secureReaderEnabled" to settings.secureReaderEnabled,
-                "notificationDeliveryMode" to settings.notificationDeliveryMode.name,
-                "autoCleanupReadDownloads" to settings.autoCleanupReadDownloads,
-                "cleanupAfterHours" to settings.cleanupAfterHours,
-                "imageCacheLimitMb" to settings.imageCacheLimitMb,
-                "contentBlacklist" to settings.contentBlacklist.toList(),
-                "spoilerCollapseDefault" to settings.spoilerCollapseDefault,
-                "mutedUserIds" to settings.mutedUserIds.toList()
-            ),
-            SetOptions.merge()
-        ).await()
-
-        userRef.collection("preferences").document("reader")
-            .set(reader, SetOptions.merge())
-            .await()
-
-        favorites.forEach { favorite ->
-            userRef.collection("favorites").document(favorite.mangaId)
-                .set(favorite, SetOptions.merge())
-                .await()
-        }
-
-        history.forEach { item ->
-            userRef.collection("readingHistory").document(item.mangaId)
-                .set(item, SetOptions.merge())
-                .await()
-        }
-
-        annotations.forEach { annotation ->
-            val id = annotationDocId(annotation)
-            userRef.collection("readerAnnotations").document(id)
-                .set(annotation, SetOptions.merge())
-                .await()
-        }
+        val writes = mutableListOf<Pair<com.google.firebase.firestore.DocumentReference, Any>>()
+        writes += userRef to mapOf(
+            "updatedAt" to System.currentTimeMillis(),
+            "enabledSources" to settings.enabledSources.toList(),
+            "theme" to settings.theme.name,
+            "useDynamicColors" to settings.useDynamicColors,
+            "biometricLockEnabled" to settings.biometricLockEnabled,
+            "secureReaderEnabled" to settings.secureReaderEnabled,
+            "notificationDeliveryMode" to settings.notificationDeliveryMode.name,
+            "autoCleanupReadDownloads" to settings.autoCleanupReadDownloads,
+            "cleanupAfterHours" to settings.cleanupAfterHours,
+            "imageCacheLimitMb" to settings.imageCacheLimitMb,
+            "contentBlacklist" to settings.contentBlacklist.toList(),
+            "spoilerCollapseDefault" to settings.spoilerCollapseDefault,
+            "mutedUserIds" to settings.mutedUserIds.toList()
+        )
+        writes += userRef.collection("preferences").document("reader") to reader
+        favorites.forEach { favorite -> writes += userRef.collection("favorites").document(favorite.mangaId) to favorite }
+        history.forEach { item -> writes += userRef.collection("readingHistory").document(item.mangaId) to item }
+        annotations.forEach { annotation -> writes += userRef.collection("readerAnnotations").document(annotationDocId(annotation)) to annotation }
+        commitChunked(writes)
     }
 
     suspend fun pullRemoteSnapshot() {
@@ -149,8 +130,8 @@ class FirebaseSyncManager @Inject constructor(
         val remoteAnnotations = userRef.collection("readerAnnotations").get().await().documents.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
 
         val localFavorites = favoriteDao.getFavoritesList()
-        val localHistory = historyDao.getRecent(100)
-        val localAnnotations = readerAnnotationDao.getAll(500)
+        val localHistory = historyDao.getAll()
+        val localAnnotations = readerAnnotationDao.getAll()
         val localTheme = settingsRepository.getAppSettings().first().theme
         val remoteTheme = profile.getString("theme")?.let { name -> AppTheme.values().firstOrNull { it.name == name } }
 
@@ -198,8 +179,8 @@ class FirebaseSyncManager @Inject constructor(
         val remoteHistory = userRef.collection("readingHistory").get().await().documents.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
         val remoteAnnotations = userRef.collection("readerAnnotations").get().await().documents.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
         val localFavorites = favoriteDao.getFavoritesList().associateBy { it.mangaId }
-        val localHistory = historyDao.getRecent(200).associateBy { it.mangaId }
-        val localAnnotations = readerAnnotationDao.getAll(500).associateBy { annotationDocId(it) }
+        val localHistory = historyDao.getAll().associateBy { it.mangaId }
+        val localAnnotations = readerAnnotationDao.getAll().associateBy { annotationDocId(it) }
 
         (localFavorites + remoteFavorites.associateBy { it.mangaId }).values.forEach { favoriteDao.insert(it) }
         (localHistory + remoteHistory.associateBy { it.mangaId }).values
@@ -222,4 +203,12 @@ class FirebaseSyncManager @Inject constructor(
 
     private fun annotationDocId(entity: ReaderAnnotationEntity): String =
         listOf(entity.mangaId, entity.chapterUrl.hashCode().toString(), entity.pageIndex.toString()).joinToString("_")
+
+    private suspend fun commitChunked(writes: List<Pair<com.google.firebase.firestore.DocumentReference, Any>>) {
+        writes.chunked(400).forEach { chunk ->
+            val batch: WriteBatch = firestore.batch()
+            chunk.forEach { (ref, value) -> batch.set(ref, value, SetOptions.merge()) }
+            batch.commit().await()
+        }
+    }
 }

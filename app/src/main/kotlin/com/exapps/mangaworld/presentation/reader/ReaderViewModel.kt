@@ -35,6 +35,8 @@ data class ReaderUiState(
     val brightness: Float = 1.0f,
     val error: String? = null,
     val chapterUrl: String = "",
+    val chapterNumber: Float? = null,
+    val chapterTitle: String? = null,
     val mangaId: String = "",
     val downloadInProgress: Boolean = false,
     val downloadProgress: Float = 0f,
@@ -132,14 +134,18 @@ class ReaderViewModel @Inject constructor(
         prefetchedNextChapterUrl = null
         _state.update { it.copy(isLoading = true, error = null, chapterUrl = chapterUrl, mangaId = mangaId) }
         viewModelScope.launch {
+            val chapterMeta = resolveChapterMeta(mangaId, chapterUrl, source)
             val localPages = downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
             if (localPages.isNotEmpty()) {
+                val currentChapterNumber = chapterMeta?.number ?: parseFallbackChapterNumber(chapterUrl)
                 _state.update {
                     it.copy(
                         isLoading = false,
                         pages = localPages,
                         totalPages = localPages.size,
                         currentPage = 0,
+                        chapterNumber = currentChapterNumber,
+                        chapterTitle = chapterMeta?.title,
                         downloadMessage = "قراءة بدون إنترنت"
                     )
                 }
@@ -152,16 +158,16 @@ class ReaderViewModel @Inject constructor(
             mangaRepo.getChapterPages("", chapterUrl, source)
                 .onSuccess { pages ->
                     // Restore saved progress
-                    val slug = mangaId.substringAfter("_")
-                    val chNum = chapterUrl.substringAfterLast("/").replace("[^0-9.]".toRegex(), "")
-                        .toFloatOrNull() ?: 0f
+                    val chNum = chapterMeta?.number ?: parseFallbackChapterNumber(chapterUrl)
                     val (savedPage, _) = libraryRepo.getReadingProgress(mangaId, chNum)
                     _state.update {
                         it.copy(
                             isLoading = false,
                             pages = pages,
                             totalPages = pages.size,
-                            currentPage = savedPage.coerceIn(0, maxOf(0, pages.size - 1))
+                            currentPage = savedPage.coerceIn(0, maxOf(0, pages.size - 1)),
+                            chapterNumber = chNum,
+                            chapterTitle = chapterMeta?.title
                         )
                     }
                     // Update reading history so Library shows last-visited manga
@@ -212,8 +218,7 @@ class ReaderViewModel @Inject constructor(
         _state.update { it.copy(currentPage = page) }
         // Save progress & mark read at last page
         viewModelScope.launch {
-            val chNum = st.chapterUrl.substringAfterLast("/").replace("[^0-9.]".toRegex(), "")
-                .toFloatOrNull() ?: return@launch
+            val chNum = st.chapterNumber ?: resolveChapterMeta(st.mangaId, st.chapterUrl, currentSource)?.number ?: parseFallbackChapterNumber(st.chapterUrl)
             trackReadingTime()
             if (!st.incognitoMode) {
                 libraryRepo.saveReadingProgress(st.mangaId, chNum, page, st.totalPages)
@@ -256,7 +261,7 @@ class ReaderViewModel @Inject constructor(
                 mangaId = st.mangaId,
                 mangaTitle = st.mangaId.substringAfter("_").ifBlank { st.mangaId },
                 chapterUrl = st.chapterUrl,
-                chapterTitle = null,
+                chapterTitle = st.chapterTitle,
                 pages = st.pages,
                 wifiOnly = st.downloadOnWifiOnly,
                 referer = referer
@@ -429,8 +434,7 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun computeAdjacentChapters(mangaId: String, chapterUrl: String, source: MangaSource) {
-        val detail = cacheDao.get(mangaId)?.toDetail(source)
-            ?: mangaRepo.getMangaDetail(mangaId.substringAfter("_"), source).getOrNull()
+        val detail = resolveDetailForChapter(mangaId, source)
         val chapters = detail?.chapters.orEmpty().sortedByDescending { it.number }
         val currentIndex = chapters.indexOfFirst { it.url == chapterUrl }
         if (currentIndex == -1) return
@@ -450,6 +454,15 @@ class ReaderViewModel @Inject constructor(
         imagePrefetcher.prefetchPages(pages)
         prefetchedNextChapterUrl = nextUrl
     }
+
+    private suspend fun resolveDetailForChapter(mangaId: String, source: MangaSource): MangaDetail? =
+        cacheDao.get(mangaId)?.toDetail(source) ?: mangaRepo.getMangaDetail(mangaId.substringAfter("_"), source).getOrNull()
+
+    private suspend fun resolveChapterMeta(mangaId: String, chapterUrl: String, source: MangaSource): Chapter? =
+        resolveDetailForChapter(mangaId, source)?.chapters?.firstOrNull { it.url == chapterUrl }
+
+    private fun parseFallbackChapterNumber(chapterUrl: String): Float =
+        chapterUrl.substringAfterLast("/").replace("[^0-9.]".toRegex(), "").toFloatOrNull() ?: 0f
 
     private suspend fun scheduleAutoCleanupIfNeeded(mangaId: String, chapterUrl: String) {
         val settings = settingsRepo.getAppSettings().first()

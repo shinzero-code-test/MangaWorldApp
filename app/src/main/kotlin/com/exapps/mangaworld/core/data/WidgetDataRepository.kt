@@ -46,13 +46,12 @@ class WidgetDataRepository @Inject constructor(
 ) {
 
     private val imageLoader by lazy {
-        val limitMb = runCatching { kotlinx.coroutines.runBlocking { settingsRepository.getAppSettings().first().imageCacheLimitMb } }.getOrDefault(250)
         ImageLoader.Builder(context)
             .okHttpClient(okHttpClient)
             .diskCache {
                 DiskCache.Builder()
                     .directory(File(context.cacheDir, "coil_image_cache"))
-                    .maxSizeBytes(limitMb.coerceAtLeast(64).toLong() * 1024L * 1024L)
+                    .maxSizeBytes(DEFAULT_WIDGET_IMAGE_CACHE_MB.toLong() * 1024L * 1024L)
                     .build()
             }
             .crossfade(true)
@@ -277,3 +276,5 @@ class WidgetDataRepository @Inject constructor(
     private fun formatChapterNumber(number: Float): String =
         if (number == number.toInt().toFloat()) number.toInt().toString() else number.toString()
 }
+
+private const val DEFAULT_WIDGET_IMAGE_CACHE_MB = 250

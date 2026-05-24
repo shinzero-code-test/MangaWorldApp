@@ -21,6 +21,7 @@ interface MangaRepository {
 
     // Popular / Featured
     suspend fun getPopularManga(source: MangaSource): Result<List<MangaItem>>
+    suspend fun getSuggestedManga(candidates: List<MangaItem>, limit: Int = 12): List<MangaItem>
 
     // Genres
     suspend fun getGenres(source: MangaSource? = null, enabledSourceIds: Set<String>? = null): List<String>

@@ -157,14 +157,26 @@ class MangaSidScraper @Inject constructor(
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
         val doc = fetchDocument(
             chapterUrl,
-            extraHeaders = mapOf("Referer" to source.baseUrl + "/")
+            extraHeaders = mapOf(
+                "Referer" to source.baseUrl + "/",
+                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Sec-Fetch-Dest" to "document",
+                "Sec-Fetch-Mode" to "navigate",
+                "Sec-Fetch-Site" to "same-origin"
+            )
         )
 
         doc.select(".manga-page img[src], .manga-page img[data-src], img.block.relative.z-20.w-full.h-auto")
             .mapNotNull { img ->
-                val src = img.attr("abs:src").ifEmpty {
-                    img.attr("data-src").ifEmpty { img.attr("src") }.absoluteUrl("https://api.mangasid.com")
+                val raw = img.attr("data-src").ifEmpty { img.attr("src") }
+                if (raw.isBlank()) return@mapNotNull null
+                
+                val src = when {
+                    raw.startsWith("http") -> raw
+                    raw.startsWith("//") -> "https:$raw"
+                    else -> "https://api.mangasid.com${if (raw.startsWith("/")) "" else "/"}$raw"
                 }.encodeForUrl()
+                
                 src.takeIf { it.isNotBlank() }
             }
             .distinct()
@@ -172,7 +184,7 @@ class MangaSidScraper @Inject constructor(
                 ChapterPage(
                     index = index,
                     url = src,
-                    headers = buildImageHeaders(src, source.baseUrl + "/")
+                    headers = buildImageHeaders(src, chapterUrl)
                 )
             }
     }
@@ -293,8 +305,12 @@ class MangaSidScraper @Inject constructor(
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", USER_AGENT)
-            .header("Accept", "text/html,application/xhtml+xml")
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
             .header("Accept-Language", "ar,en;q=0.9")
+            .header("Referer", source.baseUrl + "/")
+            .header("Sec-Fetch-Dest", "document")
+            .header("Sec-Fetch-Mode", "navigate")
+            .header("Sec-Fetch-Site", "same-origin")
             .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
             .build()
         val response = client.newCall(request).execute()
