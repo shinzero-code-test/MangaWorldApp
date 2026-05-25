@@ -148,13 +148,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          app_id=$(python - <<'PY'
-import json
-with open('app/google-services.json', 'r', encoding='utf-8') as fh:
-    data = json.load(fh)
-print(data['client'][0]['client_info']['mobilesdk_app_id'])
-PY
-          )
+          app_id=$(python -c "import json; print(json.load(open('app/google-services.json', 'r', encoding='utf-8'))['client'][0]['client_info']['mobilesdk_app_id'])")
           echo "app_id=$app_id" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js for Firebase CLI
@@ -306,13 +300,7 @@ PY
         shell: bash
         run: |
           set -euo pipefail
-          app_id=$(python - <<'PY'
-import json
-with open('app/google-services.json', 'r', encoding='utf-8') as fh:
-    data = json.load(fh)
-print(data['client'][0]['client_info']['mobilesdk_app_id'])
-PY
-          )
+          app_id=$(python -c "import json; print(json.load(open('app/google-services.json', 'r', encoding='utf-8'))['client'][0]['client_info']['mobilesdk_app_id'])")
           echo "app_id=$app_id" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js for Firebase CLI
