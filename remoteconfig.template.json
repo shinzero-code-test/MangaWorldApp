@@ -7,11 +7,18 @@
     "source_mangasid_enabled": { "defaultValue": { "value": "true" } },
     "source_meshmanga_enabled": { "defaultValue": { "value": "true" } },
     "scraper_selector_overrides": { "defaultValue": { "value": "{}" } },
+    "scraper_connect_timeout_seconds": { "defaultValue": { "value": "30" } },
+    "scraper_read_timeout_seconds": { "defaultValue": { "value": "30" } },
+    "scraper_write_timeout_seconds": { "defaultValue": { "value": "15" } },
+    "scraper_retry_count": { "defaultValue": { "value": "1" } },
     "home_layout_variant": { "defaultValue": { "value": "default" } },
     "community_banned_keywords": { "defaultValue": { "value": "" } },
-    "remote_alert_message": { "defaultValue": { "value": "" } }
+    "remote_alert_message": { "defaultValue": { "value": "" } },
+    "ml_translation_enabled": { "defaultValue": { "value": "true" } },
+    "ml_smart_reply_enabled": { "defaultValue": { "value": "true" } },
+    "ml_cover_tagging_enabled": { "defaultValue": { "value": "true" } }
   },
   "version": {
-    "versionNumber": "1"
+    "versionNumber": "2"
   }
 }

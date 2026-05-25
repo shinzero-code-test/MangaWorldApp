@@ -2,6 +2,7 @@ package com.exapps.mangaworld.core.data.download
 
 import android.app.Application
 import androidx.work.*
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.data.local.dao.DownloadTaskDao
 import com.exapps.mangaworld.core.data.local.dao.DownloadedMangaDao
 import com.exapps.mangaworld.core.data.local.entity.DownloadTaskEntity
@@ -23,7 +24,8 @@ class DownloadQueueManager @Inject constructor(
     private val app: Application,
     private val downloadTaskDao: DownloadTaskDao,
     private val downloadedMangaDao: DownloadedMangaDao,
-    private val okHttpClient: OkHttpClient
+    private val okHttpClient: OkHttpClient,
+    private val analyticsManager: FirebaseAnalyticsManager
 ) {
     // ─── Observe ──────────────────────────────────────────────────────────────
 
@@ -105,6 +107,12 @@ class DownloadQueueManager @Inject constructor(
                 status = "queued"
             )
         )
+        analyticsManager.logDownloadStatus(
+            mangaId = mangaId,
+            sourceId = mangaId.substringBefore('_'),
+            status = "queued",
+            totalPages = pages.size
+        )
 
         // Persist manga metadata so the Local Storage screen can display it
         if (mangaMetadata != null) {
@@ -147,6 +155,12 @@ class DownloadQueueManager @Inject constructor(
         downloadTaskDao.upsert(
             task.copy(status = "cancelled", updatedAt = System.currentTimeMillis(),
                 errorMessage = "Cancelled by user")
+        )
+        analyticsManager.logDownloadStatus(
+            mangaId = task.mangaId,
+            sourceId = task.mangaId.substringBefore('_'),
+            status = "cancelled",
+            totalPages = runCatching { JSONArray(task.pagesJson).length() }.getOrDefault(0)
         )
         File(task.targetDir).deleteRecursively()
         WorkManager.getInstance(app).cancelAllWorkByTag(taskId)

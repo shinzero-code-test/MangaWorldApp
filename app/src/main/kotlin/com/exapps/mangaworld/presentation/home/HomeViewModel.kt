@@ -3,7 +3,9 @@ package com.exapps.mangaworld.presentation.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.isBlockedBy
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
+import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -29,7 +31,9 @@ data class HomeUiState(
 class HomeViewModel @Inject constructor(
     private val repo: MangaRepository,
     private val settingsRepo: SettingsRepository,
-    private val remoteConfigManager: FirebaseRemoteConfigManager
+    private val remoteConfigManager: FirebaseRemoteConfigManager,
+    private val analyticsManager: FirebaseAnalyticsManager,
+    private val firebaseTelemetry: FirebaseTelemetry
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -81,6 +85,7 @@ class HomeViewModel @Inject constructor(
             _state.update { it.copy(isLoading = true, error = null) }
             repo.getHomeData(source)
                 .onSuccess { data ->
+                    firebaseTelemetry.setActiveSource(source.id)
                     val filteredFeatured = data.featured.filterNot { it.isBlockedBy(blockedKeywords) }
                     val filteredLatest = data.latestChapters.filterNot { it.isBlockedBy(blockedKeywords) }
                     val filteredTrending = data.trending.filterNot { it.isBlockedBy(blockedKeywords) }
@@ -95,6 +100,7 @@ class HomeViewModel @Inject constructor(
                             activeSource = source
                         )
                     }
+                    analyticsManager.logHomeLayoutExposure(_state.value.homeLayoutVariant, source.id)
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isLoading = false, error = e.message) }

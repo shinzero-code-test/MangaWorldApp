@@ -72,8 +72,8 @@ android {
         applicationId = "com.exapps.mangaworld"
         minSdk        = 26
         targetSdk     = 35
-        versionCode   = 2
-        versionName   = "2.0.0"
+        versionCode   = 3
+        versionName   = "3.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -201,6 +201,7 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.jsoup)
     implementation(libs.play.services.base)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     // Image Loading
     implementation(libs.coil.compose)
@@ -225,7 +226,14 @@ dependencies {
     implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-perf")
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
+    debugImplementation("com.google.firebase:firebase-appcheck-debug")
     implementation(libs.play.services.auth)
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mlkit:translate:17.0.3")
+    implementation("com.google.mlkit:smart-reply:17.0.4")
+    implementation("com.google.mlkit:image-labeling:17.0.9")
+    implementation("com.google.mlkit:language-id:17.0.6")
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
     // Testing

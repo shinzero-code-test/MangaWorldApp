@@ -37,6 +37,7 @@ import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.size.Precision
+import com.exapps.mangaworld.core.firebase.withFirebaseTrace
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
@@ -61,6 +62,7 @@ fun ReaderScreen(
     var annotationsSheetOpen by remember { mutableStateOf(false) }
     var commentsSheetOpen by remember { mutableStateOf(false) }
     var settingsSheetOpen by remember { mutableStateOf(false) }
+    var translationSheetOpen by remember { mutableStateOf(false) }
     var commentText by remember { mutableStateOf("") }
     var commentSpoiler by remember { mutableStateOf(false) }
     val solverLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -170,6 +172,11 @@ fun ReaderScreen(
                 },
                 onBrowseAnnotations = { annotationsSheetOpen = true },
                 onOpenComments = { commentsSheetOpen = true },
+                translationEnabled = state.translation.enabled,
+                onTranslate = {
+                    translationSheetOpen = true
+                    viewModel.translateCurrentPage()
+                },
                 onOpenSettings = { settingsSheetOpen = true },
                 liveReaders = state.liveReaders,
                 hasPreviousChapter = state.prevChapterUrl != null,
@@ -326,6 +333,18 @@ fun ReaderScreen(
                         commentsSheetOpen = false
                         onOpenCommunity()
                     }
+                )
+            }
+        }
+
+        if (translationSheetOpen) {
+            ModalBottomSheet(onDismissRequest = {
+                translationSheetOpen = false
+                viewModel.clearTranslationResult()
+            }) {
+                ReaderTranslationSheet(
+                    translation = state.translation,
+                    onRetry = { viewModel.translateCurrentPage() }
                 )
             }
         }
@@ -542,6 +561,7 @@ private fun MangaPageImage(page: ChapterPage, imageFilter: ReaderImageFilter, mo
                 .bitmapConfig(Bitmap.Config.RGB_565)
                 .precision(Precision.INEXACT)
                 .size(1600, 4096)
+                .withFirebaseTrace("reader_page")
                 .apply { if (transformations.isNotEmpty()) transformations(transformations) }
                 .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
                 .build(),
@@ -601,6 +621,8 @@ private fun ReaderTopBar(
     onEditNote: () -> Unit,
     onBrowseAnnotations: () -> Unit,
     onOpenComments: () -> Unit,
+    translationEnabled: Boolean,
+    onTranslate: () -> Unit,
     onOpenSettings: () -> Unit,
     liveReaders: Int,
     hasPreviousChapter: Boolean,
@@ -652,6 +674,11 @@ private fun ReaderTopBar(
                 IconButton(onClick = onOpenComments) {
                     Icon(Icons.Filled.Forum, "نقاش الفصل", tint = Color.White)
                 }
+                if (translationEnabled) {
+                    IconButton(onClick = onTranslate) {
+                        Icon(Icons.Filled.GTranslate, "ترجمة الصفحة", tint = Color.White)
+                    }
+                }
                 if (downloadInProgress) {
                     IconButton(onClick = onCancelDownload) {
                         Icon(Icons.Filled.Close, "إلغاء التنزيل", tint = Color.White)
@@ -665,6 +692,60 @@ private fun ReaderTopBar(
                 IconButton(onClick = onOpenSettings) {
                     Icon(Icons.Filled.MoreVert, "إعدادات", tint = Color.White)
                 }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReaderTranslationSheet(
+    translation: PageTranslationUiState,
+    onRetry: () -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text("ترجمة الصفحة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        when {
+            !translation.enabled -> {
+                Text("ميزة الترجمة غير مفعلة حالياً.", color = MangaColors.Muted)
+            }
+
+            translation.isLoading -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+                    Text("جارٍ تحليل النص وترجمته...", color = MangaColors.OnSurfaceVariant)
+                }
+            }
+
+            translation.error != null -> {
+                Text(translation.error, color = MaterialTheme.colorScheme.error)
+                OutlinedButton(onClick = onRetry) { Text("إعادة المحاولة") }
+            }
+
+            translation.lines.isEmpty() -> {
+                Text("لم يتم العثور على نص قابل للترجمة في هذه الصفحة.", color = MangaColors.Muted)
+            }
+
+            else -> {
+                translation.sourceLanguageTag?.let { tag ->
+                    Text("اللغة المكتشفة: $tag", color = MangaColors.Cyan, style = MaterialTheme.typography.labelMedium)
+                }
+                translation.lines.forEachIndexed { index, line ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("الفقرة ${index + 1}", color = MangaColors.Cyan, style = MaterialTheme.typography.labelMedium)
+                            Text(line.originalText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                            Text(line.translatedText, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                 }
             }
         }

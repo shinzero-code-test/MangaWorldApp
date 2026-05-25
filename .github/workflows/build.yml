@@ -5,6 +5,7 @@ on:
     branches: [ main, master, develop ]
     tags:
       - 'v*'
+      - '*.*.*'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
@@ -91,6 +92,9 @@ jobs:
     name: Build Debug APKs (All ABIs)
     runs-on: ubuntu-latest
     needs: lint-and-test
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      FIREBASE_APP_DISTRIBUTION_GROUPS: ${{ secrets.FIREBASE_APP_DISTRIBUTION_GROUPS }}
     if: |
       github.event_name == 'push' ||
       github.event_name == 'pull_request' ||
@@ -138,6 +142,51 @@ jobs:
       - name: Build Debug APKs
         run: ./gradlew :app:assembleDebug --stacktrace
 
+      - name: Resolve Firebase app id
+        if: github.event_name == 'push'
+        id: firebase-app
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_id=$(python - <<'PY'
+import json
+with open('app/google-services.json', 'r', encoding='utf-8') as fh:
+    data = json.load(fh)
+print(data['client'][0]['client_info']['mobilesdk_app_id'])
+PY
+          )
+          echo "app_id=$app_id" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js for Firebase CLI
+        if: github.event_name == 'push' && env.FIREBASE_SERVICE_ACCOUNT != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Firebase CLI
+        if: github.event_name == 'push' && env.FIREBASE_SERVICE_ACCOUNT != ''
+        run: npm install -g firebase-tools
+
+      - name: Distribute internal debug build
+        if: github.event_name == 'push' && env.FIREBASE_SERVICE_ACCOUNT != ''
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/debug/*universal*.apk)
+          if [[ ${#apks[@]} -eq 0 ]]; then
+            echo "No universal debug APK found; skipping App Distribution."
+            exit 0
+          fi
+          groups="${FIREBASE_APP_DISTRIBUTION_GROUPS:-internal-testers}"
+          firebase appdistribution:distribute "${apks[0]}" \
+            --app "${{ steps.firebase-app.outputs.app_id }}" \
+            --groups "$groups" \
+            --release-notes "Internal debug build from ${GITHUB_REF_NAME} (${GITHUB_SHA::7})"
+
       - name: List APK files
         run: find app/build/outputs/apk -name "*.apk" -type f
 
@@ -180,6 +229,8 @@ jobs:
     needs: lint-and-test
     env:
       KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      FIREBASE_APP_DISTRIBUTION_GROUPS: ${{ secrets.FIREBASE_APP_DISTRIBUTION_GROUPS }}
     if: |
       github.event_name == 'push' ||
       startsWith(github.ref, 'refs/tags/v') ||
@@ -249,6 +300,51 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew :app:bundleRelease --stacktrace
 
+      - name: Resolve Firebase app id
+        if: github.event_name == 'push'
+        id: firebase-app
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_id=$(python - <<'PY'
+import json
+with open('app/google-services.json', 'r', encoding='utf-8') as fh:
+    data = json.load(fh)
+print(data['client'][0]['client_info']['mobilesdk_app_id'])
+PY
+          )
+          echo "app_id=$app_id" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js for Firebase CLI
+        if: github.event_name == 'push' && env.FIREBASE_SERVICE_ACCOUNT != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Firebase CLI
+        if: github.event_name == 'push' && env.FIREBASE_SERVICE_ACCOUNT != ''
+        run: npm install -g firebase-tools
+
+      - name: Distribute internal release build
+        if: github.event_name == 'push' && env.FIREBASE_SERVICE_ACCOUNT != ''
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/release/*universal*.apk)
+          if [[ ${#apks[@]} -eq 0 ]]; then
+            echo "No universal release APK found; skipping App Distribution."
+            exit 0
+          fi
+          groups="${FIREBASE_APP_DISTRIBUTION_GROUPS:-internal-testers}"
+          firebase appdistribution:distribute "${apks[0]}" \
+            --app "${{ steps.firebase-app.outputs.app_id }}" \
+            --groups "$groups" \
+            --release-notes "Internal release build from ${GITHUB_REF_NAME} (${GITHUB_SHA::7})"
+
       - name: List output files
         run: |
           echo "=== APKs ==="
@@ -310,7 +406,7 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: build-release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     steps:

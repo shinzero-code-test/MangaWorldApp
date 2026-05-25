@@ -26,18 +26,28 @@ import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
+import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
+import com.exapps.mangaworld.core.firebase.withFirebaseTrace
 import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
+import com.exapps.mangaworld.core.ml.MlKitCoverTagger
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.components.GradientDivider
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class LocalStorageViewModel @Inject constructor(
-    private val manager: DownloadQueueManager
+    private val manager: DownloadQueueManager,
+    private val coverTagger: MlKitCoverTagger,
+    private val remoteConfigManager: FirebaseRemoteConfigManager,
+    private val analyticsManager: FirebaseAnalyticsManager
 ) : ViewModel() {
 
     val downloadedMangas = manager.observeDownloadedMangas()
@@ -45,6 +55,43 @@ class LocalStorageViewModel @Inject constructor(
 
     private val _confirmDelete = MutableStateFlow<DownloadedMangaEntity?>(null)
     val confirmDelete: StateFlow<DownloadedMangaEntity?> = _confirmDelete.asStateFlow()
+
+    private val _autoTags = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+    val autoTags: StateFlow<Map<String, List<String>>> = _autoTags.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            combine(manager.observeDownloadedMangas(), remoteConfigManager.mlCoverTaggingEnabled) { mangas, enabled ->
+                mangas to enabled
+            }.collectLatest { (mangas, enabled) ->
+                if (!enabled) {
+                    _autoTags.value = emptyMap()
+                    return@collectLatest
+                }
+
+                val preserved = _autoTags.value.filterKeys { existingId ->
+                    mangas.any { it.mangaId == existingId }
+                }
+
+                val missing = mangas.filter { it.mangaId !in preserved }
+                val generated = coroutineScope {
+                    missing.map { manga ->
+                        async {
+                            manga.mangaId to coverTagger.generateTags(manga.localCoverPath, manga.coverUrl)
+                        }
+                    }.associate { deferred -> deferred.await() }
+                }.filterValues { it.isNotEmpty() }
+
+                generated.forEach { (mangaId, tags) ->
+                    mangas.firstOrNull { it.mangaId == mangaId }?.let { manga ->
+                        analyticsManager.logCoverTagsGenerated(manga.sourceId, tags.size)
+                    }
+                }
+
+                _autoTags.value = preserved + generated
+            }
+        }
+    }
 
     fun promptDelete(manga: DownloadedMangaEntity) { _confirmDelete.value = manga }
     fun dismissDelete() { _confirmDelete.value = null }
@@ -55,6 +102,8 @@ class LocalStorageViewModel @Inject constructor(
     }
     fun chapterCount(entity: DownloadedMangaEntity): Int =
         manager.countDownloadedChapters(entity.mangaId, entity.title)
+
+    fun tagsFor(entity: DownloadedMangaEntity): List<String> = autoTags.value[entity.mangaId].orEmpty()
 }
 
 @Composable
@@ -64,6 +113,7 @@ fun LocalStorageScreen(
 ) {
     val mangas by viewModel.downloadedMangas.collectAsStateWithLifecycle()
     val confirmDelete by viewModel.confirmDelete.collectAsStateWithLifecycle()
+    val autoTags by viewModel.autoTags.collectAsStateWithLifecycle()
 
     Box(Modifier.fillMaxSize().background(MangaColors.Background)) {
         Column(Modifier.fillMaxSize()) {
@@ -105,6 +155,7 @@ fun LocalStorageScreen(
                     items(mangas, key = { it.mangaId }) { manga ->
                         LocalMangaCard(
                             manga = manga,
+                            autoTags = autoTags[manga.mangaId].orEmpty(),
                             downloadedChapters = viewModel.chapterCount(manga),
                             onClick = { onMangaClick(manga.sourceId, manga.slug) },
                             onDelete = { viewModel.promptDelete(manga) }
@@ -144,6 +195,7 @@ fun LocalStorageScreen(
 @Composable
 private fun LocalMangaCard(
     manga: DownloadedMangaEntity,
+    autoTags: List<String>,
     downloadedChapters: Int,
     onClick: () -> Unit,
     onDelete: () -> Unit
@@ -159,7 +211,9 @@ private fun LocalMangaCard(
             horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             AsyncImage(
                 model = ImageRequest.Builder(ctx).data(manga.localCoverPath ?: manga.coverUrl)
-                    .crossfade(true).build(),
+                    .crossfade(true)
+                    .withFirebaseTrace("local_cover")
+                    .build(),
                 imageLoader = ctx.imageLoader,
                 contentDescription = manga.title, contentScale = ContentScale.Crop,
                 modifier = Modifier.size(72.dp, 100.dp).clip(RoundedCornerShape(10.dp))
@@ -174,6 +228,20 @@ private fun LocalMangaCard(
                     .padding(horizontal = 8.dp, vertical = 3.dp)) {
                     Text(MangaSource.fromId(manga.sourceId).displayName,
                         style = MaterialTheme.typography.labelSmall, color = MangaColors.Cyan)
+                }
+
+                if (autoTags.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        autoTags.forEach { tag ->
+                            Box(
+                                Modifier
+                                    .background(MangaColors.SurfaceContainer, RoundedCornerShape(100.dp))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Text(tag, style = MaterialTheme.typography.labelSmall, color = MangaColors.OnSurfaceVariant)
+                            }
+                        }
+                    }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically,

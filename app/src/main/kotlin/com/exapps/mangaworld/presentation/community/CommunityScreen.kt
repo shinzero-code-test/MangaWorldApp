@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -47,7 +48,12 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
+import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
+import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.exapps.mangaworld.core.firebase.filterMutedComments
+import com.exapps.mangaworld.core.ml.MlKitSmartReplySuggester
+import com.exapps.mangaworld.core.ml.SmartReplyMessageInput
 import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.CommunityComment
 import com.exapps.mangaworld.domain.model.CommunityProfile
@@ -62,6 +68,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -87,7 +94,11 @@ data class CommunityUiState(
 class CommunityViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val communityRepository: CommunityRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val smartReplySuggester: MlKitSmartReplySuggester,
+    private val sessionManager: FirebaseSessionManager,
+    private val analyticsManager: FirebaseAnalyticsManager,
+    private val remoteConfigManager: FirebaseRemoteConfigManager
 ) : ViewModel() {
     private val mangaId: String = checkNotNull(savedStateHandle["mangaId"])
     private val slug: String = checkNotNull(savedStateHandle["slug"])
@@ -98,6 +109,7 @@ class CommunityViewModel @Inject constructor(
     private val _tab = MutableStateFlow(if (chapterUrl == null) CommunityTab.REVIEWS else CommunityTab.COMMENTS)
     private val _replyTo = MutableStateFlow<CommunityComment?>(null)
     private val _error = MutableStateFlow<String?>(null)
+    private val _suggestions = MutableStateFlow<List<String>>(emptyList())
     private val commentsFlow = if (chapterUrl == null) communityRepository.observeMangaComments(mangaId) else communityRepository.observeChapterComments(mangaId, chapterUrl.orEmpty())
     private val reviewsFlow = if (chapterUrl == null) communityRepository.observeReviews(mangaId) else kotlinx.coroutines.flow.flowOf(emptyList())
     private val profileFlow: Flow<CommunityProfile?> = flow { emit(communityRepository.getCurrentProfile()) }
@@ -129,6 +141,39 @@ class CommunityViewModel @Inject constructor(
             error = error
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, CommunityUiState(chapterMode = chapterUrl != null))
+
+    val suggestions: StateFlow<List<String>> = _suggestions.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            combine(commentsFlow, _replyTo, remoteConfigManager.mlSmartReplyEnabled) { comments, replyTo, enabled ->
+                Triple(comments, replyTo, enabled)
+            }.collectLatest { (comments, replyTo, enabled) ->
+                    if (!enabled) {
+                        _suggestions.value = emptyList()
+                        return@collectLatest
+                    }
+                    val currentUserId = sessionManager.currentUserId().orEmpty()
+                    val seededComments = buildList {
+                        replyTo?.let(::add)
+                        addAll(comments.takeLast(8))
+                    }.distinctBy { it.id }
+                    val inputs = seededComments.map { comment ->
+                        SmartReplyMessageInput(
+                            authorId = comment.authorUid,
+                            text = comment.text,
+                            isLocalUser = comment.authorUid == currentUserId,
+                            timestampMs = comment.createdAt
+                        )
+                    }
+                    val generated = runCatching { smartReplySuggester.suggestReplies(inputs) }.getOrDefault(emptyList())
+                    _suggestions.value = generated
+                    if (generated.isNotEmpty()) {
+                        analyticsManager.logSmartReplySurface("community_comments", generated.size)
+                    }
+                }
+        }
+    }
 
     fun setTab(tab: CommunityTab) { _tab.value = tab }
     fun setReply(comment: CommunityComment?) { _replyTo.value = comment }
@@ -170,6 +215,10 @@ class CommunityViewModel @Inject constructor(
             settingsRepository.setMutedUserIds(current + uid)
         }
     }
+
+    fun onSuggestionSelected(reply: String) {
+        analyticsManager.logSmartReplySelected("community_comments", reply.length)
+    }
 }
 
 private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
@@ -182,6 +231,7 @@ fun CommunityScreen(
     viewModel: CommunityViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     var commentText by remember { mutableStateOf("") }
     var spoiler by remember { mutableStateOf(false) }
     var reviewDialog by remember { mutableStateOf(false) }
@@ -262,6 +312,23 @@ fun CommunityScreen(
                     color = MangaColors.Cyan,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
+            }
+            if (suggestions.isNotEmpty()) {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(suggestions) { suggestion ->
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                commentText = suggestion
+                                viewModel.onSuggestionSelected(suggestion)
+                            },
+                            label = { Text(suggestion) }
+                        )
+                    }
+                }
             }
             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(Modifier.weight(1f)) {

@@ -13,6 +13,9 @@ import androidx.work.WorkManager
 import coil.disk.DiskCache
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
+import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.exapps.mangaworld.core.firebase.FirebaseStartupCoordinator
 import com.exapps.mangaworld.core.firebase.FirebaseSyncWorker
 import com.exapps.mangaworld.core.firebase.FavoriteDigestWorker
@@ -59,6 +62,7 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
 
     override fun onCreate() {
         super.onCreate()
+        initializeAppCheck()
         createNotificationChannels()
         widgetRefreshScheduler.schedule()
         scheduleFirebaseSync()
@@ -66,6 +70,17 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
             appShortcutManager.refreshDynamicShortcuts()
             firebaseStartupCoordinator.initialize()
         }
+    }
+
+    private fun initializeAppCheck() {
+        val firebaseAppCheck = FirebaseAppCheck.getInstance()
+        val providerFactory = if (BuildConfig.DEBUG) {
+            DebugAppCheckProviderFactory.getInstance()
+        } else {
+            PlayIntegrityAppCheckProviderFactory.getInstance()
+        }
+        firebaseAppCheck.installAppCheckProviderFactory(providerFactory)
+        firebaseAppCheck.isTokenAutoRefreshEnabled = true
     }
 
     private fun scheduleFirebaseSync() {

@@ -45,8 +45,8 @@ object NetworkModule {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
+            .addInterceptor(firebaseNetworkInterceptor)
             .addInterceptor(logging)
-            .addNetworkInterceptor(firebaseNetworkInterceptor)
             .addInterceptor { chain ->
                 val req = chain.request().newBuilder()
                     .header("User-Agent", BaseScraperImpl.USER_AGENT)

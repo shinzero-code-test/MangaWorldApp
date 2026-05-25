@@ -24,6 +24,7 @@ import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.size.Precision
+import com.exapps.mangaworld.core.firebase.withFirebaseTrace
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
@@ -142,6 +143,7 @@ fun MangaCover(
             .allowHardware(false)
             .bitmapConfig(Bitmap.Config.RGB_565)
             .precision(Precision.INEXACT)
+            .withFirebaseTrace("manga_cover")
             .apply { headers.forEach { (k, v) -> addHeader(k, v) } }
             .build(),
         imageLoader = ctx.imageLoader,

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -16,7 +17,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val repo: MangaRepository,
-    private val settingsRepo: SettingsRepository
+    private val settingsRepo: SettingsRepository,
+    private val analyticsManager: FirebaseAnalyticsManager
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -39,6 +41,21 @@ class SearchViewModel @Inject constructor(
                     _source.value = null
                 }
             }
+        }
+
+        viewModelScope.launch {
+            combine(_query.debounce(700), _source, enabledSources) { query, source, enabled ->
+                Triple(query.trim(), source, enabled)
+            }
+                .filter { (query, _, _) -> query.length >= 2 }
+                .distinctUntilChanged()
+                .collect { (query, source, enabled) ->
+                    analyticsManager.logSearchQuery(
+                        query = query,
+                        sourceId = source?.id,
+                        enabledSources = enabled.size
+                    )
+                }
         }
     }
 

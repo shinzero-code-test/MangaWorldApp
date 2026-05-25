@@ -6,6 +6,7 @@ import coil.imageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.size.Precision
+import com.exapps.mangaworld.core.firebase.withFirebaseTrace
 import com.exapps.mangaworld.domain.model.ChapterPage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -25,6 +26,7 @@ class ImagePrefetcher @Inject constructor(
                 .size(1600, 4096)
                 .diskCachePolicy(CachePolicy.ENABLED)
                 .memoryCachePolicy(CachePolicy.ENABLED)
+                .withFirebaseTrace("prefetch_page")
                 .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
                 .build()
             context.imageLoader.enqueue(request)

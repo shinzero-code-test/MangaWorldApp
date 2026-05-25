@@ -24,6 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
+import com.exapps.mangaworld.core.firebase.withFirebaseTrace
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
@@ -83,7 +84,9 @@ fun HomeScreen(
                     }
                 }
 
-                val trendingFirst = state.homeLayoutVariant == "trending_first"
+                val layoutVariant = state.homeLayoutVariant.lowercase()
+                val trendingFirst = layoutVariant.contains("trending_first")
+                val useLatestGrid = layoutVariant.contains("grid")
                 if (trendingFirst && state.trending.isNotEmpty()) {
                     item {
                         SectionHeader(
@@ -109,12 +112,20 @@ fun HomeScreen(
                     )
                 }
 
-                // Latest chapters list
-                items(state.latestChapters.take(15), key = { it.chapterUrl }) { item ->
-                    LatestChapterRow(
-                        item = item,
-                        onClick = { onMangaClick(item.source.id, item.mangaSlug) }
-                    )
+                if (useLatestGrid) {
+                    item {
+                        LatestChapterGrid(
+                            items = state.latestChapters.take(10),
+                            onMangaClick = { item -> onMangaClick(item.source.id, item.mangaSlug) }
+                        )
+                    }
+                } else {
+                    items(state.latestChapters.take(15), key = { it.chapterUrl }) { item ->
+                        LatestChapterRow(
+                            item = item,
+                            onClick = { onMangaClick(item.source.id, item.mangaSlug) }
+                        )
+                    }
                 }
 
                 if (state.suggested.isNotEmpty()) {
@@ -252,7 +263,11 @@ private fun FeaturedCard(manga: MangaItem, onClick: () -> Unit) {
     ) {
         Box(Modifier.fillMaxSize()) {
             AsyncImage(
-                model = ImageRequest.Builder(ctx).data(manga.coverUrl).crossfade(true).build(),
+                model = ImageRequest.Builder(ctx)
+                    .data(manga.coverUrl)
+                    .crossfade(true)
+                    .withFirebaseTrace("featured_cover")
+                    .build(),
                 imageLoader = ctx.imageLoader,
                 contentDescription = manga.title,
                 contentScale = ContentScale.Crop,
@@ -351,6 +366,80 @@ private fun LatestChapterRow(item: LatestChapterItem, onClick: () -> Unit) {
         }
     }
     GradientDivider(Modifier.padding(horizontal = 16.dp))
+}
+
+@Composable
+private fun LatestChapterGrid(
+    items: List<LatestChapterItem>,
+    onMangaClick: (LatestChapterItem) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items.chunked(2).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                rowItems.forEach { item ->
+                    LatestChapterGridCard(
+                        item = item,
+                        onClick = { onMangaClick(item) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (rowItems.size == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LatestChapterGridCard(
+    item: LatestChapterItem,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = MangaColors.CardBg),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            MangaCover(
+                url = item.coverUrl,
+                contentDescription = item.mangaTitle,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+            )
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    item.mangaTitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MangaColors.OnSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "الفصل ${item.chapterNumber.let { if (it == it.toInt().toFloat()) it.toInt() else it }}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MangaColors.PrimaryLight
+                )
+                SourceBadge(item.source)
+            }
+        }
+    }
 }
 
 // ─── Trending Row ─────────────────────────────────────────────────────────────

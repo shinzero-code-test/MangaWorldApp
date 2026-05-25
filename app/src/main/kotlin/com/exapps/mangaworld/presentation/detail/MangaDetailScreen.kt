@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
+import com.exapps.mangaworld.core.firebase.withFirebaseTrace
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.theme.rememberDominantColor
@@ -174,7 +175,7 @@ private fun DetailContent(
         item {
             Box(Modifier.fillMaxWidth().height(320.dp)) {
                 AsyncImage(
-                    model = ImageRequest.Builder(ctx).data(manga.coverUrl).crossfade(true).build(),
+                    model = ImageRequest.Builder(ctx).data(manga.coverUrl).crossfade(true).withFirebaseTrace("detail_cover").build(),
                     imageLoader = ctx.imageLoader,
                     contentDescription = null, contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize().blur(20.dp)
@@ -199,7 +200,7 @@ private fun DetailContent(
                         modifier = Modifier.size(110.dp, 155.dp)
                     ) {
                         AsyncImage(
-                            model = ImageRequest.Builder(ctx).data(manga.coverUrl).crossfade(true).build(),
+                            model = ImageRequest.Builder(ctx).data(manga.coverUrl).crossfade(true).withFirebaseTrace("detail_related_cover").build(),
                             imageLoader = ctx.imageLoader,
                             contentDescription = manga.title, contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()

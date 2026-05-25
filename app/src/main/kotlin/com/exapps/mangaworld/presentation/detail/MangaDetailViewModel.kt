@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
+import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.core.firebase.FirebaseTopicManager
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
@@ -44,7 +46,9 @@ class MangaDetailViewModel @Inject constructor(
     private val downloadQueueManager: DownloadQueueManager,
     private val firebaseSyncManager: FirebaseSyncManager,
     private val firebaseTopicManager: FirebaseTopicManager,
-    private val widgetShortcutCoordinator: WidgetShortcutCoordinator
+    private val widgetShortcutCoordinator: WidgetShortcutCoordinator,
+    private val analyticsManager: FirebaseAnalyticsManager,
+    private val firebaseTelemetry: FirebaseTelemetry
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DetailUiState())
@@ -80,6 +84,7 @@ class MangaDetailViewModel @Inject constructor(
 
             mangaRepo.getMangaDetail(slug, source)
                 .onSuccess { detail ->
+                    firebaseTelemetry.setActiveSource(detail.source.id)
                     // Preserve cached chapters when network returns empty
                     val chapters = if (detail.chapters.isEmpty()
                         && (_state.value.manga?.chapters?.isNotEmpty() == true)
@@ -88,6 +93,12 @@ class MangaDetailViewModel @Inject constructor(
                     _state.update {
                         it.copy(isLoading = false, manga = detail.copy(chapters = chapters))
                     }
+                    analyticsManager.logMangaViewed(
+                        mangaId = currentMangaId,
+                        sourceId = detail.source.id,
+                        genres = detail.genres,
+                        chapterCount = detail.totalChapters
+                    )
 
                     // Start all infinite-flow observers in a single cancellable job
                     observersJob?.cancel()

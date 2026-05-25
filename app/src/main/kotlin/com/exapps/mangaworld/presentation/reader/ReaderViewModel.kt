@@ -12,9 +12,13 @@ import com.exapps.mangaworld.core.data.ReadingStatsStore
 import com.exapps.mangaworld.core.data.toDetail
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.core.data.download.ChapterCleanupWorker
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
+import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
+import com.exapps.mangaworld.core.ml.MlKitPageTranslator
+import com.exapps.mangaworld.core.ml.PageTranslationLine
 import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
 import com.exapps.mangaworld.domain.model.*
@@ -22,8 +26,18 @@ import com.exapps.mangaworld.domain.repository.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+
+data class PageTranslationUiState(
+    val enabled: Boolean = true,
+    val isLoading: Boolean = false,
+    val pageIndex: Int? = null,
+    val sourceLanguageTag: String? = null,
+    val lines: List<PageTranslationLine> = emptyList(),
+    val error: String? = null
+)
 
 data class ReaderUiState(
     val isLoading: Boolean = true,
@@ -62,7 +76,8 @@ data class ReaderUiState(
     val spoilerCollapseDefault: Boolean = true,
     val chapterComments: List<CommunityComment> = emptyList(),
     val lastTapNormalizedX: Float = 0.5f,
-    val lastTapNormalizedY: Float = 0.5f
+    val lastTapNormalizedY: Float = 0.5f,
+    val translation: PageTranslationUiState = PageTranslationUiState()
 )
 
 @HiltViewModel
@@ -77,7 +92,10 @@ class ReaderViewModel @Inject constructor(
     private val readingStatsStore: ReadingStatsStore,
     private val imagePrefetcher: ImagePrefetcher,
     private val firebaseSyncManager: FirebaseSyncManager,
-    private val widgetShortcutCoordinator: WidgetShortcutCoordinator
+    private val widgetShortcutCoordinator: WidgetShortcutCoordinator,
+    private val analyticsManager: FirebaseAnalyticsManager,
+    private val pageTranslator: MlKitPageTranslator,
+    private val remoteConfigManager: FirebaseRemoteConfigManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReaderUiState())
@@ -91,6 +109,7 @@ class ReaderViewModel @Inject constructor(
     private var reactionsJob: Job? = null
     private var commentsJob: Job? = null
     private var prefetchedNextChapterUrl: String? = null
+    private var lastReadAnalyticsKey: String? = null
 
     init {
         viewModelScope.launch {
@@ -123,6 +142,19 @@ class ReaderViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            remoteConfigManager.mlTranslationEnabled.collect { enabled ->
+                _state.update { current ->
+                    current.copy(
+                        translation = if (enabled) {
+                            current.translation.copy(enabled = true)
+                        } else {
+                            PageTranslationUiState(enabled = false)
+                        }
+                    )
+                }
+            }
+        }
     }
 
     fun loadChapter(chapterUrl: String, mangaId: String, source: MangaSource) {
@@ -132,7 +164,15 @@ class ReaderViewModel @Inject constructor(
         }
         currentSource = source
         prefetchedNextChapterUrl = null
-        _state.update { it.copy(isLoading = true, error = null, chapterUrl = chapterUrl, mangaId = mangaId) }
+        _state.update {
+            it.copy(
+                isLoading = true,
+                error = null,
+                chapterUrl = chapterUrl,
+                mangaId = mangaId,
+                translation = PageTranslationUiState(enabled = it.translation.enabled)
+            )
+        }
         viewModelScope.launch {
             val chapterMeta = resolveChapterMeta(mangaId, chapterUrl, source)
             val localPages = downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
@@ -232,6 +272,17 @@ class ReaderViewModel @Inject constructor(
                     libraryRepo.markChapterRead(st.mangaId, chNum)
                     scheduleAutoCleanupIfNeeded(st.mangaId, st.chapterUrl)
                     runCatching { firebaseSyncManager.pushLocalSnapshot() }
+                    val analyticsKey = "${st.mangaId}|${st.chapterUrl}|$chNum"
+                    if (lastReadAnalyticsKey != analyticsKey) {
+                        lastReadAnalyticsKey = analyticsKey
+                        analyticsManager.logChapterRead(
+                            mangaId = st.mangaId,
+                            sourceId = currentSource.id,
+                            chapterNumber = chNum,
+                            totalPages = st.totalPages,
+                            readerMode = st.readerMode.name
+                        )
+                    }
                 }
                 if (st.autoOpenNextChapter) {
                     st.nextChapterUrl?.let { next -> loadChapter(next, st.mangaId, currentSource) }
@@ -327,6 +378,62 @@ class ReaderViewModel @Inject constructor(
 
     fun setIncognito(enabled: Boolean) = viewModelScope.launch {
         settingsRepo.updateIncognitoMode(enabled)
+    }
+
+    fun translateCurrentPage(targetLanguageTag: String = Locale.getDefault().language.ifBlank { "ar" }) {
+        val currentState = _state.value
+        val page = currentState.pages.getOrNull(currentState.currentPage) ?: return
+        if (!currentState.translation.enabled) return
+
+        viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    translation = it.translation.copy(
+                        isLoading = true,
+                        pageIndex = currentState.currentPage,
+                        sourceLanguageTag = null,
+                        lines = emptyList(),
+                        error = null
+                    )
+                )
+            }
+
+            runCatching { pageTranslator.translatePage(page, targetLanguageTag) }
+                .onSuccess { result ->
+                    _state.update {
+                        it.copy(
+                            translation = it.translation.copy(
+                                isLoading = false,
+                                pageIndex = currentState.currentPage,
+                                sourceLanguageTag = result.sourceLanguageTag,
+                                lines = result.lines,
+                                error = null
+                            )
+                        )
+                    }
+                    analyticsManager.logMlTranslation(
+                        sourceLanguage = result.sourceLanguageTag,
+                        targetLanguage = targetLanguageTag,
+                        blockCount = result.lines.size
+                    )
+                }
+                .onFailure { throwable ->
+                    _state.update {
+                        it.copy(
+                            translation = it.translation.copy(
+                                isLoading = false,
+                                pageIndex = currentState.currentPage,
+                                lines = emptyList(),
+                                error = throwable.message ?: "تعذر ترجمة الصفحة الحالية"
+                            )
+                        )
+                    }
+                }
+        }
+    }
+
+    fun clearTranslationResult() {
+        _state.update { it.copy(translation = PageTranslationUiState(enabled = it.translation.enabled)) }
     }
 
     fun onReaderTap(normalizedX: Float, normalizedY: Float) {

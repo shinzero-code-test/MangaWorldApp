@@ -13,6 +13,7 @@ import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import com.exapps.mangaworld.MangaWorldApp
 import com.exapps.mangaworld.core.data.resolveCookieForUrl
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.data.local.dao.DownloadTaskDao
 import com.exapps.mangaworld.core.data.local.dao.DownloadedMangaDao
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
@@ -36,7 +37,8 @@ class ChapterDownloadWorker @AssistedInject constructor(
     private val downloadTaskDao: DownloadTaskDao,
     private val downloadedMangaDao: DownloadedMangaDao,
     private val okHttpClient: OkHttpClient,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val analyticsManager: FirebaseAnalyticsManager
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -80,6 +82,13 @@ class ChapterDownloadWorker @AssistedInject constructor(
 
             File(targetDir, ".completed").writeText("ok")
             downloadTaskDao.updateState(taskId, "completed", 1f, pages.size, pages.size, System.currentTimeMillis(), null)
+            analyticsManager.logDownloadStatus(
+                mangaId = mangaId,
+                sourceId = mangaId.substringBefore('_'),
+                status = "completed",
+                totalPages = pages.size,
+                retryCount = runAttemptCount
+            )
 
             val count = mangaDir.listFiles()?.count { it.isDirectory && File(it, ".completed").exists() } ?: 0
             downloadedMangaDao.updateChapterCount(mangaId, count)
@@ -89,6 +98,14 @@ class ChapterDownloadWorker @AssistedInject constructor(
         }.getOrElse { e ->
             runCatching {
                 downloadTaskDao.getById(taskId)?.let { current ->
+                    analyticsManager.logDownloadStatus(
+                        mangaId = current.mangaId,
+                        sourceId = current.mangaId.substringBefore('_'),
+                        status = "failed",
+                        totalPages = pages.size,
+                        retryCount = current.retries + 1,
+                        reason = e.message
+                    )
                     downloadTaskDao.upsert(
                         current.copy(
                             status = "failed",
