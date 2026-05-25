@@ -80,7 +80,7 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
             PlayIntegrityAppCheckProviderFactory.getInstance()
         }
         firebaseAppCheck.installAppCheckProviderFactory(providerFactory)
-        firebaseAppCheck.isTokenAutoRefreshEnabled = true
+        firebaseAppCheck.setTokenAutoRefreshEnabled(true)
     }
 
     private fun scheduleFirebaseSync() {
