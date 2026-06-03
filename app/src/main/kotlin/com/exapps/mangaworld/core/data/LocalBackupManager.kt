@@ -78,6 +78,8 @@ class LocalBackupManager @Inject constructor(
         settingsRepository.setContentBlacklist(settings.contentBlacklist)
         settingsRepository.setSpoilerCollapseDefault(settings.spoilerCollapseDefault)
         settingsRepository.setMutedUserIds(settings.mutedUserIds)
+        settingsRepository.setMlKitEnabled(settings.mlKitEnabled)
+        settingsRepository.setDownloadBandwidthCapKb(settings.downloadBandwidthCapKb)
     }
 
     private suspend fun applyReaderSettings(settings: ReaderSettings) {
@@ -94,6 +96,9 @@ class LocalBackupManager @Inject constructor(
         settingsRepository.updateShowReactionOverlay(settings.showReactionOverlay)
         settingsRepository.updateDualPageLandscape(settings.dualPageLandscape)
         settingsRepository.updateWebtoonAutoStitch(settings.webtoonAutoStitch)
+        settingsRepository.updatePageTurnVolumeKeys(settings.pageTurnVolumeKeys)
+        settingsRepository.updateTapToTurnPages(settings.tapToTurnPages)
+        settingsRepository.updateReadingDirectionLocked(settings.readingDirectionLocked)
     }
 
     private fun FavoriteEntity.toJson() = JSONObject().apply {
@@ -102,17 +107,63 @@ class LocalBackupManager @Inject constructor(
     }
     private fun ReadingHistoryEntity.toJson() = JSONObject().apply {
         put("mangaId", mangaId); put("slug", slug); put("title", title); put("coverUrl", coverUrl)
-        put("sourceId", sourceId); put("lastChapterNumber", lastChapterNumber.toDouble()); put("lastChapterUrl", lastChapterUrl)
+        put("sourceId", sourceId); put("lastChapterNumber", lastChapterNumber.toDouble()); put("lastChapterId", lastChapterId); put("lastChapterUrl", lastChapterUrl)
         put("lastReadAt", lastReadAt); put("readChapters", readChapters); put("totalChapters", totalChapters)
     }
-    private fun ReadChapterEntity.toJson() = JSONObject().apply { put("mangaId", mangaId); put("chapterNumber", chapterNumber.toDouble()); put("readAt", readAt) }
-    private fun ReadingProgressEntity.toJson() = JSONObject().apply { put("mangaId", mangaId); put("chapterNumber", chapterNumber.toDouble()); put("currentPage", currentPage); put("totalPages", totalPages); put("updatedAt", updatedAt) }
+    private fun ReadChapterEntity.toJson() = JSONObject().apply { put("mangaId", mangaId); put("chapterId", chapterId); put("chapterNumber", chapterNumber.toDouble()); put("readAt", readAt) }
+    private fun ReadingProgressEntity.toJson() = JSONObject().apply { put("mangaId", mangaId); put("chapterId", chapterId); put("chapterNumber", chapterNumber.toDouble()); put("currentPage", currentPage); put("totalPages", totalPages); put("updatedAt", updatedAt) }
     private fun ReaderAnnotationEntity.toJson() = JSONObject().apply { put("mangaId", mangaId); put("chapterUrl", chapterUrl); put("pageIndex", pageIndex); put("note", note); put("isBookmarked", isBookmarked); put("updatedAt", updatedAt) }
 
-    private fun JSONObject.toFavoriteEntity() = FavoriteEntity(getString("mangaId"), getString("slug"), getString("title"), getString("coverUrl"), getString("sourceId"), getLong("addedAt"), optInt("readChapters"), optInt("totalChapters"))
-    private fun JSONObject.toHistoryEntity() = ReadingHistoryEntity(getString("mangaId"), getString("slug"), getString("title"), getString("coverUrl"), getString("sourceId"), getDouble("lastChapterNumber").toFloat(), optString("lastChapterUrl"), getLong("lastReadAt"), optInt("readChapters"), optInt("totalChapters"))
-    private fun JSONObject.toReadChapterEntity() = ReadChapterEntity(getString("mangaId"), getDouble("chapterNumber").toFloat(), getLong("readAt"))
-    private fun JSONObject.toProgressEntity() = ReadingProgressEntity(getString("mangaId"), getDouble("chapterNumber").toFloat(), optInt("currentPage"), optInt("totalPages"), getLong("updatedAt"))
+    private fun JSONObject.toFavoriteEntity() = FavoriteEntity(
+        mangaId = getString("mangaId"),
+        slug = getString("slug"),
+        title = getString("title"),
+        coverUrl = getString("coverUrl"),
+        sourceId = getString("sourceId"),
+        addedAt = optLong("addedAt", System.currentTimeMillis()),
+        readChapters = optInt("readChapters", 0),
+        totalChapters = optInt("totalChapters", 0)
+    )
+
+    private fun JSONObject.toHistoryEntity(): ReadingHistoryEntity {
+        val chapterNumber = optDouble("lastChapterNumber", 0.0).toFloat()
+        return ReadingHistoryEntity(
+            mangaId = getString("mangaId"),
+            slug = getString("slug"),
+            title = getString("title"),
+            coverUrl = getString("coverUrl"),
+            sourceId = getString("sourceId"),
+            lastChapterNumber = chapterNumber,
+            lastChapterId = optString("lastChapterId").ifBlank { chapterNumber.toString() },
+            lastChapterUrl = optString("lastChapterUrl"),
+            lastReadAt = optLong("lastReadAt", System.currentTimeMillis()),
+            readChapters = optInt("readChapters", 0),
+            totalChapters = optInt("totalChapters", 0)
+        )
+    }
+
+    private fun JSONObject.toReadChapterEntity(): ReadChapterEntity {
+        val chapterNumber = optDouble("chapterNumber", 0.0).toFloat()
+        return ReadChapterEntity(
+            mangaId = getString("mangaId"),
+            chapterId = optString("chapterId").ifBlank { chapterNumber.toString() },
+            chapterNumber = chapterNumber,
+            readAt = optLong("readAt", System.currentTimeMillis())
+        )
+    }
+
+    private fun JSONObject.toProgressEntity(): ReadingProgressEntity {
+        val chapterNumber = optDouble("chapterNumber", 0.0).toFloat()
+        return ReadingProgressEntity(
+            mangaId = getString("mangaId"),
+            chapterId = optString("chapterId").ifBlank { chapterNumber.toString() },
+            chapterNumber = chapterNumber,
+            currentPage = optInt("currentPage", 0),
+            totalPages = optInt("totalPages", 0),
+            updatedAt = optLong("updatedAt", System.currentTimeMillis())
+        )
+    }
+
     private fun JSONObject.toAnnotationEntity() = ReaderAnnotationEntity(getString("mangaId"), getString("chapterUrl"), getInt("pageIndex"), optString("note"), optBoolean("isBookmarked"), getLong("updatedAt"))
 
     private fun AppSettings.toJson() = JSONObject().apply {
@@ -121,9 +172,11 @@ class LocalBackupManager @Inject constructor(
         put("useDynamicColors", useDynamicColors); put("biometricLockEnabled", biometricLockEnabled); put("secureReaderEnabled", secureReaderEnabled)
         put("notificationDeliveryMode", notificationDeliveryMode.name); put("autoCleanupReadDownloads", autoCleanupReadDownloads); put("cleanupAfterHours", cleanupAfterHours)
         put("imageCacheLimitMb", imageCacheLimitMb); put("contentBlacklist", JSONArray(contentBlacklist.toList())); put("spoilerCollapseDefault", spoilerCollapseDefault); put("mutedUserIds", JSONArray(mutedUserIds.toList()))
+        put("mlKitEnabled", mlKitEnabled); put("downloadBandwidthCapKb", downloadBandwidthCapKb)
     }
     private fun ReaderSettings.toJson() = JSONObject().apply {
-        put("mode", mode.name); put("brightness", brightness.toDouble()); put("pageSpacing", pageSpacing); put("keepScreenOn", keepScreenOn)
+        put("mode", mode.name); put("brightness", brightness.toDouble()); put("pageSpacing", pageSpacing); put("pageTurnVolumeKeys", pageTurnVolumeKeys)
+        put("tapToTurnPages", tapToTurnPages); put("readingDirectionLocked", readingDirectionLocked); put("keepScreenOn", keepScreenOn)
         put("showPageNumber", showPageNumber); put("autoWebtoonDetection", autoWebtoonDetection); put("incognitoMode", incognitoMode)
         put("smartPrefetchEnabled", smartPrefetchEnabled); put("hapticsEnabled", hapticsEnabled); put("imageFilter", imageFilter.name)
         put("autoOpenNextChapter", autoOpenNextChapter); put("showLiveReadersOverlay", showLiveReadersOverlay); put("showReactionOverlay", showReactionOverlay)
@@ -146,13 +199,18 @@ class LocalBackupManager @Inject constructor(
         imageCacheLimitMb = optInt("imageCacheLimitMb", 250),
         contentBlacklist = optJSONArray("contentBlacklist")?.toStringSet() ?: emptySet(),
         spoilerCollapseDefault = optBoolean("spoilerCollapseDefault", true),
-        mutedUserIds = optJSONArray("mutedUserIds")?.toStringSet() ?: emptySet()
+        mutedUserIds = optJSONArray("mutedUserIds")?.toStringSet() ?: emptySet(),
+        mlKitEnabled = optBoolean("mlKitEnabled", false),
+        downloadBandwidthCapKb = optInt("downloadBandwidthCapKb", 0)
     )
 
     private fun JSONObject.toReaderSettings(): ReaderSettings = ReaderSettings(
         mode = enumValue(optString("mode"), ReaderMode.VERTICAL_SCROLL),
         brightness = optDouble("brightness", 1.0).toFloat(),
         pageSpacing = optInt("pageSpacing", 0),
+        pageTurnVolumeKeys = optBoolean("pageTurnVolumeKeys", false),
+        tapToTurnPages = optBoolean("tapToTurnPages", true),
+        readingDirectionLocked = optBoolean("readingDirectionLocked", false),
         keepScreenOn = optBoolean("keepScreenOn", true),
         showPageNumber = optBoolean("showPageNumber", true),
         autoWebtoonDetection = optBoolean("autoWebtoonDetection", true),
