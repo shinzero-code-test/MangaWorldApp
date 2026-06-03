@@ -1,7 +1,7 @@
 # MangaWorld
 
 <p align="center">
-  <img src="app/src/main/res/drawable/ic_launcher_foreground.xml" width="100" alt="MangaWorld Logo"/>
+  <img src="app/src/main/res/drawable-nodpi/mangaworld_logo.png" width="100" alt="MangaWorld Logo"/>
 </p>
 
 <p align="center">
@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/youssef-deveg/MangaWorld/actions/workflows/build.yml"><img src="https://github.com/youssef-deveg/MangaWorld/actions/workflows/build.yml/badge.svg" alt="Build Status"/></a>
+  <a href="https://github.com/shinzero-code-test/MangaWorldApp/actions/workflows/build.yml"><img src="https://github.com/shinzero-code-test/MangaWorldApp/actions/workflows/build.yml/badge.svg" alt="Build Status"/></a>
   <img src="https://img.shields.io/badge/Kotlin-2.1.0-7C4DFF?logo=kotlin" />
   <img src="https://img.shields.io/badge/Compose-BOM_2025.01-00E5FF?logo=jetpackcompose" />
   <img src="https://img.shields.io/badge/Min_SDK-26_(Android_8)-green" />
