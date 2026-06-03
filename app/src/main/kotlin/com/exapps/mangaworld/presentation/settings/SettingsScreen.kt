@@ -253,6 +253,30 @@ fun SettingsScreen(
                 checked = reader.webtoonAutoStitch,
                 onCheckedChange = viewModel::setWebtoonAutoStitch
             )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.VolumeUp,
+                title = "أزرار الصوت لتقليب الصفحات",
+                subtitle = "استخدم أزرار الصوت كاختصارات داخل القارئ",
+                checked = reader.pageTurnVolumeKeys,
+                onCheckedChange = viewModel::setPageTurnVolumeKeys
+            )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.TouchApp,
+                title = "النقر لتقليب الصفحات",
+                subtitle = "مناطق النقر اليمنى/اليسرى تتحكم بالتنقل",
+                checked = reader.tapToTurnPages,
+                onCheckedChange = viewModel::setTapToTurnPages
+            )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
+                icon = Icons.Filled.ScreenRotation,
+                title = "قفل اتجاه القراءة",
+                subtitle = "تثبيت اتجاه الفصل الحالي عند التبديل بين الأوضاع",
+                checked = reader.readingDirectionLocked,
+                onCheckedChange = viewModel::setReadingDirectionLocked
+            )
         }
 
         // ── Sources ───────────────────────────────────────────────────────────
@@ -353,6 +377,22 @@ fun SettingsScreen(
                     }
                 }
             }
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SettingsItem(
+                icon = Icons.Filled.Speed,
+                title = "حد سرعة التنزيل",
+                subtitle = if (app.downloadBandwidthCapKb <= 0) "بدون حد" else "${app.downloadBandwidthCapKb} KB/s"
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0, 256, 512, 1024).forEach { kb ->
+                        FilterChip(
+                            selected = app.downloadBandwidthCapKb == kb,
+                            onClick = { viewModel.setDownloadBandwidthCap(kb) },
+                            label = { Text(if (kb == 0) "∞" else "$kb") }
+                        )
+                    }
+                }
+            }
         }
 
         SettingsSection("النسخ الاحتياطي المحلي") {
@@ -422,6 +462,18 @@ fun SettingsScreen(
             }
         }
 
+
+
+        SettingsSection("ML Kit") {
+            SwitchItem(
+                icon = Icons.Filled.Translate,
+                title = "ميزات ML Kit عند الطلب",
+                subtitle = "الترجمة، التعرف على النص، الردود الذكية، وتصنيف الأغلفة تُحمّل ملفاتها عند التفعيل ولا تستخدم النمط المضمّن",
+                checked = app.mlKitEnabled,
+                onCheckedChange = viewModel::setMlKitEnabled
+            )
+        }
+
         // ── Notifications ─────────────────────────────────────────────────────
         SettingsSection("الإشعارات") {
             SwitchItem(icon = Icons.Filled.Notifications,
@@ -433,7 +485,7 @@ fun SettingsScreen(
 
         // ── About ─────────────────────────────────────────────────────────────
         SettingsSection("عن التطبيق") {
-            SettingsItem(icon = Icons.Filled.Info, title = "الإصدار", subtitle = "2.0.0") {}
+            SettingsItem(icon = Icons.Filled.Info, title = "الإصدار", subtitle = "3.5.0") {}
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(icon = Icons.Filled.Code, title = "com.exapps.mangaworld",
                 subtitle = "مبني بـ Kotlin + Jetpack Compose") {}

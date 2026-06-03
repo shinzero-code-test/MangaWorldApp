@@ -48,11 +48,13 @@ fun ReaderScreen(
     source: MangaSource,
     mangaId: String,
     chapterUrl: String,
+    chapterId: String? = null,
+    chapterNumber: Float? = null,
     onBack: () -> Unit,
     onOpenCommunity: () -> Unit,
     viewModel: ReaderViewModel = hiltViewModel()
 ) {
-    LaunchedEffect(chapterUrl) { viewModel.loadChapter(chapterUrl, mangaId, source) }
+    LaunchedEffect(chapterUrl, chapterId, chapterNumber) { viewModel.loadChapter(chapterUrl, mangaId, source, chapterId, chapterNumber) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val haptics = LocalHapticFeedback.current
@@ -73,7 +75,7 @@ fun ReaderScreen(
                 com.exapps.mangaworld.core.data.CookieCache.put(domain, cookies)
                 viewModel.onCloudflareSolved(domain, cookies)
             } else {
-                viewModel.loadChapter(chapterUrl, mangaId, source)
+                viewModel.loadChapter(chapterUrl, mangaId, source, chapterId, chapterNumber)
             }
         }
     }

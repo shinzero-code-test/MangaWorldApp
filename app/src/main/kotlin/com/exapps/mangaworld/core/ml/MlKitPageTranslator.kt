@@ -2,6 +2,7 @@ package com.exapps.mangaworld.core.ml
 
 import android.graphics.BitmapFactory
 import com.exapps.mangaworld.domain.model.ChapterPage
+import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
@@ -11,6 +12,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -30,13 +32,17 @@ data class PageTranslationResult(
 
 @Singleton
 class MlKitPageTranslator @Inject constructor(
-    private val okHttpClient: OkHttpClient
+    private val okHttpClient: OkHttpClient,
+    private val settingsRepository: SettingsRepository
 ) {
 
     suspend fun translatePage(
         page: ChapterPage,
         targetLanguageTag: String = Locale.getDefault().language.ifBlank { "ar" }
     ): PageTranslationResult = withContext(Dispatchers.IO) {
+        if (!settingsRepository.getAppSettings().first().mlKitEnabled) {
+            return@withContext PageTranslationResult(emptyList(), null)
+        }
         val bitmap = downloadBitmap(page) ?: return@withContext PageTranslationResult(emptyList(), null)
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         val languageIdentifier = LanguageIdentification.getClient()

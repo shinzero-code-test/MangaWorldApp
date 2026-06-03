@@ -154,7 +154,7 @@ class LatestUpdatesViewModel @Inject constructor(
 @Composable
 fun LatestUpdatesScreen(
     onBack: () -> Unit,
-    onOpenChapter: (sourceId: String, mangaId: String, chapterUrl: String) -> Unit,
+    onOpenChapter: (sourceId: String, mangaId: String, chapterUrl: String, chapterId: String, chapterNumber: Float) -> Unit,
     viewModel: LatestUpdatesViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -234,7 +234,7 @@ fun LatestUpdatesScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onOpenChapter(item.source.id, item.mangaId, item.chapterUrl) },
+                            .clickable { onOpenChapter(item.source.id, item.mangaId, item.chapterUrl, item.chapterUrl, item.chapterNumber) },
                         shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.cardColors(containerColor = MangaColors.CardBg)
                     ) {

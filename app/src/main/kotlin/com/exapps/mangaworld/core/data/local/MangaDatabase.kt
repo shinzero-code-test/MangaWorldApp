@@ -15,8 +15,9 @@ import com.exapps.mangaworld.core.data.local.entity.*
         MangaCacheEntity::class,
         DownloadTaskEntity::class,
         DownloadedMangaEntity::class,
+        SourceBrowseMetadataEntity::class,
     ],
-    version = 7,          // v7: enriched download task metadata for retries
+    version = 8,          // v8: chapter ids, source metadata cache, richer downloads
     exportSchema = false
 )
 abstract class MangaDatabase : RoomDatabase() {
@@ -28,4 +29,5 @@ abstract class MangaDatabase : RoomDatabase() {
     abstract fun mangaCacheDao(): MangaCacheDao
     abstract fun downloadTaskDao(): DownloadTaskDao
     abstract fun downloadedMangaDao(): DownloadedMangaDao
+    abstract fun sourceBrowseMetadataDao(): SourceBrowseMetadataDao
 }

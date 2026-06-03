@@ -87,7 +87,11 @@ class DownloadQueueManager @Inject constructor(
         pages: List<ChapterPage>,
         wifiOnly: Boolean = true,
         referer: String = "",
-        mangaMetadata: DownloadedMangaEntity? = null
+        mangaMetadata: DownloadedMangaEntity? = null,
+        chapterId: String = DownloadStorage.chapterKey(chapterUrl),
+        chapterNumber: Float? = null,
+        priority: Int = 0,
+        bandwidthCapKb: Int = 0
     ) {
         if (downloadTaskDao.getPendingByChapter(chapterUrl, mangaId) != null) return
 
@@ -104,6 +108,10 @@ class DownloadQueueManager @Inject constructor(
                 targetDir = targetDir.absolutePath,
                 referer = referer,
                 pagesJson = JSONArray(pages.map { it.url }).toString(),
+                chapterId = chapterId,
+                chapterNumber = chapterNumber,
+                priority = priority,
+                bandwidthCapKb = bandwidthCapKb,
                 status = "queued"
             )
         )
@@ -137,11 +145,13 @@ class DownloadQueueManager @Inject constructor(
             .putString(ChapterDownloadWorker.KEY_CHAPTER_TITLE, chapterTitle)
             .putString(ChapterDownloadWorker.KEY_REFERER, referer)
             .putString(ChapterDownloadWorker.KEY_TARGET_DIR, targetDir.absolutePath)
+            .putInt(ChapterDownloadWorker.KEY_BANDWIDTH_CAP_KB, bandwidthCapKb)
             .putStringArray(ChapterDownloadWorker.KEY_PAGES, pages.map { it.url }.toTypedArray())
             .build()
         val request = OneTimeWorkRequestBuilder<ChapterDownloadWorker>()
             .setInputData(input)
             .setConstraints(constraints)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, java.util.concurrent.TimeUnit.SECONDS)
             .addTag(taskId)
             .addTag("manga_$mangaId")
             .build()
@@ -149,6 +159,20 @@ class DownloadQueueManager @Inject constructor(
     }
 
     // ─── Cancel / delete ─────────────────────────────────────────────────────
+
+    suspend fun pauseTask(taskId: String) {
+        val task = downloadTaskDao.getById(taskId) ?: return
+        downloadTaskDao.updateStatus(taskId, "paused", System.currentTimeMillis(), "Paused by user")
+        WorkManager.getInstance(app).cancelAllWorkByTag(taskId)
+    }
+
+    suspend fun resumeTask(taskId: String) {
+        retryTask(taskId, forceQueuedStatus = true)
+    }
+
+    suspend fun setPriority(taskId: String, priority: Int) {
+        downloadTaskDao.updatePriority(taskId, priority, System.currentTimeMillis())
+    }
 
     suspend fun cancelTask(taskId: String) {
         val task = downloadTaskDao.getById(taskId) ?: return
@@ -166,9 +190,10 @@ class DownloadQueueManager @Inject constructor(
         WorkManager.getInstance(app).cancelAllWorkByTag(taskId)
     }
 
-    suspend fun retryTask(taskId: String) {
+    suspend fun retryTask(taskId: String, forceQueuedStatus: Boolean = false) {
         val task = downloadTaskDao.getById(taskId) ?: return
-        downloadTaskDao.upsert(task.copy(status = "queued", errorMessage = null,
+        if (task.status == "running" && !forceQueuedStatus) return
+        downloadTaskDao.upsert(task.copy(status = "queued", errorMessage = null, nextRetryAt = null,
             updatedAt = System.currentTimeMillis()))
         WorkManager.getInstance(app).enqueue(
             OneTimeWorkRequestBuilder<ChapterDownloadWorker>()
@@ -179,6 +204,7 @@ class DownloadQueueManager @Inject constructor(
                     .putString(ChapterDownloadWorker.KEY_CHAPTER_TITLE, task.chapterTitle)
                     .putString(ChapterDownloadWorker.KEY_REFERER, task.referer)
                     .putString(ChapterDownloadWorker.KEY_TARGET_DIR, task.targetDir)
+                    .putInt(ChapterDownloadWorker.KEY_BANDWIDTH_CAP_KB, task.bandwidthCapKb)
                     .putStringArray(
                         ChapterDownloadWorker.KEY_PAGES,
                         runCatching {
@@ -187,6 +213,7 @@ class DownloadQueueManager @Inject constructor(
                         }.getOrDefault(emptyArray())
                     )
                     .build())
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, java.util.concurrent.TimeUnit.SECONDS)
                 .addTag(taskId)
                 .addTag("manga_${task.mangaId}")
                 .build()
@@ -194,6 +221,28 @@ class DownloadQueueManager @Inject constructor(
     }
 
     suspend fun clearCompleted() = downloadTaskDao.clearCompleted()
+
+    suspend fun verifyIntegrity(taskId: String): Boolean {
+        val task = downloadTaskDao.getById(taskId) ?: return false
+        val dir = File(task.targetDir)
+        val expected = runCatching { JSONArray(task.pagesJson).length() }.getOrDefault(task.totalPages)
+        val files = dir.listFiles()?.filter { it.isFile && it.extension.lowercase() in setOf("jpg", "png", "webp") && it.length() > 0L }.orEmpty()
+        val ok = File(dir, ".completed").exists() && expected > 0 && files.size >= expected
+        downloadTaskDao.updateIntegrity(
+            taskId,
+            if (ok) "ok" else "broken",
+            if (ok) "${files.size}/$expected pages verified" else "Only ${files.size}/$expected valid pages found",
+            System.currentTimeMillis()
+        )
+        return ok
+    }
+
+    suspend fun repairTask(taskId: String) {
+        val task = downloadTaskDao.getById(taskId) ?: return
+        File(task.targetDir).listFiles()?.filter { it.name.endsWith(".part") || it.length() <= 0L }?.forEach { it.delete() }
+        downloadTaskDao.updateIntegrity(taskId, "repairing", "Repair queued", System.currentTimeMillis())
+        retryTask(taskId, forceQueuedStatus = true)
+    }
 
     suspend fun getDownloadedChapterDir(mangaId: String, chapterUrl: String): String? =
         downloadTaskDao.getLatestByChapter(chapterUrl, mangaId)

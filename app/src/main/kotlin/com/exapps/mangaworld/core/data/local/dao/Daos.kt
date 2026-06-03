@@ -69,8 +69,14 @@ interface ReadChapterDao {
     @Query("DELETE FROM read_chapters WHERE mangaId = :mangaId AND chapterNumber = :chapterNumber")
     suspend fun markUnread(mangaId: String, chapterNumber: Float)
 
+    @Query("DELETE FROM read_chapters WHERE mangaId = :mangaId AND chapterId = :chapterId")
+    suspend fun markUnreadById(mangaId: String, chapterId: String)
+
     @Query("SELECT EXISTS(SELECT 1 FROM read_chapters WHERE mangaId = :mangaId AND chapterNumber = :chapterNumber)")
     suspend fun isRead(mangaId: String, chapterNumber: Float): Boolean
+
+    @Query("SELECT EXISTS(SELECT 1 FROM read_chapters WHERE mangaId = :mangaId AND chapterId = :chapterId)")
+    suspend fun isReadById(mangaId: String, chapterId: String): Boolean
 
     @Query("SELECT COUNT(*) FROM read_chapters")
     suspend fun getTotalReadCount(): Int
@@ -89,6 +95,9 @@ interface ReadingProgressDao {
 
     @Query("SELECT * FROM reading_progress WHERE mangaId = :mangaId AND chapterNumber = :chapter")
     suspend fun get(mangaId: String, chapter: Float): ReadingProgressEntity?
+
+    @Query("SELECT * FROM reading_progress WHERE mangaId = :mangaId AND chapterId = :chapterId")
+    suspend fun getByChapterId(mangaId: String, chapterId: String): ReadingProgressEntity?
 
     @Query("SELECT * FROM reading_progress WHERE mangaId = :mangaId")
     suspend fun getAllForManga(mangaId: String): List<ReadingProgressEntity>
@@ -138,7 +147,7 @@ interface MangaCacheDao {
 
 @Dao
 interface DownloadTaskDao {
-    @Query("SELECT * FROM download_tasks ORDER BY createdAt DESC")
+    @Query("SELECT * FROM download_tasks ORDER BY priority DESC, createdAt ASC")
     fun observeAll(): Flow<List<DownloadTaskEntity>>
 
     @Query("SELECT * FROM download_tasks WHERE id = :id LIMIT 1")
@@ -173,6 +182,16 @@ interface DownloadTaskDao {
         errorMessage: String?
     )
 
+
+    @Query("UPDATE download_tasks SET status = :status, updatedAt = :updatedAt, errorMessage = :message WHERE id = :id")
+    suspend fun updateStatus(id: String, status: String, updatedAt: Long, message: String? = null)
+
+    @Query("UPDATE download_tasks SET priority = :priority, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updatePriority(id: String, priority: Int, updatedAt: Long)
+
+    @Query("UPDATE download_tasks SET integrityStatus = :status, integrityMessage = :message, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateIntegrity(id: String, status: String, message: String?, updatedAt: Long)
+
     @Query("DELETE FROM download_tasks WHERE id = :id")
     suspend fun delete(id: String)
 
@@ -199,4 +218,17 @@ interface DownloadedMangaDao {
 
     @Query("DELETE FROM downloaded_manga WHERE mangaId = :mangaId")
     suspend fun delete(mangaId: String)
+}
+
+
+@Dao
+interface SourceBrowseMetadataDao {
+    @Query("SELECT * FROM source_browse_metadata WHERE sourceId = :sourceId LIMIT 1")
+    suspend fun get(sourceId: String): SourceBrowseMetadataEntity?
+
+    @Query("SELECT * FROM source_browse_metadata ORDER BY sourceId ASC")
+    fun observeAll(): Flow<List<SourceBrowseMetadataEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: SourceBrowseMetadataEntity)
 }

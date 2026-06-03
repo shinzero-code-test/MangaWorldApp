@@ -34,7 +34,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.CacheManager
+import com.exapps.mangaworld.core.data.ReadingStatsStore
 import com.exapps.mangaworld.core.data.WidgetSnapshotStore
+import com.exapps.mangaworld.core.data.local.dao.DownloadTaskDao
 import com.exapps.mangaworld.core.data.remote.scraper.MangaScraper
 import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.MangaSource
@@ -66,6 +68,9 @@ data class DiagnosticsUiState(
     val imageCacheSizeBytes: Long = 0L,
     val widgetSnapshotUpdatedAt: Long = 0L,
     val sources: List<SourceDiagnosticStatus> = emptyList(),
+    val downloadSpeedSummary: String = "لا توجد بيانات",
+    val scraperReliabilitySummary: String = "لا توجد بيانات",
+    val readerUsageSummary: String = "لا توجد بيانات",
     val error: String? = null
 )
 
@@ -74,7 +79,9 @@ class DiagnosticsViewModel @Inject constructor(
     private val scrapers: Map<String, @JvmSuppressWildcards MangaScraper>,
     private val settingsRepository: SettingsRepository,
     private val widgetSnapshotStore: WidgetSnapshotStore,
-    private val cacheManager: CacheManager
+    private val cacheManager: CacheManager,
+    private val downloadTaskDao: DownloadTaskDao,
+    private val readingStatsStore: ReadingStatsStore
 ) : ViewModel() {
     private val _state = MutableStateFlow(DiagnosticsUiState())
     val state: StateFlow<DiagnosticsUiState> = _state.asStateFlow()
@@ -87,6 +94,10 @@ class DiagnosticsViewModel @Inject constructor(
             val settings = settingsRepository.getAppSettings().first()
             val widgetUpdated = widgetSnapshotStore.lastUpdatedAt()
             val cacheSize = cacheManager.getImageCacheSizeBytes()
+            val downloadTasks = downloadTaskDao.observeAll().first()
+            val completedDownloads = downloadTasks.filter { it.status == "completed" && it.totalPages > 0 }
+            val avgPages = completedDownloads.map { it.totalPages }.average().takeIf { !it.isNaN() } ?: 0.0
+            val totalReadingMinutes = readingStatsStore.totalReadingTimeMs.first() / 60_000
             val statuses = coroutineScope {
                 MangaSource.entries.map { source ->
                     async {
@@ -112,7 +123,10 @@ class DiagnosticsViewModel @Inject constructor(
                 appSettings = settings,
                 imageCacheSizeBytes = cacheSize,
                 widgetSnapshotUpdatedAt = widgetUpdated,
-                sources = statuses.sortedBy { it.source.displayName }
+                sources = statuses.sortedBy { it.source.displayName },
+                downloadSpeedSummary = "${completedDownloads.size} مكتملة • متوسط ${String.format(java.util.Locale.US, "%.1f", avgPages)} صفحة/فصل",
+                scraperReliabilitySummary = "${statuses.count { it.homeOk }}/${statuses.size} مصادر سليمة • ${statuses.sumOf { it.searchResults }} نتيجة اختبار",
+                readerUsageSummary = "$totalReadingMinutes دقيقة قراءة محفوظة"
             )
         }
     }
@@ -157,6 +171,13 @@ fun DiagnosticsScreen(
             DiagnosticLine("حجم كاش الصور", formatDiagnosticBytes(state.imageCacheSizeBytes))
             DiagnosticLine("آخر تحديث لويدجت", if (state.widgetSnapshotUpdatedAt > 0) java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(state.widgetSnapshotUpdatedAt)) else "لا يوجد")
             DiagnosticLine("القفل البيومتري", if (state.appSettings.biometricLockEnabled) "مفعل" else "معطل")
+        }
+
+        Spacer(Modifier.height(12.dp))
+        DiagnosticsSectionCard(title = "لوحات الأداء والتحليلات") {
+            DiagnosticLine("موثوقية الكاشطات", state.scraperReliabilitySummary)
+            DiagnosticLine("سرعة/حجم التنزيل", state.downloadSpeedSummary)
+            DiagnosticLine("اتجاهات استخدام القارئ", state.readerUsageSummary)
         }
 
         Spacer(Modifier.height(12.dp))

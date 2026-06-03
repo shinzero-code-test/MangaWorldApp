@@ -41,7 +41,12 @@ class DownloadsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun cancelTask(id: String)   = viewModelScope.launch { manager.cancelTask(id) }
+    fun pauseTask(id: String)    = viewModelScope.launch { manager.pauseTask(id) }
+    fun resumeTask(id: String)   = viewModelScope.launch { manager.resumeTask(id) }
     fun retryTask(id: String)    = viewModelScope.launch { manager.retryTask(id) }
+    fun boostPriority(id: String, priority: Int) = viewModelScope.launch { manager.setPriority(id, priority) }
+    fun verifyTask(id: String)   = viewModelScope.launch { manager.verifyIntegrity(id) }
+    fun repairTask(id: String)   = viewModelScope.launch { manager.repairTask(id) }
     fun clearCompleted()         = viewModelScope.launch { manager.clearCompleted() }
 }
 
@@ -53,6 +58,7 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
 
     val queued     = remember(tasks) { tasks.filter { it.status == "queued" } }
     val inProgress = remember(tasks) { tasks.filter { it.status == "running" } }
+    val paused     = remember(tasks) { tasks.filter { it.status == "paused" } }
     val failed     = remember(tasks) { tasks.filter { it.status == "failed" || it.status == "cancelled" } }
     val completed  = remember(tasks) { tasks.filter { it.status == "completed" } }
 
@@ -105,6 +111,8 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
                 items(inProgress, key = { it.id }) { task ->
                     TaskCard(task,
                         onCancel = { viewModel.cancelTask(task.id) },
+                        onPause = { viewModel.pauseTask(task.id) },
+                        onPriority = { viewModel.boostPriority(task.id, task.priority + 1) },
                         onRetry  = null)
                 }
             }
@@ -115,7 +123,20 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
                 items(queued, key = { it.id }) { task ->
                     TaskCard(task,
                         onCancel = { viewModel.cancelTask(task.id) },
+                        onPriority = { viewModel.boostPriority(task.id, task.priority + 1) },
                         onRetry  = null)
+                }
+            }
+
+
+
+            if (paused.isNotEmpty()) {
+                item { SectionHeader("متوقفة مؤقتاً", paused.size, MangaColors.Muted) }
+                items(paused, key = { it.id }) { task ->
+                    TaskCard(task,
+                        onCancel = { viewModel.cancelTask(task.id) },
+                        onResume = { viewModel.resumeTask(task.id) },
+                        onRetry = null)
                 }
             }
 
@@ -125,6 +146,7 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
                 items(failed, key = { it.id }) { task ->
                     TaskCard(task,
                         onCancel = { viewModel.cancelTask(task.id) },
+                        onRepair = { viewModel.repairTask(task.id) },
                         onRetry  = { viewModel.retryTask(task.id) })
                 }
             }
@@ -133,7 +155,7 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
             if (completed.isNotEmpty()) {
                 item { SectionHeader("مكتملة", completed.size, MangaColors.Primary) }
                 items(completed, key = { it.id }) { task ->
-                    TaskCard(task, onCancel = null, onRetry = null)
+                    TaskCard(task, onCancel = null, onVerify = { viewModel.verifyTask(task.id) }, onRetry = null)
                 }
             }
         }
@@ -161,7 +183,12 @@ private fun SectionHeader(title: String, count: Int, color: Color) {
 private fun TaskCard(
     task: DownloadTaskEntity,
     onCancel: (() -> Unit)?,
-    onRetry: (() -> Unit)?
+    onRetry: (() -> Unit)?,
+    onPause: (() -> Unit)? = null,
+    onResume: (() -> Unit)? = null,
+    onPriority: (() -> Unit)? = null,
+    onVerify: (() -> Unit)? = null,
+    onRepair: (() -> Unit)? = null
 ) {
     val statusColor by animateColorAsState(
         when (task.status) {
@@ -200,6 +227,32 @@ private fun TaskCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                if (onPause != null) {
+                    IconButton(onClick = onPause, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Pause, "إيقاف مؤقت", modifier = Modifier.size(18.dp), tint = MangaColors.Yellow)
+                    }
+                }
+                if (onResume != null) {
+                    IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.PlayArrow, "استئناف", modifier = Modifier.size(18.dp), tint = MangaColors.Cyan)
+                    }
+                }
+                if (onPriority != null) {
+                    IconButton(onClick = onPriority, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.KeyboardDoubleArrowUp, "رفع الأولوية", modifier = Modifier.size(18.dp), tint = MangaColors.Primary)
+                    }
+                }
+                if (onVerify != null) {
+                    IconButton(onClick = onVerify, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Verified, "فحص السلامة", modifier = Modifier.size(18.dp), tint = MangaColors.Cyan)
+                    }
+                }
+                if (onRepair != null) {
+                    IconButton(onClick = onRepair, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Build, "إصلاح", modifier = Modifier.size(18.dp), tint = MangaColors.Primary)
+                    }
+                }
                 if (onRetry != null) {
                     IconButton(onClick = onRetry, modifier = Modifier.size(32.dp)) {
                         Icon(Icons.Filled.Refresh, "إعادة المحاولة",
@@ -229,7 +282,8 @@ private fun TaskCard(
                 modifier = Modifier.fillMaxWidth()) {
                 Text(
                     when (task.status) {
-                        "queued"    -> "في الانتظار"
+                        "queued"    -> "في الانتظار • أولوية ${task.priority}"
+                        "paused"    -> "متوقف مؤقتاً • يمكن الاستئناف"
                         "running"   -> "جاري التنزيل • ${task.downloadedPages}/${task.totalPages} صفحة"
                         "completed" -> "مكتمل • ${task.totalPages} صفحة"
                         "failed"    -> "فشل"
@@ -247,6 +301,13 @@ private fun TaskCard(
                         fontWeight = FontWeight.SemiBold
                     )
                 }
+            }
+
+            if (task.nextRetryAt != null && task.status == "failed") {
+                Text("المحاولة القادمة بعد: ${maxOf(0, (task.nextRetryAt - System.currentTimeMillis()) / 1000)}ث", style = MaterialTheme.typography.labelSmall, color = MangaColors.Yellow)
+            }
+            if (task.integrityStatus != "unknown") {
+                Text("سلامة التنزيل: ${task.integrityStatus} — ${task.integrityMessage.orEmpty()}", style = MaterialTheme.typography.labelSmall, color = MangaColors.Muted)
             }
 
             // Error message

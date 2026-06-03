@@ -176,6 +176,17 @@ enum class SortBy(val label: String) {
     RATING("الأعلى تقييماً")
 }
 
+// ─── Source Browse Metadata ──────────────────────────────────────────────────
+
+data class SourceBrowseMetadata(
+    val source: MangaSource,
+    val genres: List<String> = emptyList(),
+    val statuses: List<MangaStatus> = MangaStatus.values().filter { it != MangaStatus.UNKNOWN },
+    val types: List<MangaType> = MangaType.values().filter { it != MangaType.UNKNOWN },
+    val categories: List<String> = emptyList(),
+    val refreshedAt: Long = System.currentTimeMillis()
+)
+
 // ─── Library Models ───────────────────────────────────────────────────────────
 
 data class FavoriteManga(
@@ -238,6 +249,9 @@ data class ReaderSettings(
     val mode: ReaderMode = ReaderMode.VERTICAL_SCROLL,
     val brightness: Float = 1.0f,
     val pageSpacing: Int = 0,
+    val pageTurnVolumeKeys: Boolean = false,
+    val tapToTurnPages: Boolean = true,
+    val readingDirectionLocked: Boolean = false,
     val keepScreenOn: Boolean = true,
     val showPageNumber: Boolean = true,
     val autoWebtoonDetection: Boolean = true,
@@ -278,7 +292,9 @@ data class AppSettings(
     val imageCacheLimitMb: Int = 250,
     val contentBlacklist: Set<String> = emptySet(),
     val spoilerCollapseDefault: Boolean = true,
-    val mutedUserIds: Set<String> = emptySet()
+    val mutedUserIds: Set<String> = emptySet(),
+    val mlKitEnabled: Boolean = false,
+    val downloadBandwidthCapKb: Int = 0
 )
 
 enum class CommunityNotificationType {

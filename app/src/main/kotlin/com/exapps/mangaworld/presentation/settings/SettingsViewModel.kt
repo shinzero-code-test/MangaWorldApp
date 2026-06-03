@@ -47,6 +47,8 @@ class SettingsViewModel @Inject constructor(
     fun setContentBlacklist(values: Set<String>) = saveAndSync { repo.setContentBlacklist(values) }
     fun setSpoilerCollapseDefault(enabled: Boolean) = saveAndSync { repo.setSpoilerCollapseDefault(enabled) }
     fun setMutedUserIds(values: Set<String>) = saveAndSync { repo.setMutedUserIds(values) }
+    fun setMlKitEnabled(v: Boolean) = saveAndSync { repo.setMlKitEnabled(v) }
+    fun setDownloadBandwidthCap(kb: Int) = saveAndSync { repo.setDownloadBandwidthCapKb(kb) }
     fun toggleSource(id: String, enabled: Boolean) = viewModelScope.launch {
         repo.toggleSource(id, enabled)
         runCatching { widgetDataRepository.refreshRemoteSnapshot() }
@@ -65,6 +67,9 @@ class SettingsViewModel @Inject constructor(
     fun setShowReactionOverlay(v: Boolean) = saveAndSync { repo.updateShowReactionOverlay(v) }
     fun setDualPageLandscape(v: Boolean) = saveAndSync { repo.updateDualPageLandscape(v) }
     fun setWebtoonAutoStitch(v: Boolean) = saveAndSync { repo.updateWebtoonAutoStitch(v) }
+    fun setPageTurnVolumeKeys(v: Boolean) = saveAndSync { repo.updatePageTurnVolumeKeys(v) }
+    fun setTapToTurnPages(v: Boolean) = saveAndSync { repo.updateTapToTurnPages(v) }
+    fun setReadingDirectionLocked(v: Boolean) = saveAndSync { repo.updateReadingDirectionLocked(v) }
     fun saveCookies(domain: String, cookies: String) = viewModelScope.launch { repo.saveCookies(domain, cookies) }
 
     fun refreshCacheStats() = viewModelScope.launch {

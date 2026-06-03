@@ -39,6 +39,8 @@ class AppPreferences @Inject constructor(
         val KEY_CONTENT_BLACKLIST = stringPreferencesKey("content_blacklist")
         val KEY_SPOILER_COLLAPSE_DEFAULT = booleanPreferencesKey("spoiler_collapse_default")
         val KEY_MUTED_USERS = stringPreferencesKey("muted_users")
+        val KEY_ML_KIT_ENABLED = booleanPreferencesKey("ml_kit_enabled")
+        val KEY_DOWNLOAD_BANDWIDTH_CAP_KB = intPreferencesKey("download_bandwidth_cap_kb")
 
         val KEY_READER_MODE = stringPreferencesKey("reader_mode")
         val KEY_BRIGHTNESS = floatPreferencesKey("brightness")
@@ -54,6 +56,9 @@ class AppPreferences @Inject constructor(
         val KEY_SHOW_REACTIONS = booleanPreferencesKey("reader_show_reactions")
         val KEY_DUAL_PAGE = booleanPreferencesKey("reader_dual_page")
         val KEY_WEBTOON_STITCH = booleanPreferencesKey("reader_webtoon_stitch")
+        val KEY_PAGE_TURN_VOLUME = booleanPreferencesKey("reader_page_turn_volume")
+        val KEY_TAP_TO_TURN = booleanPreferencesKey("reader_tap_to_turn")
+        val KEY_READING_DIRECTION_LOCKED = booleanPreferencesKey("reader_direction_locked")
 
         fun cookieKey(domain: String) = stringPreferencesKey("cookie_$domain")
     }
@@ -92,7 +97,9 @@ class AppPreferences @Inject constructor(
                     ?.map { it.trim() }
                     ?.filter { it.isNotBlank() }
                     ?.toSet()
-                    ?: emptySet()
+                    ?: emptySet(),
+                mlKitEnabled = prefs[KEY_ML_KIT_ENABLED] ?: false,
+                downloadBandwidthCapKb = prefs[KEY_DOWNLOAD_BANDWIDTH_CAP_KB] ?: 0
             )
         }
 
@@ -103,6 +110,9 @@ class AppPreferences @Inject constructor(
                 mode = prefs[KEY_READER_MODE]?.let { m -> ReaderMode.values().firstOrNull { it.name == m } }
                     ?: ReaderMode.VERTICAL_SCROLL,
                 brightness = prefs[KEY_BRIGHTNESS] ?: 1.0f,
+                pageTurnVolumeKeys = prefs[KEY_PAGE_TURN_VOLUME] ?: false,
+                tapToTurnPages = prefs[KEY_TAP_TO_TURN] ?: true,
+                readingDirectionLocked = prefs[KEY_READING_DIRECTION_LOCKED] ?: false,
                 keepScreenOn = prefs[KEY_KEEP_SCREEN] ?: true,
                 showPageNumber = prefs[KEY_SHOW_PAGE_NUM] ?: true,
                 autoWebtoonDetection = prefs[KEY_AUTO_WEBTOON] ?: true,
@@ -165,6 +175,12 @@ class AppPreferences @Inject constructor(
     suspend fun setMutedUsers(values: Set<String>) =
         dataStore.edit { it[KEY_MUTED_USERS] = values.joinToString(",") }
 
+    suspend fun setMlKitEnabled(enabled: Boolean) =
+        dataStore.edit { it[KEY_ML_KIT_ENABLED] = enabled }
+
+    suspend fun setDownloadBandwidthCapKb(kb: Int) =
+        dataStore.edit { it[KEY_DOWNLOAD_BANDWIDTH_CAP_KB] = kb.coerceAtLeast(0) }
+
     suspend fun toggleSource(sourceId: String, enabled: Boolean) = dataStore.edit { prefs ->
         val current = prefs[KEY_ENABLED_SOURCES]?.split(",")?.toMutableSet()
             ?: MangaSource.values().map { it.id }.toMutableSet()
@@ -217,6 +233,15 @@ class AppPreferences @Inject constructor(
 
     suspend fun setWebtoonStitch(v: Boolean) =
         dataStore.edit { it[KEY_WEBTOON_STITCH] = v }
+
+    suspend fun setPageTurnVolume(v: Boolean) =
+        dataStore.edit { it[KEY_PAGE_TURN_VOLUME] = v }
+
+    suspend fun setTapToTurn(v: Boolean) =
+        dataStore.edit { it[KEY_TAP_TO_TURN] = v }
+
+    suspend fun setReadingDirectionLocked(v: Boolean) =
+        dataStore.edit { it[KEY_READING_DIRECTION_LOCKED] = v }
 
     fun getCookies(domain: String): Flow<String?> = dataStore.data
         .catch { emit(emptyPreferences()) }

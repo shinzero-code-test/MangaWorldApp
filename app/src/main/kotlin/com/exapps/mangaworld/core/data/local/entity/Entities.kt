@@ -36,6 +36,7 @@ data class ReadingHistoryEntity(
     val coverUrl: String,
     val sourceId: String,
     val lastChapterNumber: Float,
+    val lastChapterId: String = "",
     val lastChapterUrl: String = "",
     val lastReadAt: Long,
     val readChapters: Int = 0,
@@ -49,16 +50,18 @@ data class ReadingHistoryEntity(
     )
 }
 
-@Entity(tableName = "read_chapters", primaryKeys = ["mangaId", "chapterNumber"])
+@Entity(tableName = "read_chapters", primaryKeys = ["mangaId", "chapterId"])
 data class ReadChapterEntity(
     val mangaId: String,
+    val chapterId: String,
     val chapterNumber: Float,
     val readAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "reading_progress", primaryKeys = ["mangaId", "chapterNumber"])
+@Entity(tableName = "reading_progress", primaryKeys = ["mangaId", "chapterId"])
 data class ReadingProgressEntity(
     val mangaId: String,
+    val chapterId: String,
     val chapterNumber: Float,
     val currentPage: Int,
     val totalPages: Int,
@@ -112,11 +115,18 @@ data class DownloadTaskEntity(
     val targetDir: String,
     val referer: String = "",
     val pagesJson: String = "[]",
-    val status: String = "queued", // queued|running|completed|failed|cancelled
+    val chapterId: String = "",
+    val chapterNumber: Float? = null,
+    val priority: Int = 0,
+    val bandwidthCapKb: Int = 0,
+    val status: String = "queued", // queued|running|paused|completed|failed|cancelled
     val progress: Float = 0f,
     val totalPages: Int = 0,
     val downloadedPages: Int = 0,
     val retries: Int = 0,
+    val nextRetryAt: Long? = null,
+    val integrityStatus: String = "unknown",
+    val integrityMessage: String? = null,
     val errorMessage: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
@@ -138,4 +148,40 @@ data class DownloadedMangaEntity(
     val description: String = "",
     val downloadedAt: Long = System.currentTimeMillis(),
     val lastUpdatedAt: Long = System.currentTimeMillis()
+)
+
+
+@Entity(tableName = "source_browse_metadata")
+data class SourceBrowseMetadataEntity(
+    @PrimaryKey val sourceId: String,
+    val genresJson: String = "[]",
+    val statusesJson: String = "[]",
+    val typesJson: String = "[]",
+    val categoriesJson: String = "[]",
+    val refreshedAt: Long = System.currentTimeMillis()
+) {
+    fun toDomain() = SourceBrowseMetadata(
+        source = MangaSource.fromId(sourceId),
+        genres = jsonList(genresJson),
+        statuses = jsonList(statusesJson).mapNotNull { name -> MangaStatus.values().firstOrNull { it.name == name } },
+        types = jsonList(typesJson).mapNotNull { name -> MangaType.values().firstOrNull { it.name == name } },
+        categories = jsonList(categoriesJson),
+        refreshedAt = refreshedAt
+    )
+
+    companion object {
+        private fun jsonList(raw: String): List<String> = runCatching {
+            val arr = org.json.JSONArray(raw)
+            List(arr.length()) { idx -> arr.optString(idx) }.filter { it.isNotBlank() }
+        }.getOrDefault(emptyList())
+    }
+}
+
+fun SourceBrowseMetadata.toEntity() = SourceBrowseMetadataEntity(
+    sourceId = source.id,
+    genresJson = org.json.JSONArray(genres).toString(),
+    statusesJson = org.json.JSONArray(statuses.map { it.name }).toString(),
+    typesJson = org.json.JSONArray(types.map { it.name }).toString(),
+    categoriesJson = org.json.JSONArray(categories).toString(),
+    refreshedAt = refreshedAt
 )

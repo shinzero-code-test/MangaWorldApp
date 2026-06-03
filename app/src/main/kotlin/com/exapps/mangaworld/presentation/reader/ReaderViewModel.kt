@@ -50,6 +50,7 @@ data class ReaderUiState(
     val error: String? = null,
     val chapterUrl: String = "",
     val chapterNumber: Float? = null,
+    val chapterId: String = "",
     val chapterTitle: String? = null,
     val mangaId: String = "",
     val downloadInProgress: Boolean = false,
@@ -157,7 +158,7 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    fun loadChapter(chapterUrl: String, mangaId: String, source: MangaSource) {
+    fun loadChapter(chapterUrl: String, mangaId: String, source: MangaSource, suppliedChapterId: String? = null, suppliedChapterNumber: Float? = null) {
         if (_state.value.chapterUrl != chapterUrl) {
             finishSessionAsync()
             stopCommunityPresenceAsync(_state.value.mangaId, _state.value.chapterUrl)
@@ -170,14 +171,18 @@ class ReaderViewModel @Inject constructor(
                 error = null,
                 chapterUrl = chapterUrl,
                 mangaId = mangaId,
+                chapterId = suppliedChapterId.orEmpty(),
+                chapterNumber = suppliedChapterNumber ?: it.chapterNumber,
                 translation = PageTranslationUiState(enabled = it.translation.enabled)
             )
         }
         viewModelScope.launch {
             val chapterMeta = resolveChapterMeta(mangaId, chapterUrl, source)
+            val resolvedChapterId = suppliedChapterId ?: chapterMeta?.id ?: ""
+            val resolvedChapterNumber = suppliedChapterNumber ?: chapterMeta?.number ?: 0f
             val localPages = downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
             if (localPages.isNotEmpty()) {
-                val currentChapterNumber = chapterMeta?.number ?: parseFallbackChapterNumber(chapterUrl)
+                val currentChapterNumber = resolvedChapterNumber
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -185,6 +190,7 @@ class ReaderViewModel @Inject constructor(
                         totalPages = localPages.size,
                         currentPage = 0,
                         chapterNumber = currentChapterNumber,
+                        chapterId = resolvedChapterId,
                         chapterTitle = chapterMeta?.title,
                         downloadMessage = "قراءة بدون إنترنت"
                     )
@@ -198,7 +204,7 @@ class ReaderViewModel @Inject constructor(
             mangaRepo.getChapterPages("", chapterUrl, source)
                 .onSuccess { pages ->
                     // Restore saved progress
-                    val chNum = chapterMeta?.number ?: parseFallbackChapterNumber(chapterUrl)
+                    val chNum = resolvedChapterNumber
                     val (savedPage, _) = libraryRepo.getReadingProgress(mangaId, chNum)
                     _state.update {
                         it.copy(
@@ -207,6 +213,7 @@ class ReaderViewModel @Inject constructor(
                             totalPages = pages.size,
                             currentPage = savedPage.coerceIn(0, maxOf(0, pages.size - 1)),
                             chapterNumber = chNum,
+                            chapterId = resolvedChapterId,
                             chapterTitle = chapterMeta?.title
                         )
                     }
@@ -249,7 +256,7 @@ class ReaderViewModel @Inject constructor(
             settingsRepo.saveCookies(domain, cookies)
             delay(300)
             val st = _state.value
-            loadChapter(st.chapterUrl, st.mangaId, currentSource)
+            loadChapter(st.chapterUrl, st.mangaId, currentSource, st.chapterId, st.chapterNumber)
         }
     }
 
@@ -258,7 +265,7 @@ class ReaderViewModel @Inject constructor(
         _state.update { it.copy(currentPage = page) }
         // Save progress & mark read at last page
         viewModelScope.launch {
-            val chNum = st.chapterNumber ?: resolveChapterMeta(st.mangaId, st.chapterUrl, currentSource)?.number ?: parseFallbackChapterNumber(st.chapterUrl)
+            val chNum = st.chapterNumber ?: resolveChapterMeta(st.mangaId, st.chapterUrl, currentSource)?.number ?: return@launch
             trackReadingTime()
             if (!st.incognitoMode) {
                 libraryRepo.saveReadingProgress(st.mangaId, chNum, page, st.totalPages)
@@ -285,7 +292,7 @@ class ReaderViewModel @Inject constructor(
                     }
                 }
                 if (st.autoOpenNextChapter) {
-                    st.nextChapterUrl?.let { next -> loadChapter(next, st.mangaId, currentSource) }
+                    st.nextChapterUrl?.let { next -> loadAdjacentChapter(next, st.mangaId, currentSource) }
                 }
                 widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
             }
@@ -306,6 +313,7 @@ class ReaderViewModel @Inject constructor(
             val referer = st.pages.firstOrNull()?.headers?.get("Referer")
                 ?.takeIf { it.isNotBlank() }
                 ?: st.chapterUrl
+            val downloadSettings = settingsRepo.getAppSettings().first()
             _state.update { it.copy(downloadInProgress = true, downloadProgress = 0f, downloadMessage = "بدء التنزيل...", activeDownloadTaskId = taskId) }
             downloadQueueManager.enqueueAndRun(
                 taskId = taskId,
@@ -315,7 +323,11 @@ class ReaderViewModel @Inject constructor(
                 chapterTitle = st.chapterTitle,
                 pages = st.pages,
                 wifiOnly = st.downloadOnWifiOnly,
-                referer = referer
+                referer = referer,
+                chapterId = st.chapterId,
+                chapterNumber = st.chapterNumber,
+                priority = 5,
+                bandwidthCapKb = downloadSettings.downloadBandwidthCapKb
             )
         }
     }
@@ -464,12 +476,12 @@ class ReaderViewModel @Inject constructor(
 
     fun openPreviousChapter() {
         val st = _state.value
-        st.prevChapterUrl?.let { loadChapter(it, st.mangaId, currentSource) }
+        st.prevChapterUrl?.let { loadAdjacentChapter(it, st.mangaId, currentSource) }
     }
 
     fun openNextChapter() {
         val st = _state.value
-        st.nextChapterUrl?.let { loadChapter(it, st.mangaId, currentSource) }
+        st.nextChapterUrl?.let { loadAdjacentChapter(it, st.mangaId, currentSource) }
     }
 
     fun sendReaction(emoji: String) {
@@ -568,8 +580,12 @@ class ReaderViewModel @Inject constructor(
     private suspend fun resolveChapterMeta(mangaId: String, chapterUrl: String, source: MangaSource): Chapter? =
         resolveDetailForChapter(mangaId, source)?.chapters?.firstOrNull { it.url == chapterUrl }
 
-    private fun parseFallbackChapterNumber(chapterUrl: String): Float =
-        chapterUrl.substringAfterLast("/").replace("[^0-9.]".toRegex(), "").toFloatOrNull() ?: 0f
+    private fun loadAdjacentChapter(chapterUrl: String, mangaId: String, source: MangaSource) {
+        viewModelScope.launch {
+            val meta = resolveChapterMeta(mangaId, chapterUrl, source)
+            loadChapter(chapterUrl, mangaId, source, meta?.id, meta?.number)
+        }
+    }
 
     private suspend fun scheduleAutoCleanupIfNeeded(mangaId: String, chapterUrl: String) {
         val settings = settingsRepo.getAppSettings().first()

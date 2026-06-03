@@ -12,6 +12,8 @@ interface MangaRepository {
     fun searchManga(filters: SearchFilters): Flow<PagingData<MangaItem>>
     suspend fun searchMangaDirect(query: String, source: MangaSource, page: Int = 1): Result<List<MangaItem>>
     suspend fun getMangaByGenre(genre: String, source: MangaSource, page: Int): Result<List<MangaItem>>
+    fun observeSourceBrowseMetadata(): Flow<List<SourceBrowseMetadata>>
+    suspend fun refreshSourceBrowseMetadata(source: MangaSource): SourceBrowseMetadata
 
     // Detail
     suspend fun getMangaDetail(slug: String, source: MangaSource): Result<MangaDetail>
@@ -77,6 +79,8 @@ interface SettingsRepository {
     suspend fun setContentBlacklist(values: Set<String>)
     suspend fun setSpoilerCollapseDefault(enabled: Boolean)
     suspend fun setMutedUserIds(values: Set<String>)
+    suspend fun setMlKitEnabled(enabled: Boolean)
+    suspend fun setDownloadBandwidthCapKb(kb: Int)
 
     fun getReaderSettings(): Flow<ReaderSettings>
     suspend fun updateReaderMode(mode: ReaderMode)
@@ -92,6 +96,9 @@ interface SettingsRepository {
     suspend fun updateShowReactionOverlay(enabled: Boolean)
     suspend fun updateDualPageLandscape(enabled: Boolean)
     suspend fun updateWebtoonAutoStitch(enabled: Boolean)
+    suspend fun updatePageTurnVolumeKeys(enabled: Boolean)
+    suspend fun updateTapToTurnPages(enabled: Boolean)
+    suspend fun updateReadingDirectionLocked(enabled: Boolean)
 
     fun getCookies(domain: String): Flow<String?>
     suspend fun saveCookies(domain: String, cookies: String)

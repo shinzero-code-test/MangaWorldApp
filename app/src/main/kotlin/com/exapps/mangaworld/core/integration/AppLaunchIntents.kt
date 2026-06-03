@@ -19,13 +19,15 @@ object AppLaunchIntents {
     fun detail(context: Context, sourceId: String, slug: String): Intent =
         intent(context, "$Scheme://manga/$sourceId/$slug")
 
-    fun reader(context: Context, sourceId: String, mangaId: String, chapterUrl: String): Intent {
+    fun reader(context: Context, sourceId: String, mangaId: String, chapterUrl: String, chapterId: String = "", chapterNumber: Float? = null): Intent {
         val uri = Uri.Builder()
             .scheme(Scheme)
             .authority("reader")
             .appendQueryParameter("sourceId", sourceId)
             .appendQueryParameter("mangaId", mangaId)
             .appendQueryParameter("chapterUrl", chapterUrl)
+            .appendQueryParameter("chapterId", chapterId)
+            .appendQueryParameter("chapterNumber", chapterNumber?.toString().orEmpty())
             .build()
         return intent(context, uri)
     }

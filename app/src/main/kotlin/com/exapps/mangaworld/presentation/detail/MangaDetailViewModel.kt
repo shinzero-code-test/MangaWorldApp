@@ -264,7 +264,8 @@ class MangaDetailViewModel @Inject constructor(
                         .getOrDefault(emptyList())
                 }
                 if (pages.isNotEmpty()) {
-                    val wifiOnly = settingsRepo.getAppSettings().first().downloadOnWifiOnly
+                    val downloadSettings = settingsRepo.getAppSettings().first()
+                    val wifiOnly = downloadSettings.downloadOnWifiOnly
                     val manga = _state.value.manga
                     val srcReferer = pages.firstOrNull()?.headers?.get("Referer")
                         ?.takeIf { it.isNotBlank() }
@@ -278,6 +279,10 @@ class MangaDetailViewModel @Inject constructor(
                         pages = pages,
                         wifiOnly = wifiOnly,
                         referer = srcReferer,
+                        chapterId = chapter.id,
+                        chapterNumber = chapter.number,
+                        priority = if (chapter.isRead) 0 else 2,
+                        bandwidthCapKb = downloadSettings.downloadBandwidthCapKb,
                         mangaMetadata = manga?.let { m ->
                             com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity(
                                 mangaId = currentMangaId,

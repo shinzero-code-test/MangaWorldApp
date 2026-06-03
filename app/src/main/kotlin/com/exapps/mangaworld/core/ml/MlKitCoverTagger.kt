@@ -1,11 +1,13 @@
 package com.exapps.mangaworld.core.ml
 
 import android.graphics.BitmapFactory
+import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -16,10 +18,12 @@ import javax.inject.Singleton
 
 @Singleton
 class MlKitCoverTagger @Inject constructor(
-    private val okHttpClient: OkHttpClient
+    private val okHttpClient: OkHttpClient,
+    private val settingsRepository: SettingsRepository
 ) {
 
     suspend fun generateTags(localCoverPath: String?, remoteCoverUrl: String?): List<String> = withContext(Dispatchers.IO) {
+        if (!settingsRepository.getAppSettings().first().mlKitEnabled) return@withContext emptyList()
         val bitmap = when {
             !localCoverPath.isNullOrBlank() && File(localCoverPath).exists() -> BitmapFactory.decodeFile(localCoverPath)
             !remoteCoverUrl.isNullOrBlank() -> downloadBitmap(remoteCoverUrl)

@@ -25,6 +25,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -49,6 +50,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
         val referer = inputData.getString(KEY_REFERER).orEmpty()
         val targetDirPath = inputData.getString(KEY_TARGET_DIR)
         val pages = inputData.getStringArray(KEY_PAGES)?.toList().orEmpty()
+        val bandwidthCapKb = inputData.getInt(KEY_BANDWIDTH_CAP_KB, 0)
         if (pages.isEmpty()) return@withContext Result.failure()
 
         val targetDir = targetDirPath?.let(::File)
@@ -66,12 +68,15 @@ class ChapterDownloadWorker @AssistedInject constructor(
             updateProgress(taskId, displayTitle, done, pages.size, mangaId, chapterUrl)
 
             val targets = pages.mapIndexed { index, pageUrl -> pageUrl to File(targetDir, "${index + 1}.jpg") }
-            targets.chunked(PARALLEL_DOWNLOADS).forEach { chunk ->
+            targets.chunked(if (bandwidthCapKb > 0) 1 else PARALLEL_DOWNLOADS).forEach { chunk ->
+                if (downloadTaskDao.getById(taskId)?.status == "paused") {
+                    return@withContext Result.success()
+                }
                 coroutineScope {
                     chunk.map { (pageUrl, outFile) ->
                         async {
                             ensureActive()
-                            downloadPage(pageUrl, referer, outFile)
+                            downloadPage(pageUrl, referer, outFile, bandwidthCapKb)
                         }
                     }.awaitAll().forEach { downloaded ->
                         if (downloaded) done += 1
@@ -111,6 +116,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
                             status = "failed",
                             retries = current.retries + 1,
                             errorMessage = e.message,
+                            nextRetryAt = System.currentTimeMillis() + ((current.retries + 1).coerceAtMost(6) * 30_000L),
                             updatedAt = System.currentTimeMillis()
                         )
                     )
@@ -121,7 +127,8 @@ class ChapterDownloadWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun downloadPage(pageUrl: String, referer: String, outFile: File): Boolean {
+    private suspend fun downloadPage(pageUrl: String, referer: String, outFile: File, bandwidthCapKb: Int): Boolean {
+        val startedAt = System.currentTimeMillis()
         if (outFile.exists() && outFile.length() > 0L) return false
 
         val reqBuilder = Request.Builder()
@@ -154,6 +161,11 @@ class ChapterDownloadWorker @AssistedInject constructor(
             error("Downloaded empty image for $pageUrl")
         }
         tempFile.renameTo(outFile)
+        if (bandwidthCapKb > 0) {
+            val expectedMs = (outFile.length() * 1000L / (bandwidthCapKb * 1024L)).coerceAtLeast(0L)
+            val elapsedMs = System.currentTimeMillis() - startedAt
+            if (expectedMs > elapsedMs) delay(expectedMs - elapsedMs)
+        }
         return true
     }
 
@@ -246,6 +258,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
         const val KEY_PAGES = "pages"
         const val KEY_REFERER = "referer"
         const val KEY_TARGET_DIR = "target_dir"
+        const val KEY_BANDWIDTH_CAP_KB = "bandwidth_cap_kb"
         private const val NOTIF_ID_PROGRESS = 1001
         private const val NOTIF_ID_COMPLETE = 2000
         private const val NOTIF_ID_FAIL = 3000

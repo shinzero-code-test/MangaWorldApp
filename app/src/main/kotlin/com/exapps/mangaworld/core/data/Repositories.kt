@@ -87,6 +87,7 @@ internal fun MangaDetail.toCacheEntity() = MangaCacheEntity(
 class MangaRepositoryImpl @Inject constructor(
     private val scrapers: Map<String, @JvmSuppressWildcards MangaScraper>,
     private val cacheDao: MangaCacheDao,
+    private val sourceBrowseMetadataDao: SourceBrowseMetadataDao,
     private val favoriteDao: FavoriteDao,
     private val firebaseTelemetry: FirebaseTelemetry
 ) : MangaRepository {
@@ -108,6 +109,21 @@ class MangaRepositoryImpl @Inject constructor(
 
     override suspend fun getMangaByGenre(genre: String, source: MangaSource, page: Int) =
         scraper(source).getMangaByGenre(genre, page)
+
+    override fun observeSourceBrowseMetadata(): Flow<List<SourceBrowseMetadata>> =
+        sourceBrowseMetadataDao.observeAll().map { list -> list.map { it.toDomain() } }
+
+    override suspend fun refreshSourceBrowseMetadata(source: MangaSource): SourceBrowseMetadata {
+        val genres = scraper(source).getGenres().getOrDefault(emptyList()).distinct().sorted()
+        val metadata = SourceBrowseMetadata(
+            source = source,
+            genres = genres,
+            categories = genres,
+            refreshedAt = System.currentTimeMillis()
+        )
+        sourceBrowseMetadataDao.upsert(metadata.toEntity())
+        return metadata
+    }
 
     /**
      * Cache-first strategy:
@@ -173,11 +189,22 @@ class MangaRepositoryImpl @Inject constructor(
     override suspend fun getGenres(source: MangaSource?, enabledSourceIds: Set<String>?): List<String> {
         val allowed = enabledSourceIds ?: MangaSource.entries.map { it.id }.toSet()
         val sources = if (source != null) listOf(source) else MangaSource.values().toList()
-        return sources.flatMap { s ->
-            if (s.id !in allowed) return@flatMap emptyList()
-            val sc = scrapers[s.id] ?: return@flatMap emptyList()
-            sc.getGenres().getOrDefault(emptyList())
-        }.distinct().sorted()
+        val allGenres = mutableListOf<String>()
+        for (s in sources) {
+            if (s.id !in allowed) continue
+            val cached = sourceBrowseMetadataDao.get(s.id)
+                ?.toDomain()
+                ?.takeIf { System.currentTimeMillis() - it.refreshedAt < 24 * 60 * 60 * 1000L }
+            if (cached != null) {
+                allGenres += cached.genres
+                continue
+            }
+            val sc = scrapers[s.id] ?: continue
+            val genres = sc.getGenres().getOrDefault(emptyList())
+            sourceBrowseMetadataDao.upsert(SourceBrowseMetadata(source = s, genres = genres, categories = genres).toEntity())
+            allGenres += genres
+        }
+        return allGenres.distinct().sorted()
     }
 }
 
@@ -333,7 +360,7 @@ class LibraryRepositoryImpl @Inject constructor(
     override suspend fun removeFromHistory(mangaId: String) = historyDao.delete(mangaId)
 
     override suspend fun markChapterRead(mangaId: String, chapterNumber: Float) {
-        readChapterDao.markRead(ReadChapterEntity(mangaId, chapterNumber))
+        readChapterDao.markRead(ReadChapterEntity(mangaId = mangaId, chapterId = chapterNumber.toString(), chapterNumber = chapterNumber))
         syncFavoriteProgress(mangaId)
     }
 
@@ -349,7 +376,7 @@ class LibraryRepositoryImpl @Inject constructor(
         readChapterDao.getReadChapters(mangaId).map { it.toSet() }
 
     override suspend fun saveReadingProgress(mangaId: String, chapterNumber: Float, page: Int, totalPages: Int) =
-        progressDao.save(ReadingProgressEntity(mangaId, chapterNumber, page, totalPages))
+        progressDao.save(ReadingProgressEntity(mangaId = mangaId, chapterId = chapterNumber.toString(), chapterNumber = chapterNumber, currentPage = page, totalPages = totalPages))
 
     override suspend fun getReadingProgress(mangaId: String, chapterNumber: Float): Pair<Int, Int> {
         val p = progressDao.get(mangaId, chapterNumber)
@@ -441,6 +468,8 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setContentBlacklist(values: Set<String>) { prefs.setContentBlacklist(values) }
     override suspend fun setSpoilerCollapseDefault(enabled: Boolean) { prefs.setSpoilerCollapseDefault(enabled) }
     override suspend fun setMutedUserIds(values: Set<String>) { prefs.setMutedUsers(values) }
+    override suspend fun setMlKitEnabled(enabled: Boolean) { prefs.setMlKitEnabled(enabled) }
+    override suspend fun setDownloadBandwidthCapKb(kb: Int) { prefs.setDownloadBandwidthCapKb(kb) }
     override fun getReaderSettings() = prefs.readerSettings
     override suspend fun updateReaderMode(mode: ReaderMode) { prefs.setReaderMode(mode) }
     override suspend fun updateBrightness(brightness: Float) { prefs.setBrightness(brightness) }
@@ -455,6 +484,9 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun updateShowReactionOverlay(enabled: Boolean) { prefs.setShowReactions(enabled) }
     override suspend fun updateDualPageLandscape(enabled: Boolean) { prefs.setDualPage(enabled) }
     override suspend fun updateWebtoonAutoStitch(enabled: Boolean) { prefs.setWebtoonStitch(enabled) }
+    override suspend fun updatePageTurnVolumeKeys(enabled: Boolean) { prefs.setPageTurnVolume(enabled) }
+    override suspend fun updateTapToTurnPages(enabled: Boolean) { prefs.setTapToTurn(enabled) }
+    override suspend fun updateReadingDirectionLocked(enabled: Boolean) { prefs.setReadingDirectionLocked(enabled) }
     override fun getCookies(domain: String) = prefs.getCookies(domain)
     override suspend fun saveCookies(domain: String, cookies: String) { prefs.saveCookies(domain, cookies) }
     override suspend fun clearCookies(domain: String) { prefs.clearCookies(domain) }

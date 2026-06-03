@@ -39,7 +39,7 @@ import com.exapps.mangaworld.presentation.theme.MangaColors
 fun MangaDetailScreen(
     source: MangaSource,
     slug: String,
-    onChapterClick: (chapterUrl: String, mangaId: String) -> Unit,
+    onChapterClick: (chapter: Chapter, mangaId: String) -> Unit,
     onOpenCommunity: (mangaId: String) -> Unit,
     onOpenChapterCommunity: (mangaId: String, chapterUrl: String) -> Unit,
     onOpenOtherSource: (sourceId: String, slug: String) -> Unit,
@@ -95,7 +95,7 @@ fun MangaDetailScreen(
                 onOpenChapterCommunity = onOpenChapterCommunity,
                 onOpenOtherSource = onOpenOtherSource,
                 onShowAddToList = viewModel::showAddToListDialog,
-                onChapterClick = { ch -> onChapterClick(ch.url, "${source.id}_$slug") }
+                onChapterClick = { ch -> onChapterClick(ch, "${source.id}_$slug") }
             )
         }
 

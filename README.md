@@ -1,5 +1,7 @@
 # MangaWorld
 
+Current app version: 3.5.0
+
 <p align="center">
   <img src="app/src/main/res/drawable-nodpi/mangaworld_logo.png" width="100" alt="MangaWorld Logo"/>
 </p>

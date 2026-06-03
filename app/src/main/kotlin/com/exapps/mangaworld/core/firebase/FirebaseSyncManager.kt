@@ -10,6 +10,8 @@ import com.exapps.mangaworld.domain.model.AppTheme
 import com.exapps.mangaworld.domain.model.CloudRestorePreview
 import com.exapps.mangaworld.domain.model.CloudRestoreStrategy
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.WriteBatch
 import com.google.firebase.firestore.FirebaseFirestore
@@ -31,9 +33,11 @@ class FirebaseSyncManager @Inject constructor(
 
     suspend fun pushLocalSnapshot() {
         val uid = sessionManager.ensureGuestSession() ?: return
-        val favorites = favoriteDao.getFavoritesList()
-        val history = historyDao.getAll()
-        val annotations = readerAnnotationDao.getAll()
+        val syncState = firestore.collection("users").document(uid).collection("syncState").document("local").get().await()
+        val lastPushAt = syncState.getLong("lastPushAt") ?: 0L
+        val favorites = favoriteDao.getFavoritesList().filter { it.addedAt >= lastPushAt }
+        val history = historyDao.getAll().filter { it.lastReadAt >= lastPushAt }
+        val annotations = readerAnnotationDao.getAll().filter { it.updatedAt >= lastPushAt }
         val settings = settingsRepository.getAppSettings().first()
         val reader = settingsRepository.getReaderSettings().first()
 
@@ -45,10 +49,11 @@ class FirebaseSyncManager @Inject constructor(
                 "annotations" to annotations.size.toLong()
             )
         ) {
+            val pushedAt = System.currentTimeMillis()
             val userRef = firestore.collection("users").document(uid)
             val writes = mutableListOf<Pair<com.google.firebase.firestore.DocumentReference, Any>>()
             writes += userRef to mapOf(
-                "updatedAt" to System.currentTimeMillis(),
+                "updatedAt" to pushedAt,
                 "enabledSources" to settings.enabledSources.toList(),
                 "theme" to settings.theme.name,
                 "useDynamicColors" to settings.useDynamicColors,
@@ -60,12 +65,15 @@ class FirebaseSyncManager @Inject constructor(
                 "imageCacheLimitMb" to settings.imageCacheLimitMb,
                 "contentBlacklist" to settings.contentBlacklist.toList(),
                 "spoilerCollapseDefault" to settings.spoilerCollapseDefault,
-                "mutedUserIds" to settings.mutedUserIds.toList()
+                "mutedUserIds" to settings.mutedUserIds.toList(),
+                "mlKitEnabled" to settings.mlKitEnabled,
+                "downloadBandwidthCapKb" to settings.downloadBandwidthCapKb
             )
             writes += userRef.collection("preferences").document("reader") to reader
             favorites.forEach { favorite -> writes += userRef.collection("favorites").document(favorite.mangaId) to favorite }
             history.forEach { item -> writes += userRef.collection("readingHistory").document(item.mangaId) to item }
             annotations.forEach { annotation -> writes += userRef.collection("readerAnnotations").document(annotationDocId(annotation)) to annotation }
+            writes += userRef.collection("syncState").document("local") to mapOf("lastPushAt" to pushedAt)
             commitChunked(writes)
         }
     }
@@ -75,9 +83,11 @@ class FirebaseSyncManager @Inject constructor(
         firebaseTelemetry.traceDatabaseSync(operation = "pull") {
             val userRef = firestore.collection("users").document(uid)
             val profile = userRef.get().await()
-            val favorites = userRef.collection("favorites").get().await().documents
-            val history = userRef.collection("readingHistory").get().await().documents
-            val annotations = userRef.collection("readerAnnotations").get().await().documents
+            val state = userRef.collection("syncState").document("remotePull").get().await()
+            val lastPullAt = state.getLong("lastPullAt") ?: 0L
+            val favorites = getPagedDocuments(userRef.collection("favorites"), "addedAt", lastPullAt)
+            val history = getPagedDocuments(userRef.collection("readingHistory"), "lastReadAt", lastPullAt)
+            val annotations = getPagedDocuments(userRef.collection("readerAnnotations"), "updatedAt", lastPullAt)
             val readerPrefs = userRef.collection("preferences").document("reader").get().await()
 
             favorites.mapNotNull { it.toObject(FavoriteEntity::class.java) }.forEach { favoriteDao.insert(it) }
@@ -110,6 +120,10 @@ class FirebaseSyncManager @Inject constructor(
             (profile.get("mutedUserIds") as? List<*>)?.mapNotNull { it?.toString() }?.toSet()?.let { muted ->
                 settingsRepository.setMutedUserIds(muted)
             }
+            profile.getBoolean("mlKitEnabled")?.let { settingsRepository.setMlKitEnabled(it) }
+            profile.getLong("downloadBandwidthCapKb")?.toInt()?.let { settingsRepository.setDownloadBandwidthCapKb(it) }
+
+            userRef.collection("syncState").document("remotePull").set(mapOf("lastPullAt" to System.currentTimeMillis()), SetOptions.merge()).await()
 
             readerPrefs.getString("mode")?.let { name ->
                 com.exapps.mangaworld.domain.model.ReaderMode.values().firstOrNull { it.name == name }?.let { mode ->
@@ -125,6 +139,9 @@ class FirebaseSyncManager @Inject constructor(
             readerPrefs.getBoolean("autoOpenNextChapter")?.let { settingsRepository.updateAutoOpenNextChapter(it) }
             readerPrefs.getBoolean("showLiveReadersOverlay")?.let { settingsRepository.updateShowLiveReadersOverlay(it) }
             readerPrefs.getBoolean("showReactionOverlay")?.let { settingsRepository.updateShowReactionOverlay(it) }
+            readerPrefs.getBoolean("pageTurnVolumeKeys")?.let { settingsRepository.updatePageTurnVolumeKeys(it) }
+            readerPrefs.getBoolean("tapToTurnPages")?.let { settingsRepository.updateTapToTurnPages(it) }
+            readerPrefs.getBoolean("readingDirectionLocked")?.let { settingsRepository.updateReadingDirectionLocked(it) }
             readerPrefs.getString("imageFilter")?.let { name ->
                 com.exapps.mangaworld.domain.model.ReaderImageFilter.values().firstOrNull { it.name == name }?.let { filter ->
                     settingsRepository.updateImageFilter(filter)
@@ -137,9 +154,9 @@ class FirebaseSyncManager @Inject constructor(
         val uid = sessionManager.ensureGuestSession() ?: error("No user")
         val userRef = firestore.collection("users").document(uid)
         val profile = userRef.get().await()
-        val remoteFavorites = userRef.collection("favorites").get().await().documents.mapNotNull { it.toObject(FavoriteEntity::class.java) }
-        val remoteHistory = userRef.collection("readingHistory").get().await().documents.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
-        val remoteAnnotations = userRef.collection("readerAnnotations").get().await().documents.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
+        val remoteFavorites = getPagedDocuments(userRef.collection("favorites"), "addedAt", 0L).mapNotNull { it.toObject(FavoriteEntity::class.java) }
+        val remoteHistory = getPagedDocuments(userRef.collection("readingHistory"), "lastReadAt", 0L).mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
+        val remoteAnnotations = getPagedDocuments(userRef.collection("readerAnnotations"), "updatedAt", 0L).mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
 
         val localFavorites = favoriteDao.getFavoritesList()
         val localHistory = historyDao.getAll()
@@ -188,9 +205,9 @@ class FirebaseSyncManager @Inject constructor(
         val uid = sessionManager.ensureGuestSession() ?: return
         firebaseTelemetry.traceDatabaseSync(operation = "merge") {
             val userRef = firestore.collection("users").document(uid)
-            val remoteFavorites = userRef.collection("favorites").get().await().documents.mapNotNull { it.toObject(FavoriteEntity::class.java) }
-            val remoteHistory = userRef.collection("readingHistory").get().await().documents.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
-            val remoteAnnotations = userRef.collection("readerAnnotations").get().await().documents.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
+            val remoteFavorites = getPagedDocuments(userRef.collection("favorites"), "addedAt", 0L).mapNotNull { it.toObject(FavoriteEntity::class.java) }
+            val remoteHistory = getPagedDocuments(userRef.collection("readingHistory"), "lastReadAt", 0L).mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
+            val remoteAnnotations = getPagedDocuments(userRef.collection("readerAnnotations"), "updatedAt", 0L).mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
             val localFavorites = favoriteDao.getFavoritesList().associateBy { it.mangaId }
             val localHistory = historyDao.getAll().associateBy { it.mangaId }
             val localAnnotations = readerAnnotationDao.getAll().associateBy { annotationDocId(it) }
@@ -217,6 +234,25 @@ class FirebaseSyncManager @Inject constructor(
 
     private fun annotationDocId(entity: ReaderAnnotationEntity): String =
         listOf(entity.mangaId, entity.chapterUrl.hashCode().toString(), entity.pageIndex.toString()).joinToString("_")
+
+    private suspend fun getPagedDocuments(
+        collection: com.google.firebase.firestore.CollectionReference,
+        cursorField: String,
+        minUpdatedAt: Long,
+        pageSize: Long = 250L
+    ): List<DocumentSnapshot> {
+        val docs = mutableListOf<DocumentSnapshot>()
+        var cursor: DocumentSnapshot? = null
+        do {
+            var query: Query = collection.orderBy(cursorField).limit(pageSize)
+            if (minUpdatedAt > 0L) query = query.whereGreaterThanOrEqualTo(cursorField, minUpdatedAt)
+            cursor?.let { query = query.startAfter(it) }
+            val page = query.get().await().documents
+            docs += page
+            cursor = page.lastOrNull()
+        } while (page.size.toLong() == pageSize)
+        return docs
+    }
 
     private suspend fun commitChunked(writes: List<Pair<com.google.firebase.firestore.DocumentReference, Any>>) {
         writes.chunked(400).forEach { chunk ->

@@ -61,11 +61,15 @@ sealed class Screen(val route: String) {
     object Detail : Screen("detail/{sourceId}/{slug}") {
         fun createRoute(sourceId: String, slug: String) = "detail/$sourceId/$slug"
     }
-    object Reader : Screen("reader/{sourceId}/{mangaId}/{chapterUrl}") {
-        fun createRoute(sourceId: String, mangaId: String, chapterUrl: String) =
-            "reader/$sourceId/$mangaId/${java.net.URLEncoder.encode(chapterUrl, "UTF-8")}"
+    object Reader : Screen("reader/{sourceId}/{mangaId}/{chapterUrl}?chapterId={chapterId}&chapterNumber={chapterNumber}") {
+        fun createRoute(sourceId: String, mangaId: String, chapterUrl: String, chapterId: String? = null, chapterNumber: Float? = null): String {
+            val encodedUrl = java.net.URLEncoder.encode(chapterUrl, "UTF-8")
+            val encodedId = java.net.URLEncoder.encode(chapterId.orEmpty(), "UTF-8")
+            val number = chapterNumber?.toString().orEmpty()
+            return "reader/$sourceId/$mangaId/$encodedUrl?chapterId=$encodedId&chapterNumber=$number"
+        }
     }
-    object ReaderDeepLink : Screen("reader_deep_link?sourceId={sourceId}&mangaId={mangaId}&chapterUrl={chapterUrl}")
+    object ReaderDeepLink : Screen("reader_deep_link?sourceId={sourceId}&mangaId={mangaId}&chapterUrl={chapterUrl}&chapterId={chapterId}&chapterNumber={chapterNumber}")
 }
 
 val bottomNavItems: List<Triple<Screen, String, ImageVector>> = listOf(
@@ -178,8 +182,8 @@ fun MangaNavGraph(navController: NavHostController) {
         ) {
             LatestUpdatesScreen(
                 onBack = { navController.popBackStack() },
-                onOpenChapter = { src, mangaId, chapterUrl ->
-                    navController.navigate(Screen.Reader.createRoute(src, mangaId, chapterUrl))
+                onOpenChapter = { src, mangaId, chapterUrl, chapterId, chapterNumber ->
+                    navController.navigate(Screen.Reader.createRoute(src, mangaId, chapterUrl, chapterId, chapterNumber))
                 }
             )
         }
@@ -200,8 +204,8 @@ fun MangaNavGraph(navController: NavHostController) {
             val slug     = back.arguments?.getString("slug") ?: return@composable
             MangaDetailScreen(
                 source = MangaSource.fromId(sourceId), slug = slug,
-                onChapterClick = { chapterUrl, mangaId ->
-                    navController.navigate(Screen.Reader.createRoute(sourceId, mangaId, chapterUrl))
+                onChapterClick = { chapter, mangaId ->
+                    navController.navigate(Screen.Reader.createRoute(sourceId, mangaId, chapter.url, chapter.id, chapter.number))
                 },
                 onOpenCommunity = { mangaId ->
                     navController.navigate(Screen.Community.createRoute(sourceId, mangaId, slug))
@@ -220,7 +224,9 @@ fun MangaNavGraph(navController: NavHostController) {
             arguments = listOf(
                 navArgument("sourceId")   { type = NavType.StringType },
                 navArgument("mangaId")    { type = NavType.StringType },
-                navArgument("chapterUrl") { type = NavType.StringType }
+                navArgument("chapterUrl") { type = NavType.StringType },
+                navArgument("chapterId") { type = NavType.StringType; nullable = true; defaultValue = "" },
+                navArgument("chapterNumber") { type = NavType.StringType; nullable = true; defaultValue = "" }
             )
         ) { back ->
             val sourceId   = back.arguments?.getString("sourceId") ?: return@composable
@@ -228,9 +234,13 @@ fun MangaNavGraph(navController: NavHostController) {
             val chapterUrl = java.net.URLDecoder.decode(
                 back.arguments?.getString("chapterUrl") ?: "", "UTF-8"
             )
+            val chapterId = java.net.URLDecoder.decode(back.arguments?.getString("chapterId").orEmpty(), "UTF-8").ifBlank { null }
+            val chapterNumber = back.arguments?.getString("chapterNumber")?.toFloatOrNull()
             ReaderScreen(
                 source = MangaSource.fromId(sourceId), mangaId = mangaId,
                 chapterUrl = chapterUrl,
+                chapterId = chapterId,
+                chapterNumber = chapterNumber,
                 onBack = { navController.popBackStack() },
                 onOpenCommunity = {
                     navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl))
@@ -242,21 +252,27 @@ fun MangaNavGraph(navController: NavHostController) {
             arguments = listOf(
                 navArgument("sourceId") { type = NavType.StringType },
                 navArgument("mangaId") { type = NavType.StringType },
-                navArgument("chapterUrl") { type = NavType.StringType }
+                navArgument("chapterUrl") { type = NavType.StringType },
+                navArgument("chapterId") { type = NavType.StringType; nullable = true; defaultValue = "" },
+                navArgument("chapterNumber") { type = NavType.StringType; nullable = true; defaultValue = "" }
             ),
             deepLinks = listOf(
                 navDeepLink {
-                    uriPattern = "mangaworld://reader?sourceId={sourceId}&mangaId={mangaId}&chapterUrl={chapterUrl}"
+                    uriPattern = "mangaworld://reader?sourceId={sourceId}&mangaId={mangaId}&chapterUrl={chapterUrl}&chapterId={chapterId}&chapterNumber={chapterNumber}"
                 }
             )
         ) { back ->
             val sourceId = back.arguments?.getString("sourceId") ?: return@composable
             val mangaId = back.arguments?.getString("mangaId") ?: return@composable
             val chapterUrl = back.arguments?.getString("chapterUrl") ?: return@composable
+            val chapterId = back.arguments?.getString("chapterId")?.ifBlank { null }
+            val chapterNumber = back.arguments?.getString("chapterNumber")?.toFloatOrNull()
             ReaderScreen(
                 source = MangaSource.fromId(sourceId),
                 mangaId = mangaId,
                 chapterUrl = chapterUrl,
+                chapterId = chapterId,
+                chapterNumber = chapterNumber,
                 onBack = { navController.popBackStack() },
                 onOpenCommunity = {
                     navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl))
