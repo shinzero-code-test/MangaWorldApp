@@ -30,6 +30,7 @@ import com.exapps.mangaworld.presentation.search.SearchScreen
 import com.exapps.mangaworld.presentation.settings.SettingsScreen
 import com.exapps.mangaworld.presentation.stats.ReadingStatsScreen
 import com.exapps.mangaworld.presentation.collections.CollectionsScreen
+import com.exapps.mangaworld.presentation.goals.GoalsScreen
 
 sealed class Screen(val route: String) {
     object Home        : Screen("home")
@@ -57,6 +58,7 @@ sealed class Screen(val route: String) {
     object Collections : Screen("collections/{collectionId}") {
         fun createRoute(collectionId: String = "") = if (collectionId.isBlank()) "collections/" else "collections/$collectionId"
     }
+    object Goals : Screen("goals")
     object Community : Screen("community/{sourceId}/{mangaId}/{slug}?chapterUrl={chapterUrl}&commentId={commentId}") {
         fun createRoute(sourceId: String, mangaId: String, slug: String, chapterUrl: String? = null, commentId: String? = null): String {
             val encoded = chapterUrl?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
@@ -210,6 +212,11 @@ fun MangaNavGraph(navController: NavHostController) {
             CollectionsScreen(
                 onBack = { navController.popBackStack() },
                 onCollectionClick = { id -> navController.navigate(Screen.Collections.createRoute(id)) }
+            )
+        }
+        composable(Screen.Goals.route) {
+            GoalsScreen(
+                onBack = { navController.popBackStack() }
             )
         }
         composable(
