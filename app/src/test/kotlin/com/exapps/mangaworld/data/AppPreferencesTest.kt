@@ -35,7 +35,7 @@ class AppPreferencesTest {
     @Test
     fun cookieKey_returnsCorrectKey() {
         val key = AppPreferences.cookieKey("example.com")
-        assertEquals("cookies_example.com", key.name)
+        assertEquals("cookie_example.com", key.name)
     }
 
     @Test

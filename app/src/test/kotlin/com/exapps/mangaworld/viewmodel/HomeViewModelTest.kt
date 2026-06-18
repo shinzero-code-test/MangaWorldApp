@@ -60,9 +60,14 @@ class HomeViewModelTest {
     )
 
     @Test
-    fun initialState_isLoading() {
+    fun initialState_loadsHomeData() {
         val vm = createViewModel()
-        assertTrue(vm.state.value.isLoading)
+        // init block triggers loadHome via collectLatest, which completes
+        // immediately with UnconfinedTestDispatcher
+        val state = vm.state.value
+        assertFalse(state.isLoading)
+        assertEquals(1, state.featured.size)
+        assertNull(state.error)
     }
 
     @Test
