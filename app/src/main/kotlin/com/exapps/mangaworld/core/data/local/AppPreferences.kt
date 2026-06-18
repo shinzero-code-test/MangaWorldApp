@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -227,8 +226,4 @@ class AppPreferences @Inject constructor(
 
     suspend fun clearCookies(domain: String) =
         dataStore.edit { it.remove(cookieKey(domain)) }
-
-    fun currentImageCacheLimitMbBlocking(): Int = runBlocking {
-        appSettings.map { it.imageCacheLimitMb }.first()
-    }
 }
