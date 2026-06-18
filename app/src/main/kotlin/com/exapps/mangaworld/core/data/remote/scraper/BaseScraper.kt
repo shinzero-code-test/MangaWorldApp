@@ -66,10 +66,9 @@ abstract class BaseScraperImpl(
 
             val request = requestBuilder.build()
 
-            val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: ""
-            val code = response.code
-            response.close()
+            val (body, code) = client.newCall(request).execute().use { response ->
+                (response.body?.string() ?: "") to response.code
+            }
             val doc = Jsoup.parse(body, url)
             val title = doc.title().lowercase()
             val isCf = code == 403 ||
