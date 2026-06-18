@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.presentation.detail
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.CookieCache
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.*
 import java.util.UUID
 import javax.inject.Inject
 
+@Immutable
 data class DetailUiState(
     val isLoading: Boolean = true,
     val manga: MangaDetail? = null,

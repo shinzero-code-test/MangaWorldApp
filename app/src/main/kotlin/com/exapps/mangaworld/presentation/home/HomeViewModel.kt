@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.presentation.home
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.isBlockedBy
@@ -14,6 +15,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 
+@Immutable
 data class HomeUiState(
     val isLoading: Boolean = true,
     val featured: List<MangaItem> = emptyList(),

@@ -5,6 +5,7 @@ import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.ImagePrefetcher
@@ -30,6 +31,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
+@Immutable
 data class PageTranslationUiState(
     val enabled: Boolean = true,
     val isLoading: Boolean = false,
@@ -39,6 +41,7 @@ data class PageTranslationUiState(
     val error: String? = null
 )
 
+@Immutable
 data class ReaderUiState(
     val isLoading: Boolean = true,
     val pages: List<ChapterPage> = emptyList(),
