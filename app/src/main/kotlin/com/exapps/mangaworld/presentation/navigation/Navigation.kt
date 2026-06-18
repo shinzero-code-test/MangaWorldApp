@@ -29,6 +29,7 @@ import com.exapps.mangaworld.presentation.reader.ReaderScreen
 import com.exapps.mangaworld.presentation.search.SearchScreen
 import com.exapps.mangaworld.presentation.settings.SettingsScreen
 import com.exapps.mangaworld.presentation.stats.ReadingStatsScreen
+import com.exapps.mangaworld.presentation.collections.CollectionsScreen
 
 sealed class Screen(val route: String) {
     object Home        : Screen("home")
@@ -53,6 +54,9 @@ sealed class Screen(val route: String) {
     object LocalStorage: Screen("local_storage")
     object LatestUpdates : Screen("latest_updates")
     object ReadingStats : Screen("reading_stats")
+    object Collections : Screen("collections/{collectionId}") {
+        fun createRoute(collectionId: String = "") = if (collectionId.isBlank()) "collections/" else "collections/$collectionId"
+    }
     object Community : Screen("community/{sourceId}/{mangaId}/{slug}?chapterUrl={chapterUrl}&commentId={commentId}") {
         fun createRoute(sourceId: String, mangaId: String, slug: String, chapterUrl: String? = null, commentId: String? = null): String {
             val encoded = chapterUrl?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
@@ -194,6 +198,18 @@ fun MangaNavGraph(navController: NavHostController) {
         composable(Screen.ReadingStats.route) {
             ReadingStatsScreen(
                 onBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            route = Screen.Collections.route,
+            arguments = listOf(
+                navArgument("collectionId") { type = NavType.StringType; defaultValue = "" }
+            )
+        ) { back ->
+            val collectionId = back.arguments?.getString("collectionId") ?: ""
+            CollectionsScreen(
+                onBack = { navController.popBackStack() },
+                onCollectionClick = { id -> navController.navigate(Screen.Collections.createRoute(id)) }
             )
         }
         composable(

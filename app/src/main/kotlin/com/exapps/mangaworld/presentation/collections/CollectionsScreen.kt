@@ -1,0 +1,245 @@
+package com.exapps.mangaworld.presentation.collections
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.data.CollectionManager
+import com.exapps.mangaworld.core.data.MangaCollection
+import com.exapps.mangaworld.presentation.theme.MangaColors
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+@HiltViewModel
+class CollectionsViewModel @Inject constructor(
+    private val collectionManager: CollectionManager
+) : ViewModel() {
+
+    val collections = collectionManager.collections
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun createCollection(name: String, description: String) {
+        viewModelScope.launch {
+            collectionManager.createCollection(name, description)
+        }
+    }
+
+    fun deleteCollection(id: String) {
+        viewModelScope.launch {
+            collectionManager.deleteCollection(id)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CollectionsScreen(
+    onBack: () -> Unit,
+    onCollectionClick: (String) -> Unit,
+    viewModel: CollectionsViewModel = hiltViewModel()
+) {
+    val collections by viewModel.collections.collectAsStateWithLifecycle()
+    var showCreateDialog by remember { mutableStateOf(false) }
+
+    Scaffold(
+        containerColor = MangaColors.Background,
+        topBar = {
+            TopAppBar(
+                title = { Text("قوائمي", color = MangaColors.OnSurface) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showCreateDialog = true }) {
+                        Icon(Icons.Filled.Add, "إضافة", tint = MangaColors.Cyan)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
+            )
+        }
+    ) { padding ->
+        if (collections.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "لا توجد قوائم بعد",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MangaColors.OnSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = { showCreateDialog = true }) {
+                        Text("إنشاء قائمة جديدة")
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                items(collections) { collection ->
+                    CollectionCard(
+                        collection = collection,
+                        onClick = { onCollectionClick(collection.id) },
+                        onDelete = { viewModel.deleteCollection(collection.id) }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showCreateDialog) {
+        CreateCollectionDialog(
+            onDismiss = { showCreateDialog = false },
+            onCreate = { name, description ->
+                viewModel.createCollection(name, description)
+                showCreateDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun CollectionCard(
+    collection: MangaCollection,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MangaColors.Surface),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    collection.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MangaColors.OnSurface,
+                    fontWeight = FontWeight.Bold
+                )
+                if (collection.description.isNotBlank()) {
+                    Text(
+                        collection.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MangaColors.OnSurfaceVariant
+                    )
+                }
+                Text(
+                    "${collection.mangaIds.size} مانجا",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MangaColors.Cyan
+                )
+            }
+            IconButton(onClick = { showDeleteConfirm = true }) {
+                Icon(Icons.Filled.Delete, "حذف", tint = MangaColors.Error)
+            }
+        }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("حذف القائمة") },
+            text = { Text("هل أنت متأكد من حذف \"${collection.name}\"؟") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete()
+                    showDeleteConfirm = false
+                }) {
+                    Text("حذف", color = MangaColors.Error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun CreateCollectionDialog(
+    onDismiss: () -> Unit,
+    onCreate: (String, String) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("إنشاء قائمة جديدة") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("اسم القائمة") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("الوصف (اختياري)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onCreate(name, description) },
+                enabled = name.isNotBlank()
+            ) {
+                Text("إنشاء")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("إلغاء")
+            }
+        }
+    )
+}
