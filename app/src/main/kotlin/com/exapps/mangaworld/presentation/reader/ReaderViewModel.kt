@@ -110,6 +110,7 @@ class ReaderViewModel @Inject constructor(
     private var commentsJob: Job? = null
     private var prefetchedNextChapterUrl: String? = null
     private var lastReadAnalyticsKey: String? = null
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
         viewModelScope.launch {
@@ -492,6 +493,7 @@ class ReaderViewModel @Inject constructor(
         super.onCleared()
         stopCommunityPresenceAsync(_state.value.mangaId, _state.value.chapterUrl)
         finishSessionAsync()
+        backgroundScope.cancel()
     }
 
     private fun beginSession(mangaId: String, chapterUrl: String) {
@@ -614,7 +616,7 @@ class ReaderViewModel @Inject constructor(
         sessionCheckpointAt = null
         activeSessionKey = null
         if (delta >= 1_000L) {
-            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            backgroundScope.launch {
                 readingStatsStore.addReadingTime(delta)
                 widgetShortcutCoordinator.refreshWidgets()
             }
