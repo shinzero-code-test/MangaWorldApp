@@ -17,6 +17,12 @@
 # ── Room ───────────────────────────────────────────────────────────────────────
 -keep class * extends androidx.room.RoomDatabase
 -keep @androidx.room.Entity class *
+-keepclassmembers class * extends androidx.room.RoomDatabase {
+    <init>(...);
+}
+-keepclassmembers class * {
+    @androidx.room.* <fields>;
+}
 -dontwarn androidx.room.paging.**
 
 # ── Hilt ───────────────────────────────────────────────────────────────────────

@@ -301,16 +301,16 @@ class OlympusScraper @Inject constructor(
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", BaseScraperImpl.USER_AGENT)
-            .header("Accept", "*/*")
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
             .header("Accept-Language", "ar,en;q=0.9")
             .header("Referer", source.baseUrl + "/series")
             .header("X-Requested-With", "XMLHttpRequest")
             .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
             .build()
 
-        val response = client.newCall(request).execute()
-        val body = response.body?.string() ?: ""
-        response.close()
+        val body = client.newCall(request).execute().use { response ->
+            response.body?.string() ?: ""
+        }
 
         if (body.isBlank()) {
             fetchDocument("${source.baseUrl}/series?keyword=$encoded").let(::parseMangaGrid)
@@ -322,7 +322,6 @@ class OlympusScraper @Inject constructor(
         ) {
             throw CloudflareChallengeException("olympustaff.com", url)
         } else {
-            // /ajax/search returns JSON on olympustaff.com — try JSON first, fall back to HTML
             val trimmed = body.trimStart()
             val parsed = if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
                 parseJsonSearchResults(body)

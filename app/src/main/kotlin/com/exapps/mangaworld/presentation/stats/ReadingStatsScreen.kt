@@ -218,7 +218,7 @@ private fun StreakCard(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "أ最长: $longestStreak يوم",
+                    "أطول سلسلة: $longestStreak يوم",
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.OnSurfaceVariant
                 )
