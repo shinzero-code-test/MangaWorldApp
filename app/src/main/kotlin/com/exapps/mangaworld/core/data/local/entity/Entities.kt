@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.core.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.exapps.mangaworld.domain.model.*
 
@@ -28,7 +29,8 @@ fun FavoriteManga.toEntity() = FavoriteEntity(
     totalChapters = totalChapters
 )
 
-@Entity(tableName = "reading_history")
+@Entity(tableName = "reading_history",
+    indices = [Index("lastReadAt"), Index("mangaId")])
 data class ReadingHistoryEntity(
     @PrimaryKey val mangaId: String,
     val slug: String,
@@ -49,14 +51,18 @@ data class ReadingHistoryEntity(
     )
 }
 
-@Entity(tableName = "read_chapters", primaryKeys = ["mangaId", "chapterNumber"])
+@Entity(tableName = "read_chapters",
+    primaryKeys = ["mangaId", "chapterNumber"],
+    indices = [Index("mangaId"), Index("readAt")])
 data class ReadChapterEntity(
     val mangaId: String,
     val chapterNumber: Float,
     val readAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "reading_progress", primaryKeys = ["mangaId", "chapterNumber"])
+@Entity(tableName = "reading_progress",
+    primaryKeys = ["mangaId", "chapterNumber"],
+    indices = [Index("mangaId")])
 data class ReadingProgressEntity(
     val mangaId: String,
     val chapterNumber: Float,
@@ -82,7 +88,8 @@ data class ReaderAnnotationEntity(
     )
 }
 
-@Entity(tableName = "manga_cache")
+@Entity(tableName = "manga_cache",
+    indices = [Index("sourceId"), Index("cachedAt")])
 data class MangaCacheEntity(
     @PrimaryKey val mangaId: String,
     val slug: String,
@@ -102,7 +109,8 @@ data class MangaCacheEntity(
     val chaptersJson: String = "[]"
 )
 
-@Entity(tableName = "download_tasks")
+@Entity(tableName = "download_tasks",
+    indices = [Index("mangaId"), Index("chapterUrl"), Index("status"), Index("updatedAt")])
 data class DownloadTaskEntity(
     @PrimaryKey val id: String,
     val mangaId: String,
