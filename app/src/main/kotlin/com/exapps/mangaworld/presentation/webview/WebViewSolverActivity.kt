@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.exapps.mangaworld.core.data.remote.scraper.BaseScraperImpl
+import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import com.exapps.mangaworld.presentation.theme.MangaWorldTheme
 
@@ -28,13 +29,22 @@ class WebViewSolverActivity : ComponentActivity() {
         const val EXTRA_URL    = "extra_url"
         const val EXTRA_DOMAIN = "extra_domain"
         const val RESULT_COOKIES = "result_cookies"
+
+        private val ALLOWED_DOMAINS = MangaSource.entries.map {
+            java.net.URI(it.baseUrl).host
+        }.toSet()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val url    = intent.getStringExtra(EXTRA_URL) ?: run { finish(); return }
-        val domain = intent.getStringExtra(EXTRA_DOMAIN) ?: "olympustaff.com"
+        val domain = intent.getStringExtra(EXTRA_DOMAIN) ?: run { finish(); return }
+
+        if (domain !in ALLOWED_DOMAINS || !url.startsWith("https://")) {
+            finish()
+            return
+        }
 
         setContent {
             MangaWorldTheme(darkTheme = true) {
@@ -104,13 +114,13 @@ private fun CloudflareWebView(
                         userAgentString    = BaseScraperImpl.USER_AGENT
                         loadWithOverviewMode = true
                         useWideViewPort    = true
-                        allowContentAccess = true
+                        allowContentAccess = false
                         setSupportZoom(true)
                     }
 
                     val cm = CookieManager.getInstance()
                     cm.setAcceptCookie(true)
-                    cm.setAcceptThirdPartyCookies(wv, true)
+                    cm.setAcceptThirdPartyCookies(wv, false)
 
                     wv.webViewClient = object : WebViewClient() {
                         override fun onPageFinished(view: WebView?, pageUrl: String?) {

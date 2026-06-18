@@ -18,6 +18,7 @@ local.properties
 *.keystore
 keystore.properties
 google-services.json
+.gitignore
 logs/
 sessions/
 .mimocode/
