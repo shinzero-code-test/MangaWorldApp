@@ -236,6 +236,14 @@ enum class ReaderImageFilter(val label: String) {
     OLED_BLACK("أسود OLED")
 }
 
+enum class TapAction(val label: String) {
+    PREV_PAGE("الفصل السابق"),
+    NEXT_PAGE("الفصل التالي"),
+    TOGGLE_CONTROLS("إظهار/إخفاء الأدوات"),
+    BOOKMARK("إضافة إشارة مرجعية"),
+    NONE("لا شيء")
+}
+
 data class ReaderPageAnnotation(
     val pageIndex: Int,
     val note: String? = null,
@@ -257,8 +265,11 @@ data class ReaderSettings(
     val autoOpenNextChapter: Boolean = false,
     val showLiveReadersOverlay: Boolean = true,
     val showReactionOverlay: Boolean = true,
-    val dualPageLandscape: Boolean = false,
-    val webtoonAutoStitch: Boolean = true
+    val volumeButtonPageTurn: Boolean = false,
+    val doubleTapZoom: Boolean = true,
+    val tapLeftAction: TapAction = TapAction.PREV_PAGE,
+    val tapRightAction: TapAction = TapAction.NEXT_PAGE,
+    val tapMiddleAction: TapAction = TapAction.TOGGLE_CONTROLS
 )
 
 enum class NotificationDeliveryMode(val label: String) {
