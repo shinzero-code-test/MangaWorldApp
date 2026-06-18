@@ -2,7 +2,6 @@ package com.exapps.mangaworld.core.data
 
 import android.content.Context
 import android.graphics.Bitmap
-import coil.Disposable
 import coil.imageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
@@ -18,15 +17,7 @@ import javax.inject.Singleton
 class ImagePrefetcher @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val pendingDisposables = mutableListOf<Disposable>()
-
-    fun cancelAll() {
-        pendingDisposables.forEach { it.dispose() }
-        pendingDisposables.clear()
-    }
-
     fun prefetchPages(pages: List<ChapterPage>, count: Int = pages.size.coerceAtMost(6)) {
-        cancelAll()
         pages.take(count).forEach { page ->
             val request = ImageRequest.Builder(context)
                 .data(page.url)
@@ -39,8 +30,7 @@ class ImagePrefetcher @Inject constructor(
                 .withFirebaseTrace("prefetch_page")
                 .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
                 .build()
-            val disposable = context.imageLoader.enqueue(request)
-            pendingDisposables.add(disposable)
+            context.imageLoader.enqueue(request)
         }
     }
 }
