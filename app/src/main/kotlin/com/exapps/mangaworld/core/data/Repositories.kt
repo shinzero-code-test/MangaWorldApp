@@ -88,7 +88,8 @@ class MangaRepositoryImpl @Inject constructor(
     private val scrapers: Map<String, @JvmSuppressWildcards MangaScraper>,
     private val cacheDao: MangaCacheDao,
     private val favoriteDao: FavoriteDao,
-    private val firebaseTelemetry: FirebaseTelemetry
+    private val firebaseTelemetry: FirebaseTelemetry,
+    private val recommendationEngine: RecommendationEngine
 ) : MangaRepository {
 
     private fun scraper(source: MangaSource): MangaScraper =
@@ -152,22 +153,7 @@ class MangaRepositoryImpl @Inject constructor(
         scraper(source).getPopularManga()
 
     override suspend fun getSuggestedManga(candidates: List<MangaItem>, limit: Int): List<MangaItem> {
-        val favorites = favoriteDao.getFavoritesList()
-        val favoriteIds = favorites.map { it.mangaId }.toSet()
-        val topGenres = cacheDao.getByIds(favorites.map { it.mangaId })
-            .flatMap { cache -> runCatching { JSONArray(cache.genresJson) }.getOrNull()?.let { arr -> (0 until arr.length()).map { idx -> arr.getString(idx) } } ?: emptyList() }
-            .groupingBy { it }
-            .eachCount()
-            .entries
-            .sortedByDescending { it.value }
-            .take(4)
-            .map { it.key }
-            .toSet()
-        return candidates
-            .filterNot { it.id in favoriteIds }
-            .filter { topGenres.isEmpty() || it.genres.any { genre -> genre in topGenres } }
-            .distinctBy { it.id }
-            .take(limit)
+        return recommendationEngine.getSmartRecommendations(candidates, limit)
     }
 
     override suspend fun getGenres(source: MangaSource?, enabledSourceIds: Set<String>?): List<String> {
