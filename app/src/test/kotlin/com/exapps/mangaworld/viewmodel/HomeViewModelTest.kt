@@ -10,6 +10,7 @@ import com.exapps.mangaworld.presentation.home.HomeViewModel
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -33,8 +34,8 @@ class HomeViewModelTest {
         Dispatchers.setMain(testDispatcher)
         val defaultSettings = AppSettings(enabledSources = setOf("azora", "olympus"))
         every { settingsRepo.getAppSettings() } returns flowOf(defaultSettings)
-        every { remoteConfigManager.remoteAlertMessage } returns flowOf("")
-        every { remoteConfigManager.homeLayoutVariant } returns flowOf("default")
+        every { remoteConfigManager.remoteAlertMessage } returns MutableStateFlow("")
+        every { remoteConfigManager.homeLayoutVariant } returns MutableStateFlow("default")
         coEvery { mangaRepo.getHomeData(any()) } returns Result.success(
             HomeData(
                 featured = listOf(testManga("f1")),

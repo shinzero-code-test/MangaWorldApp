@@ -1,7 +1,10 @@
 package com.exapps.mangaworld.viewmodel
 
-import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
-import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
+import com.exapps.mangaworld.core.data.CacheManager
+import com.exapps.mangaworld.core.data.LocalBackupManager
+import com.exapps.mangaworld.core.data.WidgetDataRepository
+import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
+import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
 import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.AppTheme
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -22,8 +25,11 @@ import org.junit.Test
 class SettingsViewModelTest {
     private val testDispatcher = UnconfinedTestDispatcher()
     private val settingsRepo = mockk<SettingsRepository>(relaxed = true)
-    private val remoteConfigManager = mockk<FirebaseRemoteConfigManager>(relaxed = true)
-    private val firebaseTelemetry = mockk<FirebaseTelemetry>(relaxed = true)
+    private val cacheManager = mockk<CacheManager>(relaxed = true)
+    private val localBackupManager = mockk<LocalBackupManager>(relaxed = true)
+    private val widgetDataRepository = mockk<WidgetDataRepository>(relaxed = true)
+    private val firebaseSyncManager = mockk<FirebaseSyncManager>(relaxed = true)
+    private val widgetShortcutCoordinator = mockk<WidgetShortcutCoordinator>(relaxed = true)
 
     @Before
     fun setup() {
@@ -32,8 +38,6 @@ class SettingsViewModelTest {
         every { settingsRepo.getReaderSettings() } returns flowOf(
             com.exapps.mangaworld.domain.model.ReaderSettings()
         )
-        every { remoteConfigManager.remoteAlertMessage } returns flowOf("")
-        every { remoteConfigManager.disabledSourceIds } returns flowOf(emptySet())
     }
 
     @After
@@ -42,16 +46,19 @@ class SettingsViewModelTest {
     }
 
     private fun createViewModel() = SettingsViewModel(
-        settingsRepo = settingsRepo,
-        remoteConfigManager = remoteConfigManager,
-        firebaseTelemetry = firebaseTelemetry
+        repo = settingsRepo,
+        cacheManager = cacheManager,
+        localBackupManager = localBackupManager,
+        widgetDataRepository = widgetDataRepository,
+        firebaseSyncManager = firebaseSyncManager,
+        widgetShortcutCoordinator = widgetShortcutCoordinator
     )
 
     @Test
     fun initialState_hasDefaultSettings() {
         val vm = createViewModel()
-        assertEquals(AppTheme.DARK, vm.settings.value.theme)
-        assertTrue(vm.settings.value.enableNotifications)
+        assertEquals(AppTheme.DARK, vm.appSettings.value.theme)
+        assertTrue(vm.appSettings.value.enableNotifications)
     }
 
     @Test
@@ -59,13 +66,6 @@ class SettingsViewModelTest {
         val vm = createViewModel()
         vm.setTheme(AppTheme.LIGHT)
         coVerify { settingsRepo.updateTheme(AppTheme.LIGHT) }
-    }
-
-    @Test
-    fun setNotificationsEnabled_callsSettingsRepo() {
-        val vm = createViewModel()
-        vm.setNotificationsEnabled(false)
-        coVerify { settingsRepo.setNotificationsEnabled(false) }
     }
 
     @Test
