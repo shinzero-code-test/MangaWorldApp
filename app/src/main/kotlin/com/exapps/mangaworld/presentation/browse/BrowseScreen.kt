@@ -68,7 +68,7 @@ fun BrowseScreen(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(uiState.genres.size) { i ->
+            items(uiState.genres.size, key = { uiState.genres[it] }) { i ->
                 val genre = uiState.genres[i]
                 val isAll = genre == "الكل"
                 val isSelected = if (isAll) uiState.selectedGenre == null
@@ -96,7 +96,7 @@ fun BrowseScreen(
                     label = { Text("كل المصادر") }
                 )
             }
-            items(MangaSource.entries.size) { index ->
+            items(MangaSource.entries.size, key = { MangaSource.entries[it].id }) { index ->
                 val src = MangaSource.entries[index]
                 if (uiState.enabledSourceIds.contains(src.id)) {
                     FilterChip(
@@ -114,7 +114,7 @@ fun BrowseScreen(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(SortBy.entries.size) { i ->
+            items(SortBy.entries.size, key = { SortBy.entries[it].name }) { i ->
                 val sort = SortBy.entries[i]
                 FilterChip(
                     selected = uiState.sortBy == sort,
