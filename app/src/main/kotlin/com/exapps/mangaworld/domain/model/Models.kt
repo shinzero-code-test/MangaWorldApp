@@ -230,7 +230,10 @@ enum class ReaderImageFilter(val label: String) {
     GRAYSCALE("تدرج رمادي"),
     SEPIA("سيبيا"),
     HIGH_CONTRAST("تباين عال"),
-    SMART_CROP("قص ذكي للحواف")
+    SMART_CROP("قص ذكي للحواف"),
+    WARM_TINT("صبغة دافئة"),
+    COOL_TINT("صبغة باردة"),
+    OLED_BLACK("أسود OLED")
 }
 
 data class ReaderPageAnnotation(

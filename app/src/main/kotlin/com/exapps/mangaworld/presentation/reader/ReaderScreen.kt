@@ -867,6 +867,24 @@ private fun ReaderImageFilter.toColorFilter(): ColorFilter? {
             0f, 0f, 1.4f, 0f, -20f,
             0f, 0f, 0f, 1f, 0f
         ))
+        ReaderImageFilter.WARM_TINT -> ColorMatrix(floatArrayOf(
+            1.1f, 0.1f, 0f, 0f, 10f,
+            0f, 1.0f, 0f, 0f, 5f,
+            0f, 0f, 0.9f, 0f, 0f,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        ReaderImageFilter.COOL_TINT -> ColorMatrix(floatArrayOf(
+            0.9f, 0f, 0.1f, 0f, 0f,
+            0f, 1.0f, 0.1f, 0f, 0f,
+            0f, 0.1f, 1.1f, 0f, 10f,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        ReaderImageFilter.OLED_BLACK -> ColorMatrix(floatArrayOf(
+            1.2f, 0f, 0f, 0f, -30f,
+            0f, 1.2f, 0f, 0f, -30f,
+            0f, 0f, 1.2f, 0f, -30f,
+            0f, 0f, 0f, 1f, 0f
+        ))
     }
     return ColorFilter.colorMatrix(matrix)
 }
