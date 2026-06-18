@@ -240,7 +240,9 @@ class DownloadQueueManager @Inject constructor(
         if (!coverFile.exists() && metadata.coverUrl.isNotBlank()) {
             runCatching {
                 val req = Request.Builder().url(metadata.coverUrl)
-                    .header("User-Agent", "Mozilla/5.0").build()
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36")
+                    .header("Accept", "image/webp,image/apng,image/*,*/*;q=0.8")
+                    .build()
                 val resp = okHttpClient.newCall(req).execute()
                 resp.body?.byteStream()?.use { inp ->
                     coverFile.outputStream().use { out -> inp.copyTo(out) }

@@ -29,8 +29,8 @@ enum class MangaSource(
 
 enum class MangaType(val label: String) {
     MANGA("مانجا"),
-    MANHWA("مانهوا"),
-    MANHUA("مانهوا"),
+    MANHWA("مانهوا كورية"),
+    MANHUA("مانهوا صينية"),
     UNKNOWN("غير محدد");
 
     companion object {
