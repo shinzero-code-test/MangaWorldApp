@@ -603,6 +603,7 @@ class ReaderViewModel @Inject constructor(
         val delta = (now - checkpoint).coerceIn(0L, 2 * 60_000L)
         if (delta >= 1_000L) {
             readingStatsStore.addReadingTime(delta)
+            readingStatsStore.recordPageRead(1)
         }
         sessionCheckpointAt = now
     }

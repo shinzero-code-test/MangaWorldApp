@@ -28,6 +28,7 @@ import com.exapps.mangaworld.presentation.profile.UserListsScreen
 import com.exapps.mangaworld.presentation.reader.ReaderScreen
 import com.exapps.mangaworld.presentation.search.SearchScreen
 import com.exapps.mangaworld.presentation.settings.SettingsScreen
+import com.exapps.mangaworld.presentation.stats.ReadingStatsScreen
 
 sealed class Screen(val route: String) {
     object Home        : Screen("home")
@@ -51,6 +52,7 @@ sealed class Screen(val route: String) {
     object Downloads   : Screen("downloads")
     object LocalStorage: Screen("local_storage")
     object LatestUpdates : Screen("latest_updates")
+    object ReadingStats : Screen("reading_stats")
     object Community : Screen("community/{sourceId}/{mangaId}/{slug}?chapterUrl={chapterUrl}&commentId={commentId}") {
         fun createRoute(sourceId: String, mangaId: String, slug: String, chapterUrl: String? = null, commentId: String? = null): String {
             val encoded = chapterUrl?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
@@ -124,7 +126,8 @@ fun MangaNavGraph(navController: NavHostController) {
                 onOpenCommunityChat = { navController.navigate(Screen.CommunityChat.createRoute("global", "الدردشة العامة")) },
                 onOpenNotifications = { navController.navigate(Screen.Notifications.route) },
                 onOpenLists = { navController.navigate(Screen.UserLists.route) },
-                onOpenModeration = { navController.navigate(Screen.ModerationDashboard.route) }
+                onOpenModeration = { navController.navigate(Screen.ModerationDashboard.route) },
+                onOpenReadingStats = { navController.navigate(Screen.ReadingStats.route) }
             )
         }
         composable(Screen.UserLists.route) {
@@ -186,6 +189,11 @@ fun MangaNavGraph(navController: NavHostController) {
         composable(Screen.LocalStorage.route) {
             LocalStorageScreen(
                 onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) }
+            )
+        }
+        composable(Screen.ReadingStats.route) {
+            ReadingStatsScreen(
+                onBack = { navController.popBackStack() }
             )
         }
         composable(

@@ -78,6 +78,7 @@ fun UserProfileScreen(
     onOpenNotifications: () -> Unit,
     onOpenLists: () -> Unit,
     onOpenModeration: () -> Unit,
+    onOpenReadingStats: () -> Unit,
     viewModel: UserProfileViewModel = hiltViewModel()
 ) {
     val profile by viewModel.profile.collectAsStateWithLifecycle()
@@ -121,6 +122,7 @@ fun UserProfileScreen(
                     OutlinedButton(onClick = onOpenNotifications) { Text("الإشعارات") }
                 }
                 OutlinedButton(onClick = onOpenLists) { Icon(Icons.Filled.List, null); Text("قوائمي") }
+                OutlinedButton(onClick = onOpenReadingStats) { Text("إحصائيات القراءة") }
                 if (profile?.role in setOf("moderator", "admin")) {
                     OutlinedButton(onClick = onOpenModeration) { Text("لوحة الإشراف") }
                 }
