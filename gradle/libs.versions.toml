@@ -116,7 +116,6 @@ room-testing = { group = "androidx.room", name = "room-testing", version.ref = "
 androidx-test-ext = { group = "androidx.test.ext", name = "junit", version = "1.2.1" }
 androidx-test-core = { group = "androidx.test", name = "core", version = "1.6.1" }
 compose-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
