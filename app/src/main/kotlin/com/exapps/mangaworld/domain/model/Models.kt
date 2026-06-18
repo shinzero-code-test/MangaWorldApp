@@ -267,7 +267,7 @@ data class AppSettings(
     val downloadOnWifiOnly: Boolean = true,
     val autoDownloadNewChapters: Boolean = false,
     val enableNotifications: Boolean = true,
-    val enabledSources: Set<String> = MangaSource.values().map { it.id }.toSet(),
+    val enabledSources: Set<String> = MangaSource.entries.map { it.id }.toSet(),
     val onboardingCompleted: Boolean = false,
     val useDynamicColors: Boolean = true,
     val biometricLockEnabled: Boolean = false,

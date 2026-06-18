@@ -85,7 +85,7 @@ class FirebaseSyncManager @Inject constructor(
             annotations.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }.forEach { readerAnnotationDao.upsert(it) }
 
             profile.getString("theme")?.let { name ->
-                AppTheme.values().firstOrNull { it.name == name }?.let { theme ->
+                AppTheme.entries.firstOrNull { it.name == name }?.let { theme ->
                     settingsRepository.updateTheme(theme)
                 }
             }
@@ -96,7 +96,7 @@ class FirebaseSyncManager @Inject constructor(
             profile.getBoolean("biometricLockEnabled")?.let { settingsRepository.setBiometricLock(it) }
             profile.getBoolean("secureReaderEnabled")?.let { settingsRepository.setSecureReader(it) }
             profile.getString("notificationDeliveryMode")?.let { name ->
-                com.exapps.mangaworld.domain.model.NotificationDeliveryMode.values().firstOrNull { it.name == name }?.let { mode ->
+                com.exapps.mangaworld.domain.model.NotificationDeliveryMode.entries.firstOrNull { it.name == name }?.let { mode ->
                     settingsRepository.setNotificationDeliveryMode(mode)
                 }
             }
@@ -112,7 +112,7 @@ class FirebaseSyncManager @Inject constructor(
             }
 
             readerPrefs.getString("mode")?.let { name ->
-                com.exapps.mangaworld.domain.model.ReaderMode.values().firstOrNull { it.name == name }?.let { mode ->
+                com.exapps.mangaworld.domain.model.ReaderMode.entries.firstOrNull { it.name == name }?.let { mode ->
                     settingsRepository.updateReaderMode(mode)
                 }
             }
@@ -126,7 +126,7 @@ class FirebaseSyncManager @Inject constructor(
             readerPrefs.getBoolean("showLiveReadersOverlay")?.let { settingsRepository.updateShowLiveReadersOverlay(it) }
             readerPrefs.getBoolean("showReactionOverlay")?.let { settingsRepository.updateShowReactionOverlay(it) }
             readerPrefs.getString("imageFilter")?.let { name ->
-                com.exapps.mangaworld.domain.model.ReaderImageFilter.values().firstOrNull { it.name == name }?.let { filter ->
+                com.exapps.mangaworld.domain.model.ReaderImageFilter.entries.firstOrNull { it.name == name }?.let { filter ->
                     settingsRepository.updateImageFilter(filter)
                 }
             }
@@ -145,7 +145,7 @@ class FirebaseSyncManager @Inject constructor(
         val localHistory = historyDao.getAll()
         val localAnnotations = readerAnnotationDao.getAll()
         val localTheme = settingsRepository.getAppSettings().first().theme
-        val remoteTheme = profile.getString("theme")?.let { name -> AppTheme.values().firstOrNull { it.name == name } }
+        val remoteTheme = profile.getString("theme")?.let { name -> AppTheme.entries.firstOrNull { it.name == name } }
 
         val localLatest = localHistory.maxOfOrNull { it.lastReadAt } ?: 0L
         val remoteLatest = remoteHistory.maxOfOrNull { it.lastReadAt } ?: 0L
@@ -210,7 +210,7 @@ class FirebaseSyncManager @Inject constructor(
 
             val profile = userRef.get().await()
             profile.getString("theme")?.let { name ->
-                AppTheme.values().firstOrNull { it.name == name }?.let { theme -> settingsRepository.updateTheme(theme) }
+                AppTheme.entries.firstOrNull { it.name == name }?.let { theme -> settingsRepository.updateTheme(theme) }
             }
         }
     }

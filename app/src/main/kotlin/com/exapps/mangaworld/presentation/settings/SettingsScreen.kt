@@ -83,7 +83,7 @@ fun SettingsScreen(
                     }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
                         modifier = Modifier.background(MangaColors.SurfaceContainer)) {
-                        AppTheme.values().forEach { theme ->
+                        AppTheme.entries.forEach { theme ->
                             DropdownMenuItem(
                                 text = { Text(theme.label, color = MangaColors.OnSurface) },
                                 onClick = { viewModel.setTheme(theme); expanded = false },
@@ -144,7 +144,7 @@ fun SettingsScreen(
                     }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
                         modifier = Modifier.background(MangaColors.SurfaceContainer)) {
-                        ReaderMode.values().forEach { m ->
+                        ReaderMode.entries.forEach { m ->
                             DropdownMenuItem(
                                 text = { Text(m.label, color = MangaColors.OnSurface) },
                                 onClick = { viewModel.setReaderMode(m); expanded = false },
@@ -201,7 +201,7 @@ fun SettingsScreen(
                         Icon(Icons.Filled.ArrowDropDown, null, tint = MangaColors.Cyan)
                     }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(MangaColors.SurfaceContainer)) {
-                        ReaderImageFilter.values().forEach { filter ->
+                        ReaderImageFilter.entries.forEach { filter ->
                             DropdownMenuItem(
                                 text = { Text(filter.label, color = MangaColors.OnSurface) },
                                 onClick = { viewModel.setImageFilter(filter); expanded = false },
@@ -257,7 +257,7 @@ fun SettingsScreen(
 
         // ── Sources ───────────────────────────────────────────────────────────
         SettingsSection("المصادر") {
-            MangaSource.values().forEachIndexed { i, source ->
+            MangaSource.entries.forEachIndexed { i, source ->
                 val enabled = app.enabledSources.contains(source.id)
                 SwitchItem(
                     icon = Icons.Filled.Language,
@@ -266,7 +266,7 @@ fun SettingsScreen(
                     checked = enabled,
                     onCheckedChange = { viewModel.toggleSource(source.id, it) }
                 )
-                if (i < MangaSource.values().size - 1)
+                if (i < MangaSource.entries.size - 1)
                     GradientDivider(Modifier.padding(horizontal = 16.dp))
             }
             GradientDivider(Modifier.padding(horizontal = 16.dp))
@@ -386,7 +386,7 @@ fun SettingsScreen(
                         Icon(Icons.Filled.ArrowDropDown, null, tint = MangaColors.Cyan)
                     }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(MangaColors.SurfaceContainer)) {
-                        NotificationDeliveryMode.values().forEach { mode ->
+                        NotificationDeliveryMode.entries.forEach { mode ->
                             DropdownMenuItem(
                                 text = { Text(mode.label, color = MangaColors.OnSurface) },
                                 onClick = { viewModel.setNotificationMode(mode); expanded = false },

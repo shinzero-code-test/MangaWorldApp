@@ -62,20 +62,20 @@ class AppPreferences @Inject constructor(
         .catch { emit(emptyPreferences()) }
         .map { prefs ->
             AppSettings(
-                theme = prefs[KEY_THEME]?.let { t -> AppTheme.values().firstOrNull { it.name == t } }
+                theme = prefs[KEY_THEME]?.let { t -> AppTheme.entries.firstOrNull { it.name == t } }
                     ?: AppTheme.DARK,
                 downloadOnWifiOnly = prefs[KEY_DOWNLOAD_WIFI_ONLY] ?: true,
                 autoDownloadNewChapters = prefs[KEY_AUTO_DOWNLOAD] ?: false,
                 enableNotifications = prefs[KEY_NOTIFICATIONS] ?: true,
                 enabledSources = prefs[KEY_ENABLED_SOURCES]
                     ?.split(",")?.toSet()
-                    ?: MangaSource.values().map { it.id }.toSet(),
+                    ?: MangaSource.entries.map { it.id }.toSet(),
                 onboardingCompleted = prefs[KEY_ONBOARDING_DONE] ?: false,
                 useDynamicColors = prefs[KEY_DYNAMIC_COLORS] ?: true,
                 biometricLockEnabled = prefs[KEY_BIOMETRIC_LOCK] ?: false,
                 secureReaderEnabled = prefs[KEY_SECURE_READER] ?: false,
                 notificationDeliveryMode = prefs[KEY_NOTIFICATION_MODE]
-                    ?.let { name -> NotificationDeliveryMode.values().firstOrNull { it.name == name } }
+                    ?.let { name -> NotificationDeliveryMode.entries.firstOrNull { it.name == name } }
                     ?: NotificationDeliveryMode.INSTANT,
                 autoCleanupReadDownloads = prefs[KEY_AUTO_CLEANUP] ?: false,
                 cleanupAfterHours = prefs[KEY_CLEANUP_HOURS] ?: 24,
@@ -100,7 +100,7 @@ class AppPreferences @Inject constructor(
         .catch { emit(emptyPreferences()) }
         .map { prefs ->
             ReaderSettings(
-                mode = prefs[KEY_READER_MODE]?.let { m -> ReaderMode.values().firstOrNull { it.name == m } }
+                mode = prefs[KEY_READER_MODE]?.let { m -> ReaderMode.entries.firstOrNull { it.name == m } }
                     ?: ReaderMode.VERTICAL_SCROLL,
                 brightness = prefs[KEY_BRIGHTNESS] ?: 1.0f,
                 keepScreenOn = prefs[KEY_KEEP_SCREEN] ?: true,
@@ -110,7 +110,7 @@ class AppPreferences @Inject constructor(
                 smartPrefetchEnabled = prefs[KEY_SMART_PREFETCH] ?: true,
                 hapticsEnabled = prefs[KEY_HAPTICS] ?: true,
                 imageFilter = prefs[KEY_IMAGE_FILTER]
-                    ?.let { name -> ReaderImageFilter.values().firstOrNull { it.name == name } }
+                    ?.let { name -> ReaderImageFilter.entries.firstOrNull { it.name == name } }
                     ?: ReaderImageFilter.NONE,
                 autoOpenNextChapter = prefs[KEY_AUTO_OPEN_NEXT] ?: false,
                 showLiveReadersOverlay = prefs[KEY_SHOW_LIVE_READERS] ?: true,
@@ -167,7 +167,7 @@ class AppPreferences @Inject constructor(
 
     suspend fun toggleSource(sourceId: String, enabled: Boolean) = dataStore.edit { prefs ->
         val current = prefs[KEY_ENABLED_SOURCES]?.split(",")?.toMutableSet()
-            ?: MangaSource.values().map { it.id }.toMutableSet()
+            ?: MangaSource.entries.map { it.id }.toMutableSet()
         if (enabled) current.add(sourceId) else current.remove(sourceId)
         prefs[KEY_ENABLED_SOURCES] = current.joinToString(",")
     }

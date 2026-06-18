@@ -51,7 +51,7 @@ fun LibraryScreen(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            LibraryTab.values().forEach { tab ->
+            LibraryTab.entries.forEach { tab ->
                 val active = state.activeTab == tab
                 Box(
                     modifier = Modifier

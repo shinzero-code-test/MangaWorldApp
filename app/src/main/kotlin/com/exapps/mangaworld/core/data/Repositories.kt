@@ -172,7 +172,7 @@ class MangaRepositoryImpl @Inject constructor(
 
     override suspend fun getGenres(source: MangaSource?, enabledSourceIds: Set<String>?): List<String> {
         val allowed = enabledSourceIds ?: MangaSource.entries.map { it.id }.toSet()
-        val sources = if (source != null) listOf(source) else MangaSource.values().toList()
+        val sources = if (source != null) listOf(source) else MangaSource.entries.toList()
         return sources.flatMap { s ->
             if (s.id !in allowed) return@flatMap emptyList()
             val sc = scrapers[s.id] ?: return@flatMap emptyList()
@@ -214,7 +214,7 @@ class MangaPagingSource(
             val sources = if (filters.source != null) {
                 listOfNotNull(filters.source.takeIf { it.id in allowedSourceIds })
             } else {
-                MangaSource.values().filter { it.id in allowedSourceIds }
+                MangaSource.entries.filter { it.id in allowedSourceIds }
             }
 
             // Run all source queries in parallel, tolerate CF errors per-source

@@ -351,7 +351,7 @@ fun CloudSyncScreen(
                     Text("الإشارات والملاحظات: محلي ${preview.localAnnotations} / سحابي ${preview.remoteAnnotations}", color = MangaColors.OnSurfaceVariant)
                     Text("الثيم: محلي ${preview.localTheme.label} / سحابي ${preview.remoteTheme?.label ?: "غير متوفر"}", color = MangaColors.OnSurfaceVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CloudRestoreStrategy.values().forEach { strategy ->
+                        CloudRestoreStrategy.entries.forEach { strategy ->
                             FilterChip(
                                 selected = preview.suggestedStrategy == strategy,
                                 onClick = { viewModel.applyRestore(strategy) },

@@ -770,21 +770,21 @@ private fun ReaderSettingsSheet(
         Text("إعدادات القارئ", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text("وضع القراءة", color = MangaColors.Muted)
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            ReaderMode.values().forEachIndexed { index, mode ->
+            ReaderMode.entries.forEachIndexed { index, mode ->
                 SegmentedButton(
                     selected = state.readerMode == mode,
                     onClick = { onModeChange(mode) },
-                    shape = SegmentedButtonDefaults.itemShape(index, ReaderMode.values().size)
+                    shape = SegmentedButtonDefaults.itemShape(index, ReaderMode.entries.size)
                 ) { Text(mode.label) }
             }
         }
         Text("فلتر الصورة", color = MangaColors.Muted)
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            ReaderImageFilter.values().forEachIndexed { index, filter ->
+            ReaderImageFilter.entries.forEachIndexed { index, filter ->
                 SegmentedButton(
                     selected = state.imageFilter == filter,
                     onClick = { onFilterChange(filter) },
-                    shape = SegmentedButtonDefaults.itemShape(index, ReaderImageFilter.values().size)
+                    shape = SegmentedButtonDefaults.itemShape(index, ReaderImageFilter.entries.size)
                 ) { Text(filter.label) }
             }
         }
