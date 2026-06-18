@@ -75,8 +75,8 @@ interface ReadChapterDao {
     @Query("SELECT COUNT(*) FROM read_chapters")
     suspend fun getTotalReadCount(): Int
 
-    @Query("SELECT readAt FROM read_chapters ORDER BY readAt DESC")
-    suspend fun getReadTimestamps(): List<Long>
+    @Query("SELECT readAt FROM read_chapters ORDER BY readAt DESC LIMIT :limit")
+    suspend fun getReadTimestamps(limit: Int = 365): List<Long>
 
     @Query("SELECT * FROM read_chapters ORDER BY readAt DESC")
     suspend fun getAll(): List<ReadChapterEntity>
