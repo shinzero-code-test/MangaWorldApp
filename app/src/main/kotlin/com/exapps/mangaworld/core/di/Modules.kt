@@ -101,7 +101,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): MangaDatabase =
         Room.databaseBuilder(ctx, MangaDatabase::class.java, "mangaworld.db")
-            .fallbackToDestructiveMigration()
+            .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
     @Provides fun provideFavoriteDao(db: MangaDatabase) = db.favoriteDao()

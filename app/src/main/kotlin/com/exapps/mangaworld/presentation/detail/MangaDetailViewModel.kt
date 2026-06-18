@@ -249,7 +249,7 @@ class MangaDetailViewModel @Inject constructor(
         }
     }
 
-        fun showDownloadDialog() = _state.update { it.copy(showDownloadDialog = true) }
+    fun showDownloadDialog() = _state.update { it.copy(showDownloadDialog = true) }
     fun hideDownloadDialog() = _state.update { it.copy(showDownloadDialog = false) }
 
     /** Enqueue a single chapter for download. */

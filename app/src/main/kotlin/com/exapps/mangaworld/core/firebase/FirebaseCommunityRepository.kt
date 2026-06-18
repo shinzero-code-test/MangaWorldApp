@@ -37,7 +37,7 @@ class FirebaseCommunityRepository @Inject constructor(
 ) : CommunityRepository {
 
     private val firestore = FirebaseFirestore.getInstance()
-    private val realtimeDb = FirebaseDatabase.getInstance("https://mangaworld-live-260519-default-rtdb.europe-west1.firebasedatabase.app")
+    private val realtimeDb = FirebaseDatabase.getInstance()
 
     override fun observeMangaComments(mangaId: String): Flow<List<CommunityComment>> =
         observeComments(commentsCollection(mangaId, null))
