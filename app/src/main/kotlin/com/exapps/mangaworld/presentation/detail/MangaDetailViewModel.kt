@@ -25,6 +25,8 @@ data class DetailUiState(
     val isLoading: Boolean = true,
     val manga: MangaDetail? = null,
     val otherSourceMatches: List<MangaItem> = emptyList(),
+    val sourceComparisons: List<SourceComparison> = emptyList(),
+    val showSourceComparison: Boolean = false,
     val isFavorite: Boolean = false,
     val readChapters: Set<Float> = emptySet(),
     val downloadedChapters: Set<String> = emptySet(),
@@ -199,6 +201,64 @@ class MangaDetailViewModel @Inject constructor(
             _state.update { it.copy(showAddToListDialog = false) }
         }
     }
+
+    // ─── Source Comparison ─────────────────────────────────────────────────────
+
+    fun showSourceComparison() {
+        val manga = _state.value.manga ?: return
+        _state.update { it.copy(showSourceComparison = true) }
+        loadSourceComparisons(manga)
+    }
+
+    fun hideSourceComparison() = _state.update { it.copy(showSourceComparison = false) }
+
+    fun switchSource(source: MangaSource, slug: String) {
+        _state.update { it.copy(showSourceComparison = false) }
+        load(slug, source)
+    }
+
+    private fun loadSourceComparisons(manga: MangaDetail) {
+        viewModelScope.launch {
+            val comparisons = MangaSource.entries
+                .filter { it != currentSource }
+                .map { source ->
+                    SourceComparison(source = source, isLoading = true)
+                }
+            _state.update { it.copy(sourceComparisons = comparisons) }
+
+            val results = MangaSource.entries
+                .filter { it != currentSource }
+                .map { source ->
+                    async {
+                        try {
+                            val result = mangaRepo.searchMangaDirect(manga.title, source)
+                            val match = result.getOrNull()?.firstOrNull { item ->
+                                normalizeTitle(item.title).contains(normalizeTitle(manga.title)) ||
+                                normalizeTitle(manga.title).contains(normalizeTitle(item.title))
+                            }
+                            SourceComparison(
+                                source = source,
+                                match = match,
+                                chapterCount = match?.let { detail ->
+                                    mangaRepo.getMangaDetail(detail.slug, source).getOrNull()?.totalChapters ?: 0
+                                } ?: 0
+                            )
+                        } catch (e: Exception) {
+                            SourceComparison(
+                                source = source,
+                                error = e.message ?: "خطأ غير معروف"
+                            )
+                        }
+                    }
+                }.awaitAll()
+
+            _state.update { it.copy(sourceComparisons = results) }
+        }
+    }
+
+    private fun normalizeTitle(value: String): String = value.lowercase()
+        .replace("[\\u064B-\\u065F]".toRegex(), "")
+        .replace("[^\\p{L}\\p{Nd}]".toRegex(), "")
 
     private suspend fun loadOtherSourceMatches(detail: MangaDetail): List<MangaItem> = coroutineScope {
         val title = detail.title.trim()
