@@ -12,6 +12,7 @@ import androidx.work.Data
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import com.exapps.mangaworld.MangaWorldApp
+import com.exapps.mangaworld.R
 import com.exapps.mangaworld.core.data.resolveCookieForUrl
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.data.local.dao.DownloadTaskDao
@@ -160,7 +161,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
     private fun buildForegroundInfo(title: String, done: Int, total: Int, mangaId: String, chapterUrl: String): ForegroundInfo {
         val sourceId = mangaId.substringBefore('_')
         val notification = NotificationCompat.Builder(appContext, MangaWorldApp.DOWNLOAD_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setSmallIcon(R.drawable.ic_shortcut_downloads)
             .setContentTitle("جاري تنزيل $title")
             .setContentText(if (total > 0) "$done/$total صفحة" else "جاري...")
             .setOngoing(true)
@@ -186,7 +187,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
     private fun showCompletionNotification(title: String, pages: Int, mangaId: String, chapterUrl: String) {
         val sourceId = mangaId.substringBefore('_')
         val notif = NotificationCompat.Builder(appContext, MangaWorldApp.COMPLETE_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setSmallIcon(R.drawable.ic_shortcut_downloads)
             .setContentTitle("✓ تم تنزيل $title")
             .setContentText("$pages صفحة — اضغط للقراءة بدون إنترنت")
             .setContentIntent(
@@ -205,7 +206,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
 
     private fun showFailureNotification(title: String, mangaId: String, chapterUrl: String) {
         val notif = NotificationCompat.Builder(appContext, MangaWorldApp.COMPLETE_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setSmallIcon(R.drawable.ic_shortcut_downloads)
             .setContentTitle("✗ فشل تنزيل $title")
             .setContentText("اضغط لفتح إدارة التنزيلات أو إعادة المحاولة")
             .setContentIntent(
