@@ -246,6 +246,7 @@ class MangaDetailViewModel @Inject constructor(
                         } catch (e: Exception) {
                             SourceComparison(
                                 source = source,
+                                match = null,
                                 error = e.message ?: "خطأ غير معروف"
                             )
                         }

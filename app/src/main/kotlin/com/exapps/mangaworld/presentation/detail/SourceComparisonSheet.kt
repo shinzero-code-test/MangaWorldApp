@@ -9,7 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CompareArrows
-import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -161,7 +161,7 @@ private fun SourceCard(
                 }
                 error != null -> {
                     Icon(
-                        Icons.Filled.ErrorOutline,
+                        Icons.Filled.Warning,
                         contentDescription = null,
                         tint = MangaColors.Error,
                         modifier = Modifier.size(20.dp)
