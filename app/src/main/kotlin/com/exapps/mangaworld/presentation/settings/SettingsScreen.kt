@@ -441,7 +441,7 @@ fun SettingsScreen(
 
         // ── About ─────────────────────────────────────────────────────────────
         SettingsSection("عن التطبيق") {
-            SettingsItem(icon = Icons.Filled.Info, title = "الإصدار", subtitle = "2.0.0") {}
+            SettingsItem(icon = Icons.Filled.Info, title = "الإصدار", subtitle = com.exapps.mangaworld.BuildConfig.VERSION_NAME) {}
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(icon = Icons.Filled.Code, title = "com.exapps.mangaworld",
                 subtitle = "مبني بـ Kotlin + Jetpack Compose") {}

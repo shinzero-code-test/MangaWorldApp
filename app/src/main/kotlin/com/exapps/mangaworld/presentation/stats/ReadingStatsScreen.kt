@@ -64,7 +64,7 @@ fun ReadingStatsScreen(
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
-                        title = "مanga مقروءة",
+                        title = "مانجا مقروءة",
                         value = "${state.totalMangaRead}",
                         color = MangaColors.GlowPurple
                     )
