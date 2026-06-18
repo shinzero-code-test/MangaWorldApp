@@ -12,7 +12,8 @@ class FirebaseStartupCoordinator @Inject constructor(
     private val favoriteDao: FavoriteDao,
     private val topicManager: FirebaseTopicManager,
     private val messagingRegistrar: FirebaseMessagingRegistrar,
-    private val userInsightsCoordinator: FirebaseUserInsightsCoordinator
+    private val userInsightsCoordinator: FirebaseUserInsightsCoordinator,
+    private val notificationPolicyManager: NotificationPolicyManager
 ) {
     suspend fun initialize() {
         sessionManager.ensureGuestSession()
@@ -23,5 +24,6 @@ class FirebaseStartupCoordinator @Inject constructor(
         runCatching {
             favoriteDao.getFavoritesList().forEach { topicManager.subscribeToManga(it.mangaId) }
         }
+        runCatching { notificationPolicyManager.checkAndSendReminders() }
     }
 }
