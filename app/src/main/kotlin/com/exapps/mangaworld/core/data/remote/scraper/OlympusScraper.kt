@@ -517,7 +517,8 @@ class OlympusScraper @Inject constructor(
 
     private fun parseAjaxSearchHtml(body: String): List<MangaItem> {
         val doc = Jsoup.parse(body, source.baseUrl)
-        return doc.select("a.group[href*='/series/'], a[href*='/series/']").mapNotNull { a ->
+        // Olympus search returns <a href="/series/..."> with flex items
+        return doc.select("a[href*='/series/']").mapNotNull { a ->
             val href = a.attr("abs:href").ifEmpty { a.attr("href").absoluteUrl() }
             val slug = href.substringAfterLast("/series/").trimEnd('/').takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val title = a.selectFirst("h4")?.text()?.cleanText()
