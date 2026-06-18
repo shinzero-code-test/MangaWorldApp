@@ -66,6 +66,7 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
         createNotificationChannels()
         widgetRefreshScheduler.schedule()
         scheduleFirebaseSync()
+        scheduleAutoDownload()
         applicationScope.launch {
             appShortcutManager.refreshDynamicShortcuts()
             firebaseStartupCoordinator.initialize()
@@ -100,6 +101,10 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
                 .setConstraints(constraints)
                 .build()
         )
+    }
+
+    private fun scheduleAutoDownload() {
+        com.exapps.mangaworld.core.data.download.AutoDownloadWorker.schedule(this)
     }
 
     private fun createNotificationChannels() {

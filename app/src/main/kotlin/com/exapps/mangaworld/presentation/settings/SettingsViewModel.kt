@@ -40,6 +40,7 @@ class SettingsViewModel @Inject constructor(
     fun setSecureReader(v: Boolean) = saveAndSync { repo.setSecureReader(v) }
     fun setNotificationMode(v: NotificationDeliveryMode) = saveAndSync { repo.setNotificationDeliveryMode(v) }
     fun setWifiOnly(v: Boolean) = saveAndSync { repo.setDownloadOnWifiOnly(v) }
+    fun setAutoDownload(v: Boolean) = saveAndSync { repo.setAutoDownloadNewChapters(v) }
     fun setNotifications(v: Boolean) = saveAndSync { repo.setNotificationsEnabled(v) }
     fun setAutoCleanup(v: Boolean) = saveAndSync { repo.setAutoCleanupReadDownloads(v) }
     fun setCleanupHours(v: Int) = saveAndSync { repo.setCleanupAfterHours(v) }

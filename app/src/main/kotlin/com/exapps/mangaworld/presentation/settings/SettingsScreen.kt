@@ -307,6 +307,14 @@ fun SettingsScreen(
                 onCheckedChange = viewModel::setWifiOnly)
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
+                icon = Icons.Filled.CloudDownload,
+                title = "تنزيل تلقائي للفصول الجديدة",
+                subtitle = "تنزيل 3 فصول غير مقروءة من المفضلة",
+                checked = app.autoDownloadNewChapters,
+                onCheckedChange = viewModel::setAutoDownload
+            )
+            GradientDivider(Modifier.padding(horizontal = 16.dp))
+            SwitchItem(
                 icon = Icons.Filled.DeleteSweep,
                 title = "حذف التنزيلات المقروءة تلقائياً",
                 subtitle = "بعد فترة من إنهاء الفصل",
