@@ -15,7 +15,13 @@ enum class MangaSource(
     MESHMANGA("meshmanga", "Meshmanga", "https://meshmanga.com", false);
 
     companion object {
-        fun fromId(id: String) = values().find { it.id == id } ?: AZORA
+        fun fromId(id: String): MangaSource {
+            val found = entries.find { it.id == id }
+            if (found == null) {
+                android.util.Log.w("MangaSource", "Unknown source ID '$id', falling back to AZORA")
+            }
+            return found ?: AZORA
+        }
     }
 }
 
