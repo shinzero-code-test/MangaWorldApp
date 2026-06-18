@@ -265,6 +265,8 @@ data class ReaderSettings(
     val autoOpenNextChapter: Boolean = false,
     val showLiveReadersOverlay: Boolean = true,
     val showReactionOverlay: Boolean = true,
+    val dualPageLandscape: Boolean = false,
+    val webtoonAutoStitch: Boolean = true,
     val volumeButtonPageTurn: Boolean = false,
     val doubleTapZoom: Boolean = true,
     val tapLeftAction: TapAction = TapAction.PREV_PAGE,

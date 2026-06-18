@@ -64,7 +64,7 @@ class AnnotationSyncManager @Inject constructor(
                         mangaId = mangaId,
                         chapterUrl = chapterUrl,
                         pageIndex = pageIndex,
-                        note = note,
+                        note = note ?: "",
                         isBookmarked = isBookmarked,
                         updatedAt = updatedAt
                     )
