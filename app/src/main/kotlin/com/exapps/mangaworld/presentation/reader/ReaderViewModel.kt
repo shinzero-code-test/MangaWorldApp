@@ -9,6 +9,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.ImagePrefetcher
+import com.exapps.mangaworld.core.data.ReadingPositionSyncManager
 import com.exapps.mangaworld.core.data.ReadingStatsStore
 import com.exapps.mangaworld.core.data.toDetail
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
@@ -98,7 +99,8 @@ class ReaderViewModel @Inject constructor(
     private val widgetShortcutCoordinator: WidgetShortcutCoordinator,
     private val analyticsManager: FirebaseAnalyticsManager,
     private val pageTranslator: MlKitPageTranslator,
-    private val remoteConfigManager: FirebaseRemoteConfigManager
+    private val remoteConfigManager: FirebaseRemoteConfigManager,
+    private val positionSyncManager: ReadingPositionSyncManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReaderUiState())
@@ -176,6 +178,10 @@ class ReaderViewModel @Inject constructor(
                 mangaId = mangaId,
                 translation = PageTranslationUiState(enabled = it.translation.enabled)
             )
+        }
+        // Pull remote positions to get latest from other devices
+        viewModelScope.launch {
+            runCatching { positionSyncManager.pullRemotePositions() }
         }
         viewModelScope.launch {
             val chapterMeta = resolveChapterMeta(mangaId, chapterUrl, source)
@@ -266,6 +272,10 @@ class ReaderViewModel @Inject constructor(
             trackReadingTime()
             if (!st.incognitoMode) {
                 libraryRepo.saveReadingProgress(st.mangaId, chNum, page, st.totalPages)
+                // Sync position to cloud every 5 pages
+                if (page % 5 == 0) {
+                    runCatching { positionSyncManager.pushLocalPositions() }
+                }
             }
             observeReactions(st.mangaId, st.chapterUrl, page)
             if (st.smartPrefetchEnabled && st.totalPages > 0 && page >= (st.totalPages / 2)) {
