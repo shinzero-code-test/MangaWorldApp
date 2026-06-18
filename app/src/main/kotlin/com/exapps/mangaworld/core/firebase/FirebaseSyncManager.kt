@@ -14,6 +14,8 @@ import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.WriteBatch
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,9 +30,10 @@ class FirebaseSyncManager @Inject constructor(
     private val firebaseTelemetry: FirebaseTelemetry
 ) {
     private val firestore = FirebaseFirestore.getInstance()
+    private val syncMutex = Mutex()
 
-    suspend fun pushLocalSnapshot() {
-        val uid = sessionManager.ensureGuestSession() ?: return
+    suspend fun pushLocalSnapshot() = syncMutex.withLock {
+        val uid = sessionManager.ensureGuestSession() ?: return@withLock
         val favorites = favoriteDao.getFavoritesList()
         val history = historyDao.getAll()
         val annotations = readerAnnotationDao.getAll()
@@ -70,8 +73,8 @@ class FirebaseSyncManager @Inject constructor(
         }
     }
 
-    suspend fun pullRemoteSnapshot() {
-        val uid = sessionManager.ensureGuestSession() ?: return
+    suspend fun pullRemoteSnapshot() = syncMutex.withLock {
+        val uid = sessionManager.ensureGuestSession() ?: return@withLock
         firebaseTelemetry.traceDatabaseSync(operation = "pull") {
             val userRef = firestore.collection("users").document(uid)
             val profile = userRef.get().await()
@@ -184,8 +187,8 @@ class FirebaseSyncManager @Inject constructor(
         }
     }
 
-    private suspend fun mergeRemoteSnapshot() {
-        val uid = sessionManager.ensureGuestSession() ?: return
+    private suspend fun mergeRemoteSnapshot() = syncMutex.withLock {
+        val uid = sessionManager.ensureGuestSession() ?: return@withLock
         firebaseTelemetry.traceDatabaseSync(operation = "merge") {
             val userRef = firestore.collection("users").document(uid)
             val remoteFavorites = userRef.collection("favorites").get().await().documents.mapNotNull { it.toObject(FavoriteEntity::class.java) }
