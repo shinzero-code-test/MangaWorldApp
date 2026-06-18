@@ -277,4 +277,4 @@ class WidgetDataRepository @Inject constructor(
         if (number == number.toInt().toFloat()) number.toInt().toString() else number.toString()
 }
 
-private const val DEFAULT_WIDGET_IMAGE_CACHE_MB = 250
+private const val DEFAULT_WIDGET_IMAGE_CACHE_MB = 32
