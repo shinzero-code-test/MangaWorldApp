@@ -2,7 +2,7 @@
   "rules": {
     "chatRooms": {
       "$roomId": {
-        ".read": true,
+        ".read": "auth != null",
         "messages": {
           "$messageId": {
             ".write": "auth != null"

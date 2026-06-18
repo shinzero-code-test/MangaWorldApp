@@ -61,7 +61,7 @@ service cloud.firestore {
     }
 
     match /usernames/{username} {
-      allow read: if true;
+      allow read: if signedIn();
       allow write: if signedIn() && request.resource.data.uid == request.auth.uid;
     }
 
