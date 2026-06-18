@@ -109,7 +109,7 @@ class ReadingStatsStore @Inject constructor(
             DailyStat(
                 date = date,
                 pagesRead = pagesMap[date] ?: 0,
-                readingTimeMs = timeMap[date] ?: 0L
+                readingTimeMs = (timeMap[date] ?: 0).toLong()
             )
         }
     }
