@@ -2,6 +2,7 @@ package com.exapps.mangaworld.core.di
 
 import android.content.Context
 import androidx.room.Room
+import com.exapps.mangaworld.BuildConfig
 import com.exapps.mangaworld.core.data.*
 import com.exapps.mangaworld.core.data.local.MangaDatabase
 import com.exapps.mangaworld.core.data.local.dao.*
@@ -37,7 +38,8 @@ object NetworkModule {
         val cache = Cache(cacheDir, 50L * 1024 * 1024) // 50MB
 
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC
+                    else HttpLoggingInterceptor.Level.NONE
         }
 
         return OkHttpClient.Builder()

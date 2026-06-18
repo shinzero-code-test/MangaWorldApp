@@ -21,4 +21,4 @@ google-services.json
 .gitignore
 logs/
 sessions/
-.mimocode/
+/.mimocode/
