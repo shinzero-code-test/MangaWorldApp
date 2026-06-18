@@ -45,12 +45,12 @@ class ReadingStatsStore @Inject constructor(
 
     suspend fun addReadingTime(durationMs: Long) {
         if (durationMs <= 0L) return
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
         dataStore.edit { prefs ->
             prefs[totalReadingTimeKey] = (prefs[totalReadingTimeKey] ?: 0L) + durationMs
-            val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
             prefs[lastReadDateKey] = today
-            updateStreak(prefs, today)
         }
+        updateStreak(today)
     }
 
     suspend fun recordPageRead(pagesRead: Int) {
@@ -69,31 +69,33 @@ class ReadingStatsStore @Inject constructor(
         }
     }
 
-    private fun updateStreak(prefs: androidx.datastore.preferences.core.Preferences, today: String) {
-        val lastDate = prefs[lastReadDateKey]
-        val currentStreak = prefs[currentStreakKey] ?: 0
-        val longestStreak = prefs[longestStreakKey] ?: 0
+    private suspend fun updateStreak(today: String) {
+        dataStore.edit { prefs ->
+            val lastDate = prefs[lastReadDateKey]
+            val currentStreak = prefs[currentStreakKey] ?: 0
+            val longestStreak = prefs[longestStreakKey] ?: 0
 
-        if (lastDate == null || lastDate == today) {
-            // First read or same day
-            if (currentStreak == 0) {
-                prefs[currentStreakKey] = 1
-            }
-        } else {
-            val lastLocalDate = LocalDate.parse(lastDate, DateTimeFormatter.ISO_LOCAL_DATE)
-            val todayLocalDate = LocalDate.parse(today, DateTimeFormatter.ISO_LOCAL_DATE)
-            val daysDiff = java.time.temporal.ChronoUnit.DAYS.between(lastLocalDate, todayLocalDate)
-
-            if (daysDiff == 1L) {
-                // Consecutive day
-                val newStreak = currentStreak + 1
-                prefs[currentStreakKey] = newStreak
-                if (newStreak > longestStreak) {
-                    prefs[longestStreakKey] = newStreak
+            if (lastDate == null || lastDate == today) {
+                // First read or same day
+                if (currentStreak == 0) {
+                    prefs[currentStreakKey] = 1
                 }
-            } else if (daysDiff > 1L) {
-                // Streak broken
-                prefs[currentStreakKey] = 1
+            } else {
+                val lastLocalDate = LocalDate.parse(lastDate, DateTimeFormatter.ISO_LOCAL_DATE)
+                val todayLocalDate = LocalDate.parse(today, DateTimeFormatter.ISO_LOCAL_DATE)
+                val daysDiff = java.time.temporal.ChronoUnit.DAYS.between(lastLocalDate, todayLocalDate)
+
+                if (daysDiff == 1L) {
+                    // Consecutive day
+                    val newStreak = currentStreak + 1
+                    prefs[currentStreakKey] = newStreak
+                    if (newStreak > longestStreak) {
+                        prefs[longestStreakKey] = newStreak
+                    }
+                } else if (daysDiff > 1L) {
+                    // Streak broken
+                    prefs[currentStreakKey] = 1
+                }
             }
         }
     }
