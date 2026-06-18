@@ -222,7 +222,7 @@ class MangaDetailViewModel @Inject constructor(
             val comparisons = MangaSource.entries
                 .filter { it != currentSource }
                 .map { source ->
-                    SourceComparison(source = source, isLoading = true)
+                    SourceComparison(source = source, match = null, isLoading = true)
                 }
             _state.update { it.copy(sourceComparisons = comparisons) }
 
@@ -273,10 +273,6 @@ class MangaDetailViewModel @Inject constructor(
         }.awaitAll().filterNotNull()
         results.distinctBy { it.source.id }.take(5)
     }
-
-    private fun normalizeTitle(value: String): String = value.lowercase()
-        .replace("[\\u064B-\\u065F]".toRegex(), "")
-        .replace("[^\\p{L}\\p{Nd}]".toRegex(), "")
 
     fun sortedChapters(): List<Chapter> {
         val state = _state.value

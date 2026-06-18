@@ -161,7 +161,7 @@ private fun SourceCard(
                 }
                 error != null -> {
                     Icon(
-                        Icons.Filled.Error,
+                        Icons.Filled.ErrorOutline,
                         contentDescription = null,
                         tint = MangaColors.Error,
                         modifier = Modifier.size(20.dp)

@@ -108,7 +108,7 @@ class CollectionManager @Inject constructor(
     }
 
     suspend fun getCollectionsForManga(mangaId: String): List<MangaCollection> {
-        return collections.map { list -> list.filter { mangaId in it.mangaIds } }.first()
+        return collections.first().filter { mangaId in it.mangaIds }
     }
 
     private suspend fun addCollection(collection: MangaCollection) {
@@ -128,13 +128,17 @@ class CollectionManager @Inject constructor(
             val arr = JSONArray(json)
             (0 until arr.length()).mapNotNull { i ->
                 val obj = arr.getJSONObject(i)
+                val mangaIdsArr = obj.optJSONArray("mangaIds")
+                val mangaIds = if (mangaIdsArr != null) {
+                    (0 until mangaIdsArr.length()).map { j -> mangaIdsArr.getString(j) }
+                } else {
+                    emptyList()
+                }
                 MangaCollection(
                     id = obj.getString("id"),
                     name = obj.getString("name"),
                     description = obj.optString("description", ""),
-                    mangaIds = (0 until obj.optJSONArray("mangaIds")?.length() ?: 0).map { j ->
-                        obj.getJSONArray("mangaIds").getString(j)
-                    },
+                    mangaIds = mangaIds,
                     isPublic = obj.optBoolean("isPublic", false),
                     createdAt = obj.optLong("createdAt", 0L),
                     updatedAt = obj.optLong("updatedAt", 0L)

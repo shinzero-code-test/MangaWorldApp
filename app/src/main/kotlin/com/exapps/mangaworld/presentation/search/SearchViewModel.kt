@@ -95,9 +95,12 @@ class SearchViewModel @Inject constructor(
         )
 
     val results: Flow<PagingData<MangaItem>> =
-        combine(_query, _source, enabledSources, appSettings, _reloadToken, _filters) { q, s, enabled, settings, reload, advancedFilters ->
-            SearchRequest(q, s, enabled, settings, reload, advancedFilters)
+        combine(_query, _source, enabledSources, appSettings, _reloadToken) { q, s, enabled, settings, reload ->
+            SearchRequest(q, s, enabled, settings, reload, _filters.value)
         }
+            .combine(_filters) { request, filters ->
+                request.copy(advancedFilters = filters)
+            }
             .debounce(400)
             .filter { it.query.length >= 2 || it.advancedFilters.genre != null }
             .flatMapLatest { request ->

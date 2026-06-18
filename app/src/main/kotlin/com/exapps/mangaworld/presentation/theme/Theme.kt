@@ -32,6 +32,7 @@ object MangaColors {
     val Green            = Color(0xFF4CAF50)
     val Yellow           = Color(0xFFFFD700)
     val Orange           = Color(0xFFFF9800)
+    val Error            = Color(0xFFCF6679)
 
     // Text
     val OnSurface        = Color(0xFFE4E1ED)
