@@ -92,6 +92,10 @@ interface SettingsRepository {
     suspend fun updateShowReactionOverlay(enabled: Boolean)
     suspend fun updateDualPageLandscape(enabled: Boolean)
     suspend fun updateWebtoonAutoStitch(enabled: Boolean)
+    suspend fun updatePageSpacing(spacing: Int)
+    suspend fun updateVolumeButtonPageTurn(enabled: Boolean)
+    suspend fun updateDoubleTapZoom(enabled: Boolean)
+    suspend fun updateShowPageNumber(enabled: Boolean)
 
     fun getCookies(domain: String): Flow<String?>
     suspend fun saveCookies(domain: String, cookies: String)

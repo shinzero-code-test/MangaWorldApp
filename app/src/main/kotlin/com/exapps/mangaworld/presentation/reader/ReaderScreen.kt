@@ -64,6 +64,7 @@ fun ReaderScreen(
     var settingsSheetOpen by remember { mutableStateOf(false) }
     var commentText by remember { mutableStateOf("") }
     var commentSpoiler by remember { mutableStateOf(false) }
+    var showSavePageDialog by remember { mutableStateOf(false) }
     val solverLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val cookies = result.data?.getStringExtra(WebViewSolverActivity.RESULT_COOKIES).orEmpty()
@@ -124,16 +125,17 @@ fun ReaderScreen(
                 }
             }
             state.pages.isEmpty() -> ReaderError("لا توجد صفحات", onBack)
-            else -> ReaderContent(
-                state = state,
-                onPageChanged = viewModel::onPageChanged,
-                onTap = { x, y ->
-                    viewModel.onReaderTap(x, y)
-                    if (state.hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    viewModel.toggleControls()
-                },
-                onModeChange = viewModel::setReaderMode
-            )
+                else -> ReaderContent(
+                    state = state,
+                    onPageChanged = viewModel::onPageChanged,
+                    onTap = { x, y ->
+                        viewModel.onReaderTap(x, y)
+                        if (state.hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        viewModel.toggleControls()
+                    },
+                    onLongPress = { showSavePageDialog = true },
+                    onModeChange = viewModel::setReaderMode
+                )
         }
 
         // Top bar
@@ -275,6 +277,23 @@ fun ReaderScreen(
             )
         }
 
+        if (showSavePageDialog) {
+            AlertDialog(
+                onDismissRequest = { showSavePageDialog = false },
+                title = { Text("حفظ الصفحة") },
+                text = { Text("هل تريد حفظ الصفحة ${state.currentPage + 1} في المعرض؟") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.saveCurrentPage()
+                        showSavePageDialog = false
+                    }) { Text("حفظ") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSavePageDialog = false }) { Text("إلغاء") }
+                }
+            )
+        }
+
         if (annotationsSheetOpen) {
             ModalBottomSheet(onDismissRequest = { annotationsSheetOpen = false }) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
@@ -344,19 +363,23 @@ fun ReaderScreen(
                     onReactionsChange = viewModel::setShowReactionOverlay,
                     onDualPageChange = viewModel::setDualPageLandscape,
                     onWebtoonStitchChange = viewModel::setWebtoonAutoStitch,
-                    onKeepScreenOnChange = {},
-                    onHapticsChange = {},
-                    onSmartPrefetchChange = {},
-                    onPageSpacingChange = {},
-                    onVolumeButtonChange = {},
-                    onDoubleTapZoomChange = {},
+                    onKeepScreenOnChange = viewModel::setKeepScreenOn,
+                    onHapticsChange = viewModel::setHaptics,
+                    onSmartPrefetchChange = viewModel::setSmartPrefetch,
+                    onPageSpacingChange = viewModel::setPageSpacing,
+                    onVolumeButtonChange = viewModel::setVolumeButton,
+                    onDoubleTapZoomChange = viewModel::setDoubleTapZoom,
+                    onShowPageNumberChange = viewModel::setShowPageNumber,
                     onDownload = { viewModel.downloadCurrentChapter() },
                     onCancelDownload = { viewModel.cancelDownload() },
                     onRetryDownload = { viewModel.retryCurrentChapterDownload() },
                     onToggleBookmark = { viewModel.toggleBookmarkCurrentPage() },
-                    onEditNote = { /* handled by caller */ },
-                    onBrowseAnnotations = { /* handled by caller */ },
-                    onOpenComments = { /* handled by caller */ }
+                    onEditNote = { 
+                        noteText = state.pageNotes[state.currentPage].orEmpty()
+                        noteDialog = true 
+                    },
+                    onBrowseAnnotations = { annotationsSheetOpen = true },
+                    onOpenComments = { commentsSheetOpen = true }
                 )
             }
         }
@@ -377,47 +400,51 @@ private fun ReaderContent(
     state: ReaderUiState,
     onPageChanged: (Int) -> Unit,
     onTap: (Float, Float) -> Unit,
+    onLongPress: () -> Unit = {},
     onModeChange: (ReaderMode) -> Unit
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
-    when (state.readerMode) {
-        ReaderMode.VERTICAL_SCROLL, ReaderMode.WEBTOON ->
-            WebtoonReader(
-                pages = state.pages,
-                imageFilter = state.imageFilter,
-                autoStitch = state.webtoonAutoStitch,
-                onTap = onTap,
-                onPageChanged = onPageChanged
-            )
-        ReaderMode.HORIZONTAL_RTL ->
-            if (state.dualPageLandscape && isLandscape) {
-                DualPageReader(
+        when (state.readerMode) {
+            ReaderMode.VERTICAL_SCROLL, ReaderMode.WEBTOON ->
+                WebtoonReader(
                     pages = state.pages,
-                    rtl = true,
-                    initialPage = state.currentPage,
                     imageFilter = state.imageFilter,
-                    onPageChanged = onPageChanged,
-                    onTap = onTap
+                    autoStitch = state.webtoonAutoStitch,
+                    onTap = onTap,
+                    onLongPress = onLongPress,
+                    onPageChanged = onPageChanged
                 )
-            } else {
-                HorizontalReader(pages = state.pages, rtl = true,
-                    initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap)
-            }
-        ReaderMode.HORIZONTAL_LTR ->
-            if (state.dualPageLandscape && isLandscape) {
-                DualPageReader(
-                    pages = state.pages,
-                    rtl = false,
-                    initialPage = state.currentPage,
-                    imageFilter = state.imageFilter,
-                    onPageChanged = onPageChanged,
-                    onTap = onTap
-                )
-            } else {
-                HorizontalReader(pages = state.pages, rtl = false,
-                    initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap)
-            }
+            ReaderMode.HORIZONTAL_RTL ->
+                if (state.dualPageLandscape && isLandscape) {
+                    DualPageReader(
+                        pages = state.pages,
+                        rtl = true,
+                        initialPage = state.currentPage,
+                        imageFilter = state.imageFilter,
+                        onPageChanged = onPageChanged,
+                        onTap = onTap,
+                        onLongPress = onLongPress
+                    )
+                } else {
+                    HorizontalReader(pages = state.pages, rtl = true,
+                        initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress)
+                }
+            ReaderMode.HORIZONTAL_LTR ->
+                if (state.dualPageLandscape && isLandscape) {
+                    DualPageReader(
+                        pages = state.pages,
+                        rtl = false,
+                        initialPage = state.currentPage,
+                        imageFilter = state.imageFilter,
+                        onPageChanged = onPageChanged,
+                        onTap = onTap,
+                        onLongPress = onLongPress
+                    )
+                } else {
+                    HorizontalReader(pages = state.pages, rtl = false,
+                        initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress)
+                }
     }
 }
 
@@ -429,6 +456,7 @@ private fun WebtoonReader(
     imageFilter: ReaderImageFilter,
     autoStitch: Boolean,
     onTap: (Float, Float) -> Unit,
+    onLongPress: () -> Unit = {},
     onPageChanged: (Int) -> Unit
 ) {
     val listState = rememberLazyListState()
@@ -442,11 +470,14 @@ private fun WebtoonReader(
         state = listState,
         verticalArrangement = Arrangement.spacedBy(if (autoStitch) 0.dp else 6.dp),
         modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-            detectTapGestures { offset ->
-                val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
-                val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
-                onTap(nx, ny)
-            }
+            detectTapGestures(
+                onLongPress = { _ -> onLongPress() },
+                onTap = { offset ->
+                    val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
+                    val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
+                    onTap(nx, ny)
+                }
+            )
         }
     ) {
         items(pages, key = { it.index }) { page ->
@@ -463,7 +494,8 @@ private fun DualPageReader(
     initialPage: Int,
     imageFilter: ReaderImageFilter,
     onPageChanged: (Int) -> Unit,
-    onTap: (Float, Float) -> Unit
+    onTap: (Float, Float) -> Unit,
+    onLongPress: () -> Unit = {}
 ) {
     val orderedPages = if (rtl) pages.reversed() else pages
     val spreadPages = orderedPages.chunked(2)
@@ -479,11 +511,14 @@ private fun DualPageReader(
     HorizontalPager(
         state = pagerState,
         modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-            detectTapGestures { offset ->
-                val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
-                val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
-                onTap(nx, ny)
-            }
+            detectTapGestures(
+                onLongPress = { _ -> onLongPress() },
+                onTap = { offset ->
+                    val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
+                    val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
+                    onTap(nx, ny)
+                }
+            )
         }
     ) { spreadIndex ->
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -507,7 +542,8 @@ private fun HorizontalReader(
     initialPage: Int,
     imageFilter: ReaderImageFilter,
     onPageChanged: (Int) -> Unit,
-    onTap: (Float, Float) -> Unit
+    onTap: (Float, Float) -> Unit,
+    onLongPress: () -> Unit = {}
 ) {
     val orderedPages = if (rtl) pages.reversed() else pages
     val pagerState = rememberPagerState(initialPage = initialPage.coerceIn(0, maxOf(0, orderedPages.size - 1))) { orderedPages.size }
@@ -521,11 +557,14 @@ private fun HorizontalReader(
         state = pagerState,
         modifier = Modifier.fillMaxSize()
             .pointerInput(Unit) {
-                detectTapGestures { offset ->
-                    val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
-                    val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
-                    onTap(nx, ny)
-                }
+                detectTapGestures(
+                    onLongPress = { _ -> onLongPress() },
+                    onTap = { offset ->
+                        val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
+                        val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
+                        onTap(nx, ny)
+                    }
+                )
             }
     ) { pageIndex ->
         MangaPageImage(
@@ -679,6 +718,7 @@ private fun ReaderSettingsSheet(
     onPageSpacingChange: (Int) -> Unit,
     onVolumeButtonChange: (Boolean) -> Unit,
     onDoubleTapZoomChange: (Boolean) -> Unit,
+    onShowPageNumberChange: (Boolean) -> Unit,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
     onRetryDownload: () -> Unit,
@@ -687,7 +727,7 @@ private fun ReaderSettingsSheet(
     onBrowseAnnotations: () -> Unit,
     onOpenComments: () -> Unit
 ) {
-    var expandedSection by remember { mutableStateOf<String?>(null) }
+    var expandedSection by remember { mutableStateOf<String?>("actions") }
 
     Column(
         Modifier.fillMaxWidth().padding(16.dp),
@@ -797,7 +837,7 @@ private fun ReaderSettingsSheet(
             SwitchRow("وضع خفي", state.incognitoMode, onIncognitoChange)
             SwitchRow("الانتقال التلقائي للفصل التالي", state.autoOpenNextChapter, onAutoNextChange)
             SwitchRow("إبقاء الشاشة مضاءة", state.keepScreenOn, onKeepScreenOnChange)
-            SwitchRow("إظهار رقم الصفحة", state.showPageNumber, { })
+            SwitchRow("إظهار رقم الصفحة", state.showPageNumber, onShowPageNumberChange)
             SwitchRow("التحميل المسبق الذكي", state.smartPrefetchEnabled, onSmartPrefetchChange)
         }
 
@@ -994,7 +1034,7 @@ private fun ReaderBottomBar(currentPage: Int, totalPages: Int, onPageSelected: (
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                Text("1", style = MaterialTheme.typography.labelSmall, color = Color(0x88FFFFFF))
+                Text("${currentPage + 1}", style = MaterialTheme.typography.labelSmall, color = Color.White)
                 Text("$totalPages", style = MaterialTheme.typography.labelSmall, color = Color(0x88FFFFFF))
             }
         }

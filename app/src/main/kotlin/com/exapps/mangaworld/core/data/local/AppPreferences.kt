@@ -53,6 +53,9 @@ class AppPreferences @Inject constructor(
         val KEY_SHOW_REACTIONS = booleanPreferencesKey("reader_show_reactions")
         val KEY_DUAL_PAGE = booleanPreferencesKey("reader_dual_page")
         val KEY_WEBTOON_STITCH = booleanPreferencesKey("reader_webtoon_stitch")
+        val KEY_PAGE_SPACING = intPreferencesKey("reader_page_spacing")
+        val KEY_VOLUME_BUTTON = booleanPreferencesKey("reader_volume_button")
+        val KEY_DOUBLE_TAP_ZOOM = booleanPreferencesKey("reader_double_tap_zoom")
 
         fun cookieKey(domain: String) = stringPreferencesKey("cookie_$domain")
     }
@@ -115,7 +118,10 @@ class AppPreferences @Inject constructor(
                 showLiveReadersOverlay = prefs[KEY_SHOW_LIVE_READERS] ?: true,
                 showReactionOverlay = prefs[KEY_SHOW_REACTIONS] ?: true,
                 dualPageLandscape = prefs[KEY_DUAL_PAGE] ?: false,
-                webtoonAutoStitch = prefs[KEY_WEBTOON_STITCH] ?: true
+                webtoonAutoStitch = prefs[KEY_WEBTOON_STITCH] ?: true,
+                pageSpacing = prefs[KEY_PAGE_SPACING] ?: 0,
+                volumeButtonPageTurn = prefs[KEY_VOLUME_BUTTON] ?: false,
+                doubleTapZoom = prefs[KEY_DOUBLE_TAP_ZOOM] ?: true
             )
         }
 
@@ -216,6 +222,15 @@ class AppPreferences @Inject constructor(
 
     suspend fun setWebtoonStitch(v: Boolean) =
         dataStore.edit { it[KEY_WEBTOON_STITCH] = v }
+
+    suspend fun setPageSpacing(v: Int) =
+        dataStore.edit { it[KEY_PAGE_SPACING] = v }
+
+    suspend fun setVolumeButton(v: Boolean) =
+        dataStore.edit { it[KEY_VOLUME_BUTTON] = v }
+
+    suspend fun setDoubleTapZoom(v: Boolean) =
+        dataStore.edit { it[KEY_DOUBLE_TAP_ZOOM] = v }
 
     fun getCookies(domain: String): Flow<String?> = dataStore.data
         .catch { emit(emptyPreferences()) }

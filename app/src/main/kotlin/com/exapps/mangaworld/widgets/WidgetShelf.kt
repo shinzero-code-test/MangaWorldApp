@@ -74,7 +74,7 @@ private fun WidgetShelfContent(
             Spacer(GlanceModifier.width(8.dp))
             ShelfItem(
                 label = "البحث",
-                onClick = AppLaunchIntents.home(context)
+                onClick = AppLaunchIntents.search(context)
             )
             Spacer(GlanceModifier.width(8.dp))
             ShelfItem(
@@ -84,7 +84,7 @@ private fun WidgetShelfContent(
             Spacer(GlanceModifier.width(8.dp))
             ShelfItem(
                 label = "التنزيلات",
-                onClick = AppLaunchIntents.home(context)
+                onClick = AppLaunchIntents.downloads(context)
             )
         }
     }

@@ -122,7 +122,12 @@ class ReaderViewModel @Inject constructor(
                         showLiveReadersOverlay = settings.showLiveReadersOverlay,
                         showReactionOverlay = settings.showReactionOverlay,
                         dualPageLandscape = settings.dualPageLandscape,
-                        webtoonAutoStitch = settings.webtoonAutoStitch
+                        webtoonAutoStitch = settings.webtoonAutoStitch,
+                        pageSpacing = settings.pageSpacing,
+                        volumeButtonPageTurn = settings.volumeButtonPageTurn,
+                        doubleTapZoom = settings.doubleTapZoom,
+                        showPageNumber = settings.showPageNumber,
+                        keepScreenOn = settings.keepScreenOn
                     )
                 }
             }
@@ -370,12 +375,93 @@ class ReaderViewModel @Inject constructor(
         settingsRepo.updateIncognitoMode(enabled)
     }
 
+    fun setKeepScreenOn(enabled: Boolean) = viewModelScope.launch {
+        settingsRepo.updateKeepScreenOn(enabled)
+    }
+
+    fun setHaptics(enabled: Boolean) = viewModelScope.launch {
+        settingsRepo.updateReaderHaptics(enabled)
+    }
+
+    fun setSmartPrefetch(enabled: Boolean) = viewModelScope.launch {
+        settingsRepo.updateSmartPrefetch(enabled)
+    }
+
+    fun setPageSpacing(spacing: Int) = viewModelScope.launch {
+        settingsRepo.updatePageSpacing(spacing)
+        _state.update { it.copy(pageSpacing = spacing) }
+    }
+
+    fun setVolumeButton(enabled: Boolean) = viewModelScope.launch {
+        settingsRepo.updateVolumeButtonPageTurn(enabled)
+        _state.update { it.copy(volumeButtonPageTurn = enabled) }
+    }
+
+    fun setDoubleTapZoom(enabled: Boolean) = viewModelScope.launch {
+        settingsRepo.updateDoubleTapZoom(enabled)
+        _state.update { it.copy(doubleTapZoom = enabled) }
+    }
+
+    fun setShowPageNumber(enabled: Boolean) = viewModelScope.launch {
+        settingsRepo.updateShowPageNumber(enabled)
+        _state.update { it.copy(showPageNumber = enabled) }
+    }
+
     fun onReaderTap(normalizedX: Float, normalizedY: Float) {
         _state.update {
             it.copy(
                 lastTapNormalizedX = normalizedX.coerceIn(0f, 1f),
                 lastTapNormalizedY = normalizedY.coerceIn(0f, 1f)
             )
+        }
+    }
+
+    fun saveCurrentPage() {
+        val st = _state.value
+        val page = st.pages.getOrNull(st.currentPage) ?: return
+        viewModelScope.launch {
+            try {
+                val context = app.applicationContext
+                val bitmap = coil.ImageLoader(context).execute(
+                    coil.request.ImageRequest.Builder(context)
+                        .data(page.url)
+                        .allowHardware(false)
+                        .build()
+                ).drawable?.let { drawable ->
+                    val bmp = android.graphics.Bitmap.createBitmap(drawable.intrinsicWidth, drawable.intrinsicHeight, android.graphics.Bitmap.Config.ARGB_8888)
+                    val canvas = android.graphics.Canvas(bmp)
+                    drawable.setBounds(0, 0, canvas.width, canvas.height)
+                    drawable.draw(canvas)
+                    bmp
+                } ?: return@launch
+                val resolver = context.contentResolver
+                val contentValues = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "MangaWorld_${System.currentTimeMillis()}.jpg")
+                    put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/MangaWorld")
+                        put(android.provider.MediaStore.Images.Media.IS_PENDING, 1)
+                    }
+                }
+                val uri = resolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                uri?.let {
+                    resolver.openOutputStream(it)?.use { os ->
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, os)
+                    }
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        contentValues.clear()
+                        contentValues.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0)
+                        resolver.update(it, contentValues, null, null)
+                    }
+                }
+                _state.update { it.copy(downloadMessage = "تم حفظ الصفحة") }
+                kotlinx.coroutines.delay(2000)
+                _state.update { it.copy(downloadMessage = null) }
+            } catch (_: Exception) {
+                _state.update { it.copy(downloadMessage = "فشل حفظ الصفحة") }
+                kotlinx.coroutines.delay(2000)
+                _state.update { it.copy(downloadMessage = null) }
+            }
         }
     }
 

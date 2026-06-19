@@ -81,6 +81,7 @@ class LocalStorageViewModel @Inject constructor(
 @Composable
 fun LocalStorageScreen(
     onMangaClick: (sourceId: String, slug: String) -> Unit,
+    onImportManga: () -> Unit = {},
     viewModel: LocalStorageViewModel = hiltViewModel()
 ) {
     val mangas by viewModel.downloadedMangas.collectAsStateWithLifecycle()
@@ -99,6 +100,9 @@ fun LocalStorageScreen(
                 Text("التخزين المحلي", style = MaterialTheme.typography.titleLarge,
                     color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
+                IconButton(onClick = onImportManga) {
+                    Icon(Icons.Filled.FileUpload, "استيراد", tint = MangaColors.Cyan)
+                }
                 if (mangas.isNotEmpty()) {
                     Text("${mangas.size} مانجا", style = MaterialTheme.typography.bodySmall,
                         color = MangaColors.Muted)
@@ -117,6 +121,15 @@ fun LocalStorageScreen(
                             color = MangaColors.Muted)
                         Text("نزّل فصولاً من صفحة التفاصيل لتظهر هنا",
                             style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = onImportManga,
+                            colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)
+                        ) {
+                            Icon(Icons.Filled.FileUpload, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("استيراد مانجا خارجية")
+                        }
                     }
                 }
             } else {

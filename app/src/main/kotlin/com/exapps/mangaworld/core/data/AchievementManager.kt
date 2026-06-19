@@ -5,9 +5,13 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
@@ -60,6 +64,7 @@ class AchievementManager @Inject constructor(
     private val achievementsKey = stringPreferencesKey("achievements")
     private val totalPagesReadKey = intPreferencesKey("total_pages_read")
     private val totalChaptersReadKey = intPreferencesKey("total_chapters_read")
+    private val firestore = FirebaseFirestore.getInstance()
 
     val goals: Flow<List<ReadingGoal>> = dataStore.data.map { prefs ->
         parseGoals(prefs[goalsKey] ?: "[]")
@@ -162,8 +167,96 @@ class AchievementManager @Inject constructor(
     }
 
     private suspend fun checkAchievements() {
-        // This is called after recording reads to check for new achievements
-        // Implementation would check current stats against achievement conditions
+        val prefs = dataStore.data.first()
+        val totalPages = prefs[totalPagesReadKey] ?: 0
+        val totalChapters = prefs[totalChaptersReadKey] ?: 0
+        val storedAchievements = parseAchievements(prefs[achievementsKey] ?: "[]").toMutableList()
+        val defaults = getDefaultAchievements()
+        val now = System.currentTimeMillis()
+        var changed = false
+
+        // Ensure all default achievements exist in the stored list
+        val mergedAchievements = defaults.map { default ->
+            val existing = storedAchievements.find { it.id == default.id }
+            existing ?: default
+        }.toMutableList()
+
+        // Check unlock conditions
+        mergedAchievements.forEachIndexed { index, achievement ->
+            if (!achievement.isUnlocked) {
+                val shouldUnlock = when (achievement.id) {
+                    "first_chapter" -> totalChapters >= 1
+                    "bookworm" -> totalPages >= 100
+                    "speed_reader" -> totalPages >= 50
+                    "streak_7" -> false // streak checked separately via checkAndUnlockAchievements
+                    "streak_30" -> false
+                    "manga_master" -> totalChapters >= 100
+                    else -> false
+                }
+                if (shouldUnlock) {
+                    mergedAchievements[index] = achievement.copy(isUnlocked = true, unlockedAt = now)
+                    changed = true
+                }
+            }
+        }
+
+        dataStore.edit { prefs ->
+            prefs[totalPagesReadKey] = totalPages
+            prefs[totalChaptersReadKey] = totalChapters
+            if (changed) {
+                prefs[achievementsKey] = achievementsToJson(mergedAchievements)
+            }
+        }
+
+        // Update goals progress
+        updateGoalProgressFromStats(totalPages, totalChapters)
+
+        // Sync to Firestore
+        syncToFirestore()
+    }
+
+    private suspend fun updateGoalProgressFromStats(totalPages: Int, totalChapters: Int) {
+        dataStore.edit { prefs ->
+            val goals = parseGoals(prefs[goalsKey] ?: "[]").toMutableList()
+            val today = LocalDate.now()
+            var changed = false
+
+            goals.forEachIndexed { index, goal ->
+                if (goal.isActive && !goal.isCompleted) {
+                    val newValue = when (goal.type) {
+                        GoalType.PAGES_READ -> totalPages
+                        GoalType.CHAPTERS_READ -> totalChapters
+                        GoalType.READING_TIME -> 0 // Reading time tracked separately
+                    }
+                    if (newValue != goal.currentValue) {
+                        goals[index] = goal.copy(currentValue = newValue)
+                        changed = true
+                    }
+                }
+            }
+            if (changed) {
+                prefs[goalsKey] = goalsToJson(goals)
+            }
+        }
+    }
+
+    private suspend fun syncToFirestore() {
+        try {
+            val prefs = dataStore.data.first()
+            val data = mapOf(
+                "totalPagesRead" to (prefs[totalPagesReadKey] ?: 0),
+                "totalChaptersRead" to (prefs[totalChaptersReadKey] ?: 0),
+                "goals" to (prefs[goalsKey] ?: "[]"),
+                "achievements" to (prefs[achievementsKey] ?: "[]"),
+                "lastUpdated" to System.currentTimeMillis()
+            )
+            firestore.collection("user_achievements")
+                .document("local_user")
+                .set(data, SetOptions.merge())
+                .await()
+        } catch (_: Exception) {
+            // Silently fail — Firestore sync is best-effort
+        }
     }
 
     private fun getDefaultAchievements(): List<Achievement> = listOf(

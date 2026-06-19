@@ -441,6 +441,10 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun updateShowReactionOverlay(enabled: Boolean) { prefs.setShowReactions(enabled) }
     override suspend fun updateDualPageLandscape(enabled: Boolean) { prefs.setDualPage(enabled) }
     override suspend fun updateWebtoonAutoStitch(enabled: Boolean) { prefs.setWebtoonStitch(enabled) }
+    override suspend fun updatePageSpacing(spacing: Int) { prefs.setPageSpacing(spacing) }
+    override suspend fun updateVolumeButtonPageTurn(enabled: Boolean) { prefs.setVolumeButton(enabled) }
+    override suspend fun updateDoubleTapZoom(enabled: Boolean) { prefs.setDoubleTapZoom(enabled) }
+    override suspend fun updateShowPageNumber(enabled: Boolean) { prefs.setShowPageNum(enabled) }
     override fun getCookies(domain: String) = prefs.getCookies(domain)
     override suspend fun saveCookies(domain: String, cookies: String) { prefs.saveCookies(domain, cookies) }
     override suspend fun clearCookies(domain: String) { prefs.clearCookies(domain) }

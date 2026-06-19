@@ -33,8 +33,7 @@ import com.exapps.mangaworld.presentation.collections.CollectionsScreen
 import com.exapps.mangaworld.presentation.goals.GoalsScreen
 import com.exapps.mangaworld.presentation.more.MoreScreen
 import com.exapps.mangaworld.presentation.sources.SourcesScreen
-import com.exapps.mangaworld.presentation.more.MoreScreen
-import com.exapps.mangaworld.presentation.sources.SourcesScreen
+import com.exapps.mangaworld.presentation.localstorage.ImportMangaScreen
 
 sealed class Screen(val route: String) {
     object Home        : Screen("home")
@@ -65,6 +64,7 @@ sealed class Screen(val route: String) {
     object Goals : Screen("goals")
     object More : Screen("more")
     object Sources : Screen("sources")
+    object ImportManga : Screen("import_manga")
     object Community : Screen("community/{sourceId}/{mangaId}/{slug}?chapterUrl={chapterUrl}&commentId={commentId}") {
         fun createRoute(sourceId: String, mangaId: String, slug: String, chapterUrl: String? = null, commentId: String? = null): String {
             val encoded = chapterUrl?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
@@ -197,7 +197,8 @@ fun MangaNavGraph(navController: NavHostController) {
         }
         composable(Screen.LocalStorage.route) {
             LocalStorageScreen(
-                onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) }
+                onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) },
+                onImportManga = { navController.navigate(Screen.ImportManga.route) }
             )
         }
         composable(Screen.ReadingStats.route) {
@@ -240,22 +241,10 @@ fun MangaNavGraph(navController: NavHostController) {
                 onBack = { navController.popBackStack() }
             )
         }
-        composable(Screen.More.route) {
-            MoreScreen(
-                onOpenDownloads = { navController.navigate(Screen.Downloads.route) },
-                onOpenLocalStorage = { navController.navigate(Screen.LocalStorage.route) },
-                onOpenReadingStats = { navController.navigate(Screen.ReadingStats.route) },
-                onOpenCollections = { navController.navigate(Screen.Collections.createRoute()) },
-                onOpenGoals = { navController.navigate(Screen.Goals.route) },
-                onOpenSources = { navController.navigate(Screen.Sources.route) },
-                onOpenSettings = { navController.navigate(Screen.Settings.route) },
-                onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
-                onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) }
-            )
-        }
-        composable(Screen.Sources.route) {
-            SourcesScreen(
-                onBack = { navController.popBackStack() }
+        composable(Screen.ImportManga.route) {
+            ImportMangaScreen(
+                onBack = { navController.popBackStack() },
+                onImportComplete = { /* Refresh local storage */ }
             )
         }
         composable(
