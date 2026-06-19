@@ -31,6 +31,10 @@ import com.exapps.mangaworld.presentation.settings.SettingsScreen
 import com.exapps.mangaworld.presentation.stats.ReadingStatsScreen
 import com.exapps.mangaworld.presentation.collections.CollectionsScreen
 import com.exapps.mangaworld.presentation.goals.GoalsScreen
+import com.exapps.mangaworld.presentation.more.MoreScreen
+import com.exapps.mangaworld.presentation.sources.SourcesScreen
+import com.exapps.mangaworld.presentation.more.MoreScreen
+import com.exapps.mangaworld.presentation.sources.SourcesScreen
 
 sealed class Screen(val route: String) {
     object Home        : Screen("home")
@@ -59,6 +63,10 @@ sealed class Screen(val route: String) {
         fun createRoute(collectionId: String = "") = if (collectionId.isBlank()) "collections/" else "collections/$collectionId"
     }
     object Goals : Screen("goals")
+    object More : Screen("more")
+    object Sources : Screen("sources")
+    object More : Screen("more")
+    object Sources : Screen("sources")
     object Community : Screen("community/{sourceId}/{mangaId}/{slug}?chapterUrl={chapterUrl}&commentId={commentId}") {
         fun createRoute(sourceId: String, mangaId: String, slug: String, chapterUrl: String? = null, commentId: String? = null): String {
             val encoded = chapterUrl?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
@@ -81,10 +89,7 @@ val bottomNavItems: List<Triple<Screen, String, ImageVector>> = listOf(
     Triple(Screen.Browse,       "تصفح",         Icons.Filled.GridView),
     Triple(Screen.Search,       "بحث",          Icons.Filled.Search),
     Triple(Screen.Library,      "المكتبة",      Icons.Filled.BookmarkBorder),
-    Triple(Screen.Downloads,    "التنزيلات",    Icons.Filled.Download),
-    Triple(Screen.LocalStorage, "المحلي",       Icons.Filled.FolderOpen),
-    Triple(Screen.Profile,      "الملف",        Icons.Filled.Person),
-    Triple(Screen.Settings,     "الإعدادات",    Icons.Filled.Settings),
+    Triple(Screen.More,         "المزيد",       Icons.Filled.MoreHoriz),
 )
 
 @Composable
@@ -216,6 +221,42 @@ fun MangaNavGraph(navController: NavHostController) {
         }
         composable(Screen.Goals.route) {
             GoalsScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.More.route) {
+            MoreScreen(
+                onOpenDownloads = { navController.navigate(Screen.Downloads.route) },
+                onOpenLocalStorage = { navController.navigate(Screen.LocalStorage.route) },
+                onOpenReadingStats = { navController.navigate(Screen.ReadingStats.route) },
+                onOpenCollections = { navController.navigate(Screen.Collections.createRoute()) },
+                onOpenGoals = { navController.navigate(Screen.Goals.route) },
+                onOpenSources = { navController.navigate(Screen.Sources.route) },
+                onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
+                onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) }
+            )
+        }
+        composable(Screen.Sources.route) {
+            SourcesScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.More.route) {
+            MoreScreen(
+                onOpenDownloads = { navController.navigate(Screen.Downloads.route) },
+                onOpenLocalStorage = { navController.navigate(Screen.LocalStorage.route) },
+                onOpenReadingStats = { navController.navigate(Screen.ReadingStats.route) },
+                onOpenCollections = { navController.navigate(Screen.Collections.createRoute()) },
+                onOpenGoals = { navController.navigate(Screen.Goals.route) },
+                onOpenSources = { navController.navigate(Screen.Sources.route) },
+                onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
+                onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) }
+            )
+        }
+        composable(Screen.Sources.route) {
+            SourcesScreen(
                 onBack = { navController.popBackStack() }
             )
         }
