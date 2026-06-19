@@ -405,46 +405,46 @@ private fun ReaderContent(
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
-        when (state.readerMode) {
-            ReaderMode.VERTICAL_SCROLL, ReaderMode.WEBTOON ->
-                WebtoonReader(
+    when (state.readerMode) {
+        ReaderMode.VERTICAL_SCROLL, ReaderMode.WEBTOON ->
+            WebtoonReader(
+                pages = state.pages,
+                imageFilter = state.imageFilter,
+                autoStitch = state.webtoonAutoStitch,
+                onTap = onTap,
+                onLongPress = onLongPress,
+                onPageChanged = onPageChanged
+            )
+        ReaderMode.HORIZONTAL_RTL ->
+            if (state.dualPageLandscape && isLandscape) {
+                DualPageReader(
                     pages = state.pages,
+                    rtl = true,
+                    initialPage = state.currentPage,
                     imageFilter = state.imageFilter,
-                    autoStitch = state.webtoonAutoStitch,
+                    onPageChanged = onPageChanged,
                     onTap = onTap,
-                    onLongPress = onLongPress,
-                    onPageChanged = onPageChanged
+                    onLongPress = onLongPress
                 )
-            ReaderMode.HORIZONTAL_RTL ->
-                if (state.dualPageLandscape && isLandscape) {
-                    DualPageReader(
-                        pages = state.pages,
-                        rtl = true,
-                        initialPage = state.currentPage,
-                        imageFilter = state.imageFilter,
-                        onPageChanged = onPageChanged,
-                        onTap = onTap,
-                        onLongPress = onLongPress
-                    )
-                } else {
-                    HorizontalReader(pages = state.pages, rtl = true,
-                        initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress)
-                }
-            ReaderMode.HORIZONTAL_LTR ->
-                if (state.dualPageLandscape && isLandscape) {
-                    DualPageReader(
-                        pages = state.pages,
-                        rtl = false,
-                        initialPage = state.currentPage,
-                        imageFilter = state.imageFilter,
-                        onPageChanged = onPageChanged,
-                        onTap = onTap,
-                        onLongPress = onLongPress
-                    )
-                } else {
-                    HorizontalReader(pages = state.pages, rtl = false,
-                        initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress)
-                }
+            } else {
+                HorizontalReader(pages = state.pages, rtl = true,
+                    initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress)
+            }
+        ReaderMode.HORIZONTAL_LTR ->
+            if (state.dualPageLandscape && isLandscape) {
+                DualPageReader(
+                    pages = state.pages,
+                    rtl = false,
+                    initialPage = state.currentPage,
+                    imageFilter = state.imageFilter,
+                    onPageChanged = onPageChanged,
+                    onTap = onTap,
+                    onLongPress = onLongPress
+                )
+            } else {
+                HorizontalReader(pages = state.pages, rtl = false,
+                    initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress)
+            }
     }
 }
 
