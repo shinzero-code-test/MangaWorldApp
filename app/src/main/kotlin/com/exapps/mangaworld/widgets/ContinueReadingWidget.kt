@@ -70,7 +70,7 @@ private fun ContinueReadingContent(
             return@WidgetCard
         }
 
-        val imageProvider = cover?.let { coil.ImageProvider(it) }
+        val imageProvider = cover?.let { ImageProvider(it) }
         if (imageProvider != null) {
             WidgetCover(provider = imageProvider, description = data.title, showCover = showCover)
             Spacer(GlanceModifier.height(10.dp))
