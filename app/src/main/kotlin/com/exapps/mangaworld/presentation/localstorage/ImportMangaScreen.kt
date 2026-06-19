@@ -309,7 +309,7 @@ fun ImportMangaScreen(
                                 description = mangaDescription,
                                 genres = mangaGenres.split(",").map { it.trim() }.filter { it.isNotBlank() },
                                 chapters = chapters,
-                                onProgress = { progress = it }
+                                onProgress = { importProgress = it }
                             )
                             isProcessing = false
                         }
@@ -404,7 +404,7 @@ private suspend fun importManga(
                 file.name?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull() ?: 0f
             }.forEach { archiveFile ->
                 processedCount++
-                val chapterName = archiveFile.nameWithoutExtension ?: "chapter_$processedCount"
+                val chapterName = archiveFile.name?.substringBeforeLast('.') ?: "chapter_$processedCount"
                 val chapterDir = File(mangaDir, chapterName)
                 chapterDir.mkdirs()
 
