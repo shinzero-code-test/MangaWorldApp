@@ -21,6 +21,7 @@ import dagger.multibindings.IntoMap
 import dagger.multibindings.StringKey
 import com.exapps.mangaworld.core.firebase.FirebaseNetworkInterceptor
 import okhttp3.Cache
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import java.io.File
@@ -47,6 +48,7 @@ object NetworkModule {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
+            .connectionPool(ConnectionPool(10, 5, TimeUnit.MINUTES))
             .addInterceptor(firebaseNetworkInterceptor)
             .addInterceptor(logging)
             .addInterceptor { chain ->
