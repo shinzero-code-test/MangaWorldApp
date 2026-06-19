@@ -65,8 +65,6 @@ sealed class Screen(val route: String) {
     object Goals : Screen("goals")
     object More : Screen("more")
     object Sources : Screen("sources")
-    object More : Screen("more")
-    object Sources : Screen("sources")
     object Community : Screen("community/{sourceId}/{mangaId}/{slug}?chapterUrl={chapterUrl}&commentId={commentId}") {
         fun createRoute(sourceId: String, mangaId: String, slug: String, chapterUrl: String? = null, commentId: String? = null): String {
             val encoded = chapterUrl?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
