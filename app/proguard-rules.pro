@@ -29,9 +29,24 @@
 -keepclasseswithmembers class * {
     @dagger.hilt.android.AndroidEntryPoint <methods>;
 }
+-keep class dagger.hilt.** { *; }
+-keep class * extends dagger.hilt.android.internal.managers.ViewComponentManager$FragmentContextWrapper { *; }
 
 # ── Coil ───────────────────────────────────────────────────────────────────────
 -dontwarn coil.**
+-keep class coil.** { *; }
+
+# ── Firebase ───────────────────────────────────────────────────────────────────
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
+
+# ── ML Kit ─────────────────────────────────────────────────────────────────────
+-keep class com.google.mlkit.** { *; }
+-dontwarn com.google.mlkit.**
+
+# ── Glance / Widgets ──────────────────────────────────────────────────────────
+-keep class androidx.glance.** { *; }
+-dontwarn androidx.glance.**
 
 # ── Compose ────────────────────────────────────────────────────────────────────
 -keepclassmembers class * extends androidx.lifecycle.ViewModel {
@@ -40,6 +55,7 @@
 
 # ── App models ─────────────────────────────────────────────────────────────────
 -keep class com.exapps.mangaworld.domain.model.** { *; }
+-keep class com.exapps.mangaworld.core.data.remote.scraper.** { *; }
 
 # ── General ────────────────────────────────────────────────────────────────────
 -keepattributes SourceFile,LineNumberTable
