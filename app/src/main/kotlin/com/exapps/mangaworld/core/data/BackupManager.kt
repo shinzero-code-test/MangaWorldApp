@@ -33,75 +33,65 @@ class BackupManager @Inject constructor(
     suspend fun createBackup(outputFile: File) = withContext(Dispatchers.IO) {
         ZipOutputStream(FileOutputStream(outputFile)).use { zip ->
             // Favorites
-            writeJsonArray(zip, BackupSection.FAVORITES) {
-                val favorites = database.favoriteDao().getFavoritesList()
-                JSONArray().apply {
-                    favorites.forEach { fav ->
-                        put(JSONObject().apply {
-                            put("mangaId", fav.mangaId)
-                            put("slug", fav.slug)
-                            put("title", fav.title)
-                            put("coverUrl", fav.coverUrl)
-                            put("sourceId", fav.sourceId)
-                            put("addedAt", fav.addedAt)
-                        })
-                    }
-                }.toString()
-            }
+            val favorites = database.favoriteDao().getFavoritesList()
+            val favoritesJson = JSONArray().apply {
+                favorites.forEach { fav ->
+                    put(JSONObject().apply {
+                        put("mangaId", fav.mangaId)
+                        put("slug", fav.slug)
+                        put("title", fav.title)
+                        put("coverUrl", fav.coverUrl)
+                        put("sourceId", fav.sourceId)
+                        put("addedAt", fav.addedAt)
+                    })
+                }
+            }.toString()
+            writeJson(zip, BackupSection.FAVORITES, favoritesJson)
 
             // History
-            writeJsonArray(zip, BackupSection.HISTORY) {
-                val history = database.readingHistoryDao().getAll()
-                JSONArray().apply {
-                    history.forEach { item ->
-                        put(JSONObject().apply {
-                            put("mangaId", item.mangaId)
-                            put("slug", item.slug)
-                            put("title", item.title)
-                            put("coverUrl", item.coverUrl)
-                            put("sourceId", item.sourceId)
-                            put("lastChapterNumber", item.lastChapterNumber.toDouble())
-                            put("lastReadAt", item.lastReadAt)
-                        })
-                    }
-                }.toString()
-            }
+            val history = database.readingHistoryDao().getAll()
+            val historyJson = JSONArray().apply {
+                history.forEach { item ->
+                    put(JSONObject().apply {
+                        put("mangaId", item.mangaId)
+                        put("slug", item.slug)
+                        put("title", item.title)
+                        put("coverUrl", item.coverUrl)
+                        put("sourceId", item.sourceId)
+                        put("lastChapterNumber", item.lastChapterNumber.toDouble())
+                        put("lastReadAt", item.lastReadAt)
+                    })
+                }
+            }.toString()
+            writeJson(zip, BackupSection.HISTORY, historyJson)
 
             // Settings (placeholder)
-            writeJsonArray(zip, BackupSection.SETTINGS) {
-                JSONObject().apply {
-                    put("version", 1)
-                    put("exportedAt", System.currentTimeMillis())
-                }.toString()
-            }
+            writeJson(zip, BackupSection.SETTINGS, JSONObject().apply {
+                put("version", 1)
+                put("exportedAt", System.currentTimeMillis())
+            }.toString())
 
             // Collections (placeholder)
-            writeJsonArray(zip, BackupSection.COLLECTIONS) {
-                JSONArray().toString()
-            }
+            writeJson(zip, BackupSection.COLLECTIONS, JSONArray().toString())
 
             // Annotations
-            writeJsonArray(zip, BackupSection.ANNOTATIONS) {
-                val annotations = database.readerAnnotationDao().getAll()
-                JSONArray().apply {
-                    annotations.forEach { ann ->
-                        put(JSONObject().apply {
-                            put("mangaId", ann.mangaId)
-                            put("chapterUrl", ann.chapterUrl)
-                            put("pageIndex", ann.pageIndex)
-                            put("note", ann.note ?: "")
-                            put("isBookmarked", ann.isBookmarked)
-                            put("updatedAt", ann.updatedAt)
-                        })
-                    }
-                }.toString()
-            }
+            val annotations = database.readerAnnotationDao().getAll()
+            val annotationsJson = JSONArray().apply {
+                annotations.forEach { ann ->
+                    put(JSONObject().apply {
+                        put("mangaId", ann.mangaId)
+                        put("chapterUrl", ann.chapterUrl)
+                        put("pageIndex", ann.pageIndex)
+                        put("note", ann.note ?: "")
+                        put("isBookmarked", ann.isBookmarked)
+                        put("updatedAt", ann.updatedAt)
+                    })
+                }
+            }.toString()
+            writeJson(zip, BackupSection.ANNOTATIONS, annotationsJson)
 
             // Downloads metadata
-            writeJsonArray(zip, BackupSection.DOWNLOADS) {
-                val downloads = database.downloadedMangaDao().observeAll()
-                JSONArray().toString()
-            }
+            writeJson(zip, BackupSection.DOWNLOADS, JSONArray().toString())
         }
     }
 
@@ -154,13 +144,9 @@ class BackupManager @Inject constructor(
         }
     }
 
-    private suspend fun writeJsonArray(
-        zip: ZipOutputStream,
-        section: BackupSection,
-        data: () -> String
-    ) {
+    private fun writeJson(zip: ZipOutputStream, section: BackupSection, data: String) {
         zip.putNextEntry(ZipEntry(section.entryName))
-        zip.write(data().toByteArray())
+        zip.write(data.toByteArray())
         zip.closeEntry()
     }
 }

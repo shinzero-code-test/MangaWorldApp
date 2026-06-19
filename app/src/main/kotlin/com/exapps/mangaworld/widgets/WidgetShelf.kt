@@ -2,12 +2,11 @@ package com.exapps.mangaworld.widgets
 
 import android.content.Context
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext
-import androidx.glance.LocalSize
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
@@ -19,7 +18,6 @@ import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
-import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -61,7 +59,7 @@ private fun WidgetShelfContent(
             text = "الوصول السريع",
             style = TextStyle(
                 color = ColorProvider(day = androidx.compose.ui.graphics.Color(0xFFE4E1ED), night = androidx.compose.ui.graphics.Color(0xFFE4E1ED)),
-                fontSize = androidx.compose.ui.unit.TextUnit(14.sp, androidx.compose.ui.unit.TextUnitType.Sp),
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
             )
         )
@@ -108,7 +106,7 @@ private fun ShelfItem(
             text = label,
             style = TextStyle(
                 color = ColorProvider(day = androidx.compose.ui.graphics.Color(0xFFE4E1ED), night = androidx.compose.ui.graphics.Color(0xFFE4E1ED)),
-                fontSize = androidx.compose.ui.unit.TextUnit(12.sp, androidx.compose.ui.unit.TextUnitType.Sp)
+                fontSize = 12.sp
             )
         )
     }
