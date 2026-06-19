@@ -72,8 +72,8 @@ android {
         applicationId = "com.exapps.mangaworld"
         minSdk        = 26
         targetSdk     = 35
-        versionCode   = 73
-        versionName   = "3.13.3"
+        versionCode   = 74
+        versionName   = "3.14.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -226,11 +226,6 @@ dependencies {
     implementation("com.google.firebase:firebase-appcheck-playintegrity")
     implementation("com.google.firebase:firebase-appcheck-debug")
     implementation(libs.play.services.auth)
-    implementation("com.google.mlkit:text-recognition:16.0.1")
-    implementation("com.google.mlkit:translate:17.0.3")
-    implementation("com.google.mlkit:smart-reply:17.0.4")
-    implementation("com.google.mlkit:image-labeling:17.0.9")
-    implementation("com.google.mlkit:language-id:17.0.6")
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
     // Testing

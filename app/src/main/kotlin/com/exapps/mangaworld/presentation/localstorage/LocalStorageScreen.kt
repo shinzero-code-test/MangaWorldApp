@@ -30,7 +30,7 @@ import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.withFirebaseTrace
 import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
-import com.exapps.mangaworld.core.ml.MlKitCoverTagger
+import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.components.GradientDivider
 import com.exapps.mangaworld.presentation.theme.MangaColors
@@ -45,7 +45,6 @@ import javax.inject.Inject
 @HiltViewModel
 class LocalStorageViewModel @Inject constructor(
     private val manager: DownloadQueueManager,
-    private val coverTagger: MlKitCoverTagger,
     private val remoteConfigManager: FirebaseRemoteConfigManager,
     private val analyticsManager: FirebaseAnalyticsManager
 ) : ViewModel() {
@@ -61,34 +60,8 @@ class LocalStorageViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            combine(manager.observeDownloadedMangas(), remoteConfigManager.mlCoverTaggingEnabled) { mangas, enabled ->
-                mangas to enabled
-            }.collectLatest { (mangas, enabled) ->
-                if (!enabled) {
-                    _autoTags.value = emptyMap()
-                    return@collectLatest
-                }
-
-                val preserved = _autoTags.value.filterKeys { existingId ->
-                    mangas.any { it.mangaId == existingId }
-                }
-
-                val missing = mangas.filter { it.mangaId !in preserved }
-                val generated = coroutineScope {
-                    missing.map { manga ->
-                        async {
-                            manga.mangaId to coverTagger.generateTags(manga.localCoverPath, manga.coverUrl)
-                        }
-                    }.associate { deferred -> deferred.await() }
-                }.filterValues { it.isNotEmpty() }
-
-                generated.forEach { (mangaId, tags) ->
-                    mangas.firstOrNull { it.mangaId == mangaId }?.let { manga ->
-                        analyticsManager.logCoverTagsGenerated(manga.sourceId, tags.size)
-                    }
-                }
-
-                _autoTags.value = preserved + generated
+            manager.observeDownloadedMangas().collectLatest { mangas ->
+                _autoTags.value = emptyMap()
             }
         }
     }

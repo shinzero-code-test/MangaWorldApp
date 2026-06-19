@@ -52,8 +52,7 @@ import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.exapps.mangaworld.core.firebase.filterMutedComments
-import com.exapps.mangaworld.core.ml.MlKitSmartReplySuggester
-import com.exapps.mangaworld.core.ml.SmartReplyMessageInput
+import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.CommunityComment
 import com.exapps.mangaworld.domain.model.CommunityProfile
@@ -97,7 +96,6 @@ class CommunityViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val communityRepository: CommunityRepository,
     private val settingsRepository: SettingsRepository,
-    private val smartReplySuggester: MlKitSmartReplySuggester,
     private val sessionManager: FirebaseSessionManager,
     private val analyticsManager: FirebaseAnalyticsManager,
     private val remoteConfigManager: FirebaseRemoteConfigManager
@@ -148,31 +146,10 @@ class CommunityViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            combine(commentsFlow, _replyTo, remoteConfigManager.mlSmartReplyEnabled) { comments, replyTo, enabled ->
-                Triple(comments, replyTo, enabled)
-            }.collectLatest { (comments, replyTo, enabled) ->
-                    if (!enabled) {
-                        _suggestions.value = emptyList()
-                        return@collectLatest
-                    }
-                    val currentUserId = sessionManager.currentUserId().orEmpty()
-                    val seededComments = buildList {
-                        replyTo?.let(::add)
-                        addAll(comments.takeLast(8))
-                    }.distinctBy { it.id }
-                    val inputs = seededComments.map { comment ->
-                        SmartReplyMessageInput(
-                            authorId = comment.authorUid,
-                            text = comment.text,
-                            isLocalUser = comment.authorUid == currentUserId,
-                            timestampMs = comment.createdAt
-                        )
-                    }
-                    val generated = runCatching { smartReplySuggester.suggestReplies(inputs) }.getOrDefault(emptyList())
-                    _suggestions.value = generated
-                    if (generated.isNotEmpty()) {
-                        analyticsManager.logSmartReplySurface("community_comments", generated.size)
-                    }
+            combine(commentsFlow, _replyTo) { comments, replyTo ->
+                Pair(comments, replyTo)
+            }.collectLatest { (comments, replyTo) ->
+                    _suggestions.value = emptyList()
                 }
         }
     }

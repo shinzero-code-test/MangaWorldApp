@@ -39,8 +39,7 @@ import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
-import com.exapps.mangaworld.core.ml.MlKitSmartReplySuggester
-import com.exapps.mangaworld.core.ml.SmartReplyMessageInput
+import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.model.CommunityChatMessage
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
@@ -58,7 +57,6 @@ import javax.inject.Inject
 class CommunityChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val communityRepository: CommunityRepository,
-    private val smartReplySuggester: MlKitSmartReplySuggester,
     private val sessionManager: FirebaseSessionManager,
     private val analyticsManager: FirebaseAnalyticsManager,
     private val remoteConfigManager: FirebaseRemoteConfigManager
@@ -73,27 +71,8 @@ class CommunityChatViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            combine(messages, remoteConfigManager.mlSmartReplyEnabled) { latestMessages, enabled ->
-                latestMessages to enabled
-            }.collectLatest { (latestMessages, enabled) ->
-                if (!enabled) {
-                    _suggestions.value = emptyList()
-                    return@collectLatest
-                }
-                val currentUserId = sessionManager.currentUserId().orEmpty()
-                val inputs = latestMessages.takeLast(10).map { message ->
-                    SmartReplyMessageInput(
-                        authorId = message.authorUid,
-                        text = message.text,
-                        isLocalUser = message.authorUid == currentUserId,
-                        timestampMs = message.createdAt
-                    )
-                }
-                val generated = runCatching { smartReplySuggester.suggestReplies(inputs) }.getOrDefault(emptyList())
-                _suggestions.value = generated
-                if (generated.isNotEmpty()) {
-                    analyticsManager.logSmartReplySurface("community_chat", generated.size)
-                }
+            messages.collectLatest { latestMessages ->
+                _suggestions.value = emptyList()
             }
         }
     }

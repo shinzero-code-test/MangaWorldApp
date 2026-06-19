@@ -40,10 +40,6 @@
 -keep class com.google.firebase.** { *; }
 -dontwarn com.google.firebase.**
 
-# ── ML Kit ─────────────────────────────────────────────────────────────────────
--keep class com.google.mlkit.** { *; }
--dontwarn com.google.mlkit.**
-
 # ── Glance / Widgets ──────────────────────────────────────────────────────────
 -keep class androidx.glance.** { *; }
 -dontwarn androidx.glance.**

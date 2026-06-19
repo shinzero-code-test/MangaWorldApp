@@ -62,7 +62,6 @@ fun ReaderScreen(
     var annotationsSheetOpen by remember { mutableStateOf(false) }
     var commentsSheetOpen by remember { mutableStateOf(false) }
     var settingsSheetOpen by remember { mutableStateOf(false) }
-    var translationSheetOpen by remember { mutableStateOf(false) }
     var commentText by remember { mutableStateOf("") }
     var commentSpoiler by remember { mutableStateOf(false) }
     val solverLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -172,11 +171,6 @@ fun ReaderScreen(
                 },
                 onBrowseAnnotations = { annotationsSheetOpen = true },
                 onOpenComments = { commentsSheetOpen = true },
-                translationEnabled = state.translation.enabled,
-                onTranslate = {
-                    translationSheetOpen = true
-                    viewModel.translateCurrentPage()
-                },
                 onOpenSettings = { settingsSheetOpen = true },
                 liveReaders = state.liveReaders,
                 hasPreviousChapter = state.prevChapterUrl != null,
@@ -337,18 +331,6 @@ fun ReaderScreen(
             }
         }
 
-        if (translationSheetOpen) {
-            ModalBottomSheet(onDismissRequest = {
-                translationSheetOpen = false
-                viewModel.clearTranslationResult()
-            }) {
-                ReaderTranslationSheet(
-                    translation = state.translation,
-                    onRetry = { viewModel.translateCurrentPage() }
-                )
-            }
-        }
-
         if (settingsSheetOpen) {
             ModalBottomSheet(onDismissRequest = { settingsSheetOpen = false }) {
                 ReaderSettingsSheet(
@@ -374,9 +356,7 @@ fun ReaderScreen(
                     onToggleBookmark = { viewModel.toggleBookmarkCurrentPage() },
                     onEditNote = { /* handled by caller */ },
                     onBrowseAnnotations = { /* handled by caller */ },
-                    onOpenComments = { /* handled by caller */ },
-                    onTranslate = { viewModel.translateCurrentPage() },
-                    translationEnabled = state.translation.enabled
+                    onOpenComments = { /* handled by caller */ }
                 )
             }
         }
@@ -636,8 +616,6 @@ private fun ReaderTopBar(
     onEditNote: () -> Unit,
     onBrowseAnnotations: () -> Unit,
     onOpenComments: () -> Unit,
-    translationEnabled: Boolean,
-    onTranslate: () -> Unit,
     onOpenSettings: () -> Unit,
     liveReaders: Int,
     hasPreviousChapter: Boolean,
@@ -682,60 +660,6 @@ private fun ReaderTopBar(
     }
 }
 
-@Composable
-private fun ReaderTranslationSheet(
-    translation: PageTranslationUiState,
-    onRetry: () -> Unit
-) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text("ترجمة الصفحة", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        when {
-            !translation.enabled -> {
-                Text("ميزة الترجمة غير مفعلة حالياً.", color = MangaColors.Muted)
-            }
-
-            translation.isLoading -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
-                    Text("جارٍ تحليل النص وترجمته...", color = MangaColors.OnSurfaceVariant)
-                }
-            }
-
-            translation.error != null -> {
-                Text(translation.error, color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = onRetry) { Text("إعادة المحاولة") }
-            }
-
-            translation.lines.isEmpty() -> {
-                Text("لم يتم العثور على نص قابل للترجمة في هذه الصفحة.", color = MangaColors.Muted)
-            }
-
-            else -> {
-                translation.sourceLanguageTag?.let { tag ->
-                    Text("اللغة المكتشفة: $tag", color = MangaColors.Cyan, style = MaterialTheme.typography.labelMedium)
-                }
-                translation.lines.forEachIndexed { index, line ->
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("الفقرة ${index + 1}", color = MangaColors.Cyan, style = MaterialTheme.typography.labelMedium)
-                            Text(line.originalText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                            Text(line.translatedText, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReaderSettingsSheet(
@@ -761,9 +685,7 @@ private fun ReaderSettingsSheet(
     onToggleBookmark: () -> Unit,
     onEditNote: () -> Unit,
     onBrowseAnnotations: () -> Unit,
-    onOpenComments: () -> Unit,
-    onTranslate: () -> Unit,
-    translationEnabled: Boolean
+    onOpenComments: () -> Unit
 ) {
     var expandedSection by remember { mutableStateOf<String?>(null) }
 
@@ -823,14 +745,6 @@ private fun ReaderSettingsSheet(
                     icon = Icons.Filled.Forum,
                     label = "النقاش",
                     onClick = onOpenComments
-                )
-            }
-            if (translationEnabled) {
-                ActionButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    icon = Icons.Filled.GTranslate,
-                    label = "ترجمة الصفحة",
-                    onClick = onTranslate
                 )
             }
         }

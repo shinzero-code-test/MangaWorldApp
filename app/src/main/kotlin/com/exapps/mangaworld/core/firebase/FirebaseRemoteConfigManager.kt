@@ -39,15 +39,6 @@ class FirebaseRemoteConfigManager @Inject constructor() {
     private val _scraperRuntimeConfig = MutableStateFlow(ScraperRuntimeConfig())
     val scraperRuntimeConfig: StateFlow<ScraperRuntimeConfig> = _scraperRuntimeConfig.asStateFlow()
 
-    private val _mlTranslationEnabled = MutableStateFlow(true)
-    val mlTranslationEnabled: StateFlow<Boolean> = _mlTranslationEnabled.asStateFlow()
-
-    private val _mlSmartReplyEnabled = MutableStateFlow(true)
-    val mlSmartReplyEnabled: StateFlow<Boolean> = _mlSmartReplyEnabled.asStateFlow()
-
-    private val _mlCoverTaggingEnabled = MutableStateFlow(true)
-    val mlCoverTaggingEnabled: StateFlow<Boolean> = _mlCoverTaggingEnabled.asStateFlow()
-
     init {
         remoteConfig.setConfigSettingsAsync(
             FirebaseRemoteConfigSettings.Builder()
@@ -68,10 +59,7 @@ class FirebaseRemoteConfigManager @Inject constructor() {
                 "scraper_retry_count" to 1,
                 "home_layout_variant" to "default",
                 "community_banned_keywords" to "",
-                "remote_alert_message" to "",
-                "ml_translation_enabled" to true,
-                "ml_smart_reply_enabled" to true,
-                "ml_cover_tagging_enabled" to true
+                "remote_alert_message" to ""
             )
         )
         applyState()
@@ -85,12 +73,6 @@ class FirebaseRemoteConfigManager @Inject constructor() {
     }
 
     fun currentScraperRuntimeConfig(): ScraperRuntimeConfig = scraperRuntimeConfig.value
-
-    fun isMlTranslationEnabled(): Boolean = mlTranslationEnabled.value
-
-    fun isMlSmartReplyEnabled(): Boolean = mlSmartReplyEnabled.value
-
-    fun isMlCoverTaggingEnabled(): Boolean = mlCoverTaggingEnabled.value
 
     private fun applyState() {
         val disabled = buildSet {
@@ -117,9 +99,6 @@ class FirebaseRemoteConfigManager @Inject constructor() {
             writeTimeoutSeconds = remoteConfig.getLong("scraper_write_timeout_seconds").toInt().coerceIn(5, 90),
             retryCount = remoteConfig.getLong("scraper_retry_count").toInt().coerceIn(0, 3)
         )
-        _mlTranslationEnabled.value = remoteConfig.getBoolean("ml_translation_enabled")
-        _mlSmartReplyEnabled.value = remoteConfig.getBoolean("ml_smart_reply_enabled")
-        _mlCoverTaggingEnabled.value = remoteConfig.getBoolean("ml_cover_tagging_enabled")
         RemoteSelectorOverridesStore.replaceAll(parseOverrides(overridesJson))
     }
 
