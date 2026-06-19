@@ -73,10 +73,12 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.Stable
 import javax.inject.Inject
 
 enum class CommunityTab { COMMENTS, REVIEWS }
 
+@Stable
 data class CommunityUiState(
     val title: String = "المجتمع",
     val comments: List<CommunityComment> = emptyList(),

@@ -10,8 +10,10 @@ import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.*
+import androidx.compose.runtime.Stable
 import javax.inject.Inject
 
+@Stable
 data class BrowseUiState(
     val query: String = "",
     val selectedGenre: String? = null,

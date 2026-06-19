@@ -50,6 +50,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.Stable
 import javax.inject.Inject
 
 data class SourceDiagnosticStatus(
@@ -60,6 +61,7 @@ data class SourceDiagnosticStatus(
     val error: String? = null
 )
 
+@Stable
 data class DiagnosticsUiState(
     val isLoading: Boolean = true,
     val appSettings: AppSettings = AppSettings(),

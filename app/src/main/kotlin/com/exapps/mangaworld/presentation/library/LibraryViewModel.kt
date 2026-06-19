@@ -10,10 +10,12 @@ import com.exapps.mangaworld.domain.repository.LibraryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.Stable
 import javax.inject.Inject
 
 enum class LibraryTab(val label: String) { FAVORITES("المفضلة"), HISTORY("السجل") }
 
+@Stable
 data class LibraryUiState(
     val activeTab: LibraryTab = LibraryTab.FAVORITES,
     val favorites: List<FavoriteManga> = emptyList(),

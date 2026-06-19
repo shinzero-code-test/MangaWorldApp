@@ -62,8 +62,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.Stable
 import javax.inject.Inject
 
+@Stable
 data class LatestUpdatesUiState(
     val isLoading: Boolean = true,
     val allItems: List<LatestChapterItem> = emptyList(),
