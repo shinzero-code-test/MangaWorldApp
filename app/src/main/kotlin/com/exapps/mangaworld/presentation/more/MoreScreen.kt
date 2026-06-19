@@ -16,7 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
-data class MoreMenuItemData(
+data class MoreMenuItem(
     val icon: ImageVector,
     val title: String,
     val subtitle: String? = null,
@@ -62,7 +62,7 @@ fun MoreScreen(
                 )
             }
             item {
-                MoreMenuItemData(
+                MoreMenuItem(
                     icon = Icons.Filled.Download,
                     title = "التنزيلات",
                     subtitle = "الفصول المنزّلة",
@@ -70,7 +70,7 @@ fun MoreScreen(
                 )
             }
             item {
-                MoreMenuItemData(
+                MoreMenuItem(
                     icon = Icons.Filled.FolderOpen,
                     title = "المحلي",
                     subtitle = "المانجا المحفوظة محلياً",
@@ -87,7 +87,7 @@ fun MoreScreen(
                 )
             }
             item {
-                MoreMenuItemData(
+                MoreMenuItem(
                     icon = Icons.Filled.BarChart,
                     title = "إحصائيات القراءة",
                     subtitle = "وقت القراءة والإنجازات",
@@ -95,7 +95,7 @@ fun MoreScreen(
                 )
             }
             item {
-                MoreMenuItemData(
+                MoreMenuItem(
                     icon = Icons.Filled.EmojiEvents,
                     title = "الأهداف والإنجازات",
                     subtitle = "تتبع تقدمك",
@@ -112,7 +112,7 @@ fun MoreScreen(
                 )
             }
             item {
-                MoreMenuItemData(
+                MoreMenuItem(
                     icon = Icons.Filled.List,
                     title = "القوائم المخصصة",
                     subtitle = "تنظيم المانجا في قوائم",
@@ -120,7 +120,7 @@ fun MoreScreen(
                 )
             }
             item {
-                MoreMenuItemData(
+                MoreMenuItem(
                     icon = Icons.Filled.Cloud,
                     title = "المزامنة السحابية",
                     subtitle = "مزامنة البيانات مع السحابة",
@@ -137,7 +137,7 @@ fun MoreScreen(
                 )
             }
             item {
-                MoreMenuItemData(
+                MoreMenuItem(
                     icon = Icons.Filled.Settings,
                     title = "الإعدادات",
                     subtitle = "تخصيص التطبيق",
@@ -145,7 +145,7 @@ fun MoreScreen(
                 )
             }
             item {
-                MoreMenuItemData(
+                MoreMenuItem(
                     icon = Icons.Filled.BugReport,
                     title = "التشخيص",
                     subtitle = "معلومات تقنية",
@@ -157,7 +157,7 @@ fun MoreScreen(
 }
 
 @Composable
-private fun MoreMenuItemData(
+private fun MoreMenuItemRow(
     icon: ImageVector,
     title: String,
     subtitle: String? = null,
