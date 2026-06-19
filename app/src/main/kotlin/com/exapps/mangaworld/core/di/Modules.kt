@@ -20,6 +20,8 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoMap
 import dagger.multibindings.StringKey
 import com.exapps.mangaworld.core.firebase.FirebaseNetworkInterceptor
+import coil.ImageLoader
+import coil.disk.DiskCache
 import okhttp3.Cache
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
@@ -60,6 +62,20 @@ object NetworkModule {
             }
             .build()
     }
+
+    @Provides
+    @Singleton
+    fun provideImageLoader(@ApplicationContext ctx: Context, okHttpClient: OkHttpClient): ImageLoader =
+        ImageLoader.Builder(ctx)
+            .okHttpClient(okHttpClient)
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(File(ctx.cacheDir, "coil_image_cache"))
+                    .maxSizeBytes(250L * 1024L * 1024L)
+                    .build()
+            }
+            .crossfade(true)
+            .build()
 }
 
 @Module
