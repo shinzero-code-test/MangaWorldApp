@@ -39,7 +39,6 @@ import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
-import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.model.CommunityChatMessage
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors

@@ -30,7 +30,6 @@ import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.withFirebaseTrace
 import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
-import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.components.GradientDivider
 import com.exapps.mangaworld.presentation.theme.MangaColors
