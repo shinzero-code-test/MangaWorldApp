@@ -294,42 +294,9 @@ class OlympusScraper @Inject constructor(
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query.trim(), "UTF-8")
-        val url = "${source.baseUrl}/ajax/search?keyword=$encoded"
-
-        val domain = runCatching { java.net.URI(url).host }.getOrNull() ?: ""
-        val cookies = getCookiesForDomain(url) ?: CookieCache.get(domain)
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", BaseScraperImpl.USER_AGENT)
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-            .header("Accept-Language", "ar,en;q=0.9")
-            .header("Referer", source.baseUrl + "/series")
-            .header("X-Requested-With", "XMLHttpRequest")
-            .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
-            .build()
-
-        val body = client.newCall(request).execute().use { response ->
-            response.body?.string() ?: ""
-        }
-
-        if (body.isBlank()) {
-            fetchDocument("${source.baseUrl}/series?keyword=$encoded").let(::parseMangaGrid)
-        }
-        else if (
-            body.contains("Just a moment", ignoreCase = true) ||
-            body.contains("Attention Required", ignoreCase = true) ||
-            body.contains("cf-chl", ignoreCase = true)
-        ) {
-            throw CloudflareChallengeException("olympustaff.com", url)
-        } else {
-            val trimmed = body.trimStart()
-            val parsed = if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
-                parseJsonSearchResults(body)
-            } else {
-                parseAjaxSearchHtml(body)
-            }
-            if (parsed.isNotEmpty()) parsed else fetchDocument("${source.baseUrl}/series?keyword=$encoded").let(::parseMangaGrid)
-        }
+        // Correct URL format per Kotatsu reference: /?search=<query>&page=<n>
+        val doc = fetchDocument("${source.baseUrl}/?search=$encoded&page=$page")
+        parseMangaGrid(doc)
     }
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
@@ -391,6 +358,34 @@ class OlympusScraper @Inject constructor(
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     private fun parseMangaGrid(doc: org.jsoup.nodes.Document): List<MangaItem> {
+        // Search results use .listupd .bs .bsx pattern (per Kotatsu reference)
+        val searchResults = doc.select(".listupd .bsx, .listupd .bs").mapNotNull { card ->
+            val linkEl = card.selectFirst("a[href*='/series/']") ?: return@mapNotNull null
+            val imgEl = card.selectFirst("img")
+            val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
+            val slug = href.substringAfterLast("/series/").trimEnd('/').takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val title = card.selectFirst(".tt")?.text()?.cleanText()
+                ?: card.selectFirst("h3")?.text()?.cleanText()
+                ?: imgEl?.attr("alt")?.cleanText().ifBlank { return@mapNotNull null }
+            val coverUrl = imgEl?.attr("abs:src")?.replace("thumbnail_", "")?.ifEmpty {
+                imgEl.attr("src")?.absoluteUrl()
+            }?.encodeForUrl().orEmpty()
+            val statusText = card.selectFirst(".status")?.text()?.cleanText()
+            val typeText = card.selectFirst(".type")?.text()?.cleanText()
+            MangaItem(
+                id = "olympus_$slug",
+                slug = slug,
+                title = title,
+                coverUrl = coverUrl,
+                source = source,
+                status = MangaStatus.from(statusText),
+                type = MangaType.from(typeText),
+                url = href
+            )
+        }
+        if (searchResults.isNotEmpty()) return searchResults.distinctBy { it.url }
+
+        // Fallback: home page style boxes
         val latestBoxSelector = remoteSelector("home_latest_boxes", ".box:has(.imgu a[href*='/series/']):has(.info h3)")
         val latestTitleSelector = remoteSelector("home_latest_title", ".info h3")
         val latestLinkSelector = remoteSelector("home_latest_link", ".imgu a[href*='/series/']")

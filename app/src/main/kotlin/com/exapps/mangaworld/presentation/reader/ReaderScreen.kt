@@ -367,7 +367,16 @@ fun ReaderScreen(
                     onSmartPrefetchChange = {},
                     onPageSpacingChange = {},
                     onVolumeButtonChange = {},
-                    onDoubleTapZoomChange = {}
+                    onDoubleTapZoomChange = {},
+                    onDownload = { viewModel.downloadCurrentChapter() },
+                    onCancelDownload = { viewModel.cancelDownload() },
+                    onRetryDownload = { viewModel.retryCurrentChapterDownload() },
+                    onToggleBookmark = { viewModel.toggleBookmarkCurrentPage() },
+                    onEditNote = { /* handled by caller */ },
+                    onBrowseAnnotations = { /* handled by caller */ },
+                    onOpenComments = { /* handled by caller */ },
+                    onTranslate = { viewModel.translateCurrentPage() },
+                    translationEnabled = state.translation.enabled
                 )
             }
         }
@@ -665,39 +674,8 @@ private fun ReaderTopBar(
                 IconButton(onClick = onNextChapter, enabled = hasNextChapter) {
                     Icon(Icons.Filled.NavigateNext, "الفصل التالي", tint = Color.White)
                 }
-                IconButton(onClick = onDownload, enabled = !downloadInProgress) {
-                    Icon(Icons.Filled.Download, "تنزيل", tint = Color.White)
-                }
-                IconButton(onClick = onToggleBookmark) {
-                    Icon(if (hasBookmark) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, "إشارة", tint = Color.White)
-                }
-                IconButton(onClick = onEditNote) {
-                    Icon(Icons.Filled.EditNote, "ملاحظة", tint = Color.White)
-                }
-                IconButton(onClick = onBrowseAnnotations) {
-                    Icon(Icons.Filled.FormatListBulleted, "الإشارات والملاحظات", tint = Color.White)
-                }
-                IconButton(onClick = onOpenComments) {
-                    Icon(Icons.Filled.Forum, "نقاش الفصل", tint = Color.White)
-                }
-                if (translationEnabled) {
-                    IconButton(onClick = onTranslate) {
-                        Icon(Icons.Filled.GTranslate, "ترجمة الصفحة", tint = Color.White)
-                    }
-                }
-                if (downloadInProgress) {
-                    IconButton(onClick = onCancelDownload) {
-                        Icon(Icons.Filled.Close, "إلغاء التنزيل", tint = Color.White)
-                    }
-                } else if (canRetry) {
-                    IconButton(onClick = onRetryDownload) {
-                        Icon(Icons.Filled.Refresh, "إعادة المحاولة", tint = Color.White)
-                    }
-                }
-                Box {
                 IconButton(onClick = onOpenSettings) {
                     Icon(Icons.Filled.MoreVert, "إعدادات", tint = Color.White)
-                }
                 }
             }
         }
@@ -776,7 +754,16 @@ private fun ReaderSettingsSheet(
     onSmartPrefetchChange: (Boolean) -> Unit,
     onPageSpacingChange: (Int) -> Unit,
     onVolumeButtonChange: (Boolean) -> Unit,
-    onDoubleTapZoomChange: (Boolean) -> Unit
+    onDoubleTapZoomChange: (Boolean) -> Unit,
+    onDownload: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onRetryDownload: () -> Unit,
+    onToggleBookmark: () -> Unit,
+    onEditNote: () -> Unit,
+    onBrowseAnnotations: () -> Unit,
+    onOpenComments: () -> Unit,
+    onTranslate: () -> Unit,
+    translationEnabled: Boolean
 ) {
     var expandedSection by remember { mutableStateOf<String?>(null) }
 
@@ -785,6 +772,68 @@ private fun ReaderSettingsSheet(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("إعدادات القارئ", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+        // Quick Actions
+        SectionHeader("الإجراءات السريعة", "actions", expandedSection, { expandedSection = it }) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    icon = if (state.bookmarkedPages.isNotEmpty()) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                    label = "إشارة",
+                    onClick = onToggleBookmark
+                )
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Filled.Download,
+                    label = "تنزيل",
+                    onClick = onDownload,
+                    enabled = !state.downloadInProgress
+                )
+                if (state.downloadInProgress) {
+                    ActionButton(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Filled.Close,
+                        label = "إلغاء",
+                        onClick = onCancelDownload,
+                        tint = MangaColors.Error
+                    )
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Filled.EditNote,
+                    label = "ملاحظة",
+                    onClick = onEditNote
+                )
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Filled.FormatListBulleted,
+                    label = "الإشارات",
+                    onClick = onBrowseAnnotations
+                )
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Filled.Forum,
+                    label = "النقاش",
+                    onClick = onOpenComments
+                )
+            }
+            if (translationEnabled) {
+                ActionButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Filled.GTranslate,
+                    label = "ترجمة الصفحة",
+                    onClick = onTranslate
+                )
+            }
+        }
 
         // Reading Mode Section
         SectionHeader("وضع القراءة", "mode", expandedSection, { expandedSection = it }) {
@@ -856,6 +905,29 @@ private fun ReaderSettingsSheet(
             SwitchRow("التكبير بالنقر المزدوج", state.doubleTapZoom, onDoubleTapZoomChange)
             SwitchRow("الاهتزازات اللمسية", state.hapticsEnabled, onHapticsChange)
         }
+    }
+}
+
+@Composable
+private fun ActionButton(
+    modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    tint: androidx.compose.ui.graphics.Color = MangaColors.OnSurface
+) {
+    OutlinedButton(
+        modifier = modifier,
+        onClick = onClick,
+        enabled = enabled,
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = tint
+        )
+    ) {
+        Icon(icon, contentDescription = label, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall)
     }
 }
 
