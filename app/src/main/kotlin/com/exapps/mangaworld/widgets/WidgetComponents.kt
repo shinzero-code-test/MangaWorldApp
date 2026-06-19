@@ -14,6 +14,7 @@ import androidx.glance.background
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
@@ -41,7 +42,7 @@ internal fun WidgetCard(
         modifier = GlanceModifier
             .fillMaxSize()
             .then(
-                if (transparentBg) GlanceModifier.background(androidx.glance.color.ColorProvider(androidx.glance.unit.ColorProvider(day = androidx.compose.ui.graphics.Color.Transparent, night = androidx.compose.ui.graphics.Color.Transparent)))
+                if (transparentBg) GlanceModifier.background(ColorProvider(day = androidx.compose.ui.graphics.Color.Transparent, night = androidx.compose.ui.graphics.Color.Transparent))
                 else GlanceModifier.background(GlanceTheme.colors.surface)
             )
             .cornerRadius(20.dp)
