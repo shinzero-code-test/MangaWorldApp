@@ -366,7 +366,7 @@ class OlympusScraper @Inject constructor(
             val slug = href.substringAfterLast("/series/").trimEnd('/').takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val title = card.selectFirst(".tt")?.text()?.cleanText()
                 ?: card.selectFirst("h3")?.text()?.cleanText()
-                ?: imgEl?.attr("alt")?.cleanText().ifBlank { return@mapNotNull null }
+                ?: imgEl?.attr("alt")?.cleanText()?.ifBlank { null } ?: return@mapNotNull null
             val coverUrl = imgEl?.attr("abs:src")?.replace("thumbnail_", "")?.ifEmpty {
                 imgEl.attr("src")?.absoluteUrl()
             }?.encodeForUrl().orEmpty()
