@@ -876,10 +876,9 @@ private fun SectionHeader(
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(
-                Modifier.fillMaxWidth(),
+                Modifier.fillMaxWidth().clickable { onToggle(if (isExpanded) "" else sectionKey) },
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable { onToggle(if (isExpanded) "" else sectionKey) }
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
                 Icon(
