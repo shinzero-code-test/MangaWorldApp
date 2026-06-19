@@ -22,7 +22,6 @@ import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.core.widget.WidgetEntryPoint
 import dagger.hilt.android.EntryPointAccessors
@@ -58,9 +57,8 @@ private fun WidgetShelfContent(
         Text(
             text = "الوصول السريع",
             style = TextStyle(
-                color = ColorProvider(day = androidx.compose.ui.graphics.Color(0xFFE4E1ED), night = androidx.compose.ui.graphics.Color(0xFFE4E1ED)),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
             )
         )
         Spacer(GlanceModifier.height(8.dp))
@@ -105,7 +103,6 @@ private fun ShelfItem(
         Text(
             text = label,
             style = TextStyle(
-                color = ColorProvider(day = androidx.compose.ui.graphics.Color(0xFFE4E1ED), night = androidx.compose.ui.graphics.Color(0xFFE4E1ED)),
                 fontSize = 12.sp
             )
         )
