@@ -361,7 +361,13 @@ fun ReaderScreen(
                     onLiveReadersChange = viewModel::setShowLiveReadersOverlay,
                     onReactionsChange = viewModel::setShowReactionOverlay,
                     onDualPageChange = viewModel::setDualPageLandscape,
-                    onWebtoonStitchChange = viewModel::setWebtoonAutoStitch
+                    onWebtoonStitchChange = viewModel::setWebtoonAutoStitch,
+                    onKeepScreenOnChange = {},
+                    onHapticsChange = {},
+                    onSmartPrefetchChange = {},
+                    onPageSpacingChange = {},
+                    onVolumeButtonChange = {},
+                    onDoubleTapZoomChange = {}
                 )
             }
         }
@@ -764,38 +770,129 @@ private fun ReaderSettingsSheet(
     onLiveReadersChange: (Boolean) -> Unit,
     onReactionsChange: (Boolean) -> Unit,
     onDualPageChange: (Boolean) -> Unit,
-    onWebtoonStitchChange: (Boolean) -> Unit
+    onWebtoonStitchChange: (Boolean) -> Unit,
+    onKeepScreenOnChange: (Boolean) -> Unit,
+    onHapticsChange: (Boolean) -> Unit,
+    onSmartPrefetchChange: (Boolean) -> Unit,
+    onPageSpacingChange: (Int) -> Unit,
+    onVolumeButtonChange: (Boolean) -> Unit,
+    onDoubleTapZoomChange: (Boolean) -> Unit
 ) {
-    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    var expandedSection by remember { mutableStateOf<String?>(null) }
+
+    Column(
+        Modifier.fillMaxWidth().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         Text("إعدادات القارئ", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text("وضع القراءة", color = MangaColors.Muted)
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            ReaderMode.entries.forEachIndexed { index, mode ->
-                SegmentedButton(
-                    selected = state.readerMode == mode,
-                    onClick = { onModeChange(mode) },
-                    shape = SegmentedButtonDefaults.itemShape(index, ReaderMode.entries.size)
-                ) { Text(mode.label) }
+
+        // Reading Mode Section
+        SectionHeader("وضع القراءة", "mode") { expandedSection ->
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                ReaderMode.entries.forEachIndexed { index, mode ->
+                    SegmentedButton(
+                        selected = state.readerMode == mode,
+                        onClick = { onModeChange(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(index, ReaderMode.entries.size)
+                    ) { Text(mode.label) }
+                }
             }
         }
-        Text("فلتر الصورة", color = MangaColors.Muted)
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            ReaderImageFilter.entries.forEachIndexed { index, filter ->
-                SegmentedButton(
-                    selected = state.imageFilter == filter,
-                    onClick = { onFilterChange(filter) },
-                    shape = SegmentedButtonDefaults.itemShape(index, ReaderImageFilter.entries.size)
-                ) { Text(filter.label) }
+
+        // Image Filter Section
+        SectionHeader("فلتر الصورة", "filter") { expandedSection ->
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                ReaderImageFilter.entries.forEachIndexed { index, filter ->
+                    SegmentedButton(
+                        selected = state.imageFilter == filter,
+                        onClick = { onFilterChange(filter) },
+                        shape = SegmentedButtonDefaults.itemShape(index, ReaderImageFilter.entries.size)
+                    ) { Text(filter.label) }
+                }
             }
         }
-        Text("السطوع", color = MangaColors.Muted)
-        Slider(value = state.brightness, onValueChange = onBrightnessChange, valueRange = 0.05f..1f)
-        SwitchRow("وضع خفي", state.incognitoMode, onIncognitoChange)
-        SwitchRow("الانتقال التلقائي للفصل التالي", state.autoOpenNextChapter, onAutoNextChange)
-        SwitchRow("إظهار عداد القراء", state.showLiveReadersOverlay, onLiveReadersChange)
-        SwitchRow("إظهار التفاعلات", state.showReactionOverlay, onReactionsChange)
-        SwitchRow("وضع الصفحتين أفقياً", state.dualPageLandscape, onDualPageChange)
-        SwitchRow("دمج صفحات الويب تون", state.webtoonAutoStitch, onWebtoonStitchChange)
+
+        // Brightness Section
+        SectionHeader("السطوع", "brightness") { expandedSection ->
+            Slider(value = state.brightness, onValueChange = onBrightnessChange, valueRange = 0.05f..1f)
+            Text("${(state.brightness * 100).toInt()}%", color = MangaColors.Muted)
+        }
+
+        // Page Spacing
+        SectionHeader("المسافة بين الصفحات", "spacing") { expandedSection ->
+            Slider(
+                value = state.pageSpacing.toFloat(),
+                onValueChange = { onPageSpacingChange(it.toInt()) },
+                valueRange = 0f..30f,
+                steps = 6
+            )
+            Text("${state.pageSpacing}dp", color = MangaColors.Muted)
+        }
+
+        // Reading Options
+        SectionHeader("خيارات القراءة", "reading") { expandedSection ->
+            SwitchRow("وضع خفي", state.incognitoMode, onIncognitoChange)
+            SwitchRow("الانتقال التلقائي للفصل التالي", state.autoOpenNextChapter, onAutoNextChange)
+            SwitchRow("إبقاء الشاشة مضاءة", state.keepScreenOn, onKeepScreenOnChange)
+            SwitchRow("إظهار رقم الصفحة", state.showPageNumber, { })
+            SwitchRow("التحميل المسبق الذكي", state.smartPrefetchEnabled, onSmartPrefetchChange)
+        }
+
+        // Overlays
+        SectionHeader("الطبقات العلوية", "overlays") { expandedSection ->
+            SwitchRow("إظهار عداد القراء", state.showLiveReadersOverlay, onLiveReadersChange)
+            SwitchRow("إظهار التفاعلات", state.showReactionOverlay, onReactionsChange)
+        }
+
+        // Display
+        SectionHeader("العرض", "display") { expandedSection ->
+            SwitchRow("وضع الصفحتين أفقياً", state.dualPageLandscape, onDualPageChange)
+            SwitchRow("دمج صفحات الويب تون", state.webtoonAutoStitch, onWebtoonStitchChange)
+        }
+
+        // Gestures
+        SectionHeader("الإجراءات", "gestures") { expandedSection ->
+            SwitchRow("زر الصوت للتنقل بين الصفحات", state.volumeButtonPageTurn, onVolumeButtonChange)
+            SwitchRow("التكبير بالنقر المزدوج", state.doubleTapZoom, onDoubleTapZoomChange)
+            SwitchRow("الاهتزازات اللمسية", state.hapticsEnabled, onHapticsChange)
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    sectionKey: String,
+    expandedSection: String?,
+    onToggle: (String) -> Unit,
+    content: @Composable (String) -> Unit
+) {
+    val isExpanded = expandedSection == sectionKey
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable { onToggle(if (isExpanded) "" else sectionKey) }
+            ) {
+                Text(title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
+                Icon(
+                    if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = null,
+                    tint = MangaColors.Muted
+                )
+            }
+            if (isExpanded) {
+                Spacer(Modifier.height(8.dp))
+                content(sectionKey)
+            }
+        }
     }
 }
 
