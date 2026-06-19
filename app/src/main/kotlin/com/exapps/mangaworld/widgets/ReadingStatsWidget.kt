@@ -13,7 +13,6 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
-import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.height
@@ -32,11 +31,13 @@ class ReadingStatsWidget : GlanceAppWidget() {
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val repo = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java).widgetDataRepository()
+        val entryPoint = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
+        val repo = entryPoint.widgetDataRepository()
+        val settings = entryPoint.widgetSettingsManager()
         val stats = repo.getReadingStats()
         provideContent {
             MangaWidgetTheme(context) {
-                ReadingStatsContent(stats)
+                ReadingStatsContent(stats, settings, context)
             }
         }
     }
@@ -47,9 +48,19 @@ class ReadingStatsWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 @Composable
-private fun ReadingStatsContent(stats: ReadingStatsWidgetData) {
-    val context = LocalContext.current
-    WidgetCard(title = "إحصائيات القراءة") {
+private fun ReadingStatsContent(
+    stats: ReadingStatsWidgetData,
+    settings: WidgetSettingsManager,
+    context: Context
+) {
+    val showTitles = settings.isShowTitles()
+    val transparentBg = settings.isTransparentBg()
+
+    WidgetCard(
+        title = "إحصائيات القراءة",
+        showTitle = showTitles,
+        transparentBg = transparentBg
+    ) {
         if (stats.totalChaptersRead == 0 && stats.totalReadingMinutes == 0L) {
             WidgetEmptyState(
                 title = "لا توجد إحصائيات بعد",

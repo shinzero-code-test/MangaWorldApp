@@ -24,11 +24,13 @@ class LibraryWidget : GlanceAppWidget() {
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val repo = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java).widgetDataRepository()
-        val entries = repo.getLibraryEntries(limit = 4)
+        val entryPoint = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
+        val repo = entryPoint.widgetDataRepository()
+        val settings = entryPoint.widgetSettingsManager()
+        val entries = repo.getLibraryEntries(limit = 6)
         provideContent {
             MangaWidgetTheme(context) {
-                LibraryWidgetContent(entries)
+                LibraryWidgetContent(entries, settings, context)
             }
         }
     }
@@ -39,10 +41,23 @@ class LibraryWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 @Composable
-private fun LibraryWidgetContent(entries: List<com.exapps.mangaworld.core.data.LibraryWidgetEntry>) {
-    val context = LocalContext.current
+private fun LibraryWidgetContent(
+    entries: List<com.exapps.mangaworld.core.data.LibraryWidgetEntry>,
+    settings: WidgetSettingsManager,
+    context: Context
+) {
     val size = LocalSize.current
-    WidgetCard(title = "مكتبتي") {
+    val showCovers = settings.isShowCovers()
+    val showTitles = settings.isShowTitles()
+    val showBadge = settings.isShowNewBadge()
+    val transparentBg = settings.isTransparentBg()
+    val visibleCount = settings.getVisibleItemCount(size.height.value.toInt())
+
+    WidgetCard(
+        title = "مكتبتي",
+        showTitle = showTitles,
+        transparentBg = transparentBg
+    ) {
         if (entries.isEmpty()) {
             WidgetEmptyState(
                 title = "لا توجد عناصر في المكتبة",
@@ -53,12 +68,13 @@ private fun LibraryWidgetContent(entries: List<com.exapps.mangaworld.core.data.L
             return@WidgetCard
         }
 
-        val visibleCount = if (size.height < 210.dp) 2 else 3
         entries.take(visibleCount).forEachIndexed { index, entry ->
             WidgetListItem(
                 title = entry.title,
-                subtitle = "آخر فتح من المكتبة",
-                trailing = if (entry.newChapterCount > 0) "+${entry.newChapterCount}" else "0",
+                subtitle = if (showTitles) "آخر فتح من المكتبة" else null,
+                trailing = if (showBadge && entry.newChapterCount > 0) "+${entry.newChapterCount}" else null,
+                showTitle = showTitles,
+                showBadge = showBadge,
                 intent = AppLaunchIntents.detail(context, entry.sourceId, entry.slug)
             )
             if (index < visibleCount - 1) {

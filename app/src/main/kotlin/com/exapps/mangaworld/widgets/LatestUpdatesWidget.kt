@@ -24,11 +24,13 @@ class LatestUpdatesWidget : GlanceAppWidget() {
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val repo = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java).widgetDataRepository()
+        val entryPoint = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
+        val repo = entryPoint.widgetDataRepository()
+        val settings = entryPoint.widgetSettingsManager()
         val snapshot = repo.getRemoteSnapshot()
         provideContent {
             MangaWidgetTheme(context) {
-                LatestUpdatesContent(snapshot.latestUpdates)
+                LatestUpdatesContent(snapshot.latestUpdates, settings, context)
             }
         }
     }
@@ -39,10 +41,22 @@ class LatestUpdatesWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 @Composable
-private fun LatestUpdatesContent(updates: List<com.exapps.mangaworld.core.data.WidgetLatestUpdateEntry>) {
-    val context = LocalContext.current
+private fun LatestUpdatesContent(
+    updates: List<com.exapps.mangaworld.core.data.WidgetLatestUpdateEntry>,
+    settings: WidgetSettingsManager,
+    context: Context
+) {
     val size = LocalSize.current
-    WidgetCard(title = "أحدث التحديثات") {
+    val showTitles = settings.isShowTitles()
+    val showBadge = settings.isShowNewBadge()
+    val transparentBg = settings.isTransparentBg()
+    val visibleCount = settings.getVisibleItemCount(size.height.value.toInt())
+
+    WidgetCard(
+        title = "أحدث التحديثات",
+        showTitle = showTitles,
+        transparentBg = transparentBg
+    ) {
         if (updates.isEmpty()) {
             WidgetEmptyState(
                 title = "لا توجد تحديثات حالياً",
@@ -53,12 +67,13 @@ private fun LatestUpdatesContent(updates: List<com.exapps.mangaworld.core.data.W
             return@WidgetCard
         }
 
-        val visibleCount = if (size.height < 210.dp) 2 else 3
         updates.take(visibleCount).forEachIndexed { index, update ->
             WidgetListItem(
                 title = update.mangaTitle,
-                subtitle = update.chapterLabel,
-                trailing = update.timeAgo,
+                subtitle = if (showTitles) update.chapterLabel else null,
+                trailing = if (showBadge) update.timeAgo else null,
+                showTitle = showTitles,
+                showBadge = showBadge,
                 intent = AppLaunchIntents.reader(context, update.sourceId, update.mangaId, update.chapterUrl)
             )
             if (index < visibleCount - 1) {

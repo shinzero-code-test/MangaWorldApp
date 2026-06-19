@@ -31,29 +31,40 @@ import androidx.glance.text.TextStyle
 import com.exapps.mangaworld.R
 
 @Composable
-internal fun WidgetCard(title: String, content: @Composable () -> Unit) {
+internal fun WidgetCard(
+    title: String,
+    showTitle: Boolean = true,
+    transparentBg: Boolean = false,
+    content: @Composable () -> Unit
+) {
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(GlanceTheme.colors.surface)
+            .then(
+                if (transparentBg) GlanceModifier.background(androidx.glance.color.ColorProvider(androidx.glance.unit.ColorProvider(day = androidx.compose.ui.graphics.Color.Transparent, night = androidx.compose.ui.graphics.Color.Transparent)))
+                else GlanceModifier.background(GlanceTheme.colors.surface)
+            )
             .cornerRadius(20.dp)
             .padding(14.dp)
     ) {
-        Text(
-            text = title,
-            style = TextStyle(
-                color = GlanceTheme.colors.onSurface,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
+        if (showTitle) {
+            Text(
+                text = title,
+                style = TextStyle(
+                    color = GlanceTheme.colors.onSurface,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
             )
-        )
-        Spacer(GlanceModifier.height(10.dp))
+            Spacer(GlanceModifier.height(10.dp))
+        }
         content()
     }
 }
 
 @Composable
-internal fun WidgetCover(provider: ImageProvider, description: String?) {
+internal fun WidgetCover(provider: ImageProvider, description: String?, showCover: Boolean = true) {
+    if (!showCover) return
     Box(
         modifier = GlanceModifier
             .fillMaxWidth()
@@ -85,6 +96,9 @@ internal fun WidgetListItem(
     title: String,
     subtitle: String? = null,
     trailing: String? = null,
+    showTitle: Boolean = true,
+    showSubtitle: Boolean = true,
+    showBadge: Boolean = true,
     intent: Intent
 ) {
     Row(
@@ -97,16 +111,18 @@ internal fun WidgetListItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = GlanceModifier.defaultWeight()) {
-            Text(
-                text = title,
-                maxLines = 1,
-                style = TextStyle(
-                    color = GlanceTheme.colors.onSurface,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
+            if (showTitle) {
+                Text(
+                    text = title,
+                    maxLines = 1,
+                    style = TextStyle(
+                        color = GlanceTheme.colors.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                 )
-            )
-            if (!subtitle.isNullOrBlank()) {
+            }
+            if (showSubtitle && !subtitle.isNullOrBlank()) {
                 Spacer(GlanceModifier.height(2.dp))
                 Text(
                     text = subtitle,
@@ -118,7 +134,7 @@ internal fun WidgetListItem(
                 )
             }
         }
-        if (!trailing.isNullOrBlank()) {
+        if (showBadge && !trailing.isNullOrBlank()) {
             Spacer(GlanceModifier.width(8.dp))
             Text(
                 text = trailing,
@@ -166,4 +182,17 @@ internal fun WidgetEmptyState(title: String, subtitle: String, intent: Intent? =
             WidgetPrimaryButton(label = actionLabel, intent = intent)
         }
     }
+}
+
+@Composable
+internal fun WidgetSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = TextStyle(
+            color = GlanceTheme.colors.onSurfaceVariant,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium
+        ),
+        modifier = GlanceModifier.padding(bottom = 4.dp)
+    )
 }

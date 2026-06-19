@@ -25,11 +25,13 @@ class DailyRecommendationsWidget : GlanceAppWidget() {
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val repo = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java).widgetDataRepository()
+        val entryPoint = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
+        val repo = entryPoint.widgetDataRepository()
+        val settings = entryPoint.widgetSettingsManager()
         val snapshot = repo.getRemoteSnapshot()
         provideContent {
             MangaWidgetTheme(context) {
-                DailyRecommendationsContent(snapshot)
+                DailyRecommendationsContent(snapshot, settings, context)
             }
         }
     }
@@ -40,10 +42,22 @@ class DailyRecommendationsWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 @Composable
-private fun DailyRecommendationsContent(snapshot: RemoteWidgetsSnapshot) {
-    val context = LocalContext.current
+private fun DailyRecommendationsContent(
+    snapshot: RemoteWidgetsSnapshot,
+    settings: WidgetSettingsManager,
+    context: Context
+) {
     val size = LocalSize.current
-    WidgetCard(title = "اقتراحات اليوم") {
+    val showTitles = settings.isShowTitles()
+    val showBadge = settings.isShowNewBadge()
+    val transparentBg = settings.isTransparentBg()
+    val visibleCount = settings.getVisibleItemCount(size.height.value.toInt())
+
+    WidgetCard(
+        title = "اقتراحات اليوم",
+        showTitle = showTitles,
+        transparentBg = transparentBg
+    ) {
         if (snapshot.recommendation == null && snapshot.trending == null && snapshot.latestUpdates.isEmpty()) {
             WidgetEmptyState(
                 title = "لا توجد اقتراحات حالياً",
@@ -54,32 +68,46 @@ private fun DailyRecommendationsContent(snapshot: RemoteWidgetsSnapshot) {
             return@WidgetCard
         }
 
+        var itemCount = 0
+
         snapshot.recommendation?.let { recommendation ->
-            WidgetListItem(
-                title = recommendation.title,
-                subtitle = recommendation.subtitle ?: "موصى بها لك",
-                trailing = "اقتراح",
-                intent = AppLaunchIntents.detail(context, recommendation.sourceId, recommendation.slug)
-            )
-            Spacer(GlanceModifier.height(8.dp))
+            if (itemCount < visibleCount) {
+                WidgetListItem(
+                    title = recommendation.title,
+                    subtitle = if (showTitles) recommendation.subtitle ?: "موصى بها لك" else null,
+                    trailing = if (showBadge) "اقتراح" else null,
+                    showTitle = showTitles,
+                    showBadge = showBadge,
+                    intent = AppLaunchIntents.detail(context, recommendation.sourceId, recommendation.slug)
+                )
+                Spacer(GlanceModifier.height(8.dp))
+                itemCount++
+            }
         }
 
         snapshot.trending?.let { trending ->
-            WidgetListItem(
-                title = trending.title,
-                subtitle = trending.subtitle ?: "الأكثر رواجاً",
-                trailing = "ترند",
-                intent = AppLaunchIntents.detail(context, trending.sourceId, trending.slug)
-            )
-            Spacer(GlanceModifier.height(8.dp))
+            if (itemCount < visibleCount) {
+                WidgetListItem(
+                    title = trending.title,
+                    subtitle = if (showTitles) trending.subtitle ?: "الأكثر رواجاً" else null,
+                    trailing = if (showBadge) "ترند" else null,
+                    showTitle = showTitles,
+                    showBadge = showBadge,
+                    intent = AppLaunchIntents.detail(context, trending.sourceId, trending.slug)
+                )
+                Spacer(GlanceModifier.height(8.dp))
+                itemCount++
+            }
         }
 
-        if (size.height >= 200.dp) {
+        if (itemCount < visibleCount) {
             snapshot.latestUpdates.firstOrNull()?.let { update ->
                 WidgetListItem(
                     title = update.mangaTitle,
-                    subtitle = update.chapterLabel,
-                    trailing = update.timeAgo,
+                    subtitle = if (showTitles) update.chapterLabel else null,
+                    trailing = if (showBadge) update.timeAgo else null,
+                    showTitle = showTitles,
+                    showBadge = showBadge,
                     intent = AppLaunchIntents.reader(context, update.sourceId, update.mangaId, update.chapterUrl)
                 )
             }

@@ -6,27 +6,16 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceModifier
-import androidx.glance.Image
-import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
-import androidx.glance.layout.Alignment
-import androidx.glance.layout.Column
-import androidx.glance.layout.Spacer
-import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.height
-import androidx.glance.layout.size
-import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import com.exapps.mangaworld.R
 import com.exapps.mangaworld.core.data.ContinueReadingWidgetData
-import com.exapps.mangaworld.core.data.WidgetDataRepository
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.core.widget.WidgetEntryPoint
 import dagger.hilt.android.EntryPointAccessors
@@ -37,12 +26,14 @@ class ContinueReadingWidget : GlanceAppWidget() {
     )
 
     override suspend fun provideGlance(context: Context, id: androidx.glance.GlanceId) {
-        val repo = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java).widgetDataRepository()
+        val entryPoint = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
+        val repo = entryPoint.widgetDataRepository()
+        val settings = entryPoint.widgetSettingsManager()
         val data = repo.getContinueReading()
         val cover = repo.loadCoverBitmap(data?.coverUrl, width = 320, height = 440)
         provideContent {
             MangaWidgetTheme(context) {
-                ContinueReadingContent(data = data, cover = cover)
+                ContinueReadingContent(data = data, cover = cover, settings = settings, context = context)
             }
         }
     }
@@ -53,10 +44,22 @@ class ContinueReadingWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 @Composable
-private fun ContinueReadingContent(data: ContinueReadingWidgetData?, cover: android.graphics.Bitmap?) {
-    val context = LocalContext.current
+private fun ContinueReadingContent(
+    data: ContinueReadingWidgetData?,
+    cover: android.graphics.Bitmap?,
+    settings: WidgetSettingsManager,
+    context: Context
+) {
     val size = LocalSize.current
-    WidgetCard(title = "تابع القراءة") {
+    val showCover = settings.isShowCovers()
+    val showTitles = settings.isShowTitles()
+    val transparentBg = settings.isTransparentBg()
+
+    WidgetCard(
+        title = "تابع القراءة",
+        showTitle = showTitles,
+        transparentBg = transparentBg
+    ) {
         if (data == null) {
             WidgetEmptyState(
                 title = "لا توجد قراءة حالية",
@@ -67,19 +70,23 @@ private fun ContinueReadingContent(data: ContinueReadingWidgetData?, cover: andr
             return@WidgetCard
         }
 
-        val imageProvider = cover?.let { ImageProvider(it) } ?: ImageProvider(R.mipmap.ic_launcher)
-        WidgetCover(provider = imageProvider, description = data.title)
-        Spacer(GlanceModifier.height(10.dp))
-        Text(
-            text = data.title,
-            maxLines = if (size.width < 170.dp) 1 else 2,
-            style = TextStyle(
-                color = androidx.glance.GlanceTheme.colors.onSurface,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
+        val imageProvider = cover?.let { coil.ImageProvider(it) }
+        if (imageProvider != null) {
+            WidgetCover(provider = imageProvider, description = data.title, showCover = showCover)
+            Spacer(GlanceModifier.height(10.dp))
+        }
+        if (showTitles) {
+            Text(
+                text = data.title,
+                maxLines = if (size.width < 170.dp) 1 else 2,
+                style = TextStyle(
+                    color = androidx.glance.GlanceTheme.colors.onSurface,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
             )
-        )
-        Spacer(GlanceModifier.height(4.dp))
+            Spacer(GlanceModifier.height(4.dp))
+        }
         Text(
             text = data.chapterLabel,
             style = TextStyle(
