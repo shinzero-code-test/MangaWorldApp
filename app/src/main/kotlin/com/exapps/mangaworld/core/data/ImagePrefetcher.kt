@@ -2,12 +2,14 @@ package com.exapps.mangaworld.core.data
 
 import android.content.Context
 import android.graphics.Bitmap
+import coil.ImageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.size.Precision
 import coil.size.Size
 import com.exapps.mangaworld.core.firebase.withFirebaseTrace
 import com.exapps.mangaworld.domain.model.ChapterPage
+import dagger.Lazy
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -17,14 +19,15 @@ import javax.inject.Singleton
 
 @Singleton
 class ImagePrefetcher @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val imageLoader: Lazy<ImageLoader>
 ) {
     private val pendingJobs = mutableListOf<Job>()
 
     fun cancelAll() {
         pendingJobs.forEach { it.cancel() }
         pendingJobs.clear()
-        context.imageLoader.memoryCache?.clear()
+        imageLoader.get().memoryCache?.clear()
     }
 
     suspend fun prefetchPages(pages: List<ChapterPage>, count: Int = pages.size.coerceAtMost(6)) {
@@ -43,7 +46,7 @@ class ImagePrefetcher @Inject constructor(
                         .withFirebaseTrace("prefetch_page")
                         .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
                         .build()
-                    context.imageLoader.enqueue(request)
+                    imageLoader.get().enqueue(request)
                 }
                 pendingJobs.add(job)
             }
