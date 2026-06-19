@@ -787,7 +787,7 @@ private fun ReaderSettingsSheet(
         Text("إعدادات القارئ", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
         // Reading Mode Section
-        SectionHeader("وضع القراءة", "mode") { expandedSection ->
+        SectionHeader("وضع القراءة", "mode", expandedSection, { expandedSection = it }) {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 ReaderMode.entries.forEachIndexed { index, mode ->
                     SegmentedButton(
@@ -800,7 +800,7 @@ private fun ReaderSettingsSheet(
         }
 
         // Image Filter Section
-        SectionHeader("فلتر الصورة", "filter") { expandedSection ->
+        SectionHeader("فلتر الصورة", "filter", expandedSection, { expandedSection = it }) {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 ReaderImageFilter.entries.forEachIndexed { index, filter ->
                     SegmentedButton(
@@ -813,13 +813,13 @@ private fun ReaderSettingsSheet(
         }
 
         // Brightness Section
-        SectionHeader("السطوع", "brightness") { expandedSection ->
+        SectionHeader("السطوع", "brightness", expandedSection, { expandedSection = it }) {
             Slider(value = state.brightness, onValueChange = onBrightnessChange, valueRange = 0.05f..1f)
             Text("${(state.brightness * 100).toInt()}%", color = MangaColors.Muted)
         }
 
         // Page Spacing
-        SectionHeader("المسافة بين الصفحات", "spacing") { expandedSection ->
+        SectionHeader("المسافة بين الصفحات", "spacing", expandedSection, { expandedSection = it }) {
             Slider(
                 value = state.pageSpacing.toFloat(),
                 onValueChange = { onPageSpacingChange(it.toInt()) },
@@ -830,7 +830,7 @@ private fun ReaderSettingsSheet(
         }
 
         // Reading Options
-        SectionHeader("خيارات القراءة", "reading") { expandedSection ->
+        SectionHeader("خيارات القراءة", "reading", expandedSection, { expandedSection = it }) {
             SwitchRow("وضع خفي", state.incognitoMode, onIncognitoChange)
             SwitchRow("الانتقال التلقائي للفصل التالي", state.autoOpenNextChapter, onAutoNextChange)
             SwitchRow("إبقاء الشاشة مضاءة", state.keepScreenOn, onKeepScreenOnChange)
@@ -839,19 +839,19 @@ private fun ReaderSettingsSheet(
         }
 
         // Overlays
-        SectionHeader("الطبقات العلوية", "overlays") { expandedSection ->
+        SectionHeader("الطبقات العلوية", "overlays", expandedSection, { expandedSection = it }) {
             SwitchRow("إظهار عداد القراء", state.showLiveReadersOverlay, onLiveReadersChange)
             SwitchRow("إظهار التفاعلات", state.showReactionOverlay, onReactionsChange)
         }
 
         // Display
-        SectionHeader("العرض", "display") { expandedSection ->
+        SectionHeader("العرض", "display", expandedSection, { expandedSection = it }) {
             SwitchRow("وضع الصفحتين أفقياً", state.dualPageLandscape, onDualPageChange)
             SwitchRow("دمج صفحات الويب تون", state.webtoonAutoStitch, onWebtoonStitchChange)
         }
 
         // Gestures
-        SectionHeader("الإجراءات", "gestures") { expandedSection ->
+        SectionHeader("الإجراءات", "gestures", expandedSection, { expandedSection = it }) {
             SwitchRow("زر الصوت للتنقل بين الصفحات", state.volumeButtonPageTurn, onVolumeButtonChange)
             SwitchRow("التكبير بالنقر المزدوج", state.doubleTapZoom, onDoubleTapZoomChange)
             SwitchRow("الاهتزازات اللمسية", state.hapticsEnabled, onHapticsChange)
@@ -865,7 +865,7 @@ private fun SectionHeader(
     sectionKey: String,
     expandedSection: String?,
     onToggle: (String) -> Unit,
-    content: @Composable (String) -> Unit
+    content: @Composable () -> Unit
 ) {
     val isExpanded = expandedSection == sectionKey
 
@@ -890,7 +890,7 @@ private fun SectionHeader(
             }
             if (isExpanded) {
                 Spacer(Modifier.height(8.dp))
-                content(sectionKey)
+                content()
             }
         }
     }
