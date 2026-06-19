@@ -3,7 +3,10 @@ package com.exapps.mangaworld.presentation.more
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -11,15 +14,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
-data class MoreMenuItem(
+private data class MoreGridItem(
     val icon: ImageVector,
     val title: String,
-    val subtitle: String? = null,
+    val subtitle: String,
+    val color: androidx.compose.ui.graphics.Color,
     val onClick: () -> Unit
 )
 
@@ -36,172 +43,89 @@ fun MoreScreen(
     onOpenDiagnostics: () -> Unit,
     onOpenCloudSync: () -> Unit
 ) {
+    val gridItems = listOf(
+        MoreGridItem(Icons.Filled.Download, "التنزيلات", "الفصول المنزّلة", MangaColors.Cyan, onOpenDownloads),
+        MoreGridItem(Icons.Filled.FolderOpen, "المحلي", "المانجا المحفوظة", MangaColors.GlowPurple, onOpenLocalStorage),
+        MoreGridItem(Icons.Filled.BarChart, "الإحصائيات", "وقت القراءة", MangaColors.Pink, onOpenReadingStats),
+        MoreGridItem(Icons.Filled.EmojiEvents, "الإنجازات", "تتبع التقدم", MangaColors.Yellow, onOpenGoals),
+        MoreGridItem(Icons.Filled.List, "القوائم", "تنظيم المانجا", MangaColors.Green, onOpenCollections),
+        MoreGridItem(Icons.Filled.Cloud, "المزامنة", "البيانات السحابية", MangaColors.Cyan, onOpenCloudSync),
+        MoreGridItem(Icons.Filled.Settings, "الإعدادات", "تخصيص التطبيق", MangaColors.Muted, onOpenSettings),
+        MoreGridItem(Icons.Filled.BugReport, "التشخيص", "معلومات تقنية", MangaColors.Orange, onOpenDiagnostics),
+    )
+
     Scaffold(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("المزيد", color = MangaColors.OnSurface) },
+                title = { Text("المزيد", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
             )
         }
     ) { padding ->
-        LazyColumn(
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
-            item {
-                Text(
-                    "المحتوى",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MangaColors.Cyan,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-                )
-            }
-            item {
-                MoreMenuItem(
-                    icon = Icons.Filled.Download,
-                    title = "التنزيلات",
-                    subtitle = "الفصول المنزّلة",
-                    onClick = onOpenDownloads
-                )
-            }
-            item {
-                MoreMenuItem(
-                    icon = Icons.Filled.FolderOpen,
-                    title = "المحلي",
-                    subtitle = "المانجا المحفوظة محلياً",
-                    onClick = onOpenLocalStorage
-                )
-            }
-            item {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "الإحصائيات",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MangaColors.Cyan,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-                )
-            }
-            item {
-                MoreMenuItem(
-                    icon = Icons.Filled.BarChart,
-                    title = "إحصائيات القراءة",
-                    subtitle = "وقت القراءة والإنجازات",
-                    onClick = onOpenReadingStats
-                )
-            }
-            item {
-                MoreMenuItem(
-                    icon = Icons.Filled.EmojiEvents,
-                    title = "الأهداف والإنجازات",
-                    subtitle = "تتبع تقدمك",
-                    onClick = onOpenGoals
-                )
-            }
-            item {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "الأدوات",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MangaColors.Cyan,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-                )
-            }
-            item {
-                MoreMenuItem(
-                    icon = Icons.Filled.List,
-                    title = "القوائم المخصصة",
-                    subtitle = "تنظيم المانجا في قوائم",
-                    onClick = onOpenCollections
-                )
-            }
-            item {
-                MoreMenuItem(
-                    icon = Icons.Filled.Cloud,
-                    title = "المزامنة السحابية",
-                    subtitle = "مزامنة البيانات مع السحابة",
-                    onClick = onOpenCloudSync
-                )
-            }
-            item {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "الإعدادات",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MangaColors.Cyan,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-                )
-            }
-            item {
-                MoreMenuItem(
-                    icon = Icons.Filled.Settings,
-                    title = "الإعدادات",
-                    subtitle = "تخصيص التطبيق",
-                    onClick = onOpenSettings
-                )
-            }
-            item {
-                MoreMenuItem(
-                    icon = Icons.Filled.BugReport,
-                    title = "التشخيص",
-                    subtitle = "معلومات تقنية",
-                    onClick = onOpenDiagnostics
-                )
+            items(gridItems) { item ->
+                MoreGridCard(item)
             }
         }
     }
 }
 
 @Composable
-private fun MoreMenuItemRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String? = null,
-    onClick: () -> Unit
-) {
+private fun MoreGridCard(item: MoreGridItem) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .aspectRatio(1f)
+            .clickable { item.onClick() },
         colors = CardDefaults.cardColors(containerColor = MangaColors.Surface),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(20.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = MangaColors.Cyan,
-                modifier = Modifier.size(24.dp)
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MangaColors.OnSurface,
-                    fontWeight = FontWeight.Medium
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(item.color.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    item.icon,
+                    contentDescription = null,
+                    tint = item.color,
+                    modifier = Modifier.size(24.dp)
                 )
-                if (subtitle != null) {
-                    Text(
-                        subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MangaColors.OnSurfaceVariant
-                    )
-                }
             }
-            Icon(
-                Icons.Filled.ChevronLeft,
-                contentDescription = null,
-                tint = MangaColors.Muted
+            Spacer(Modifier.height(12.dp))
+            Text(
+                item.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MangaColors.OnSurface,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                item.subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MangaColors.OnSurfaceVariant,
+                textAlign = TextAlign.Center,
+                lineHeight = 16.sp
             )
         }
     }
