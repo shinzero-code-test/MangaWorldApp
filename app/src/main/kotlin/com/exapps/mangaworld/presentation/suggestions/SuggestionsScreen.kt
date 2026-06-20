@@ -27,11 +27,9 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.core.data.RecommendationEngine
 import com.exapps.mangaworld.core.data.SuggestionsManager
-import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 import com.exapps.mangaworld.domain.model.MangaItem
 import com.exapps.mangaworld.domain.model.MangaSource
-import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -41,7 +39,6 @@ import javax.inject.Inject
 class SuggestionsViewModel @Inject constructor(
     private val recommendationEngine: RecommendationEngine,
     private val suggestionsManager: SuggestionsManager,
-    private val mangaRepository: MangaRepository,
     private val cacheDao: MangaCacheDao
 ) : ViewModel() {
 

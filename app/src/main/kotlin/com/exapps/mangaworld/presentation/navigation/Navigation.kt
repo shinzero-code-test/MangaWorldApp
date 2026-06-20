@@ -238,7 +238,8 @@ fun MangaNavGraph(navController: NavHostController) {
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
                 onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
                 onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) },
-                onOpenSuggestions = { navController.navigate(Screen.Suggestions.route) }
+                onOpenSuggestions = { navController.navigate(Screen.Suggestions.route) },
+                onOpenProfile = { navController.navigate(Screen.Profile.route) }
             )
         }
         composable(Screen.Sources.route) {
