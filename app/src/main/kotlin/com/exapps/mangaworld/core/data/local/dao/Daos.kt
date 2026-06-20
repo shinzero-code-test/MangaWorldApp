@@ -134,6 +134,9 @@ interface MangaCacheDao {
 
     @Query("SELECT * FROM manga_cache ORDER BY RANDOM() LIMIT 1")
     suspend fun getRandom(): MangaCacheEntity?
+
+    @Query("SELECT * FROM manga_cache ORDER BY cachedAt DESC LIMIT :limit")
+    suspend fun getAll(limit: Int = 200): List<MangaCacheEntity>
 }
 
 @Dao

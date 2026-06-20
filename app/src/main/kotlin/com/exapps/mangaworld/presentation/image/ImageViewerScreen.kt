@@ -1,9 +1,11 @@
 package com.exapps.mangaworld.presentation.image
 
+import android.content.ContentValues
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
@@ -23,7 +25,7 @@ import coil.compose.AsyncImage
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.io.File
+import kotlinx.coroutines.withContext
 import java.net.URL
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -94,16 +96,50 @@ fun ImageViewerScreen(
 
 private suspend fun saveImage(context: Context, imageUrl: String) {
     try {
-        val bitmap = URL(imageUrl).openStream().use { BitmapFactory.decodeStream(it) }
-        val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-        val file = File(directory, "MangaWorld_${System.currentTimeMillis()}.jpg")
-        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-        kotlinx.coroutines.withContext(Dispatchers.Main) {
-            Toast.makeText(context, "تم حفظ الصورة", Toast.LENGTH_SHORT).show()
+        val bitmap = withContext(Dispatchers.IO) {
+            URL(imageUrl).openStream().use { BitmapFactory.decodeStream(it) }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Android 10+ — use MediaStore
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "MangaWorld_${System.currentTimeMillis()}.jpg")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/MangaWorld")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+            uri?.let {
+                resolver.openOutputStream(it)?.use { os ->
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, os)
+                }
+                contentValues.clear()
+                contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
+                resolver.update(it, contentValues, null, null)
+            }
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "تم حفظ الصورة في المعرض", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            // Android 9 and below — use external storage
+            @Suppress("DEPRECATION")
+            val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+            val mangaDir = File(directory, "MangaWorld")
+            mangaDir.mkdirs()
+            val file = File(mangaDir, "MangaWorld_${System.currentTimeMillis()}.jpg")
+            file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }
+            // Scan the file so it appears in the gallery
+            android.media.MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null, null)
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "تم حفظ الصورة", Toast.LENGTH_SHORT).show()
+            }
         }
     } catch (e: Exception) {
-        kotlinx.coroutines.withContext(Dispatchers.Main) {
-            Toast.makeText(context, "فشل حفظ الصورة", Toast.LENGTH_SHORT).show()
+        withContext(Dispatchers.Main) {
+            Toast.makeText(context, "فشل حفظ الصورة: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 }
+
+private fun File(path: String) = java.io.File(path)

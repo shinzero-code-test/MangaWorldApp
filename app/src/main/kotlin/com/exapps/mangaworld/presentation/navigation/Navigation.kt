@@ -34,6 +34,8 @@ import com.exapps.mangaworld.presentation.goals.GoalsScreen
 import com.exapps.mangaworld.presentation.more.MoreScreen
 import com.exapps.mangaworld.presentation.sources.SourcesScreen
 import com.exapps.mangaworld.presentation.localstorage.ImportMangaScreen
+import com.exapps.mangaworld.presentation.suggestions.SuggestionsScreen
+import com.exapps.mangaworld.presentation.auth.login.LoginScreen
 
 sealed class Screen(val route: String) {
     object Home        : Screen("home")
@@ -65,6 +67,8 @@ sealed class Screen(val route: String) {
     object More : Screen("more")
     object Sources : Screen("sources")
     object ImportManga : Screen("import_manga")
+    object Suggestions : Screen("suggestions")
+    object Login : Screen("login")
     object Community : Screen("community/{sourceId}/{mangaId}/{slug}?chapterUrl={chapterUrl}&commentId={commentId}") {
         fun createRoute(sourceId: String, mangaId: String, slug: String, chapterUrl: String? = null, commentId: String? = null): String {
             val encoded = chapterUrl?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
@@ -233,7 +237,8 @@ fun MangaNavGraph(navController: NavHostController) {
                 onOpenSources = { navController.navigate(Screen.Sources.route) },
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
                 onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
-                onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) }
+                onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) },
+                onOpenSuggestions = { navController.navigate(Screen.Suggestions.route) }
             )
         }
         composable(Screen.Sources.route) {
@@ -245,6 +250,20 @@ fun MangaNavGraph(navController: NavHostController) {
             ImportMangaScreen(
                 onBack = { navController.popBackStack() },
                 onImportComplete = { /* Refresh local storage */ }
+            )
+        }
+        composable(Screen.Suggestions.route) {
+            SuggestionsScreen(
+                onBack = { navController.popBackStack() },
+                onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) }
+            )
+        }
+        composable(Screen.Login.route) {
+            LoginScreen(
+                onLoginClick = { _, _ -> navController.navigate(Screen.Home.route) },
+                onGoogleSignInClick = { navController.navigate(Screen.Home.route) },
+                onForgotPasswordClick = { },
+                onSignUpClick = { }
             )
         }
         composable(

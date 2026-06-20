@@ -40,9 +40,14 @@ class AutoDownloadWorker @AssistedInject constructor(
                 val detail = mangaRepository.getMangaDetail(favorite.slug, source).getOrNull() ?: continue
                 val readChapters = readChapterDao.getReadChapters(favorite.mangaId).first().toSet()
 
-                // Get next 3 unread chapters
-                val unreadChapters = detail.chapters
-                    .filter { it.number !in readChapters }
+                // Sort chapters by number descending, find the highest read chapter
+                val sortedChapters = detail.chapters.sortedByDescending { it.number }
+                val lastReadChapterNumber = sortedChapters
+                    .firstOrNull { it.number in readChapters }?.number ?: 0f
+
+                // Get next 3 unread chapters AFTER the last read one
+                val unreadChapters = sortedChapters
+                    .filter { it.number > lastReadChapterNumber && it.number !in readChapters }
                     .sortedBy { it.number }
                     .take(3)
 

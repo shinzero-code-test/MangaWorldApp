@@ -41,11 +41,13 @@ fun MoreScreen(
     onOpenSources: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDiagnostics: () -> Unit,
-    onOpenCloudSync: () -> Unit
+    onOpenCloudSync: () -> Unit,
+    onOpenSuggestions: () -> Unit = {}
 ) {
     val gridItems = listOf(
         MoreGridItem(Icons.Filled.Download, "التنزيلات", "الفصول المنزّلة", MangaColors.Cyan, onOpenDownloads),
         MoreGridItem(Icons.Filled.FolderOpen, "المحلي", "المانجا المحفوظة", MangaColors.GlowPurple, onOpenLocalStorage),
+        MoreGridItem(Icons.Filled.AutoAwesome, "اقتراحات", "مانجا قد تعجبك", MangaColors.Yellow, onOpenSuggestions),
         MoreGridItem(Icons.Filled.BarChart, "الإحصائيات", "وقت القراءة", MangaColors.Pink, onOpenReadingStats),
         MoreGridItem(Icons.Filled.EmojiEvents, "الإنجازات", "تتبع التقدم", MangaColors.Yellow, onOpenGoals),
         MoreGridItem(Icons.Filled.List, "القوائم", "تنظيم المانجا", MangaColors.Green, onOpenCollections),

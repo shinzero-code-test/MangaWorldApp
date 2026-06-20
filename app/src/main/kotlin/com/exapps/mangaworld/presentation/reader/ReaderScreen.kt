@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -401,20 +402,22 @@ private fun ReaderContent(
     onPageChanged: (Int) -> Unit,
     onTap: (Float, Float) -> Unit,
     onLongPress: () -> Unit = {},
-    onModeChange: (ReaderMode) -> Unit
+    onModeChange: (ReaderMode) -> Unit,
+    onZoom: ((Float) -> Unit)? = null
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
-    when (state.readerMode) {
-        ReaderMode.VERTICAL_SCROLL, ReaderMode.WEBTOON ->
-            WebtoonReader(
-                pages = state.pages,
-                imageFilter = state.imageFilter,
-                autoStitch = state.webtoonAutoStitch,
-                onTap = onTap,
-                onLongPress = onLongPress,
-                onPageChanged = onPageChanged
-            )
+        when (state.readerMode) {
+            ReaderMode.VERTICAL_SCROLL, ReaderMode.WEBTOON ->
+                WebtoonReader(
+                    pages = state.pages,
+                    imageFilter = state.imageFilter,
+                    autoStitch = state.webtoonAutoStitch,
+                    onTap = onTap,
+                    onLongPress = onLongPress,
+                    onPageChanged = onPageChanged,
+                    pageSpacing = state.pageSpacing
+                )
         ReaderMode.HORIZONTAL_RTL ->
             if (state.dualPageLandscape && isLandscape) {
                 DualPageReader(
@@ -457,7 +460,8 @@ private fun WebtoonReader(
     autoStitch: Boolean,
     onTap: (Float, Float) -> Unit,
     onLongPress: () -> Unit = {},
-    onPageChanged: (Int) -> Unit
+    onPageChanged: (Int) -> Unit,
+    pageSpacing: Int = 0
 ) {
     val listState = rememberLazyListState()
 
@@ -466,9 +470,15 @@ private fun WebtoonReader(
         onPageChanged(listState.firstVisibleItemIndex)
     }
 
+    val spacing = when {
+        autoStitch -> 0.dp
+        pageSpacing > 0 -> pageSpacing.dp
+        else -> 6.dp
+    }
+
     LazyColumn(
         state = listState,
-        verticalArrangement = Arrangement.spacedBy(if (autoStitch) 0.dp else 6.dp),
+        verticalArrangement = Arrangement.spacedBy(spacing),
         modifier = Modifier.fillMaxSize().pointerInput(Unit) {
             detectTapGestures(
                 onLongPress = { _ -> onLongPress() },
@@ -567,11 +577,37 @@ private fun HorizontalReader(
                 )
             }
     ) { pageIndex ->
-        MangaPageImage(
-            page = orderedPages[pageIndex],
-            imageFilter = imageFilter,
-            modifier = Modifier.fillMaxSize()
-        )
+        // Pinch-to-zoom wrapper for each page
+        var pageScale by remember { mutableFloatStateOf(1f) }
+        var pageOffsetX by remember { mutableFloatStateOf(0f) }
+        var pageOffsetY by remember { mutableFloatStateOf(0f) }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        val newScale = (pageScale * zoom).coerceIn(1f, 5f)
+                        pageOffsetX = if (newScale > 1f) (pageOffsetX + pan.x).coerceIn(-size.width * (newScale - 1f), size.width * (newScale - 1f)) else 0f
+                        pageOffsetY = if (newScale > 1f) (pageOffsetY + pan.y).coerceIn(-size.height * (newScale - 1f), size.height * (newScale - 1f)) else 0f
+                        pageScale = newScale
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            MangaPageImage(
+                page = orderedPages[pageIndex],
+                imageFilter = imageFilter,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(
+                        scaleX = pageScale,
+                        scaleY = pageScale,
+                        translationX = pageOffsetX,
+                        translationY = pageOffsetY
+                    )
+            )
+        }
     }
 }
 
