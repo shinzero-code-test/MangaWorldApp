@@ -407,7 +407,7 @@ private fun ReaderContent(
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
-        when (state.readerMode) {
+    when (state.readerMode) {
             ReaderMode.VERTICAL_SCROLL, ReaderMode.WEBTOON ->
                 WebtoonReader(
                     pages = state.pages,
