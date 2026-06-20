@@ -392,10 +392,6 @@ private suspend fun scanFolderForChapters(context: Context, folderUri: Uri): Lis
     }
 }
 
-        chapters
-    }
-}
-
 private suspend fun importManga(
     context: Context,
     folderUri: Uri,
