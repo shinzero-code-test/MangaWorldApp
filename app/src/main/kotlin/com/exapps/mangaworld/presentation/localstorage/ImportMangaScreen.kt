@@ -22,9 +22,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.exapps.mangaworld.core.data.download.DownloadQueueManager
+import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
 import com.exapps.mangaworld.presentation.theme.MangaColors
-import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,6 +38,7 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipInputStream
+import javax.inject.Inject
 
 data class ImportedChapter(
     val number: Float,
@@ -48,11 +54,23 @@ data class ImportProgress(
     val error: String? = null
 )
 
+@HiltViewModel
+class ImportMangaViewModel @Inject constructor(
+    private val downloadQueueManager: DownloadQueueManager
+) : ViewModel() {
+
+    /** Persist the imported manga to the Room database so LocalStorageScreen shows it. */
+    suspend fun upsertImportedManga(entity: DownloadedMangaEntity) {
+        downloadQueueManager.upsertDownloadedManga(entity)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImportMangaScreen(
     onBack: () -> Unit,
-    onImportComplete: () -> Unit
+    onImportComplete: () -> Unit,
+    viewModel: ImportMangaViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -301,7 +319,7 @@ fun ImportMangaScreen(
                         }
                         isProcessing = true
                         scope.launch {
-                            val result = importManga(
+                            val entity = importManga(
                                 context = context,
                                 folderUri = folderUri!!,
                                 coverUri = coverUri,
@@ -311,6 +329,10 @@ fun ImportMangaScreen(
                                 chapters = chapters,
                                 onProgress = { importProgress = it }
                             )
+                            // Persist to Room DB so LocalStorageScreen can display it
+                            if (entity != null) {
+                                viewModel.upsertImportedManga(entity)
+                            }
                             isProcessing = false
                         }
                     },
@@ -408,7 +430,7 @@ private suspend fun importManga(
     genres: List<String>,
     chapters: List<ImportedChapter>,
     onProgress: (ImportProgress) -> Unit
-): Boolean {
+): DownloadedMangaEntity? {
     return withContext(Dispatchers.IO) {
         try {
             val downloadsDir = File(context.getExternalFilesDir(null), "downloads")
@@ -508,10 +530,24 @@ private suspend fun importManga(
                 processedChapters = chapters.size,
                 isComplete = true
             ))
-            true
+
+            // Return entity so caller can persist it to Room database
+            val coverPath = File(mangaDir, "cover.jpg")
+            DownloadedMangaEntity(
+                mangaId = mangaId,
+                slug = mangaId,
+                title = mangaName,
+                coverUrl = "",
+                localCoverPath = coverPath.absolutePath.takeIf { coverPath.exists() },
+                sourceId = "imported",
+                totalChapters = chapters.size,
+                downloadedChapters = chapters.size,
+                genresJson = JSONArray(genres).toString(),
+                description = description
+            )
         } catch (e: Exception) {
             onProgress(ImportProgress(error = e.message ?: "خطأ غير معروف"))
-            false
+            null
         }
     }
 }

@@ -325,33 +325,34 @@ class MangaDetailViewModel @Inject constructor(
                 }
                 if (pages.isNotEmpty()) {
                     val wifiOnly = settingsRepo.getAppSettings().first().downloadOnWifiOnly
-                    val manga = _state.value.manga
+                    val m = _state.value.manga
                     val srcReferer = pages.firstOrNull()?.headers?.get("Referer")
                         ?.takeIf { it.isNotBlank() }
                         ?: chapter.url
+                    // Always create the entity — even if manga detail hasn't loaded yet,
+                    // the Local Storage screen needs a DB row to display the download.
+                    val metadata = com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity(
+                        mangaId = currentMangaId,
+                        slug = m?.slug ?: currentSlug,
+                        title = m?.title ?: currentSlug,
+                        coverUrl = m?.coverUrl ?: "",
+                        sourceId = m?.source?.id ?: currentSource.id,
+                        totalChapters = m?.totalChapters ?: 0,
+                        genresJson = m?.let { org.json.JSONArray(it.genres).toString() } ?: "[]",
+                        statusStr = m?.status?.name ?: "UNKNOWN",
+                        typeStr = m?.type?.name ?: "UNKNOWN",
+                        description = m?.description ?: ""
+                    )
                     downloadQueueManager.enqueueAndRun(
                         taskId = "dl_${UUID.randomUUID()}",
                         mangaId = currentMangaId,
-                        mangaTitle = manga?.title ?: currentSlug,
+                        mangaTitle = m?.title ?: currentSlug,
                         chapterUrl = chapter.url,
                         chapterTitle = chapter.title ?: "الفصل ${chapter.displayNumber}",
                         pages = pages,
                         wifiOnly = wifiOnly,
                         referer = srcReferer,
-                        mangaMetadata = manga?.let { m ->
-                            com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity(
-                                mangaId = currentMangaId,
-                                slug = m.slug,
-                                title = m.title,
-                                coverUrl = m.coverUrl,
-                                sourceId = m.source.id,
-                                totalChapters = m.totalChapters,
-                                genresJson = org.json.JSONArray(m.genres).toString(),
-                                statusStr = m.status.name,
-                                typeStr = m.type.name,
-                                description = m.description
-                            )
-                        }
+                        mangaMetadata = metadata
                     )
                 }
             } finally {

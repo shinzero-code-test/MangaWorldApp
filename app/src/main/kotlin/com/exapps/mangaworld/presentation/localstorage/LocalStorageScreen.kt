@@ -58,6 +58,10 @@ class LocalStorageViewModel @Inject constructor(
     val autoTags: StateFlow<Map<String, List<String>>> = _autoTags.asStateFlow()
 
     init {
+        // Sync filesystem → DB so imported/downloaded manga always appear
+        viewModelScope.launch {
+            manager.syncFileSystemWithDatabase()
+        }
         viewModelScope.launch {
             manager.observeDownloadedMangas().collectLatest { mangas ->
                 _autoTags.value = emptyMap()

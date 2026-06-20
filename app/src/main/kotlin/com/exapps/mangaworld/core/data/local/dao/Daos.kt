@@ -200,6 +200,9 @@ interface DownloadedMangaDao {
     @Query("UPDATE downloaded_manga SET downloadedChapters = :count, lastUpdatedAt = :now WHERE mangaId = :mangaId")
     suspend fun updateChapterCount(mangaId: String, count: Int, now: Long = System.currentTimeMillis())
 
+    @Query("SELECT * FROM downloaded_manga")
+    suspend fun getAll(): List<DownloadedMangaEntity>
+
     @Query("DELETE FROM downloaded_manga WHERE mangaId = :mangaId")
     suspend fun delete(mangaId: String)
 }

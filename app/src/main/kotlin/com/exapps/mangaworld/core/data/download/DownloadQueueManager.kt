@@ -287,4 +287,58 @@ class DownloadQueueManager @Inject constructor(
     fun getMangaDirPath(mangaId: String, title: String? = null): String =
         mangaDir(mangaId, title).absolutePath
 
+    // ─── DB helpers ────────────────────────────────────────────────────────
+
+    suspend fun upsertDownloadedManga(entity: DownloadedMangaEntity) {
+        downloadedMangaDao.upsert(entity)
+    }
+
+    /**
+     * Scan the downloads directory for manga folders that have a metadata.json
+     * but no corresponding row in the downloaded_manga table, and insert them.
+     * This is a safety net for: imported manga, crash recovery, and DB migrations.
+     */
+    suspend fun syncFileSystemWithDatabase() = withContext(Dispatchers.IO) {
+        if (!downloadsRoot.exists()) return@withContext
+        val existingIds = downloadedMangaDao.getAll().map { it.mangaId }.toSet()
+
+        downloadsRoot.listFiles()?.filter { it.isDirectory }?.forEach { dir ->
+            val metadataFile = File(dir, "metadata.json")
+            if (!metadataFile.exists()) return@forEach
+            try {
+                val json = org.json.JSONObject(metadataFile.readText())
+                // Support both imported format ("id") and downloaded format ("mangaId")
+                val mangaId = json.optString("mangaId", "")
+                    .ifBlank { json.optString("id", dir.name) }
+                if (mangaId.isBlank() || mangaId in existingIds) return@forEach
+
+                // Count completed chapter dirs
+                val completedCount = dir.listFiles()
+                    ?.count { it.isDirectory && File(it, ".completed").exists() } ?: 0
+
+                val coverFile = File(dir, "cover.jpg")
+                val entity = DownloadedMangaEntity(
+                    mangaId = mangaId,
+                    slug = json.optString("slug", mangaId),
+                    title = json.optString("title", dir.name),
+                    coverUrl = json.optString("coverUrl", ""),
+                    localCoverPath = coverFile.absolutePath.takeIf { coverFile.exists() },
+                    sourceId = json.optString("source",
+                        json.optString("sourceId", "unknown")),
+                    totalChapters = json.optInt("totalChapters", completedCount)
+                        .coerceAtLeast(completedCount),
+                    downloadedChapters = completedCount,
+                    genresJson = json.optJSONArray("genres")?.toString() ?: "[]",
+                    statusStr = json.optString("status", "UNKNOWN"),
+                    typeStr = json.optString("type", "MANGA"),
+                    description = json.optString("description", ""),
+                    downloadedAt = json.optLong("downloadedAt",
+                        json.optLong("importedAt", System.currentTimeMillis()))
+                )
+                downloadedMangaDao.upsert(entity)
+                existingIds.plus(mangaId) // avoid duplicates in same scan
+            } catch (_: Exception) { /* skip malformed metadata */ }
+        }
+    }
+
 }
