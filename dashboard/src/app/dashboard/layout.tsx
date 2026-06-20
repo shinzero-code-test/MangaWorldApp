@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { ErrorBoundary } from "@/components/shared/error-boundary";
+import { ThemeProvider } from "@/components/providers/theme-provider";
 
 interface UserInfo {
   uid: string;
@@ -34,41 +35,42 @@ export default function DashboardLayout({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-3 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-[var(--muted-foreground)]">جاري التحميل...</p>
+      <ThemeProvider>
+        <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 border-3 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-[var(--muted-foreground)]">جاري التحميل...</p>
+          </div>
         </div>
-      </div>
+      </ThemeProvider>
     );
   }
 
   if (!user) return null;
 
   return (
-    <div className="flex min-h-screen bg-[var(--background)]" dir="rtl">
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+    <ThemeProvider>
+      <div className="flex min-h-screen bg-[var(--background)]" dir="rtl">
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
-      {/* Sidebar */}
-      <div className={`fixed lg:static z-50 transition-transform ${sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0 lg:w-0 lg:overflow-hidden"}`}>
-        <Sidebar userRole={user.role} />
-      </div>
+        <div className={`fixed lg:static z-50 transition-transform ${sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0 lg:w-0 lg:overflow-hidden"}`}>
+          <Sidebar userRole={user.role} />
+        </div>
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <Header onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
-        <main className="flex-1 p-4 md:p-6 overflow-auto">
-          <ErrorBoundary>
-            {children}
-          </ErrorBoundary>
-        </main>
+        <div className="flex-1 flex flex-col min-w-0">
+          <Header onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+          <main className="flex-1 p-4 md:p-6 overflow-auto">
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
+          </main>
+        </div>
       </div>
-    </div>
+    </ThemeProvider>
   );
 }

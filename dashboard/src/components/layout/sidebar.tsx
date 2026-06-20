@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/components/providers/theme-provider";
 
 interface NavItem {
   href: string;
@@ -17,10 +18,12 @@ const navItems: NavItem[] = [
   { href: "/dashboard/moderation", label: "الإشراف", icon: "🛡️", minRole: "moderator" },
   { href: "/dashboard/community/comments", label: "المجتمع", icon: "💬", minRole: "moderator" },
   { href: "/dashboard/data", label: "متصفح البيانات", icon: "🗄️", minRole: "super-admin" },
-  { href: "/dashboard/remote-config", label: "الإعدادات遥远", icon: "⚙️", minRole: "super-admin" },
+  { href: "/dashboard/remote-config", label: "Remote Config", icon: "⚙️", minRole: "super-admin" },
   { href: "/dashboard/analytics", label: "التحليلات", icon: "📈" },
+  { href: "/dashboard/performance", label: "الأداء", icon: "⚡", minRole: "super-admin" },
   { href: "/dashboard/crashlytics", label: "الأعطال", icon: "🐛", minRole: "super-admin" },
   { href: "/dashboard/notifications", label: "الإشعارات", icon: "🔔", minRole: "super-admin" },
+  { href: "/dashboard/storage", label: "التخزين", icon: "💾", minRole: "super-admin" },
   { href: "/dashboard/settings", label: "إعدادات التطبيق", icon: "📱", minRole: "super-admin" },
   { href: "/dashboard/achievements", label: "الإنجازات", icon: "🏆" },
   { href: "/dashboard/releases", label: "الإصدارات", icon: "📦", minRole: "super-admin" },
@@ -34,6 +37,7 @@ const ROLE_HIERARCHY: Record<string, number> = {
 
 export function Sidebar({ userRole }: { userRole: string }) {
   const pathname = usePathname();
+  const { theme, toggleTheme } = useTheme();
 
   const hasAccess = (minRole?: string) => {
     if (!minRole) return true;
@@ -92,6 +96,11 @@ export function Sidebar({ userRole }: { userRole: string }) {
             </p>
             <p className="text-xs text-[var(--muted-foreground)]">{userRole}</p>
           </div>
+          <button onClick={toggleTheme}
+            className="p-1.5 rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--accent)] transition"
+            title={theme === "dark" ? "الوضع الفاتح" : "الوضع الداكن"}>
+            {theme === "dark" ? "☀️" : "🌙"}
+          </button>
           <button
             onClick={async () => {
               document.cookie = "session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
