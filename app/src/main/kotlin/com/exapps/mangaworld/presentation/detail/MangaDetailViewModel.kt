@@ -38,7 +38,8 @@ data class DetailUiState(
     val cloudflareUrl: String? = null,
     val cloudfareDomain: String? = null,
     val userLists: List<CustomUserList> = emptyList(),
-    val showAddToListDialog: Boolean = false
+    val showAddToListDialog: Boolean = false,
+    val chapterSearchQuery: String = ""
 )
 
 @HiltViewModel
@@ -377,6 +378,71 @@ class MangaDetailViewModel @Inject constructor(
         val todo = sortedChapters().filter { !it.isDownloaded && !it.isRead }
         downloadChapters(todo)
         hideDownloadDialog()
+    }
+
+    // ─── Chapter Search ─────────────────────────────────────────────────────
+
+    fun updateChapterSearchQuery(query: String) {
+        _state.update { it.copy(chapterSearchQuery = query) }
+    }
+
+    fun getFilteredChapters(): List<Chapter> {
+        val chapters = sortedChapters()
+        val query = _state.value.chapterSearchQuery.trim()
+        if (query.isEmpty()) return chapters
+        return chapters.filter { ch ->
+            ch.displayNumber.contains(query, ignoreCase = true) ||
+            (ch.title?.contains(query, ignoreCase = true) == true) ||
+            ch.number.toString().contains(query)
+        }
+    }
+
+    // ─── Mark Read/Unread ───────────────────────────────────────────────────
+
+    fun markChapterAsRead(chapter: Chapter) {
+        val mangaId = currentMangaId
+        viewModelScope.launch {
+            libraryRepo.markChapterRead(mangaId, chapter.number)
+            _state.update { it.copy(readChapters = it.readChapters + chapter.number) }
+        }
+    }
+
+    fun markChapterAsUnread(chapter: Chapter) {
+        val mangaId = currentMangaId
+        viewModelScope.launch {
+            libraryRepo.markChapterUnread(mangaId, chapter.number)
+            _state.update { it.copy(readChapters = it.readChapters - chapter.number) }
+        }
+    }
+
+    fun markAllChaptersAsRead() {
+        val mangaId = currentMangaId
+        val chapters = _state.value.manga?.chapters ?: return
+        viewModelScope.launch {
+            for (ch in chapters) {
+                libraryRepo.markChapterRead(mangaId, ch.number)
+            }
+            _state.update { it.copy(readChapters = chapters.map { it.number }.toSet()) }
+        }
+    }
+
+    fun markAllChaptersAsUnread() {
+        val mangaId = currentMangaId
+        val chapters = _state.value.manga?.chapters ?: return
+        viewModelScope.launch {
+            for (ch in chapters) {
+                libraryRepo.markChapterUnread(mangaId, ch.number)
+            }
+            _state.update { it.copy(readChapters = emptySet()) }
+        }
+    }
+
+    fun toggleChapterReadStatus(chapter: Chapter) {
+        if (_state.value.readChapters.contains(chapter.number)) {
+            markChapterAsUnread(chapter)
+        } else {
+            markChapterAsRead(chapter)
+        }
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.CircleShape
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -86,6 +88,8 @@ fun MangaDetailScreen(
                 readChapters = state.readChapters,
                 chaptersReversed = state.chaptersReversed,
                 sortedChapters = viewModel.sortedChapters(),
+                filteredChapters = viewModel.getFilteredChapters(),
+                chapterSearchQuery = state.chapterSearchQuery,
                 downloadingChapters = state.downloadingChapters,
                 onToggleFav = viewModel::toggleFavorite,
                 onToggleOrder = viewModel::toggleChaptersOrder,
@@ -95,7 +99,11 @@ fun MangaDetailScreen(
                 onOpenChapterCommunity = onOpenChapterCommunity,
                 onOpenOtherSource = onOpenOtherSource,
                 onShowAddToList = viewModel::showAddToListDialog,
-                onChapterClick = { ch -> onChapterClick(ch.url, "${source.id}_$slug") }
+                onChapterClick = { ch -> onChapterClick(ch.url, "${source.id}_$slug") },
+                onChapterSearch = viewModel::updateChapterSearchQuery,
+                onToggleChapterRead = viewModel::toggleChapterReadStatus,
+                onMarkAllRead = viewModel::markAllChaptersAsRead,
+                onMarkAllUnread = viewModel::markAllChaptersAsUnread
             )
         }
 
@@ -155,6 +163,8 @@ private fun DetailContent(
     readChapters: Set<Float>,
     chaptersReversed: Boolean,
     sortedChapters: List<Chapter>,
+    filteredChapters: List<Chapter>,
+    chapterSearchQuery: String,
     downloadingChapters: Set<Float>,
     onToggleFav: () -> Unit,
     onToggleOrder: () -> Unit,
@@ -164,7 +174,11 @@ private fun DetailContent(
     onOpenChapterCommunity: (mangaId: String, chapterUrl: String) -> Unit,
     onOpenOtherSource: (sourceId: String, slug: String) -> Unit,
     onShowAddToList: () -> Unit,
-    onChapterClick: (Chapter) -> Unit
+    onChapterClick: (Chapter) -> Unit,
+    onChapterSearch: (String) -> Unit,
+    onToggleChapterRead: (Chapter) -> Unit,
+    onMarkAllRead: () -> Unit,
+    onMarkAllUnread: () -> Unit
 ) {
     val ctx = LocalContext.current
     var descExpanded by remember { mutableStateOf(false) }
@@ -434,15 +448,66 @@ private fun DetailContent(
                     }
                 }
             }
+
+            // Chapter search bar
+            OutlinedTextField(
+                value = chapterSearchQuery,
+                onValueChange = onChapterSearch,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                placeholder = { Text("بحث في الفصول...", style = MaterialTheme.typography.bodySmall) },
+                leadingIcon = { Icon(Icons.Filled.Search, null, modifier = Modifier.size(18.dp)) },
+                trailingIcon = {
+                    if (chapterSearchQuery.isNotEmpty()) {
+                        IconButton(onClick = { onChapterSearch("") }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Filled.Close, null, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MangaColors.Cyan,
+                    unfocusedBorderColor = MangaColors.Muted.copy(alpha = 0.3f),
+                    cursorColor = MangaColors.Cyan,
+                    focusedTextColor = MangaColors.OnSurface,
+                    unfocusedTextColor = MangaColors.OnSurface,
+                    focusedContainerColor = MangaColors.Surface,
+                    unfocusedContainerColor = MangaColors.Surface
+                )
+            )
+
+            // Mark read/unread buttons
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val readCount = readChapters.size
+                val totalCount = sortedChapters.size
+                TextButton(onClick = onMarkAllRead) {
+                    Icon(Icons.Filled.DoneAll, null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("تحديد الكل كمقروء ($totalCount)", style = MaterialTheme.typography.labelSmall)
+                }
+                if (readCount > 0) {
+                    TextButton(onClick = onMarkAllUnread) {
+                        Icon(Icons.Filled.RemoveDone, null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("إلغاء تحديد الكل ($readCount)", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
         }
 
         // ── Chapters ─────────────────────────────────────────────────────────
-        items(sortedChapters, key = { it.url.ifBlank { it.id } }) { chapter ->
+        items(filteredChapters, key = { it.url.ifBlank { it.id } }) { chapter ->
             ChapterItem(
                 chapter = chapter,
                 isRead = readChapters.contains(chapter.number),
                 isDownloading = downloadingChapters.contains(chapter.number),
                 onClick = { onChapterClick(chapter) },
+                onLongClick = { onToggleChapterRead(chapter) },
                 onDownload = { onDownloadChapter(chapter) },
                 onOpenChapterComments = { onOpenChapterCommunity("${manga.source.id}_${manga.slug}", chapter.url) }
             )
@@ -457,13 +522,19 @@ private fun ChapterItem(
     isRead: Boolean,
     isDownloading: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
     onDownload: () -> Unit,
     onOpenChapterComments: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onClick() },
+                    onLongPress = { onLongClick() }
+                )
+            }
             .background(if (isRead) Color(0x0AFFFFFF) else Color.Transparent)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

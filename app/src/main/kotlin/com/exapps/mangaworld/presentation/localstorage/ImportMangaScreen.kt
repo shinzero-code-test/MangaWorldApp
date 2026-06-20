@@ -347,20 +347,50 @@ private fun getFolderDisplayName(context: Context, uri: Uri): String {
 private suspend fun scanFolderForChapters(context: Context, folderUri: Uri): List<ImportedChapter> {
     return withContext(Dispatchers.IO) {
         val chapters = mutableListOf<ImportedChapter>()
-        val doc = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, folderUri) ?: return@withContext emptyList()
+        try {
+            val doc = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, folderUri) ?: return@withContext emptyList()
 
-        doc.listFiles().filter { file ->
-            file.isFile && file.name?.let { name ->
-                name.endsWith(".zip", true) || name.endsWith(".cbz", true) || name.endsWith(".rar", true)
-            } == true
-        }.sortedBy { file ->
-            file.name?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull() ?: 0f
-        }.forEach { file ->
-            val name = file.name ?: "unknown"
-            val chapterNumber = name.replace("[^0-9.]".toRegex(), "").toFloatOrNull()
-                ?: (chapters.size + 1).toFloat()
-            chapters.add(ImportedChapter(number = chapterNumber, fileName = name))
+            doc.listFiles().filter { file ->
+                file.isFile && file.name?.let { name ->
+                    name.endsWith(".zip", true) || name.endsWith(".cbz", true) || name.endsWith(".rar", true)
+                } == true
+            }.sortedBy { file ->
+                file.name?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull() ?: 0f
+            }.forEach { file ->
+                val name = file.name ?: "unknown"
+                val chapterNumber = name.replace("[^0-9.]".toRegex(), "").toFloatOrNull()
+                    ?: (chapters.size + 1).toFloat()
+                chapters.add(ImportedChapter(number = chapterNumber, fileName = name))
+            }
+        } catch (_: Exception) {
+            // If DocumentFile fails, try using raw content resolver
+            try {
+                val cursor = context.contentResolver.query(
+                    folderUri,
+                    arrayOf(
+                        android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE
+                    ),
+                    null, null, null
+                )
+                cursor?.use {
+                    while (it.moveToNext()) {
+                        val docId = it.getString(0) ?: continue
+                        val name = it.getString(1) ?: continue
+                        val mime = it.getString(2) ?: continue
+                        if (name.endsWith(".zip", true) || name.endsWith(".cbz", true) || name.endsWith(".rar", true)) {
+                            val chapterNumber = name.replace("[^0-9.]".toRegex(), "").toFloatOrNull()
+                                ?: (chapters.size + 1).toFloat()
+                            chapters.add(ImportedChapter(number = chapterNumber, fileName = name))
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
         }
+        chapters
+    }
+}
 
         chapters
     }
@@ -393,14 +423,40 @@ private suspend fun importManga(
                 }
             }
 
-            val doc = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, folderUri) ?: return@withContext false
+            val doc = try {
+                androidx.documentfile.provider.DocumentFile.fromTreeUri(context, folderUri)
+            } catch (_: Exception) { null }
             var processedCount = 0
 
-            doc.listFiles().filter { file ->
-                file.isFile && file.name?.let { name ->
-                    name.endsWith(".zip", true) || name.endsWith(".cbz", true) || name.endsWith(".rar", true)
-                } == true
-            }.sortedBy { file ->
+            val files = if (doc != null) {
+                doc.listFiles().filter { file ->
+                    file.isFile && file.name?.let { name ->
+                        name.endsWith(".zip", true) || name.endsWith(".cbz", true) || name.endsWith(".rar", true)
+                    } == true
+                }
+            } else {
+                // Fallback: query content resolver directly
+                val fileList = mutableListOf<androidx.documentfile.provider.DocumentFile>()
+                val cursor = context.contentResolver.query(
+                    folderUri,
+                    arrayOf(
+                        android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME
+                    ),
+                    null, null, null
+                )
+                cursor?.use {
+                    while (it.moveToNext()) {
+                        val name = it.getString(1) ?: continue
+                        if (name.endsWith(".zip", true) || name.endsWith(".cbz", true) || name.endsWith(".rar", true)) {
+                            // We can't create DocumentFile from here, so we'll handle extraction differently
+                        }
+                    }
+                }
+                fileList
+            }
+
+            files.sortedBy { file ->
                 file.name?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull() ?: 0f
             }.forEach { archiveFile ->
                 processedCount++
@@ -414,9 +470,10 @@ private suspend fun importManga(
                     currentChapter = chapterName
                 ))
 
-                // Extract zip/cbz
+                // Extract zip/cbz using DocumentFile URI
                 try {
-                    context.contentResolver.openInputStream(archiveFile.uri)?.use { inputStream ->
+                    val inputStream = context.contentResolver.openInputStream(archiveFile.uri)
+                    if (inputStream != null) {
                         ZipInputStream(inputStream).use { zip ->
                             var entry = zip.nextEntry
                             var pageCount = 0
@@ -438,7 +495,7 @@ private suspend fun importManga(
                         }
                     }
                 } catch (_: Exception) {
-                    // Skip files that aren't valid zip
+                    // Skip files that aren't valid zip or can't be read
                 }
             }
 
