@@ -48,7 +48,7 @@ export default function AnalyticsPage() {
             </div>
             <p className="text-sm text-[var(--muted-foreground)]">{kpi.label}</p>
             <p className={`text-3xl font-bold mt-1 ${loading ? "animate-pulse" : ""}`}>
-              {loading ? "—" : kpi.value.toLocaleString("ar-SA")}
+              {loading ? "—" : (kpi.value || 0).toLocaleString("ar-SA")}
             </p>
           </div>
         ))}

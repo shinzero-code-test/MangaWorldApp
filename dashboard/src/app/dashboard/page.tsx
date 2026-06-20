@@ -24,7 +24,15 @@ export default function DashboardOverview() {
   useEffect(() => {
     fetch("/api/analytics/summary")
       .then((r) => r.json())
-      .then((data) => { setKpis(data); setLoading(false); })
+      .then((data) => {
+        setKpis({
+          totalUsers: data?.overview?.totalUsers ?? data?.totalUsers ?? 0,
+          totalComments: data?.overview?.totalComments ?? data?.totalComments ?? 0,
+          totalReviews: data?.overview?.totalReviews ?? data?.totalReviews ?? 0,
+          openReports: data?.overview?.openReports ?? data?.openReports ?? 0,
+        });
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, []);
 
@@ -59,7 +67,7 @@ export default function DashboardOverview() {
             </div>
             <p className="text-sm text-[var(--muted-foreground)]">{card.label}</p>
             <p className={`text-3xl font-bold mt-1 ${loading ? "animate-pulse" : ""}`}>
-              {loading ? "—" : card.value.toLocaleString("ar-SA")}
+              {loading ? "—" : (card.value || 0).toLocaleString("ar-SA")}
             </p>
           </Link>
         ))}

@@ -71,7 +71,7 @@ export default function AchievementsPage() {
             <span className="text-2xl">📖</span>
           </div>
           <p className="text-sm text-[var(--muted-foreground)]">إجمالي الصفحات</p>
-          <p className="text-3xl font-bold mt-1">{(data?.totalPagesRead || 0).toLocaleString("ar-SA")}</p>
+          <p className="text-3xl font-bold mt-1">{((data?.totalPagesRead) || 0).toLocaleString("ar-SA")}</p>
         </div>
         <div className="p-5 bg-gradient-to-br from-green-500/20 to-green-600/5 rounded-xl border border-[var(--border)]">
           <div className="flex items-center justify-between mb-2">
