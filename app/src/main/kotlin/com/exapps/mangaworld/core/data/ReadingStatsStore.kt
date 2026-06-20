@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import org.json.JSONObject
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -49,6 +50,10 @@ class ReadingStatsStore @Inject constructor(
         dataStore.edit { prefs ->
             prefs[totalReadingTimeKey] = (prefs[totalReadingTimeKey] ?: 0L) + durationMs
             prefs[lastReadDateKey] = today
+            // Also record daily reading time for the stats chart
+            val timeMap = parseMap(prefs[dailyTimeKey] ?: "{}")
+            timeMap[today] = (timeMap[today] ?: 0) + durationMs.toInt()
+            prefs[dailyTimeKey] = JSONObject(timeMap as Map<String, Any>).toString()
         }
         updateStreak(today)
     }
@@ -59,7 +64,8 @@ class ReadingStatsStore @Inject constructor(
             val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
             val pagesMap = parseMap(prefs[dailyPagesKey] ?: "{}")
             pagesMap[today] = (pagesMap[today] ?: 0) + pagesRead
-            prefs[dailyPagesKey] = pagesMap.toString()
+            // Use JSONObject for correct JSON serialization (Map.toString() produces {key=value})
+            prefs[dailyPagesKey] = JSONObject(pagesMap as Map<String, Any>).toString()
         }
     }
 
@@ -116,14 +122,21 @@ class ReadingStatsStore @Inject constructor(
 
     private fun parseMap(json: String): MutableMap<String, Int> {
         return try {
-            val cleaned = json.trim().removePrefix("{").removeSuffix("}")
-            if (cleaned.isBlank()) return mutableMapOf()
-            cleaned.split(",").associate { entry ->
-                val parts = entry.split(":")
-                parts[0].trim().removeSurrounding("\"") to (parts.getOrNull(1)?.trim()?.removeSurrounding("\"")?.toIntOrNull() ?: 0)
-            }.toMutableMap()
-        } catch (e: Exception) {
-            mutableMapOf()
+            val obj = JSONObject(json)
+            obj.keys().asSequence().associateWith { key -> obj.getInt(key) }.toMutableMap()
+        } catch (_: Exception) {
+            // Backward compat: handle old Map.toString() format "{key=value}"
+            try {
+                val cleaned = json.trim().removePrefix("{").removeSuffix("}")
+                if (cleaned.isBlank()) return mutableMapOf()
+                cleaned.split(",").associate { entry ->
+                    val sep = if (entry.contains("=")) "=" else ":"
+                    val parts = entry.split(sep)
+                    parts[0].trim().removeSurrounding("\"") to (parts.getOrNull(1)?.trim()?.removeSurrounding("\"")?.toIntOrNull() ?: 0)
+                }.toMutableMap()
+            } catch (_: Exception) {
+                mutableMapOf()
+            }
         }
     }
 }

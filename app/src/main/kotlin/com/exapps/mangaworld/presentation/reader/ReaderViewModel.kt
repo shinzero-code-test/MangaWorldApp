@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.ImagePrefetcher
 import com.exapps.mangaworld.core.data.ReadingPositionSyncManager
 import com.exapps.mangaworld.core.data.ReadingStatsStore
+import com.exapps.mangaworld.core.data.AchievementManager
 import com.exapps.mangaworld.core.data.toDetail
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.core.data.download.ChapterCleanupWorker
@@ -85,6 +86,7 @@ class ReaderViewModel @Inject constructor(
     private val downloadQueueManager: DownloadQueueManager,
     private val cacheDao: MangaCacheDao,
     private val readingStatsStore: ReadingStatsStore,
+    private val achievementManager: AchievementManager,
     private val imagePrefetcher: ImagePrefetcher,
     private val firebaseSyncManager: FirebaseSyncManager,
     private val widgetShortcutCoordinator: WidgetShortcutCoordinator,
@@ -265,6 +267,7 @@ class ReaderViewModel @Inject constructor(
             if (page >= st.totalPages - 1) {
                 if (!st.incognitoMode) {
                     libraryRepo.markChapterRead(st.mangaId, chNum)
+                    achievementManager.recordChapterRead()
                     scheduleAutoCleanupIfNeeded(st.mangaId, st.chapterUrl)
                     runCatching { firebaseSyncManager.pushLocalSnapshot() }
                     val analyticsKey = "${st.mangaId}|${st.chapterUrl}|$chNum"
@@ -620,6 +623,8 @@ class ReaderViewModel @Inject constructor(
         if (delta >= 1_000L) {
             readingStatsStore.addReadingTime(delta)
             readingStatsStore.recordPageRead(1)
+            // Keep achievements/goals in sync
+            achievementManager.recordPageRead(1)
         }
         sessionCheckpointAt = now
     }
