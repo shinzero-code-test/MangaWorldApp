@@ -17,6 +17,9 @@ import com.exapps.mangaworld.domain.repository.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 
@@ -82,6 +85,14 @@ class MangaDetailViewModel @Inject constructor(
         // Cancel previous work (including infinite collectors)
         observersJob?.cancel()
         loadJob?.cancel()
+
+        // All manga live on disk: imported manga is always local;
+        // downloaded manga uses local metadata.json + chapter dirs until
+        // the user explicitly refreshes from the online source.
+        if (source.id == "imported" || hasLocalData(currentMangaId)) {
+            loadFromLocalDisk(slug, source)
+            return
+        }
 
         loadJob = viewModelScope.launch {
             val hasData = _state.value.manga != null
@@ -151,6 +162,109 @@ class MangaDetailViewModel @Inject constructor(
                         )
                     }
                 }
+        }
+    }
+
+    /** Check whether a manga directory with metadata.json exists on disk. */
+    private fun hasLocalData(mangaId: String): Boolean {
+        val dir = File(downloadQueueManager.getMangaDirPath(mangaId))
+        return dir.exists() && File(dir, "metadata.json").exists()
+    }
+
+    /**
+     * Load a manga from the local filesystem (metadata.json + chapter dirs).
+     * Used for imported manga and downloaded manga that already exist on disk.
+     */
+    private fun loadFromLocalDisk(slug: String, source: MangaSource) {
+        loadJob = viewModelScope.launch {
+            _state.update { it.copy(isLoading = true, error = null) }
+            try {
+                val mangaDirPath = downloadQueueManager.getMangaDirPath(currentMangaId)
+                val mangaDir = File(mangaDirPath)
+                if (!mangaDir.exists()) {
+                    _state.update { it.copy(isLoading = false, error = "المجلد المحلي غير موجود") }
+                    return@launch
+                }
+
+                // Read metadata.json
+                val metadataFile = File(mangaDir, "metadata.json")
+                val json = if (metadataFile.exists()) {
+                    JSONObject(metadataFile.readText())
+                } else JSONObject()
+
+                val title = json.optString("title", slug)
+                val description = json.optString("description", "")
+                val genresRaw = json.optJSONArray("genres") ?: JSONArray()
+                val genres = (0 until genresRaw.length()).map { genresRaw.getString(it) }
+                val totalChaptersFromJson = json.optInt("totalChapters", 0)
+
+                // Scan chapter directories
+                val chapterDirs = mangaDir.listFiles()
+                    ?.filter { it.isDirectory && File(it, ".completed").exists() }
+                    ?.sortedBy { dir ->
+                        dir.name.replace("[^0-9.]".toRegex(), "").toFloatOrNull() ?: 0f
+                    }
+                    ?: emptyList()
+
+                val chapters = chapterDirs.mapIndexed { index, dir ->
+                    val chNumber = dir.name.replace("[^0-9.]".toRegex(), "").toFloatOrNull()
+                        ?: (index + 1).toFloat()
+                    val pageCount = dir.listFiles()
+                        ?.count { it.isFile && it.extension.lowercase() in setOf("jpg", "jpeg", "png", "webp") }
+                        ?: 0
+                    Chapter(
+                        id = "${currentMangaId}_${dir.name}",
+                        mangaId = currentMangaId,
+                        number = chNumber,
+                        title = "الفصل ${chNumber}",
+                        // chapterUrl = directory name; reader uses getLocalChapterPages(mangaId, chapterUrl)
+                        url = dir.name,
+                        totalPages = pageCount,
+                        isDownloaded = true
+                    )
+                }
+
+                val coverPath = File(mangaDir, "cover.jpg")
+                val coverUrl = if (coverPath.exists()) coverPath.toURI().toString() else ""
+
+                val mangaDetail = MangaDetail(
+                    id = currentMangaId,
+                    slug = slug,
+                    title = title,
+                    coverUrl = coverUrl,
+                    source = source,
+                    description = description,
+                    genres = genres,
+                    totalChapters = totalChaptersFromJson.coerceAtLeast(chapters.size),
+                    chapters = chapters,
+                    url = ""
+                )
+
+                _state.update { it.copy(isLoading = false, manga = mangaDetail) }
+
+                // Start observers for favourite / read status / download state
+                observersJob?.cancel()
+                observersJob = viewModelScope.launch {
+                    launch {
+                        libraryRepo.isFavoriteFlow(currentMangaId)
+                            .collect { fav -> _state.update { it.copy(isFavorite = fav) } }
+                    }
+                    launch {
+                        libraryRepo.getReadChapters(currentMangaId)
+                            .collect { read -> _state.update { it.copy(readChapters = read) } }
+                    }
+                    launch {
+                        val downloaded = withContext(Dispatchers.IO) {
+                            chapters.filter { ch ->
+                                downloadQueueManager.isChapterDownloaded(currentMangaId, ch.url)
+                            }.map { it.url }.toSet()
+                        }
+                        _state.update { it.copy(downloadedChapters = downloaded) }
+                    }
+                }
+            } catch (e: Exception) {
+                _state.update { it.copy(isLoading = false, error = e.message ?: "خطأ في تحميل المانجا المحلية") }
+            }
         }
     }
 
