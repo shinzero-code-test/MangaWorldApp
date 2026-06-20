@@ -335,59 +335,66 @@ fun ImportMangaScreen(
 }
 
 private fun getFolderDisplayName(context: Context, uri: Uri): String {
-    val cursor = context.contentResolver.query(uri, null, null, null, null)
-    return cursor?.use {
-        if (it.moveToFirst()) {
-            val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-            if (nameIndex >= 0) it.getString(nameIndex) ?: "مجلد" else "مجلد"
-        } else "مجلد"
-    } ?: "مجلد"
+    // DocumentFile.fromTreeUri() is the correct way to resolve a Tree URI from
+    // ACTION_OPEN_DOCUMENT_TREE. Calling contentResolver.query() on a Tree URI
+    // throws UnsupportedOperationException on most document providers.
+    return try {
+        val doc = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, uri)
+        doc?.name?.takeIf { it.isNotBlank() } ?: extractDisplayNameFromTreeId(uri)
+    } catch (_: Exception) {
+        extractDisplayNameFromTreeId(uri)
+    }
+}
+
+/**
+ * Fallback: parse the display name from the tree document ID embedded in the URI.
+ * Tree URI format: content://.../tree/primary%3ADownload%2FOmniFetch
+ * DocumentsContract.getTreeDocumentId() decodes this to "primary:Download/OmniFetch"
+ * → we take the last path segment.
+ */
+private fun extractDisplayNameFromTreeId(uri: Uri): String {
+    return try {
+        val treeDocId = android.provider.DocumentsContract.getTreeDocumentId(uri)
+        treeDocId.substringAfterLast('/').takeIf { it.isNotBlank() } ?: "مجلد"
+    } catch (_: Exception) {
+        "مجلد"
+    }
 }
 
 private suspend fun scanFolderForChapters(context: Context, folderUri: Uri): List<ImportedChapter> {
     return withContext(Dispatchers.IO) {
         val chapters = mutableListOf<ImportedChapter>()
-        try {
-            val doc = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, folderUri) ?: return@withContext emptyList()
 
-            doc.listFiles().filter { file ->
+        // Primary path: DocumentFile.fromTreeUri() is the correct SAF API for Tree URIs
+        val doc = try {
+            androidx.documentfile.provider.DocumentFile.fromTreeUri(context, folderUri)
+        } catch (_: Exception) {
+            null
+        }
+
+        if (doc == null || !doc.exists() || !doc.isDirectory) {
+            // Cannot resolve the tree — return empty (user will see "0 chapters")
+            return@withContext chapters
+        }
+
+        doc.listFiles()
+            .filter { file ->
                 file.isFile && file.name?.let { name ->
-                    name.endsWith(".zip", true) || name.endsWith(".cbz", true) || name.endsWith(".rar", true)
+                    name.endsWith(".zip", true) ||
+                        name.endsWith(".cbz", true) ||
+                        name.endsWith(".rar", true)
                 } == true
-            }.sortedBy { file ->
+            }
+            .sortedBy { file ->
                 file.name?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull() ?: 0f
-            }.forEach { file ->
+            }
+            .forEach { file ->
                 val name = file.name ?: "unknown"
                 val chapterNumber = name.replace("[^0-9.]".toRegex(), "").toFloatOrNull()
                     ?: (chapters.size + 1).toFloat()
                 chapters.add(ImportedChapter(number = chapterNumber, fileName = name))
             }
-        } catch (_: Exception) {
-            // If DocumentFile fails, try using raw content resolver
-            try {
-                val cursor = context.contentResolver.query(
-                    folderUri,
-                    arrayOf(
-                        android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                        android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                        android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE
-                    ),
-                    null, null, null
-                )
-                cursor?.use {
-                    while (it.moveToNext()) {
-                        val docId = it.getString(0) ?: continue
-                        val name = it.getString(1) ?: continue
-                        val mime = it.getString(2) ?: continue
-                        if (name.endsWith(".zip", true) || name.endsWith(".cbz", true) || name.endsWith(".rar", true)) {
-                            val chapterNumber = name.replace("[^0-9.]".toRegex(), "").toFloatOrNull()
-                                ?: (chapters.size + 1).toFloat()
-                            chapters.add(ImportedChapter(number = chapterNumber, fileName = name))
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
-        }
+
         chapters
     }
 }
@@ -422,34 +429,22 @@ private suspend fun importManga(
             val doc = try {
                 androidx.documentfile.provider.DocumentFile.fromTreeUri(context, folderUri)
             } catch (_: Exception) { null }
+
+            if (doc == null || !doc.exists() || !doc.isDirectory) {
+                throw IllegalStateException(
+                    "تعذر الوصول للمجلد. تأكد من منح صلاحية الوصول عبر SAF."
+                )
+            }
+
             var processedCount = 0
 
-            val files = if (doc != null) {
-                doc.listFiles().filter { file ->
-                    file.isFile && file.name?.let { name ->
-                        name.endsWith(".zip", true) || name.endsWith(".cbz", true) || name.endsWith(".rar", true)
-                    } == true
-                }
-            } else {
-                // Fallback: query content resolver directly
-                val fileList = mutableListOf<androidx.documentfile.provider.DocumentFile>()
-                val cursor = context.contentResolver.query(
-                    folderUri,
-                    arrayOf(
-                        android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                        android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME
-                    ),
-                    null, null, null
-                )
-                cursor?.use {
-                    while (it.moveToNext()) {
-                        val name = it.getString(1) ?: continue
-                        if (name.endsWith(".zip", true) || name.endsWith(".cbz", true) || name.endsWith(".rar", true)) {
-                            // We can't create DocumentFile from here, so we'll handle extraction differently
-                        }
-                    }
-                }
-                fileList
+            // DocumentFile.fromTreeUri() + listFiles() is the correct way to enumerate
+            // children from a Tree URI. Calling contentResolver.query() on a Tree URI
+            // throws UnsupportedOperationException — never use it as a fallback.
+            val files = doc.listFiles().filter { file ->
+                file.isFile && file.name?.let { name ->
+                    name.endsWith(".zip", true) || name.endsWith(".cbz", true) || name.endsWith(".rar", true)
+                } == true
             }
 
             files.sortedBy { file ->
