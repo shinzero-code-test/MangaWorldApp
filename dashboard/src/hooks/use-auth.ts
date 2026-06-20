@@ -26,8 +26,8 @@ export function useAuth() {
 
   const hasPermission = (minRole: "viewer" | "moderator" | "super-admin") => {
     if (!user) return false;
-    const hierarchy = { viewer: 0, moderator: 1, "super-admin": 2 };
-    return (hierarchy[user.role] || 0) >= (hierarchy[minRole] || 0);
+    const hierarchy: Record<string, number> = { viewer: 0, moderator: 1, "super-admin": 2 };
+    return (hierarchy[user.role] ?? 0) >= (hierarchy[minRole] ?? 0);
   };
 
   return { user, loading, hasPermission };

@@ -21,7 +21,7 @@ export async function getCurrentUser(): Promise<AuthUser> {
   const data = doc.data();
   return {
     uid: decoded.uid,
-    email: decoded.email,
+    email: decoded.email ?? null,
     role: (data?.role as AuthUser["role"]) || "viewer",
   };
 }
@@ -30,8 +30,8 @@ export async function requireRole(
   minRole: "viewer" | "moderator" | "super-admin"
 ): Promise<AuthUser> {
   const user = await getCurrentUser();
-  const hierarchy = { viewer: 0, moderator: 1, "super-admin": 2 };
-  if (hierarchy[user.role] < hierarchy[minRole]) {
+  const hierarchy: Record<string, number> = { viewer: 0, moderator: 1, "super-admin": 2 };
+  if ((hierarchy[user.role] ?? 0) < (hierarchy[minRole] ?? 0)) {
     throw new Error("Forbidden");
   }
   return user;
