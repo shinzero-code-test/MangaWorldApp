@@ -1,32 +1,142 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
+import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
-    await requireRole("moderator");
+    const user = await requireRole("moderator");
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || "";
-    const role = searchParams.get("role") || "";
+    const roleFilter = searchParams.get("role") || "";
+    const providerFilter = searchParams.get("provider") || "";
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
+    const sortBy = searchParams.get("sortBy") || "updatedAt";
+    const sortDir = searchParams.get("sortDir") || "desc";
     const offset = (page - 1) * limit;
 
+    // Get profiles from Firestore
     let query: any = adminDb.collection("publicProfiles");
-    if (role) query = query.where("role", "==", role);
+    if (roleFilter) query = query.where("role", "==", roleFilter);
+    query = query.orderBy(sortBy, sortDir as "asc" | "desc");
 
-    const snapshot = await query.orderBy("updatedAt", "desc").offset(offset).limit(limit + 1).get();
-    const users = snapshot.docs.slice(0, limit).map((doc: any) => ({ id: doc.id, ...doc.data() }));
+    const snapshot = await query.offset(offset).limit(limit + 1).get();
+    const profiles = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
     const hasMore = snapshot.docs.length > limit;
+    const profilesPage = profiles.slice(0, limit);
 
-    let filtered = users;
+    // Enrich with Firebase Auth data
+    const enriched = await Promise.all(
+      profilesPage.map(async (profile: any) => {
+        try {
+          const authUser = await adminAuth.getUser(profile.id);
+          return {
+            ...profile,
+            email: authUser.email || null,
+            emailVerified: authUser.emailVerified,
+            disabled: authUser.disabled,
+            lastSignIn: authUser.metadata.lastSignInTime,
+            createdAt: authUser.metadata.creationTime,
+            providers: authUser.providerData.map((p: any) => p.providerId),
+            phoneNumber: authUser.phoneNumber || null,
+          };
+        } catch {
+          return { ...profile, email: null, providers: [] };
+        }
+      })
+    );
+
+    // Apply search filter (after enrichment since search may need email)
+    let filtered = enriched;
     if (search) {
       const s = search.toLowerCase();
-      filtered = users.filter((u: any) => u.username?.toLowerCase().includes(s) || u.email?.toLowerCase().includes(s));
+      filtered = enriched.filter(
+        (u: any) =>
+          u.username?.toLowerCase().includes(s) ||
+          u.email?.toLowerCase().includes(s) ||
+          u.id.toLowerCase().includes(s)
+      );
     }
 
-    return NextResponse.json({ users: filtered, total: filtered.length, hasMore });
+    // Apply provider filter
+    if (providerFilter) {
+      filtered = filtered.filter((u: any) =>
+        u.providers?.includes(providerFilter)
+      );
+    }
+
+    // Get total count
+    const countSnapshot = await adminDb.collection("publicProfiles").count().get();
+    const total = countSnapshot.data().count;
+
+    return NextResponse.json({
+      users: filtered,
+      total,
+      page,
+      limit,
+      hasMore,
+    });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: error.message === "Forbidden" ? 403 : 500 });
+    const status = error.message === "Forbidden" ? 403 : error.message === "Unauthorized" ? 401 : 500;
+    return NextResponse.json({ error: error.message }, { status });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const admin = await requireRole("super-admin");
+    const { uid, role, username, bio, disabled } = await request.json();
+
+    if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+
+    const updates: any = { updatedAt: Date.now() };
+    if (role && ["viewer", "moderator", "super-admin"].includes(role)) {
+      updates.role = role;
+      // Also set custom claim
+      await adminAuth.setCustomUserClaims(uid, { role });
+    }
+    if (username !== undefined) updates.username = username;
+    if (bio !== undefined) updates.bio = bio;
+
+    await adminDb.collection("publicProfiles").doc(uid).update(updates);
+
+    if (disabled !== undefined) {
+      await adminAuth.updateUser(uid, { disabled });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    const status = error.message === "Forbidden" ? 403 : error.message === "Unauthorized" ? 401 : 500;
+    return NextResponse.json({ error: error.message }, { status });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    await requireRole("super-admin");
+    const { uid } = await request.json();
+    if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+
+    // Delete user from Auth
+    await adminAuth.deleteUser(uid);
+
+    // Delete profile
+    await adminDb.collection("publicProfiles").doc(uid).delete();
+
+    // Delete user subcollections
+    const subcols = ["favorites", "readingHistory", "readerAnnotations"];
+    for (const subcol of subcols) {
+      const snap = await adminDb.collection("users").doc(uid).collection(subcol).limit(500).get();
+      const batch = adminDb.batch();
+      snap.docs.forEach((doc: any) => batch.delete(doc.ref));
+      await batch.commit();
+    }
+
+    // Delete user doc
+    await adminDb.collection("users").doc(uid).delete();
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

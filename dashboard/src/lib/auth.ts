@@ -45,10 +45,10 @@ export async function createSessionCookie(idToken: string): Promise<string> {
     .collection("publicProfiles")
     .doc(decoded.uid)
     .get();
+  const isSuperAdmin = decoded.email === process.env.SUPER_ADMIN_EMAIL;
+
   if (!profileDoc.exists) {
     const userRecord = await adminAuth.getUser(decoded.uid);
-    const isSuperAdmin =
-      userRecord.email === process.env.SUPER_ADMIN_EMAIL;
     await adminDb.collection("publicProfiles").doc(decoded.uid).set({
       uid: decoded.uid,
       username: userRecord.email?.split("@")[0] || "unknown",
@@ -57,6 +57,11 @@ export async function createSessionCookie(idToken: string): Promise<string> {
       showListsPublic: false,
       showActivityPublic: false,
       bio: "",
+      updatedAt: Date.now(),
+    });
+  } else if (isSuperAdmin && profileDoc.data()?.role !== "super-admin") {
+    await adminDb.collection("publicProfiles").doc(decoded.uid).update({
+      role: "super-admin",
       updatedAt: Date.now(),
     });
   }

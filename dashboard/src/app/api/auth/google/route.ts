@@ -21,8 +21,9 @@ export async function POST(request: NextRequest) {
 
     // Auto-bootstrap profile
     const profileDoc = await adminDb.collection("publicProfiles").doc(decoded.uid).get();
+    const isSuperAdmin = decoded.email === process.env.SUPER_ADMIN_EMAIL;
+
     if (!profileDoc.exists) {
-      const isSuperAdmin = decoded.email === process.env.SUPER_ADMIN_EMAIL;
       await adminDb.collection("publicProfiles").doc(decoded.uid).set({
         uid: decoded.uid,
         username: decoded.name || decoded.email?.split("@")[0] || "user",
@@ -32,6 +33,11 @@ export async function POST(request: NextRequest) {
         showListsPublic: false,
         showActivityPublic: false,
         bio: "",
+        updatedAt: Date.now(),
+      });
+    } else if (isSuperAdmin && profileDoc.data()?.role !== "super-admin") {
+      await adminDb.collection("publicProfiles").doc(decoded.uid).update({
+        role: "super-admin",
         updatedAt: Date.now(),
       });
     }

@@ -16,6 +16,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard/users", label: "المستخدمون", icon: "👥", minRole: "moderator" },
   { href: "/dashboard/moderation", label: "الإشراف", icon: "🛡️", minRole: "moderator" },
   { href: "/dashboard/community/comments", label: "المجتمع", icon: "💬", minRole: "moderator" },
+  { href: "/dashboard/data", label: "متصفح البيانات", icon: "🗄️", minRole: "super-admin" },
   { href: "/dashboard/remote-config", label: "الإعدادات遥远", icon: "⚙️", minRole: "super-admin" },
   { href: "/dashboard/analytics", label: "التحليلات", icon: "📈" },
   { href: "/dashboard/crashlytics", label: "الأعطال", icon: "🐛", minRole: "super-admin" },
