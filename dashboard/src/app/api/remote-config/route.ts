@@ -8,7 +8,7 @@ export async function GET() {
     const { getRemoteConfig } = await import("firebase-admin/remote-config");
 
     const app = getApps()[0];
-    if (!app) return NextResponse.json({ parameters: {} });
+    if (!app) return NextResponse.json({ parameters: {}, template: null });
 
     const rc = getRemoteConfig(app);
     const template = await rc.getTemplate();
@@ -20,9 +20,18 @@ export async function GET() {
       params[key] = {
         defaultValue: val,
         valueType: param.valueType,
+        description: param.description || "",
       };
     }
-    return NextResponse.json({ parameters: params });
+
+    return NextResponse.json({
+      parameters: params,
+      template: {
+        parameterCount: Object.keys(template.parameters).length,
+        conditionCount: 0,
+        etag: template.etag,
+      },
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -49,7 +58,7 @@ export async function PUT(request: NextRequest) {
     }
 
     await rc.publishTemplate(template);
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, etag: template.etag });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
