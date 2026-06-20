@@ -256,7 +256,7 @@ fun MangaNavGraph(navController: NavHostController) {
         composable(Screen.Suggestions.route) {
             SuggestionsScreen(
                 onBack = { navController.popBackStack() },
-                onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) }
+                onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src.id, slug)) }
             )
         }
         composable(Screen.Login.route) {

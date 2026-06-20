@@ -77,7 +77,6 @@ class SuggestionsViewModel @Inject constructor(
                             rating = cache.rating,
                             latestChapter = cache.latestChapter,
                             totalChapters = cache.totalChapters,
-                            description = cache.description,
                             url = cache.url
                         )
                     } catch (_: Exception) { null }

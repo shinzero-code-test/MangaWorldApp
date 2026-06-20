@@ -125,9 +125,9 @@ private suspend fun saveImage(context: Context, imageUrl: String) {
             // Android 9 and below — use external storage
             @Suppress("DEPRECATION")
             val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-            val mangaDir = File(directory, "MangaWorld")
+            val mangaDir = java.io.File(directory, "MangaWorld")
             mangaDir.mkdirs()
-            val file = File(mangaDir, "MangaWorld_${System.currentTimeMillis()}.jpg")
+            val file = java.io.File(mangaDir, "MangaWorld_${System.currentTimeMillis()}.jpg")
             file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }
             // Scan the file so it appears in the gallery
             android.media.MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null, null)
@@ -141,5 +141,3 @@ private suspend fun saveImage(context: Context, imageUrl: String) {
         }
     }
 }
-
-private fun File(path: String) = java.io.File(path)
