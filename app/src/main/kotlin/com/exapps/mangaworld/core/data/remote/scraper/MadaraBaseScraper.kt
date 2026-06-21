@@ -2,6 +2,8 @@ package com.exapps.mangaworld.core.data.remote.scraper
 
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -284,7 +286,10 @@ open class MadaraBaseScraper(
                         chapterUrl = chHref,
                         timeAgo = timeText,
                         source = source,
-                        isNew = timeText.contains("ساعة") || timeText.contains("hour")
+                        isNew = timeText.contains("ساعة") || timeText.contains("hour") ||
+                                timeText.contains("دقيقة") || timeText.contains("minute") ||
+                                timeText.contains("ثانية") || timeText.contains("second") ||
+                                timeText.contains("لحظات") || timeText.contains("moments")
                     )
                 )
             }
@@ -321,8 +326,9 @@ open class MadaraBaseScraper(
             val linkEl = card.selectFirst(".post-title a[href], .item-thumb a[href], a[href*=\"/manga/\"], a[href*=\"manga/\"]")
                 ?: return@mapNotNull null
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-            // Extract slug from various URL patterns: /manga/slug/, /comics/slug/, /manga/slug/
-            val slug = href.trimEnd('/').let { url ->
+            // Extract slug from various URL patterns: /manga/slug/, /comics/slug/
+            // Strip query params first to avoid polluting identifiers
+            val slug = href.substringBefore("?").trimEnd('/').let { url ->
                 val lastSegment = url.substringAfterLast("/")
                 if (lastSegment.isNotBlank() && !lastSegment.startsWith("page")) lastSegment else url.substringAfterLast("/manga/").substringAfterLast("/comics/")
             }.trimEnd('/')
@@ -382,11 +388,12 @@ open class MadaraBaseScraper(
                     .post(formBody)
                     .build()
 
-                val response = client.newCall(ajaxRequest).execute()
-                val bodyStr = response.body?.string() ?: "{}"
-                response.close()
-
-                val json = JSONObject(bodyStr)
+                val (bodyStr, json) = withContext(Dispatchers.IO) {
+                    val response = client.newCall(ajaxRequest).execute()
+                    val body = response.body?.string() ?: "{}"
+                    response.close()
+                    body to JSONObject(body)
+                }
                 if (json.optBoolean("success", false)) {
                     val html = json.optString("data", "")
                     val chapDoc = Jsoup.parse(html, source.baseUrl)
@@ -406,9 +413,9 @@ open class MadaraBaseScraper(
         val chLink = li.selectFirst("a[href]") ?: return null
         val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
         val chText = chLink.text().cleanText()
-        val chNumStr = chText.replace("الفصل", "").replace("[^0-9.]".toRegex(), "").trim()
-        val chNum = chNumStr.toFloatOrNull()
-            ?: chHref.trimEnd('/').substringAfterLast("/").toFloatOrNull()
+        // Extract ONLY the first number — prevents "الفصل 12 : 3 وحوش" → 123
+        val chNum = Regex("[0-9]+(?:\\.[0-9]+)?").find(chText)?.value?.toFloatOrNull()
+            ?: chHref.trimEnd('/').substringAfterLast("/").substringBefore("?").toFloatOrNull()
             ?: return null
         val dateText = li.selectFirst(".chapter-release-date i, .chapter-release-date span, .post-on")?.text()?.cleanText()
         val dateLong = dateText?.let { parseArabicDate(it) }
