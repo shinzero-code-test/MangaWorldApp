@@ -13,30 +13,30 @@ enum class MangaSource(
     val logoRes: Int = 0
 ) {
     // ─── Original Sources ─────────────────────────────────────────────────────
-    OLYMPUS("olympus", "أوليمبس ستاف", "https://olympustaff.com", true, ThemeType.OTHER, R.drawable.olympustaff_com_logo),
-    AZORA("azora", "أزورا مون", "https://azoramoon.com", false, ThemeType.ASTRO, R.drawable.azoramoon_com_logo),
+    OLYMPUS("olympus", "تيم اكس", "https://olympustaff.com", true, ThemeType.OTHER, R.drawable.olympustaff_com_logo),
+    AZORA("azora", "ازورا مانجا", "https://azoramoon.com", false, ThemeType.ASTRO, R.drawable.azoramoon_com_logo),
     STARZ("starz", "مانجا ستارز", "https://manga-starz.net", true, ThemeType.MADARA, R.drawable.manga_starz_net_logo),
     MANGASID("mangasid", "مانجا سيد", "https://mangasid.com", false, ThemeType.ASTRO, R.drawable.mangasid_com_logo),
-    MESHMANGA("meshmanga", "ميش مانجا", "https://meshmanga.com", false, ThemeType.API, R.drawable.meshmanga_com_logo),
+    MESHMANGA("meshmanga", "مانجا سوات", "https://meshmanga.com", false, ThemeType.API, R.drawable.meshmanga_com_logo),
 
     // ─── New Arabic Sources (Madara Theme) ────────────────────────────────────
-    ASQ3("asq3", "3 أسقط", "https://3asq.org", true, ThemeType.MADARA, R.drawable.asq3_org_logo),
-    LEKMANGA("lekmanga", "ليك مانجا", "https://lek-manga.net", false, ThemeType.MADARA, R.drawable.lek_manga_net_logo),
-    LEKMANGAONLINE("lekmangaonline", "ليك مانجا أونلاين", "https://lekmanga.online", false, ThemeType.MADARA, R.drawable.lekmanga_online_logo),
-    LIKEMANGA("likemanga", "لايك مانجا", "https://like-manga.net", false, ThemeType.MADARA, R.drawable.like_manga_net_logo),
-    LINKMANGA("linkmanga", "لينك مانجا", "https://link-manga.net", false, ThemeType.MADARA, R.drawable.link_manga_net_logo),
+    ASQ3("asq3", "مانجا العاشق", "https://3asq.org", true, ThemeType.MADARA, R.drawable.asq3_org_logo),
+    LEKMANGA("lekmanga", "مانجا ليك", "https://lek-manga.net", false, ThemeType.MADARA, R.drawable.lek_manga_net_logo),
+    LEKMANGAONLINE("lekmangaonline", "مانجا ليك اونلاين", "https://lekmanga.online", false, ThemeType.MADARA, R.drawable.lekmanga_online_logo),
+    LIKEMANGA("likemanga", "مانجا لايك", "https://like-manga.net", false, ThemeType.MADARA, R.drawable.like_manga_net_logo),
+    LINKMANGA("linkmanga", "مانجا لينك", "https://link-manga.net", false, ThemeType.MADARA, R.drawable.link_manga_net_logo),
     MANGALEKO("mangaleko", "مانجا ليكو", "https://manga-leko.site", false, ThemeType.MADARA, R.drawable.manga_leko_site_logo),
     MANGALIONZ("mangalionz", "مانجا ليونز", "https://manga-lionz.org", false, ThemeType.MADARA, R.drawable.manga_lionz_org_logo),
 
     // ─── New Arabic Sources (MangaReader Theme) ───────────────────────────────
-    AREASCANS("areascans", "أريا مانجا", "https://ar.kenmanga.com", false, ThemeType.MANGAREADER, R.drawable.ar_kenmanga_com_logo),
-    HIJALA("hijala", "هجهلا", "https://hijala.com", true, ThemeType.MANGAREADER, R.drawable.hijala_com_logo),
-    LAVASCANS("lavascans", "لافا سكانز", "https://lavascans.com", true, ThemeType.MANGAREADER, R.drawable.lavascans_com_logo),
-    STELLARSABER("stellarsaber", "ستيلار سابر", "https://stellarsaber.pro", true, ThemeType.MANGAREADER, R.drawable.stellarsaber_pro_logo),
-    UMIMANGA("umimanga", "أمي مانجا", "https://www.umimanga.com", false, ThemeType.MANGAREADER, R.drawable.www_umimanga_com_logo),
+    AREASCANS("areascans", "آريا مانجا", "https://ar.kenmanga.com", false, ThemeType.MANGAREADER, R.drawable.ar_kenmanga_com_logo),
+    HIJALA("hijala", "حجالة مانجا", "https://hijala.com", true, ThemeType.MANGAREADER, R.drawable.hijala_com_logo),
+    LAVASCANS("lavascans", "لاڤا سكانز", "https://lavascans.com", true, ThemeType.MANGAREADER, R.drawable.lavascans_com_logo),
+    STELLARSABER("stellarsaber", "StellarSaber", "https://stellarsaber.pro", true, ThemeType.MANGAREADER, R.drawable.stellarsaber_pro_logo),
+    UMIMANGA("umimanga", "يومي مانجا", "https://www.umimanga.com", false, ThemeType.MANGAREADER, R.drawable.www_umimanga_com_logo),
 
     // ─── New Arabic Sources (Custom) ──────────────────────────────────────────
-    PROCOMIC("procomic", "برو كوميك", "https://procomic.pro", true, ThemeType.CUSTOM, R.drawable.procomic_pro_logo),
+    PROCOMIC("procomic", "ProChan", "https://procomic.pro", true, ThemeType.CUSTOM, R.drawable.procomic_pro_logo),
     ROCKMANGA("rockmanga", "روكس مانجا", "https://rocksmanga.com", false, ThemeType.MADARA_CUSTOM, R.drawable.rocksmanga_com_logo);
 
     /** Drawable resource ID for the site logo. Used in SourcesScreen grid. */
