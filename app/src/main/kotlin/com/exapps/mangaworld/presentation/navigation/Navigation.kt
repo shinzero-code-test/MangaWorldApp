@@ -244,7 +244,19 @@ fun MangaNavGraph(navController: NavHostController) {
         }
         composable(Screen.Sources.route) {
             SourcesScreen(
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onSourceSearch = { sourceId ->
+                    // Navigate to search with pre-selected source
+                    navController.navigate(Screen.Search.route) {
+                        launchSingleTop = true
+                    }
+                },
+                onSourceBrowse = { sourceId ->
+                    // Navigate to browse with pre-selected source
+                    navController.navigate(Screen.Browse.route) {
+                        launchSingleTop = true
+                    }
+                }
             )
         }
         composable(Screen.ImportManga.route) {

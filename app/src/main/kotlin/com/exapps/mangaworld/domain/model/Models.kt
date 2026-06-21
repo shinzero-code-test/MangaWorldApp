@@ -6,13 +6,37 @@ enum class MangaSource(
     val id: String,
     val displayName: String,
     val baseUrl: String,
-    val requiresVerification: Boolean = false
+    val requiresVerification: Boolean = false,
+    val themeType: ThemeType = ThemeType.OTHER
 ) {
-    OLYMPUS("olympus", "Olympus Staff", "https://olympustaff.com", true),
-    AZORA("azora", "Azora Moon", "https://azoramoon.com", false),
-    STARZ("starz", "Manga Starz", "https://manga-starz.net", true),
-    MANGASID("mangasid", "Manga Sid", "https://mangasid.com", false),
-    MESHMANGA("meshmanga", "Meshmanga", "https://meshmanga.com", false);
+    // ─── Original Sources ─────────────────────────────────────────────────────
+    OLYMPUS("olympus", "Olympus Staff", "https://olympustaff.com", true, ThemeType.OTHER),
+    AZORA("azora", "Azora Moon", "https://azoramoon.com", false, ThemeType.ASTRO),
+    STARZ("starz", "Manga Starz", "https://manga-starz.net", true, ThemeType.MADARA),
+    MANGASID("mangasid", "Manga Sid", "https://mangasid.com", false, ThemeType.ASTRO),
+    MESHMANGA("meshmanga", "Meshmanga", "https://meshmanga.com", false, ThemeType.API),
+
+    // ─── New Arabic Sources (Madara Theme) ────────────────────────────────────
+    ASQ3("asq3", "3Asq", "https://3asq.org", true, ThemeType.MADARA),
+    LEKMANGA("lekmanga", "LekManga", "https://lek-manga.net", false, ThemeType.MADARA),
+    LEKMANGAONLINE("lekmangaonline", "LekManga Online", "https://lekmanga.online", false, ThemeType.MADARA),
+    LIKEMANGA("likemanga", "Like-Manga", "https://like-manga.net", false, ThemeType.MADARA),
+    LINKMANGA("linkmanga", "Link-Manga", "https://link-manga.net", false, ThemeType.MADARA),
+    MANGALEKO("mangaleko", "Manga-Leko", "https://manga-leko.site", false, ThemeType.MADARA),
+    MANGALIONZ("mangalionz", "Manga-Lionz", "https://manga-lionz.org", false, ThemeType.MADARA),
+
+    // ─── New Arabic Sources (MangaReader Theme) ───────────────────────────────
+    AREASCANS("areascans", "Area Scans", "https://ar.kenmanga.com", false, ThemeType.MANGAREADER),
+    HIJALA("hijala", "Hijala", "https://hijala.com", true, ThemeType.MANGAREADER),
+    LAVASCANS("lavascans", "Lava Scans", "https://lavascans.com", true, ThemeType.MANGAREADER),
+    STELLARSABER("stellarsaber", "Stellar Saber", "https://stellarsaber.pro", true, ThemeType.MANGAREADER),
+    UMIMANGA("umimanga", "UmiManga", "https://www.umimanga.com", false, ThemeType.MANGAREADER),
+
+    // ─── New Arabic Sources (Custom) ──────────────────────────────────────────
+    PROCOMIC("procomic", "ProComic", "https://procomic.pro", true, ThemeType.CUSTOM),
+    ROCKMANGA("rockmanga", "RocksManga", "https://rocksmanga.com", false, ThemeType.MADARA_CUSTOM);
+
+    enum class ThemeType { MADARA, MANGAREADER, ASTRO, API, OTHER, CUSTOM, MADARA_CUSTOM }
 
     companion object {
         fun fromId(id: String): MangaSource {
@@ -22,6 +46,13 @@ enum class MangaSource(
             }
             return found ?: AZORA
         }
+
+        /** All sources added in v4.0.0 — these appear on the Sources screen grid */
+        val NEW_SOURCES = setOf(
+            ASQ3, LEKMANGA, LEKMANGAONLINE, LIKEMANGA, LINKMANGA,
+            MANGALEKO, MANGALIONZ, AREASCANS, HIJALA, LAVASCANS,
+            STELLARSABER, UMIMANGA, PROCOMIC, ROCKMANGA
+        )
     }
 }
 

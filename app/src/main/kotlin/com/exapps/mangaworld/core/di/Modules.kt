@@ -111,6 +111,54 @@ object ScraperModule {
     @IntoMap
     @StringKey("meshmanga")
     fun provideMeshmangaScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = MeshmangaScraper(client, settingsRepo)
+
+    // ─── v4.0.0 — Madara Theme Sources ────────────────────────────────────────
+
+    @Provides @Singleton @IntoMap @StringKey("asq3")
+    fun provideAsq3Scraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = Asq3Scraper(client, settingsRepo)
+
+    @Provides @Singleton @IntoMap @StringKey("lekmanga")
+    fun provideLekMangaScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = LekMangaScraper(client, settingsRepo)
+
+    @Provides @Singleton @IntoMap @StringKey("lekmangaonline")
+    fun provideLekMangaOnlineScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = LekMangaOnlineScraper(client, settingsRepo)
+
+    @Provides @Singleton @IntoMap @StringKey("likemanga")
+    fun provideLikeMangaScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = LikeMangaScraper(client, settingsRepo)
+
+    @Provides @Singleton @IntoMap @StringKey("linkmanga")
+    fun provideLinkMangaScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = LinkMangaScraper(client, settingsRepo)
+
+    @Provides @Singleton @IntoMap @StringKey("mangaleko")
+    fun provideMangaLekoScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = MangaLekoScraper(client, settingsRepo)
+
+    @Provides @Singleton @IntoMap @StringKey("mangalionz")
+    fun provideMangaLionzScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = MangaLionzScraper(client, settingsRepo)
+
+    // ─── v4.0.0 — MangaReader Theme Sources ───────────────────────────────────
+
+    @Provides @Singleton @IntoMap @StringKey("areascans")
+    fun provideAreaScansScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = AreaScansScraper(client, settingsRepo)
+
+    @Provides @Singleton @IntoMap @StringKey("hijala")
+    fun provideHijalaScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = HijalaScraper(client, settingsRepo)
+
+    @Provides @Singleton @IntoMap @StringKey("lavascans")
+    fun provideLavaScansScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = LavaScansScraper(client, settingsRepo)
+
+    @Provides @Singleton @IntoMap @StringKey("stellarsaber")
+    fun provideStellarSaberScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = StellarSaberScraper(client, settingsRepo)
+
+    @Provides @Singleton @IntoMap @StringKey("umimanga")
+    fun provideUmiMangaScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = UmiMangaScraper(client, settingsRepo)
+
+    // ─── v4.0.0 — Custom Theme Sources ────────────────────────────────────────
+
+    @Provides @Singleton @IntoMap @StringKey("procomic")
+    fun provideProComicScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = ProComicScraper(client, settingsRepo)
+
+    @Provides @Singleton @IntoMap @StringKey("rockmanga")
+    fun provideRockMangaScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = RockMangaScraper(client, settingsRepo)
 }
 
 @Module
