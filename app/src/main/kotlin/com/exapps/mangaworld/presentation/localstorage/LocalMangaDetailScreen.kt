@@ -14,13 +14,44 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.exapps.mangaworld.core.data.local.dao.DownloadedMangaDao
 import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.launch
 import java.io.File
+import javax.inject.Inject
+
+@HiltViewModel
+class LocalMangaDetailViewModel @Inject constructor(
+    private val downloadedMangaDao: DownloadedMangaDao
+) : ViewModel() {
+    var manga by mutableStateOf<DownloadedMangaEntity?>(null)
+        private set
+    var chapters by mutableStateOf<List<Pair<String, File>>>(emptyList())
+        private set
+
+    fun load(mangaId: String, filesDir: File?) {
+        viewModelScope.launch {
+            manga = downloadedMangaDao.get(mangaId)
+            val downloadsDir = File(filesDir, "downloads")
+            val mangaDir = File(downloadsDir, mangaId)
+            if (mangaDir.exists()) {
+                chapters = mangaDir.listFiles()
+                    ?.filter { it.isDirectory && !it.name.startsWith(".") }
+                    ?.sortedBy { it.name?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull() ?: 0f }
+                    ?.map { it.name!! to it }
+                    .orEmpty()
+            }
+        }
+    }
+}
 
 /**
  * Simple detail screen for imported/downloaded manga.
@@ -31,29 +62,20 @@ import java.io.File
 fun LocalMangaDetailScreen(
     mangaId: String,
     onBack: () -> Unit,
-    onReadChapter: (chapterPath: String) -> Unit = {}
+    onReadChapter: (chapterPath: String) -> Unit = {},
+    viewModel: LocalMangaDetailViewModel = hiltViewModel()
 ) {
-    val context = LocalContext.current
-    var manga by remember { mutableStateOf<DownloadedMangaEntity?>(null) }
-    var chapters by remember { mutableStateOf<List<Pair<String, File>>>(emptyList()) }
-
     LaunchedEffect(mangaId) {
-        // Load manga from database
-        val dao = com.exapps.mangaworld.core.data.local.MangaDatabase.getInstance(context)
-            .downloadedMangaDao()
-        manga = dao.get(mangaId)
-
-        // Load chapters from filesystem
-        val downloadsDir = File(context.getExternalFilesDir(null), "downloads")
-        val mangaDir = File(downloadsDir, mangaId)
-        if (mangaDir.exists()) {
-            chapters = mangaDir.listFiles()
-                ?.filter { it.isDirectory && it.name != "." && !it.name.startsWith(".") }
-                ?.sortedBy { it.name?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull() ?: 0f }
-                ?.map { it.name!! to it }
-                .orEmpty()
+        val filesDir = viewModel.let { 
+            // Get filesDir from application context
+            val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as android.app.Application
+            app.filesDir
         }
+        viewModel.load(mangaId, filesDir)
     }
+
+    val manga = viewModel.manga
+    val chapters = viewModel.chapters
 
     Scaffold(
         containerColor = MangaColors.Background,
@@ -82,11 +104,11 @@ fun LocalMangaDetailScreen(
                 // Cover + info
                 item {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        manga!!.localCoverPath?.let { path ->
+                        manga.localCoverPath?.let { path ->
                             if (File(path).exists()) {
                                 AsyncImage(
                                     model = File(path),
-                                    contentDescription = manga!!.title,
+                                    contentDescription = manga.title,
                                     modifier = Modifier.size(120.dp, 180.dp)
                                         .clip(RoundedCornerShape(12.dp)),
                                     contentScale = ContentScale.Crop
@@ -95,21 +117,21 @@ fun LocalMangaDetailScreen(
                         }
                         Column(Modifier.weight(1f)) {
                             Text(
-                                manga!!.title,
+                                manga.title,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MangaColors.OnSurface,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "${manga!!.downloadedChapters} فصل متاح",
+                                "${manga.downloadedChapters} فصل متاح",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MangaColors.Cyan
                             )
-                            if (manga!!.description.isNotBlank()) {
+                            if (manga.description.isNotBlank()) {
                                 Spacer(Modifier.height(8.dp))
                                 Text(
-                                    manga!!.description,
+                                    manga.description,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MangaColors.OnSurfaceVariant
                                 )
