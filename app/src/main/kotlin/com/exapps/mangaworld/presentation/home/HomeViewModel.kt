@@ -88,9 +88,9 @@ class HomeViewModel @Inject constructor(
             repo.getHomeData(source)
                 .onSuccess { data ->
                     firebaseTelemetry.setActiveSource(source.id)
-                    val filteredFeatured = data.featured.filterNot { it.isBlockedBy(blockedKeywords) }
-                    val filteredLatest = data.latestChapters.filterNot { it.isBlockedBy(blockedKeywords) }
-                    val filteredTrending = data.trending.filterNot { it.isBlockedBy(blockedKeywords) }
+                    val filteredFeatured = data.featured.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.id }
+                    val filteredLatest = data.latestChapters.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.chapterUrl }
+                    val filteredTrending = data.trending.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.id }
                     val suggested = repo.getSuggestedManga(filteredFeatured + filteredTrending)
                     _state.update {
                         it.copy(

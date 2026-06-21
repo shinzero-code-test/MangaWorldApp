@@ -3,9 +3,11 @@ package com.exapps.mangaworld.presentation.sources
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.MangaRepository
+import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +22,7 @@ data class SourceBrowseUiState(
     val isLoading: Boolean = false,
     val errorText: String? = null,
     val needsCloudflare: Boolean = false,
+    val cfAutoTriggerDisabled: Boolean = false,
     val currentPage: Int = 1,
     val hasMore: Boolean = true,
     val selectedGenre: String? = null,
@@ -31,6 +34,7 @@ data class SourceBrowseUiState(
 @HiltViewModel
 class SourceBrowseViewModel @Inject constructor(
     private val mangaRepository: MangaRepository,
+    private val settingsRepository: SettingsRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -77,6 +81,18 @@ class SourceBrowseViewModel @Inject constructor(
         loadData()
     }
 
+    fun onCloudflareSolved(domain: String, cookies: String) {
+        // Save cookies to both in-memory cache and persistent storage
+        CookieCache.put(domain, cookies)
+        viewModelScope.launch {
+            settingsRepository.saveCookies(domain, cookies)
+        }
+        // Then dismiss and retry
+        _uiState.value = _uiState.value.copy(needsCloudflare = false, errorText = null)
+        _uiState.value = _uiState.value.copy(currentPage = 1, mangaList = emptyList(), hasMore = true)
+        loadData()
+    }
+
     private fun loadData() {
         val s = _uiState.value
         viewModelScope.launch {
@@ -112,11 +128,19 @@ class SourceBrowseViewModel @Inject constructor(
     private fun handleFailure(e: Exception) {
         when {
             e is CloudflareChallengeException -> {
-                _uiState.value = _uiState.value.copy(needsCloudflare = true, isLoading = false)
+                _uiState.value = _uiState.value.copy(
+                    needsCloudflare = true,
+                    cfAutoTriggerDisabled = false,
+                    isLoading = false
+                )
             }
             e.message?.contains("Cloudflare", true) == true ||
             e.message?.contains("403", true) == true -> {
-                _uiState.value = _uiState.value.copy(needsCloudflare = true, isLoading = false)
+                _uiState.value = _uiState.value.copy(
+                    needsCloudflare = true,
+                    cfAutoTriggerDisabled = false,
+                    isLoading = false
+                )
             }
             else -> {
                 _uiState.value = _uiState.value.copy(errorText = e.message ?: "خطأ غير معروف", isLoading = false)

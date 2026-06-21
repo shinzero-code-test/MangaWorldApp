@@ -120,7 +120,7 @@ fun HomeScreen(
                         )
                     }
                 } else {
-                    items(state.latestChapters.take(15), key = { it.chapterUrl }) { item ->
+                    items(state.latestChapters.take(15), key = { "${it.source.id}_${it.chapterUrl}" }) { item ->
                         LatestChapterRow(
                             item = item,
                             onClick = { onMangaClick(item.source.id, item.mangaSlug) }
@@ -451,7 +451,7 @@ private fun TrendingRow(items: List<MangaItem>, onMangaClick: (MangaItem) -> Uni
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.padding(bottom = 8.dp)
     ) {
-        items(items, key = { it.id }) { manga ->
+        items(items, key = { "trending_${it.id}" }) { manga ->
             MangaCard(
                 manga = manga,
                 onClick = { onMangaClick(manga) },

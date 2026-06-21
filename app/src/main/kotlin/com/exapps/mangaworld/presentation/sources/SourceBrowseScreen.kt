@@ -54,13 +54,19 @@ fun SourceBrowseScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
-            viewModel.dismissCloudflare()
+            val cookies = result.data?.getStringExtra(WebViewSolverActivity.RESULT_COOKIES).orEmpty()
+            val domain  = result.data?.getStringExtra(WebViewSolverActivity.EXTRA_DOMAIN).orEmpty()
+            if (cookies.isNotBlank() && domain.isNotBlank()) {
+                viewModel.onCloudflareSolved(domain, cookies)
+            } else {
+                viewModel.dismissCloudflare()
+            }
         }
     }
 
-    // Auto-trigger CF solver
-    LaunchedEffect(uiState.needsCloudflare) {
-        if (uiState.needsCloudflare) {
+    // Auto-trigger CF solver (only if not already triggered once)
+    LaunchedEffect(uiState.needsCloudflare, uiState.cfAutoTriggerDisabled) {
+        if (uiState.needsCloudflare && !uiState.cfAutoTriggerDisabled) {
             val intent = Intent(context, WebViewSolverActivity::class.java).apply {
                 putExtra(WebViewSolverActivity.EXTRA_URL, uiState.source.baseUrl)
                 putExtra(WebViewSolverActivity.EXTRA_DOMAIN, java.net.URI(uiState.source.baseUrl).host)
@@ -174,16 +180,24 @@ fun SourceBrowseScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
-                        Modifier.padding(12.dp),
+                        Modifier.padding(12.dp).clickable {
+                            val intent = Intent(context, WebViewSolverActivity::class.java).apply {
+                                putExtra(WebViewSolverActivity.EXTRA_URL, uiState.source.baseUrl)
+                                putExtra(WebViewSolverActivity.EXTRA_DOMAIN, java.net.URI(uiState.source.baseUrl).host)
+                            }
+                            cfLauncher.launch(intent)
+                        },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Filled.Shield, null, tint = MangaColors.Yellow)
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "يتطلب التحقق من الهوية — جاري فتح نافذة التحقق",
+                            "يتطلب التحقق من الهوية — انقر لإكمال",
                             color = MangaColors.Yellow,
-                            style = MaterialTheme.typography.bodySmall
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f)
                         )
+                        Icon(Icons.Filled.OpenInNew, null, tint = MangaColors.Yellow, modifier = Modifier.size(16.dp))
                     }
                 }
             }

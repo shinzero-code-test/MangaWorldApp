@@ -59,7 +59,7 @@ open class MadaraBaseScraper(
         HomeData(
             featured = popular.take(8),
             latestChapters = latestChapters.take(30),
-            trending = popular
+            trending = popular.distinctBy { it.id }
         )
     }
 
@@ -296,28 +296,36 @@ open class MadaraBaseScraper(
     }
 
     protected open fun parseMangaGrid(doc: org.jsoup.nodes.Document): List<MangaItem> {
-        return doc.select("div.page-item-detail.manga, div.c-tabs-item__content, div.row.c-tabs-item__content, div.c-image-hover")
-            .mapNotNull { card ->
-                val imgEl = card.selectFirst("img.img-responsive, .item-thumb img, img") ?: return@mapNotNull null
-                val linkEl = card.selectFirst(".post-title a[href], .item-thumb a[href], a[href*=\"/manga/\"]")
-                    ?: return@mapNotNull null
-                val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-                val slug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
-                if (slug.isEmpty()) return@mapNotNull null
-                val title = card.selectFirst(".post-title a, h3 a")?.text()?.cleanText()
-                    ?: linkEl.attr("title").cleanText()
-                if (title.isBlank()) return@mapNotNull null
-                MangaItem(
-                    id = "${source.id}_$slug",
-                    slug = slug,
-                    title = title,
-                    coverUrl = imgEl.attr("abs:src").ifEmpty {
-                        (imgEl.attr("data-src").ifEmpty { imgEl.attr("src") }).absoluteUrl()
-                    },
-                    source = source,
-                    url = href
-                )
-            }
+        val results = doc.select(
+            "div.page-item-detail.manga, div.c-tabs-item__content, div.row.c-tabs-item__content, " +
+            "div.c-image-hover, .c-blog-listing .page-item-detail, .page-item-detail"
+        ).mapNotNull { card ->
+            val imgEl = card.selectFirst("img.img-responsive, .item-thumb img, img[src], img[data-src]") ?: return@mapNotNull null
+            val linkEl = card.selectFirst(".post-title a[href], .item-thumb a[href], a[href*=\"/manga/\"], a[href*=\"manga/\"]")
+                ?: return@mapNotNull null
+            val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
+            // Extract slug from various URL patterns: /manga/slug/, /comics/slug/, /manga/slug/
+            val slug = href.trimEnd('/').let { url ->
+                val lastSegment = url.substringAfterLast("/")
+                if (lastSegment.isNotBlank() && !lastSegment.startsWith("page")) lastSegment else url.substringAfterLast("/manga/").substringAfterLast("/comics/")
+            }.trimEnd('/')
+            if (slug.isEmpty()) return@mapNotNull null
+            val title = card.selectFirst(".post-title a, h3 a, .post-title h3 a, .item-summary .post-title a")?.text()?.cleanText()
+                ?: linkEl.attr("title").cleanText().ifBlank { slug }
+            if (title.isBlank()) return@mapNotNull null
+            MangaItem(
+                id = "${source.id}_$slug",
+                slug = slug,
+                title = title,
+                coverUrl = imgEl.attr("abs:src").ifEmpty {
+                    (imgEl.attr("data-src").ifEmpty { imgEl.attr("src") }).absoluteUrl()
+                },
+                source = source,
+                url = href
+            )
+        }
+        return results.distinctBy { it.id }
+    }
     }
 
     private suspend fun tryAjaxChapters(
