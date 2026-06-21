@@ -174,16 +174,6 @@ open class MangaReaderBaseScraper(
                 )
             }
     }
-            .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains("wp-content") }
-            .distinct()
-            .mapIndexed { index, src ->
-                ChapterPage(
-                    index = index,
-                    url = src,
-                    headers = buildImageHeaders(src, chapterUrl)
-                )
-            }
-    }
 
     // ─── Search ───────────────────────────────────────────────────────────────
 
