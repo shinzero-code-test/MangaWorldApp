@@ -29,7 +29,7 @@ enum class MangaSource(
     MANGALIONZ("mangalionz", "مانجا ليونز", "https://manga-lionz.org", false, ThemeType.MADARA, R.drawable.manga_lionz_org_logo),
 
     // ─── New Arabic Sources (MangaReader Theme) ───────────────────────────────
-    AREASCANS("areascans", "آريا مانجا", "https://ar.kenmanga.com", false, ThemeType.MANGAREADER, R.drawable.ar_kenmanga_com_logo),
+    AREASCANS("areascans", "آريا مانجا", "https://ar.kenmanga.com", false, ThemeType.CUSTOM, R.drawable.ar_kenmanga_com_logo),
     HIJALA("hijala", "حجالة مانجا", "https://hijala.com", true, ThemeType.MANGAREADER, R.drawable.hijala_com_logo),
     LAVASCANS("lavascans", "لاڤا سكانز", "https://lavascans.com", true, ThemeType.MANGAREADER, R.drawable.lavascans_com_logo),
     STELLARSABER("stellarsaber", "StellarSaber", "https://stellarsaber.pro", true, ThemeType.MANGAREADER, R.drawable.stellarsaber_pro_logo),
