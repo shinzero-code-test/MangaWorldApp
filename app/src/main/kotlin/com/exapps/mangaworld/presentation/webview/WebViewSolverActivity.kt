@@ -46,6 +46,21 @@ class WebViewSolverActivity : ComponentActivity() {
             return
         }
 
+        // Clear old cookies for this domain so the WebView solver
+        // doesn't immediately close thinking the old cf_clearance is still valid
+        val cm = CookieManager.getInstance()
+        cm.setAcceptCookie(true)
+        cm.getCookie("https://$domain")?.let { oldCookies ->
+            // Remove each old cookie individually
+            oldCookies.split(";").forEach { c ->
+                val name = c.trim().substringBefore("=")
+                if (name.isNotBlank()) {
+                    cm.setCookie("https://$domain", "$name=; Max-Age=0; path=/")
+                }
+            }
+            cm.flush()
+        }
+
         setContent {
             MangaWorldTheme(darkTheme = true) {
                 CloudflareWebView(

@@ -116,7 +116,7 @@ class SourceBrowseViewModel @Inject constructor(
                 result.onSuccess { items ->
                     val existing = if (s.currentPage > 1) s.mangaList else emptyList()
                     _uiState.value = _uiState.value.copy(
-                        mangaList = existing + items,
+                        mangaList = (existing + items).distinctBy { it.id },
                         hasMore = items.isNotEmpty(),
                         isLoading = false
                     )

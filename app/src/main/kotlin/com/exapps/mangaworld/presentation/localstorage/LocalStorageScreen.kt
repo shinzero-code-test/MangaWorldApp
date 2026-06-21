@@ -86,12 +86,12 @@ class LocalStorageViewModel @Inject constructor(
 fun LocalStorageScreen(
     onMangaClick: (sourceId: String, slug: String) -> Unit,
     onImportManga: () -> Unit = {},
+    onLocalMangaClick: (mangaId: String) -> Unit = {},
     viewModel: LocalStorageViewModel = hiltViewModel()
 ) {
     val mangas by viewModel.downloadedMangas.collectAsStateWithLifecycle()
     val confirmDelete by viewModel.confirmDelete.collectAsStateWithLifecycle()
     val autoTags by viewModel.autoTags.collectAsStateWithLifecycle()
-    val context = LocalContext.current
 
     Box(Modifier.fillMaxSize().background(MangaColors.Background)) {
         Column(Modifier.fillMaxSize()) {
@@ -149,10 +149,7 @@ fun LocalStorageScreen(
                             downloadedChapters = viewModel.chapterCount(manga),
                             onClick = {
                                 if (manga.sourceId == "imported") {
-                                    android.widget.Toast.makeText(
-                                        context, "مانجا محلية — اقرأها من التخزين المحلي",
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
+                                    onLocalMangaClick(manga.mangaId)
                                 } else {
                                     onMangaClick(manga.sourceId, manga.slug)
                                 }

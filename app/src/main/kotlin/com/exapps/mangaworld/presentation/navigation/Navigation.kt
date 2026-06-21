@@ -34,6 +34,7 @@ import com.exapps.mangaworld.presentation.goals.GoalsScreen
 import com.exapps.mangaworld.presentation.more.MoreScreen
 import com.exapps.mangaworld.presentation.sources.SourcesScreen
 import com.exapps.mangaworld.presentation.sources.SourceBrowseScreen
+import com.exapps.mangaworld.presentation.localstorage.LocalMangaDetailScreen
 import com.exapps.mangaworld.presentation.localstorage.ImportMangaScreen
 import com.exapps.mangaworld.presentation.suggestions.SuggestionsScreen
 import com.exapps.mangaworld.presentation.auth.login.LoginScreen
@@ -69,6 +70,9 @@ sealed class Screen(val route: String) {
     object Sources : Screen("sources")
     object SourceBrowse : Screen("source_browse/{sourceId}") {
         fun createRoute(sourceId: String) = "source_browse/$sourceId"
+    }
+    object LocalMangaDetail : Screen("local_manga_detail/{mangaId}") {
+        fun createRoute(mangaId: String) = "local_manga_detail/$mangaId"
     }
     object ImportManga : Screen("import_manga")
     object Suggestions : Screen("suggestions")
@@ -206,7 +210,8 @@ fun MangaNavGraph(navController: NavHostController) {
         composable(Screen.LocalStorage.route) {
             LocalStorageScreen(
                 onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) },
-                onImportManga = { navController.navigate(Screen.ImportManga.route) }
+                onImportManga = { navController.navigate(Screen.ImportManga.route) },
+                onLocalMangaClick = { mangaId -> navController.navigate(Screen.LocalMangaDetail.createRoute(mangaId)) }
             )
         }
         composable(Screen.ReadingStats.route) {
@@ -264,6 +269,18 @@ fun MangaNavGraph(navController: NavHostController) {
             SourceBrowseScreen(
                 sourceId = sourceId,
                 onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) },
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            route = Screen.LocalMangaDetail.route,
+            arguments = listOf(
+                navArgument("mangaId") { type = NavType.StringType }
+            )
+        ) { back ->
+            val mangaId = back.arguments?.getString("mangaId") ?: return@composable
+            LocalMangaDetailScreen(
+                mangaId = mangaId,
                 onBack = { navController.popBackStack() }
             )
         }
