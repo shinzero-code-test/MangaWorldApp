@@ -65,12 +65,9 @@ fun LocalMangaDetailScreen(
     onReadChapter: (chapterPath: String) -> Unit = {},
     viewModel: LocalMangaDetailViewModel = hiltViewModel()
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(mangaId) {
-        val filesDir = viewModel.let { 
-            // Get filesDir from application context
-            val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as android.app.Application
-            app.filesDir
-        }
+        val filesDir = (context.applicationContext as android.app.Application).filesDir
         viewModel.load(mangaId, filesDir)
     }
 
