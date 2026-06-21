@@ -137,6 +137,11 @@ private fun CloudflareWebView(
                     cm.setAcceptCookie(true)
                     cm.setAcceptThirdPartyCookies(wv, false)
 
+                    // Clear ALL cookies for this domain to prevent immediate close
+                    // when old cf_clearance is treated as new
+                    android.webkit.CookieManager.getInstance().removeAllCookies(null)
+                    android.webkit.CookieManager.getInstance().flush()
+
                     wv.webViewClient = object : WebViewClient() {
                         override fun onPageFinished(view: WebView?, pageUrl: String?) {
                             if (pageUrl == null) return

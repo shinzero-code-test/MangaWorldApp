@@ -64,15 +64,19 @@ class AreaScansScraper @Inject constructor(
             }
         )
 
-        // Try to get chapters from the chapters-list (may be AJAX-loaded)
-        val chapters = doc.select(".chapters-list .chapter-row, .chapters-list a[href*='/manga/']")
+        // Try to get chapters from the chapters-list
+        val chapters = doc.select(".chapters-list a.chapter-item, .chapters-list a[href], .chapters-list .chapter-row")
             .mapNotNull { el ->
-                val chLink = el.selectFirst("a[href]") ?: el.takeIf { el.tagName() == "a" } ?: return@mapNotNull null
-                val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
-                val chText = chLink.text().cleanText()
-                val chNum = chText.replace("الفصل", "").replace("[^0-9.]".toRegex(), "").trim().toFloatOrNull()
-                    ?: chHref.trimEnd('/').substringAfterLast("/").toFloatOrNull()
+                val chLink = el.takeIf { el.tagName() == "a" }
+                    ?: el.selectFirst("a[href]")
                     ?: return@mapNotNull null
+                val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
+                val chText = chLink.selectFirst(".chap-num")?.text()?.cleanText()
+                    ?: chLink.text().cleanText()
+                val chNum = chText.replace("الفصل", "").replace("[^0-9.]".toRegex(), "").trim().toFloatOrNull()
+                    ?: chHref.trimEnd('/').substringAfterLast("/").substringBefore("?").toFloatOrNull()
+                    ?: return@mapNotNull null
+                val dateText = chLink.selectFirst(".chap-date")?.text()?.cleanText()
                 Chapter(
                     id = "${slug}_$chNum",
                     mangaId = "${source.id}_$slug",

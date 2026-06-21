@@ -48,28 +48,14 @@ class ProComicScraper @Inject constructor(
     }
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
-        // Try SSR HTML first
-        val doc = fetchDocument(source.baseUrl)
-
-        val featured = doc.select("a[href*='/series/']").take(8).mapNotNull { a ->
-            val href = a.attr("abs:href").ifEmpty { a.attr("href").absoluteUrl() }
-            val slug = href.substringAfter("/series/").trimEnd('/')
-                .substringBefore("/").trimEnd('/')
-            if (slug.isBlank() || slug.contains("/")) return@mapNotNull null
-            val img = a.selectFirst("img")
-            val title = a.selectFirst("h3, .font-bold")?.text()?.cleanText()
-                ?: a.attr("title").cleanText().ifBlank { slug }
-            MangaItem(
-                id = "procomic_$slug", slug = slug, title = title,
-                coverUrl = img?.attr("abs:src")?.encodeForUrl().orEmpty(),
-                source = source, url = href
-            )
-        }.distinctBy { it.id }
+        // Use the public API to get latest series
+        val json = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=20&page=1&sort=latest")
+        val items = parseApiResults(json)
 
         HomeData(
-            featured = featured,
+            featured = items.take(8),
             latestChapters = emptyList(),
-            trending = featured
+            trending = items
         )
     }
 
@@ -104,7 +90,7 @@ class ProComicScraper @Inject constructor(
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-        val json = apiGet("$apiBase?status=approved&limit=18&page=$page&search=$encoded&sort=latest")
+        val json = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=18&page=$page&search=$encoded&sort=latest")
         parseApiResults(json)
     }
 
@@ -114,7 +100,7 @@ class ProComicScraper @Inject constructor(
     }
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
-        val json = apiGet("$apiBase?status=approved&limit=30&page=1&sort=popular")
+        val json = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=30&page=1&sort=popular")
         parseApiResults(json)
     }
 
@@ -129,7 +115,7 @@ class ProComicScraper @Inject constructor(
         }
         val params = mutableListOf("status=approved", "limit=18", "page=$page", "sort=$sort")
         genre?.takeIf { it.isNotBlank() }?.let { params += "search=${java.net.URLEncoder.encode(it, "UTF-8")}" }
-        val json = apiGet("$apiBase?${params.joinToString("&")}")
+        val json = apiGet("${source.baseUrl}/api/public/series/search?${params.joinToString("&")}")
         parseApiResults(json)
     }
 

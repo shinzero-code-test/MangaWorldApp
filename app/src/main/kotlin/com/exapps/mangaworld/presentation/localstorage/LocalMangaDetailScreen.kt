@@ -37,10 +37,10 @@ class LocalMangaDetailViewModel @Inject constructor(
     var chapters by mutableStateOf<List<Pair<String, File>>>(emptyList())
         private set
 
-    fun load(mangaId: String, filesDir: File?) {
+    fun load(mangaId: String, externalFilesDir: File?) {
         viewModelScope.launch {
             manga = downloadedMangaDao.get(mangaId)
-            val downloadsDir = File(filesDir, "downloads")
+            val downloadsDir = File(externalFilesDir, "downloads")
             val mangaDir = File(downloadsDir, mangaId)
             if (mangaDir.exists()) {
                 chapters = mangaDir.listFiles()
@@ -67,8 +67,8 @@ fun LocalMangaDetailScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(mangaId) {
-        val filesDir = (context.applicationContext as android.app.Application).filesDir
-        viewModel.load(mangaId, filesDir)
+        val externalFilesDir = (context.applicationContext as android.app.Application).getExternalFilesDir(null)
+        viewModel.load(mangaId, externalFilesDir)
     }
 
     val manga = viewModel.manga

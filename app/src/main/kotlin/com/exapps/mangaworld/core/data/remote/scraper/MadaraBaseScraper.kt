@@ -359,7 +359,7 @@ open class MadaraBaseScraper(
         val allChapters = mutableListOf<Chapter>()
 
         // Parse inline chapters first
-        doc.select(".listing-chapters_wrap li").mapNotNullTo(allChapters) { li ->
+        doc.select(".listing-chapters_wrap li, .wp-manga-chapter, li.wp-manga-chapter").mapNotNullTo(allChapters) { li ->
             parseChapterLi(li, slug)
         }
 
