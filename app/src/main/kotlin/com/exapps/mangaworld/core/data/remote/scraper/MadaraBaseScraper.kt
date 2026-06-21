@@ -343,7 +343,6 @@ open class MadaraBaseScraper(
         }
         return results.distinctBy { it.id }
     }
-    }
 
     private suspend fun tryAjaxChapters(
         doc: org.jsoup.nodes.Document,
