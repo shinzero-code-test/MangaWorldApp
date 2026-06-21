@@ -20,7 +20,7 @@ enum class MangaSource(
     MESHMANGA("meshmanga", "ميش مانجا", "https://meshmanga.com", false, ThemeType.API, R.drawable.meshmanga_com_logo),
 
     // ─── New Arabic Sources (Madara Theme) ────────────────────────────────────
-    ASQ3("asq3", "3 أسقط", "https://3asq.org", true, ThemeType.MADARA, R.drawable._3asq_org_logo),
+    ASQ3("asq3", "3 أسقط", "https://3asq.org", true, ThemeType.MADARA, R.drawable.asq3_org_logo),
     LEKMANGA("lekmanga", "ليك مانجا", "https://lek-manga.net", false, ThemeType.MADARA, R.drawable.lek_manga_net_logo),
     LEKMANGAONLINE("lekmangaonline", "ليك مانجا أونلاين", "https://lekmanga.online", false, ThemeType.MADARA, R.drawable.lekmanga_online_logo),
     LIKEMANGA("likemanga", "لايك مانجا", "https://like-manga.net", false, ThemeType.MADARA, R.drawable.like_manga_net_logo),
