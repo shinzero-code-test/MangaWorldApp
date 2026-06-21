@@ -11,6 +11,11 @@ interface MangaRepository {
     // Browse / Search
     fun searchManga(filters: SearchFilters): Flow<PagingData<MangaItem>>
     suspend fun searchMangaDirect(query: String, source: MangaSource, page: Int = 1): Result<List<MangaItem>>
+    suspend fun browseMangaDirect(
+        source: MangaSource, page: Int = 1,
+        genre: String? = null, status: MangaStatus? = null,
+        type: MangaType? = null, sortBy: SortBy = SortBy.LATEST
+    ): Result<List<MangaItem>>
     suspend fun getMangaByGenre(genre: String, source: MangaSource, page: Int): Result<List<MangaItem>>
 
     // Detail

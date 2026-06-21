@@ -1,5 +1,7 @@
 package com.exapps.mangaworld.domain.model
 
+import com.exapps.mangaworld.R
+
 // ─── Site Enum ───────────────────────────────────────────────────────────────
 
 enum class MangaSource(
@@ -7,34 +9,39 @@ enum class MangaSource(
     val displayName: String,
     val baseUrl: String,
     val requiresVerification: Boolean = false,
-    val themeType: ThemeType = ThemeType.OTHER
+    val themeType: ThemeType = ThemeType.OTHER,
+    val logoRes: Int = 0
 ) {
     // ─── Original Sources ─────────────────────────────────────────────────────
-    OLYMPUS("olympus", "Olympus Staff", "https://olympustaff.com", true, ThemeType.OTHER),
-    AZORA("azora", "Azora Moon", "https://azoramoon.com", false, ThemeType.ASTRO),
-    STARZ("starz", "Manga Starz", "https://manga-starz.net", true, ThemeType.MADARA),
-    MANGASID("mangasid", "Manga Sid", "https://mangasid.com", false, ThemeType.ASTRO),
-    MESHMANGA("meshmanga", "Meshmanga", "https://meshmanga.com", false, ThemeType.API),
+    OLYMPUS("olympus", "أوليمبس ستاف", "https://olympustaff.com", true, ThemeType.OTHER, R.drawable.olympustaff_com_logo),
+    AZORA("azora", "أزورا مون", "https://azoramoon.com", false, ThemeType.ASTRO, R.drawable.azoramoon_com_logo),
+    STARZ("starz", "مانجا ستارز", "https://manga-starz.net", true, ThemeType.MADARA, R.drawable.manga_starz_net_logo),
+    MANGASID("mangasid", "مانجا سيد", "https://mangasid.com", false, ThemeType.ASTRO, R.drawable.mangasid_com_logo),
+    MESHMANGA("meshmanga", "ميش مانجا", "https://meshmanga.com", false, ThemeType.API, R.drawable.meshmanga_com_logo),
 
     // ─── New Arabic Sources (Madara Theme) ────────────────────────────────────
-    ASQ3("asq3", "3Asq", "https://3asq.org", true, ThemeType.MADARA),
-    LEKMANGA("lekmanga", "LekManga", "https://lek-manga.net", false, ThemeType.MADARA),
-    LEKMANGAONLINE("lekmangaonline", "LekManga Online", "https://lekmanga.online", false, ThemeType.MADARA),
-    LIKEMANGA("likemanga", "Like-Manga", "https://like-manga.net", false, ThemeType.MADARA),
-    LINKMANGA("linkmanga", "Link-Manga", "https://link-manga.net", false, ThemeType.MADARA),
-    MANGALEKO("mangaleko", "Manga-Leko", "https://manga-leko.site", false, ThemeType.MADARA),
-    MANGALIONZ("mangalionz", "Manga-Lionz", "https://manga-lionz.org", false, ThemeType.MADARA),
+    ASQ3("asq3", "3 أسقط", "https://3asq.org", true, ThemeType.MADARA, R.drawable.`3asq_org_logo`),
+    LEKMANGA("lekmanga", "ليك مانجا", "https://lek-manga.net", false, ThemeType.MADARA, R.drawable.`lek-manga_net_logo`),
+    LEKMANGAONLINE("lekmangaonline", "ليك مانجا أونلاين", "https://lekmanga.online", false, ThemeType.MADARA, R.drawable.lekmanga_online_logo),
+    LIKEMANGA("likemanga", "لايك مانجا", "https://like-manga.net", false, ThemeType.MADARA, R.drawable.`like-manga_net_logo`),
+    LINKMANGA("linkmanga", "لينك مانجا", "https://link-manga.net", false, ThemeType.MADARA, R.drawable.`link-manga_net_logo`),
+    MANGALEKO("mangaleko", "مانجا ليكو", "https://manga-leko.site", false, ThemeType.MADARA, R.drawable.`manga-leko_site_logo`),
+    MANGALIONZ("mangalionz", "مانجا ليونز", "https://manga-lionz.org", false, ThemeType.MADARA, R.drawable.`manga-lionz_org_logo`),
 
     // ─── New Arabic Sources (MangaReader Theme) ───────────────────────────────
-    AREASCANS("areascans", "Area Scans", "https://ar.kenmanga.com", false, ThemeType.MANGAREADER),
-    HIJALA("hijala", "Hijala", "https://hijala.com", true, ThemeType.MANGAREADER),
-    LAVASCANS("lavascans", "Lava Scans", "https://lavascans.com", true, ThemeType.MANGAREADER),
-    STELLARSABER("stellarsaber", "Stellar Saber", "https://stellarsaber.pro", true, ThemeType.MANGAREADER),
-    UMIMANGA("umimanga", "UmiManga", "https://www.umimanga.com", false, ThemeType.MANGAREADER),
+    AREASCANS("areascans", "أريا مانجا", "https://ar.kenmanga.com", false, ThemeType.MANGAREADER, R.drawable.ar_kenmanga_com_logo),
+    HIJALA("hijala", "هجهلا", "https://hijala.com", true, ThemeType.MANGAREADER, R.drawable.hijala_com_logo),
+    LAVASCANS("lavascans", "لافا سكانز", "https://lavascans.com", true, ThemeType.MANGAREADER, R.drawable.lavascans_com_logo),
+    STELLARSABER("stellarsaber", "ستيلار سابر", "https://stellarsaber.pro", true, ThemeType.MANGAREADER, R.drawable.stellarsaber_pro_logo),
+    UMIMANGA("umimanga", "أمي مانجا", "https://www.umimanga.com", false, ThemeType.MANGAREADER, R.drawable.www_umimanga_com_logo),
 
     // ─── New Arabic Sources (Custom) ──────────────────────────────────────────
-    PROCOMIC("procomic", "ProComic", "https://procomic.pro", true, ThemeType.CUSTOM),
-    ROCKMANGA("rockmanga", "RocksManga", "https://rocksmanga.com", false, ThemeType.MADARA_CUSTOM);
+    PROCOMIC("procomic", "برو كوميك", "https://procomic.pro", true, ThemeType.CUSTOM, R.drawable.procomic_pro_logo),
+    ROCKMANGA("rockmanga", "روكس مانجا", "https://rocksmanga.com", false, ThemeType.MADARA_CUSTOM, R.drawable.rocksmanga_com_logo);
+
+    /** Drawable resource ID for the site logo. Used in SourcesScreen grid. */
+    @androidx.annotation.DrawableRes
+    val logoDrawableRes: Int get() = logoRes
 
     enum class ThemeType { MADARA, MANGAREADER, ASTRO, API, OTHER, CUSTOM, MADARA_CUSTOM }
 

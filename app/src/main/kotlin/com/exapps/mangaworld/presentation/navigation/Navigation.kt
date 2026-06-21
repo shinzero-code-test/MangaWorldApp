@@ -33,6 +33,7 @@ import com.exapps.mangaworld.presentation.collections.CollectionsScreen
 import com.exapps.mangaworld.presentation.goals.GoalsScreen
 import com.exapps.mangaworld.presentation.more.MoreScreen
 import com.exapps.mangaworld.presentation.sources.SourcesScreen
+import com.exapps.mangaworld.presentation.sources.SourceBrowseScreen
 import com.exapps.mangaworld.presentation.localstorage.ImportMangaScreen
 import com.exapps.mangaworld.presentation.suggestions.SuggestionsScreen
 import com.exapps.mangaworld.presentation.auth.login.LoginScreen
@@ -66,6 +67,9 @@ sealed class Screen(val route: String) {
     object Goals : Screen("goals")
     object More : Screen("more")
     object Sources : Screen("sources")
+    object SourceBrowse : Screen("source_browse/{sourceId}") {
+        fun createRoute(sourceId: String) = "source_browse/$sourceId"
+    }
     object ImportManga : Screen("import_manga")
     object Suggestions : Screen("suggestions")
     object Login : Screen("login")
@@ -245,18 +249,22 @@ fun MangaNavGraph(navController: NavHostController) {
         composable(Screen.Sources.route) {
             SourcesScreen(
                 onBack = { navController.popBackStack() },
-                onSourceSearch = { sourceId ->
-                    // Navigate to search with pre-selected source
-                    navController.navigate(Screen.Search.route) {
-                        launchSingleTop = true
-                    }
-                },
-                onSourceBrowse = { sourceId ->
-                    // Navigate to browse with pre-selected source
-                    navController.navigate(Screen.Browse.route) {
-                        launchSingleTop = true
-                    }
+                onSourceClick = { sourceId ->
+                    navController.navigate(Screen.SourceBrowse.createRoute(sourceId))
                 }
+            )
+        }
+        composable(
+            route = Screen.SourceBrowse.route,
+            arguments = listOf(
+                navArgument("sourceId") { type = NavType.StringType }
+            )
+        ) { back ->
+            val sourceId = back.arguments?.getString("sourceId") ?: return@composable
+            SourceBrowseScreen(
+                sourceId = sourceId,
+                onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) },
+                onBack = { navController.popBackStack() }
             )
         }
         composable(Screen.ImportManga.route) {

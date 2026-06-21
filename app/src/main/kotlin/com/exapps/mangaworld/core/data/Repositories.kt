@@ -107,6 +107,13 @@ class MangaRepositoryImpl @Inject constructor(
     override suspend fun searchMangaDirect(query: String, source: MangaSource, page: Int): Result<List<MangaItem>> =
         scraper(source).searchManga(query, page)
 
+    override suspend fun browseMangaDirect(
+        source: MangaSource, page: Int,
+        genre: String?, status: MangaStatus?,
+        type: MangaType?, sortBy: SortBy
+    ): Result<List<MangaItem>> =
+        scraper(source).browseManga(page, genre, status, type, sortBy)
+
     override suspend fun getMangaByGenre(genre: String, source: MangaSource, page: Int) =
         scraper(source).getMangaByGenre(genre, page)
 
