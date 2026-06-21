@@ -15,7 +15,9 @@ class LekMangaScraper @Inject constructor(client: OkHttpClient, settingsRepo: Se
 
 /** lekmanga.online — Madara theme, Arabic */
 class LekMangaOnlineScraper @Inject constructor(client: OkHttpClient, settingsRepo: SettingsRepository) :
-    MadaraBaseScraper(client, MangaSource.LEKMANGAONLINE, settingsRepo, listPath = "/manga/")
+    MadaraBaseScraper(client, MangaSource.LEKMANGAONLINE, settingsRepo) {
+    override val listPath: String = "/manga/"
+}
 
 /** like-manga.net — Madara theme, Arabic */
 class LikeMangaScraper @Inject constructor(client: OkHttpClient, settingsRepo: SettingsRepository) :

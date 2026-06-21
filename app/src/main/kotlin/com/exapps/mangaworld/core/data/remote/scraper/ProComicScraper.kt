@@ -159,7 +159,7 @@ class ProComicScraper @Inject constructor(
                 } ?: emptyList(),
                 status = MangaStatus.from(obj.optString("status")),
                 type = MangaType.from(metadata?.optString("type")),
-                url = "${source.baseUrl}/series/${obj.optString("type", "manga")}/$obj.optString("id")/$slug"
+                url = "${source.baseUrl}/series/${obj.optString("type", "manga")}/${obj.optString("id")}/$slug"
             )
         }
     }

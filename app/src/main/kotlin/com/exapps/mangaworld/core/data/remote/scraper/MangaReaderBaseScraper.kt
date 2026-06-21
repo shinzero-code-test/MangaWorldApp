@@ -266,7 +266,7 @@ open class MangaReaderBaseScraper(
             if (slug.isBlank()) return@mapNotNull null
             val title = card.selectFirst(".tt")?.text()?.cleanText()
                 ?: imgEl?.attr("alt")?.cleanText() ?: return@mapNotNull null
-            val coverUrl = imgEl.let {
+            val coverUrl = imgEl?.let {
                 it.attr("abs:src").ifEmpty {
                     (it.attr("data-src").ifEmpty { it.attr("src") }).absoluteUrl()
                 }
