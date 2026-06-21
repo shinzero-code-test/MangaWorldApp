@@ -71,24 +71,37 @@ open class MadaraBaseScraper(
         // Try /manga/ first, then /comics/ as fallback for some Madara sites
         var url = "${source.baseUrl}/manga/$slug/"
         var doc = runCatching { fetchDocument(url) }.getOrNull()
-        if (doc == null || doc.selectFirst("body.error-404, .page-not-found, h1")?.text()?.contains("404") == true) {
+        // Only check for explicit 404 page elements, not h1 tags
+        val is404 = doc?.let { d ->
+            d.selectFirst("body.error-404, body.page-not-found, .page-404, .error-page") != null
+        } ?: true
+        if (is404) {
             url = "${source.baseUrl}/comics/$slug/"
-            doc = fetchDocument(url)
+            doc = runCatching { fetchDocument(url) }.getOrNull()
+        }
+        // Also try /manhwa/ for sites like manga-leko.site
+        if ((doc?.selectFirst(".post-title, h1.entry-title, .summary_image") == null)) {
+            val altUrl = "${source.baseUrl}/manhwa/$slug/"
+            val altDoc = runCatching { fetchDocument(altUrl) }.getOrNull()
+            if (altDoc?.selectFirst(".post-title, h1.entry-title, .summary_image") != null) {
+                url = altUrl
+                doc = altDoc
+            }
         }
         doc ?: error("Could not load manga detail for $slug")
 
-        val coverUrl = doc.selectFirst(".summary_image img, .profile-manga img, img.wp-post-image")
+        val coverUrl = doc.selectFirst(".summary_image img, .profile-manga img, img.wp-post-image, .thumb img, img.img-responsive")
             ?.let { img ->
                 img.attr("abs:src").ifEmpty {
                     (img.attr("data-src").ifEmpty { img.attr("src") }).absoluteUrl()
                 }
             } ?: ""
 
-        val title = doc.selectFirst(".post-title h1, h1.entry-title")?.text()?.cleanText() ?: slug
+        val title = doc.selectFirst(".post-title h1, .post-title, h1.entry-title, h1")?.text()?.cleanText() ?: slug
 
-        val description = doc.selectFirst(".description-summary p, .summary__content p, .manga-excerpt")
+        val description = doc.selectFirst(".description-summary p, .summary__content p, .manga-excerpt, .summary__content h4")
             ?.text()?.cleanText()
-            ?: doc.selectFirst(".description-summary, .summary__content")?.text()?.cleanText()
+            ?: doc.selectFirst(".description-summary, .summary__content, .manga-excerpt")?.text()?.cleanText()
             ?: ""
 
         // Status
@@ -170,10 +183,16 @@ open class MadaraBaseScraper(
         // Madara theme: .reading-content .page-break img
         doc.select(".reading-content .page-break img, .reading-content img, .page-break img, img.wp-manga-chapter-img")
             .mapNotNull { img ->
-                val src = img.attr("abs:src").ifEmpty {
-                    img.attr("data-src").ifEmpty { img.attr("src") }.absoluteUrl()
-                }.encodeForUrl()
-                src.takeIf { it.isNotBlank() && !it.contains("logo") && !it.contains("avatar") }
+                // Prefer data-src (lazy-loaded) over src (may be placeholder)
+                val dataSrc = img.attr("data-src").ifEmpty { null }
+                val src = img.attr("abs:src").ifEmpty { null }
+                val actualSrc = dataSrc ?: src
+                if (actualSrc.isNullOrBlank()) return@mapNotNull null
+                val fullSrc = if (actualSrc.startsWith("http")) actualSrc else actualSrc.absoluteUrl()
+                fullSrc.encodeForUrl().takeIf {
+                    it.isNotBlank() && !it.contains("logo") && !it.contains("avatar") &&
+                    !it.contains("loading") && !it.contains("placeholder")
+                }
             }
             .distinct()
             .mapIndexed { index, src ->
@@ -359,8 +378,8 @@ open class MadaraBaseScraper(
         val allChapters = mutableListOf<Chapter>()
 
         // Parse inline chapters first
-        doc.select(".listing-chapters_wrap li, .wp-manga-chapter, li.wp-manga-chapter").mapNotNullTo(allChapters) { li ->
-            parseChapterLi(li, slug)
+        doc.select(".listing-chapters_wrap li, .wp-manga-chapter, li.wp-manga-chapter").forEach { li ->
+            parseChapterLi(li, slug)?.let { allChapters.add(it) }
         }
 
         // Try AJAX for full chapter list
@@ -395,6 +414,7 @@ open class MadaraBaseScraper(
                     response.close()
                     body to JSONObject(body)
                 }
+
                 if (json.optBoolean("success", false)) {
                     val html = json.optString("data", "")
                     val chapDoc = Jsoup.parse(html, source.baseUrl)
@@ -418,7 +438,7 @@ open class MadaraBaseScraper(
         val chNum = Regex("[0-9]+(?:\\.[0-9]+)?").find(chText)?.value?.toFloatOrNull()
             ?: chHref.trimEnd('/').substringAfterLast("/").substringBefore("?").toFloatOrNull()
             ?: return null
-        val dateText = li.selectFirst(".chapter-release-date i, .chapter-release-date span, .post-on")?.text()?.cleanText()
+        val dateText = li.selectFirst(".chapter-release-date .timediff i, .chapter-release-date i, .chapter-release-date span, .post-on")?.text()?.cleanText()
         val dateLong = dateText?.let { parseArabicDate(it) }
         return Chapter(
             id = "${slug}_$chNum",

@@ -13,10 +13,10 @@ class Asq3Scraper @Inject constructor(client: OkHttpClient, settingsRepo: Settin
 class LekMangaScraper @Inject constructor(client: OkHttpClient, settingsRepo: SettingsRepository) :
     MadaraBaseScraper(client, MangaSource.LEKMANGA, settingsRepo)
 
-/** lekmanga.online — Madara theme, Arabic */
+/** lekmanga.online — Madara theme, Arabic — URLs use /comics/{slug}/ */
 class LekMangaOnlineScraper @Inject constructor(client: OkHttpClient, settingsRepo: SettingsRepository) :
     MadaraBaseScraper(client, MangaSource.LEKMANGAONLINE, settingsRepo) {
-    override val listPath: String = "/manga/"
+    override val listPath: String = "/comics/"
 }
 
 /** like-manga.net — Madara theme, Arabic */
@@ -27,9 +27,11 @@ class LikeMangaScraper @Inject constructor(client: OkHttpClient, settingsRepo: S
 class LinkMangaScraper @Inject constructor(client: OkHttpClient, settingsRepo: SettingsRepository) :
     MadaraBaseScraper(client, MangaSource.LINKMANGA, settingsRepo)
 
-/** manga-leko.site — Madara theme, Arabic */
+/** manga-leko.site — Madara theme, Arabic — URLs use /manhwa/{slug}/ */
 class MangaLekoScraper @Inject constructor(client: OkHttpClient, settingsRepo: SettingsRepository) :
-    MadaraBaseScraper(client, MangaSource.MANGALEKO, settingsRepo)
+    MadaraBaseScraper(client, MangaSource.MANGALEKO, settingsRepo) {
+    override val listPath: String = "/manhwa/"
+}
 
 /** manga-lionz.org — Madara theme, Arabic */
 class MangaLionzScraper @Inject constructor(client: OkHttpClient, settingsRepo: SettingsRepository) :

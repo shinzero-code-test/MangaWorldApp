@@ -38,20 +38,27 @@ class AreaScansScraper @Inject constructor(
         val url = "${source.baseUrl}/manga/$slug/"
         val doc = fetchDocument(url)
 
-        val coverUrl = doc.selectFirst(".manga-poster img, .header-bg img")
-            ?.let { it.attr("abs:src").ifEmpty { it.attr("data-src").absoluteUrl() } } ?: ""
+        val coverUrl = doc.selectFirst(".manga-poster img, .hero-backdrop, .header-bg img")
+            ?.let { 
+                val style = it.attr("style")
+                val bgUrl = Regex("url\\('([^']+)\\'\\)").find(style)?.groupValues?.get(1)
+                bgUrl?.ifEmpty { null }
+                    ?: it.attr("abs:src").ifEmpty { it.attr("data-src").absoluteUrl() }
+            } ?: ""
 
         val title = doc.selectFirst(".manga-title-large, .manga-title, h1")?.text()?.cleanText() ?: slug
 
-        val description = doc.selectFirst(".manga-synopsis, .manga-description, .manga-info-header + div")
+        // Description in .story-text p or .story-section
+        val description = doc.selectFirst(".story-text p, .story-text, .manga-synopsis, .manga-description")
             ?.text()?.cleanText() ?: ""
 
-        val statusText = doc.selectFirst(".badge.status, .badge.type")?.text()?.cleanText()
+        val statusText = doc.selectFirst(".meta-tag:contains(مستمرة), .meta-tag:contains(مكتملة), .badge.status")
+            ?.text()?.cleanText()
         val status = MangaStatus.from(statusText)
 
-        val genres = doc.select(".genre-tag, .badge:not(.status):not(.type)")
+        val genres = doc.select(".filter-tag, .meta-tag:not(:contains(مستمرة)):not(:contains(مكتملة))")
             .map { it.text().cleanText() }
-            .filter { it.length in 2..20 }
+            .filter { it.length in 2..20 && !it.contains("فريق") }
             .distinct()
 
         val bodyText = doc.body().text()
@@ -106,13 +113,22 @@ class AreaScansScraper @Inject constructor(
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
         val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to source.baseUrl + "/"))
 
-        doc.select("img[data-src], img[src*='wp-content'], .reading-content img, .page-break img")
+        // ar.kenmanga.com uses #reader-canvas for chapter images
+        doc.select(
+            "#reader-canvas img, .reading-content img, .page-break img, img.wp-manga-chapter-img"
+        )
             .mapNotNull { img ->
-                val src = img.attr("data-src").ifEmpty {
-                    img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() }
-                }.encodeForUrl()
-                src.takeIf { it.isNotBlank() && !it.contains("logo") && !it.contains("avatar") }
+                val dataSrc = img.attr("data-src").ifEmpty { null }
+                val src = img.attr("abs:src").ifEmpty { null }
+                val actualSrc = dataSrc ?: src
+                if (actualSrc.isNullOrBlank()) return@mapNotNull null
+                val fullSrc = if (actualSrc.startsWith("http")) actualSrc else actualSrc.absoluteUrl()
+                fullSrc.encodeForUrl().takeIf {
+                    it.isNotBlank() && !it.contains("logo") && !it.contains("avatar") &&
+                    !it.contains("loading") && !it.contains("placeholder")
+                }
             }
+            .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains(".gif") || it.contains("wp-content") }
             .distinct()
             .mapIndexed { index, src ->
                 ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
@@ -121,7 +137,7 @@ class AreaScansScraper @Inject constructor(
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-        val url = if (page <= 1) "${source.baseUrl}/?s=$encoded" else "${source.baseUrl}/page/$page/?s=$encoded"
+        val url = if (page <= 1) "${source.baseUrl}/?s=$encoded&post_type=wp-manga" else "${source.baseUrl}/page/$page/?s=$encoded&post_type=wp-manga"
         val doc = fetchDocument(url)
         parseMangaCards(doc)
     }

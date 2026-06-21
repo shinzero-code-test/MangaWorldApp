@@ -158,12 +158,12 @@ class RockMangaScraper @Inject constructor(
     }
 
     private fun parseMangaCards(doc: org.jsoup.nodes.Document): List<MangaItem> {
-        return doc.select("div.original.card-lg div.unit").mapNotNull { unit ->
-            val linkEl = unit.selectFirst("a.poster[href*='/manga/']") ?: return@mapNotNull null
+        return doc.select("div.unit, div.original.card-lg div.unit").mapNotNull { unit ->
+            val linkEl = unit.selectFirst("a.poster[href*='/manga/'], a[href*='/manga/']") ?: return@mapNotNull null
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
             val slug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
             if (slug.isBlank()) return@mapNotNull null
-            val img = unit.selectFirst("a.poster img")
+            val img = unit.selectFirst("a.poster img, img")
             val title = unit.selectFirst("div.info > a")?.text()?.cleanText() ?: slug
             val coverUrl = img?.let {
                 it.attr("abs:src").ifEmpty { it.attr("data-src").absoluteUrl() }

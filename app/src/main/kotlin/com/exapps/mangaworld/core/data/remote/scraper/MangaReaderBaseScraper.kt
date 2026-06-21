@@ -2,8 +2,8 @@ package com.exapps.mangaworld.core.data.remote.scraper
 
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
-import okhttp3.OkHttpClient
-import org.jsoup.Jsoup
+import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -68,29 +68,44 @@ open class MangaReaderBaseScraper(
         val url = "${source.baseUrl}/manga/$slug/"
         val doc = fetchDocument(url)
 
-        val coverUrl = doc.selectFirst(".imgseries img, .postbody img, .thumb img, .sorthumb img")
-            ?.let { img ->
-                img.attr("abs:src").ifEmpty {
-                    (img.attr("data-src").ifEmpty { img.attr("src") }).absoluteUrl()
-                }
-            } ?: ""
+        // Cover: multiple patterns for different MangaReader variants
+        val coverUrl = doc.selectFirst(
+            ".imgseries img, .postbody img, .thumb img, .sorthumb img, " +
+            ".lh-poster img, .manga-poster img, img.wp-post-image, .bigcover img"
+        )?.let { img ->
+            img.attr("abs:src").ifEmpty {
+                (img.attr("data-src").ifEmpty { img.attr("src") }).absoluteUrl()
+            }
+        } ?: ""
 
-        val title = doc.selectFirst("h1.entry-title, .seriestucont h1, .bigcontent .infox h1")
-            ?.text()?.cleanText() ?: slug
+        // Title: multiple patterns
+        val title = doc.selectFirst(
+            "h1.entry-title, .seriestucont h1, .bigcontent .infox h1, " +
+            ".lh-title, .manga-title, h1"
+        )?.text()?.cleanText() ?: slug
 
-        val description = doc.selectFirst(".entry-content, .seriestucont .seriestucontr .wd-full, div.description")
-            ?.text()?.cleanText() ?: ""
+        // Description: multiple patterns
+        val description = doc.selectFirst(
+            ".entry-content, .seriestucont .seriestucontr .wd-full, div.description, " +
+            ".lh-story-content, .manga-synopsis, .manga-description"
+        )?.text()?.cleanText() ?: ""
 
-        // Status from info table
-        val statusText = doc.select(".tsinfo div, .infotable td").firstOrNull { el ->
-            el.text().contains("الحالة") || el.text().contains("Status", ignoreCase = true)
-        }?.nextElementSibling()?.text()?.cleanText()
-            ?: doc.select(".postbody .imptdt .status, .seriestucontr .tsinfo .imptdt .status i")
-                .firstOrNull()?.text()?.cleanText()
+        // Status: multiple patterns
+        val statusText = doc.select(".tsinfo div, .infotable td, .lh-meta-item").firstOrNull { el ->
+            el.text().contains("الحالة") || el.text().contains("Status", ignoreCase = true) ||
+            el.text().contains("Ongoing", ignoreCase = true) || el.text().contains("Completed", ignoreCase = true)
+        }?.let { el ->
+            el.nextElementSibling()?.text()?.cleanText()
+                ?: el.selectFirst("i, a")?.text()?.cleanText()
+                ?: el.text().cleanText()
+        }
         val status = MangaStatus.from(statusText)
 
-        val genres = doc.select(".seriestugenre a, .wd-full .mgen > a, .genre-info a, ul.genrez li label")
-            .map { it.text().cleanText() }
+        // Genres: multiple patterns
+        val genres = doc.select(
+            ".seriestugenre a, .wd-full .mgen > a, .genre-info a, ul.genrez li label, " +
+            ".lh-meta-item a[href*='genre'], .manga-tags a"
+        ).map { it.text().cleanText() }
             .filter { it.isNotBlank() }
             .distinct()
 
@@ -104,25 +119,30 @@ open class MangaReaderBaseScraper(
             }
         )
 
-        // Chapters: standard #chapterlist
-        val chapters = doc.select("#chapterlist > ul > li, .eplister > ul > li, .bxcl ul li").mapNotNull { li ->
-            val chLink = li.selectFirst("a[href]") ?: return@mapNotNull null
-            val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
-            val chNum = li.attr("data-num").toFloatOrNull()
-                ?: chLink.selectFirst(".chapternum")?.text()?.replace("الفصل", "")
-                    ?.replace("[^0-9.]".toRegex(), "")?.trim()?.toFloatOrNull()
-                ?: chHref.trimEnd('/').substringAfterLast("/").toFloatOrNull()
+        // Chapters: multiple patterns for different MangaReader variants
+        val chapters = doc.select(
+            "#chapterlist > ul > li, .eplister > ul > li, .bxcl ul li, " +
+            ".ch-list-grid .ch-item, .chapters-list a.chapter-item"
+        ).mapNotNull { el ->
+            // Handle both <li> and <a> chapter elements
+            val chLink = el.takeIf { el.tagName() == "a" }
+                ?: el.selectFirst("a[href]")
                 ?: return@mapNotNull null
-            val dateText = li.selectFirst(".chapterdate, .dt a")?.text()?.cleanText()
-            val dateLong = dateText?.let { parseArabicDate(it) }
-            val title = chLink.selectFirst(".chapternum")?.text()?.cleanText()
+            val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
+            val chNum = el.attr("data-num").toFloatOrNull()
+                ?: el.attr("data-ch").toFloatOrNull()
+                ?: chLink.selectFirst(".chapternum, .ch-num")?.text()?.replace("الفصل", "")
+                    ?.replace("[^0-9.]".toRegex(), "")?.trim()?.toFloatOrNull()
+                ?: chHref.trimEnd('/').substringAfterLast("/").substringBefore("?").toFloatOrNull()
+                ?: return@mapNotNull null
+            val dateText = el.selectFirst(".chapterdate, .ch-date, .dt a")?.text()?.cleanText()
             Chapter(
                 id = "${slug}_$chNum",
                 mangaId = "${source.id}_$slug",
                 number = chNum,
-                title = title?.replace("الفصل", "")?.trim()?.ifBlank { null },
+                title = chLink.selectFirst(".chapternum, .ch-num")?.text()?.cleanText()?.replace("الفصل", "")?.trim()?.ifBlank { null },
                 url = chHref,
-                date = dateLong,
+                date = dateText?.let { parseArabicDate(it) },
                 dateText = dateText
             )
         }.distinctBy { it.url }.sortedByDescending { it.number }
@@ -159,12 +179,18 @@ open class MangaReaderBaseScraper(
             ".reading-content img, img.ts-main-image, .chapter-pages img"
         )
             .mapNotNull { img ->
-                val src = img.attr("abs:src").ifEmpty {
-                    img.attr("data-src").ifEmpty { img.attr("src") }.absoluteUrl()
-                }.encodeForUrl()
-                src.takeIf { it.isNotBlank() && !it.contains("logo") && !it.contains("avatar") }
+                // Prefer data-src (lazy-loaded) over src (placeholder SVG)
+                val dataSrc = img.attr("data-src").ifEmpty { null }
+                val src = img.attr("abs:src").ifEmpty { null }
+                val actualSrc = dataSrc ?: src
+                if (actualSrc.isNullOrBlank()) return@mapNotNull null
+                val fullSrc = if (actualSrc.startsWith("http")) actualSrc else actualSrc.absoluteUrl()
+                fullSrc.encodeForUrl().takeIf {
+                    it.isNotBlank() && !it.contains("logo") && !it.contains("avatar") &&
+                    !it.contains("readerarea.svg") && !it.contains("loading")
+                }
             }
-            .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains("wp-content") }
+            .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains(".gif") || it.contains("wp-content") || it.contains("blogger.googleusercontent") }
             .distinct()
             .mapIndexed { index, src ->
                 ChapterPage(
@@ -172,6 +198,23 @@ open class MangaReaderBaseScraper(
                     url = src,
                     headers = buildImageHeaders(src, chapterUrl)
                 )
+            }.ifEmpty {
+                // Fallback: extract from ts_reader.run() JSON config
+                val rawHtml = doc.outerHtml()
+                val jsonMatch = Regex("ts_reader\\.run\\((\\{.*?\\})\\)").find(rawHtml)
+                if (jsonMatch != null) {
+                    try {
+                        val json = JSONObject(jsonMatch.groupValues[1])
+                        val sources = json.optJSONArray("sources") ?: JSONArray()
+                        val images = sources.optJSONObject(0)?.optJSONArray("images") ?: JSONArray()
+                        (0 until images.length()).mapNotNull { i ->
+                            val imgSrc = images.optString(i)
+                            if (imgSrc.isNotBlank() && (imgSrc.contains(".jpg") || imgSrc.contains(".png") || imgSrc.contains(".webp"))) {
+                                ChapterPage(index = i, url = imgSrc.encodeForUrl(), headers = buildImageHeaders(imgSrc, chapterUrl))
+                            } else null
+                        }
+                    } catch (_: Exception) { emptyList() }
+                } else emptyList()
             }
     }
 
@@ -324,7 +367,7 @@ open class MangaReaderBaseScraper(
             )
         }
 
-        // Pattern 2: Lavascans — .manga-list-grid article.legend-card
+        // Pattern 2: Lavascans — .manga-list-grid article.legend-card or .magma-grid article.legend-card
         if (results.isEmpty()) {
             doc.select("article.legend-card").forEach { card ->
                 val linkEl = card.selectFirst("a.legend-poster[href*='/manga/']") ?: return@forEach

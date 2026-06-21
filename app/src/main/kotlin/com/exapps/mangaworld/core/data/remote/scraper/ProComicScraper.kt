@@ -60,29 +60,51 @@ class ProComicScraper @Inject constructor(
     }
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
-        // Navigate to series page and parse SSR content
-        val doc = fetchDocument("${source.baseUrl}/series/manga/$slug/$slug")
-
-        val title = doc.selectFirst("h1, .font-bold")?.text()?.cleanText() ?: slug
-        val description = doc.selectFirst("p, .text-sm")?.text()?.cleanText() ?: ""
-
-        MangaDetail(
-            id = "procomic_$slug",
-            slug = slug,
-            title = title,
-            coverUrl = "",
-            source = source,
-            description = description,
-            url = "${source.baseUrl}/series/manga/$slug/$slug"
-        )
+        // Try to find the series in search results first
+        val searchJson = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=50&page=1&sort=latest")
+        val allItems = parseApiResults(searchJson)
+        
+        // Find the matching manga by slug
+        val matchedItem = allItems.find { it.slug == slug || it.url.contains("/$slug") }
+        
+        if (matchedItem != null) {
+            MangaDetail(
+                id = matchedItem.id,
+                slug = matchedItem.slug,
+                title = matchedItem.title,
+                coverUrl = matchedItem.coverUrl,
+                source = source,
+                genres = matchedItem.genres,
+                status = matchedItem.status,
+                type = matchedItem.type,
+                url = matchedItem.url
+            )
+        } else {
+            // Fallback: try to extract from the URL pattern
+            MangaDetail(
+                id = "procomic_$slug",
+                slug = slug,
+                title = slug.replace("-", " ").replaceFirstChar { it.uppercase() },
+                coverUrl = "",
+                source = source,
+                url = "${source.baseUrl}/series/manga/$slug/$slug"
+            )
+        }
     }
 
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
+        // ProComic chapter images are loaded via JS/API
+        // Try to parse the chapter page for any embedded image data
         val doc = fetchDocument(chapterUrl)
-        doc.select("img[src]").mapNotNull { img ->
-            val src = img.attr("abs:src").ifEmpty { img.attr("src") }.encodeForUrl()
-            src.takeIf { it.isNotBlank() }
-        }.filter { it.contains("cdn") || it.contains("wp-content") || it.contains("uploads") }
+        doc.select("img[src*='cdn'], img[data-src*='cdn'], img[src*='procomic']")
+            .mapNotNull { img ->
+                val src = img.attr("data-src").ifEmpty { img.attr("abs:src") }.ifEmpty { img.attr("src") }
+                if (src.isNullOrBlank()) return@mapNotNull null
+                val fullSrc = if (src.startsWith("http")) src else src.absoluteUrl()
+                fullSrc.encodeForUrl().takeIf { it.isNotBlank() }
+            }
+            .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") }
+            .distinct()
             .mapIndexed { index, src ->
                 ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
             }
