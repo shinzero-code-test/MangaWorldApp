@@ -101,7 +101,7 @@ class SourceBrowseViewModel @Inject constructor(
                         isLoading = false
                     )
                 }.onFailure { e ->
-                    handleFailure(e)
+                    handleFailure(e as? Exception ?: Exception(e.message, e))
                 }
             } catch (e: Exception) {
                 handleFailure(e)

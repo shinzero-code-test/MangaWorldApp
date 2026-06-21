@@ -156,7 +156,7 @@ private fun SourceGridCard(
             // Domain hint
             Text(
                 text = source.baseUrl.removePrefix("https://").removePrefix("http://").take(18),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = com.compose.ui.unit.sp(8f)),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
                 color = MangaColors.Muted,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
