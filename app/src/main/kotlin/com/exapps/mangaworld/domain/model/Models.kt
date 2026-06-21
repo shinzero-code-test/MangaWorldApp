@@ -20,13 +20,13 @@ enum class MangaSource(
     MESHMANGA("meshmanga", "ميش مانجا", "https://meshmanga.com", false, ThemeType.API, R.drawable.meshmanga_com_logo),
 
     // ─── New Arabic Sources (Madara Theme) ────────────────────────────────────
-    ASQ3("asq3", "3 أسقط", "https://3asq.org", true, ThemeType.MADARA, R.drawable.`3asq_org_logo`),
-    LEKMANGA("lekmanga", "ليك مانجا", "https://lek-manga.net", false, ThemeType.MADARA, R.drawable.`lek-manga_net_logo`),
+    ASQ3("asq3", "3 أسقط", "https://3asq.org", true, ThemeType.MADARA, R.drawable._3asq_org_logo),
+    LEKMANGA("lekmanga", "ليك مانجا", "https://lek-manga.net", false, ThemeType.MADARA, R.drawable.lek_manga_net_logo),
     LEKMANGAONLINE("lekmangaonline", "ليك مانجا أونلاين", "https://lekmanga.online", false, ThemeType.MADARA, R.drawable.lekmanga_online_logo),
-    LIKEMANGA("likemanga", "لايك مانجا", "https://like-manga.net", false, ThemeType.MADARA, R.drawable.`like-manga_net_logo`),
-    LINKMANGA("linkmanga", "لينك مانجا", "https://link-manga.net", false, ThemeType.MADARA, R.drawable.`link-manga_net_logo`),
-    MANGALEKO("mangaleko", "مانجا ليكو", "https://manga-leko.site", false, ThemeType.MADARA, R.drawable.`manga-leko_site_logo`),
-    MANGALIONZ("mangalionz", "مانجا ليونز", "https://manga-lionz.org", false, ThemeType.MADARA, R.drawable.`manga-lionz_org_logo`),
+    LIKEMANGA("likemanga", "لايك مانجا", "https://like-manga.net", false, ThemeType.MADARA, R.drawable.like_manga_net_logo),
+    LINKMANGA("linkmanga", "لينك مانجا", "https://link-manga.net", false, ThemeType.MADARA, R.drawable.link_manga_net_logo),
+    MANGALEKO("mangaleko", "مانجا ليكو", "https://manga-leko.site", false, ThemeType.MADARA, R.drawable.manga_leko_site_logo),
+    MANGALIONZ("mangalionz", "مانجا ليونز", "https://manga-lionz.org", false, ThemeType.MADARA, R.drawable.manga_lionz_org_logo),
 
     // ─── New Arabic Sources (MangaReader Theme) ───────────────────────────────
     AREASCANS("areascans", "أريا مانجا", "https://ar.kenmanga.com", false, ThemeType.MANGAREADER, R.drawable.ar_kenmanga_com_logo),
