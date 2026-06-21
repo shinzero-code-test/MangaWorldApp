@@ -87,8 +87,12 @@ class SourceBrowseViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.saveCookies(domain, cookies)
         }
-        // Then dismiss and retry
-        _uiState.value = _uiState.value.copy(needsCloudflare = false, errorText = null)
+        // Disable auto-trigger so we don't loop; show manual banner if it fails again
+        _uiState.value = _uiState.value.copy(
+            needsCloudflare = false,
+            cfAutoTriggerDisabled = true,
+            errorText = null
+        )
         _uiState.value = _uiState.value.copy(currentPage = 1, mangaList = emptyList(), hasMore = true)
         loadData()
     }
