@@ -298,11 +298,6 @@ private fun StatusFilterChip(selected: Boolean, onClick: () -> Unit, text: Strin
         colors = SuggestionChipDefaults.suggestionChipColors(
             containerColor = if (selected) MangaColors.Primary.copy(alpha = 0.2f) else MangaColors.SurfaceContainer,
             labelColor = if (selected) MangaColors.Cyan else MangaColors.OnSurfaceVariant
-        ),
-        border = SuggestionChipDefaults.suggestionChipBorder(
-            borderColor = if (selected) MangaColors.Cyan else MangaColors.SurfaceHigh,
-            enabled = true,
-            selected = selected
         )
     )
 }

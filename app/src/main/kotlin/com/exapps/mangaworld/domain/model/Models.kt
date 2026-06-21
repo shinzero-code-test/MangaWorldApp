@@ -40,7 +40,6 @@ enum class MangaSource(
     ROCKMANGA("rockmanga", "روكس مانجا", "https://rocksmanga.com", false, ThemeType.MADARA_CUSTOM, R.drawable.rocksmanga_com_logo);
 
     /** Drawable resource ID for the site logo. Used in SourcesScreen grid. */
-    @androidx.annotation.DrawableRes
     val logoDrawableRes: Int get() = logoRes
 
     enum class ThemeType { MADARA, MANGAREADER, ASTRO, API, OTHER, CUSTOM, MADARA_CUSTOM }
