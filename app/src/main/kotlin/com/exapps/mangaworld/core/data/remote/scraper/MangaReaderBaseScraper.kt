@@ -149,13 +149,31 @@ open class MangaReaderBaseScraper(
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
         val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to source.baseUrl + "/"))
 
-        doc.select("div#readerarea img, .reading-content img, .chapter-pages img")
+        // MangaReader/MangaStream themes:
+        // - Standard: div#readerarea img, div#content .ts-main-image
+        // - Lavascans: .reader-area .ts-main-image
+        // - StellarSaber: #readerarea .ts-main-image
+        // - Hijala: .readercontent .ts-main-image
+        doc.select(
+            "div#readerarea img, div#content img, .reader-area img, .readercontent img, " +
+            ".reading-content img, img.ts-main-image, .chapter-pages img"
+        )
             .mapNotNull { img ->
                 val src = img.attr("abs:src").ifEmpty {
                     img.attr("data-src").ifEmpty { img.attr("src") }.absoluteUrl()
                 }.encodeForUrl()
-                src.takeIf { it.isNotBlank() }
+                src.takeIf { it.isNotBlank() && !it.contains("logo") && !it.contains("avatar") }
             }
+            .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains("wp-content") }
+            .distinct()
+            .mapIndexed { index, src ->
+                ChapterPage(
+                    index = index,
+                    url = src,
+                    headers = buildImageHeaders(src, chapterUrl)
+                )
+            }
+    }
             .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains("wp-content") }
             .distinct()
             .mapIndexed { index, src ->
@@ -278,37 +296,98 @@ open class MangaReaderBaseScraper(
     }
 
     protected open fun parseMangaCards(doc: org.jsoup.nodes.Document): List<MangaItem> {
-        return doc.select(
-            ".listupd .bs .bsx, .bs .bsx, .bsx, .bixbox .bsx, .listupd .bs, " +
-            "article.post, div.page-item-detail, .c-tabs-item__content"
-        ).mapNotNull { card ->
-            val linkEl = card.selectFirst("a[href*='/manga/'], a[href*='manga/'], a[href]") ?: return@mapNotNull null
+        val results = mutableListOf<MangaItem>()
+
+        // Pattern 1: Standard MangaReader — .listupd .bs .bsx
+        doc.select(
+            ".listupd .bs .bsx, .bs .bsx, .bsx, .bixbox .bsx, .listupd .bs"
+        ).forEach { card ->
+            val linkEl = card.selectFirst("a[href*='/manga/'], a[href*='manga/'], a[href]")
+                ?: return@forEach
             val imgEl = card.selectFirst("img")
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-            val slug = href.trimEnd('/').let { url ->
+            val slug = href.substringBefore("?").trimEnd('/').let { url ->
                 val segments = url.split("/")
                 val last = segments.lastOrNull() ?: ""
                 if (last.isNotBlank() && !last.startsWith("page")) last
                 else segments.dropLast(1).lastOrNull() ?: ""
             }.trimEnd('/')
-            if (slug.isBlank() || slug == "manga") return@mapNotNull null
+            if (slug.isBlank() || slug == "manga") return@forEach
             val title = card.selectFirst(".tt, .bigor .tt, h3 a, .entry-title, .post-title a")?.text()?.cleanText()
                 ?: imgEl?.attr("alt")?.cleanText()
                 ?: linkEl.attr("title").cleanText().ifBlank { slug }
-            if (title.isBlank()) return@mapNotNull null
+            if (title.isBlank()) return@forEach
             val coverUrl = imgEl?.let {
                 it.attr("abs:src").ifEmpty {
                     (it.attr("data-src").ifEmpty { it.attr("src") }).absoluteUrl()
                 }
             }.orEmpty()
-            MangaItem(
-                id = "${source.id}_$slug",
-                slug = slug,
-                title = title,
-                coverUrl = coverUrl,
-                source = source,
-                url = href
+            results.add(
+                MangaItem(
+                    id = "${source.id}_$slug",
+                    slug = slug,
+                    title = title,
+                    coverUrl = coverUrl,
+                    source = source,
+                    url = href
+                )
             )
-        }.distinctBy { it.id }
+        }
+
+        // Pattern 2: Lavascans — .manga-list-grid article.legend-card
+        if (results.isEmpty()) {
+            doc.select("article.legend-card").forEach { card ->
+                val linkEl = card.selectFirst("a.legend-poster[href*='/manga/']") ?: return@forEach
+                val imgEl = card.selectFirst("img.legend-img, img")
+                val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
+                val slug = href.substringBefore("?").trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
+                if (slug.isBlank()) return@forEach
+                val title = imgEl?.attr("alt")?.cleanText()
+                    ?: card.selectFirst(".legend-info h3, .legend-title")?.text()?.cleanText()
+                    ?: slug
+                val coverUrl = imgEl?.let {
+                    it.attr("abs:src").ifEmpty { it.attr("src").absoluteUrl() }
+                }.orEmpty()
+                results.add(
+                    MangaItem(
+                        id = "${source.id}_$slug",
+                        slug = slug,
+                        title = title,
+                        coverUrl = coverUrl,
+                        source = source,
+                        url = href
+                    )
+                )
+            }
+        }
+
+        // Pattern 3: StellarSaber sidebar — .listupd li .imgseries
+        if (results.isEmpty()) {
+            doc.select(".listupd li, .serieslist li").forEach { li ->
+                val linkEl = li.selectFirst("a.series[href*='/manga/'], a[href*='/manga/']") ?: return@forEach
+                val imgEl = li.selectFirst("img.ts-post-image, img")
+                val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
+                val slug = href.substringBefore("?").trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
+                if (slug.isBlank()) return@forEach
+                val title = linkEl.text().cleanText().ifBlank {
+                    imgEl?.attr("alt")?.cleanText() ?: slug
+                }
+                val coverUrl = imgEl?.let {
+                    it.attr("abs:src").ifEmpty { it.attr("src").absoluteUrl() }
+                }.orEmpty()
+                results.add(
+                    MangaItem(
+                        id = "${source.id}_$slug",
+                        slug = slug,
+                        title = title,
+                        coverUrl = coverUrl,
+                        source = source,
+                        url = href
+                    )
+                )
+            }
+        }
+
+        return results.distinctBy { it.id }
     }
 }

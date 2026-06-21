@@ -18,7 +18,3 @@ class LavaScansScraper @Inject constructor(client: OkHttpClient, settingsRepo: S
 /** stellarsaber.pro — MangaReader/MangaStream theme, Arabic, Cloudflare protected */
 class StellarSaberScraper @Inject constructor(client: OkHttpClient, settingsRepo: SettingsRepository) :
     MangaReaderBaseScraper(client, MangaSource.STELLARSABER, settingsRepo, pageSize = 32, searchPageSize = 10)
-
-/** www.umimanga.com — MangaReader theme, Arabic */
-class UmiMangaScraper @Inject constructor(client: OkHttpClient, settingsRepo: SettingsRepository) :
-    MangaReaderBaseScraper(client, MangaSource.UMIMANGA, settingsRepo, pageSize = 30, searchPageSize = 10)

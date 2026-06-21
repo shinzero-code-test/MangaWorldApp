@@ -33,7 +33,6 @@ enum class MangaSource(
     HIJALA("hijala", "حجالة مانجا", "https://hijala.com", true, ThemeType.MANGAREADER, R.drawable.hijala_com_logo),
     LAVASCANS("lavascans", "لاڤا سكانز", "https://lavascans.com", true, ThemeType.MANGAREADER, R.drawable.lavascans_com_logo),
     STELLARSABER("stellarsaber", "StellarSaber", "https://stellarsaber.pro", true, ThemeType.MANGAREADER, R.drawable.stellarsaber_pro_logo),
-    UMIMANGA("umimanga", "يومي مانجا", "https://www.umimanga.com", false, ThemeType.MANGAREADER, R.drawable.www_umimanga_com_logo),
 
     // ─── New Arabic Sources (Custom) ──────────────────────────────────────────
     PROCOMIC("procomic", "ProChan", "https://procomic.pro", true, ThemeType.CUSTOM, R.drawable.procomic_pro_logo),

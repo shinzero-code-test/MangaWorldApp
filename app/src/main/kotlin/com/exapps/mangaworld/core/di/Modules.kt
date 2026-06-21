@@ -149,9 +149,6 @@ object ScraperModule {
     @Provides @Singleton @IntoMap @StringKey("stellarsaber")
     fun provideStellarSaberScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = StellarSaberScraper(client, settingsRepo)
 
-    @Provides @Singleton @IntoMap @StringKey("umimanga")
-    fun provideUmiMangaScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = UmiMangaScraper(client, settingsRepo)
-
     // ─── v4.0.0 — Custom Theme Sources ────────────────────────────────────────
 
     @Provides @Singleton @IntoMap @StringKey("procomic")

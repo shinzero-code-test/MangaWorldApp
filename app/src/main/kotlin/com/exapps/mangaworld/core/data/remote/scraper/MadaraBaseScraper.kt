@@ -167,12 +167,13 @@ open class MadaraBaseScraper(
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
         val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to source.baseUrl + "/"))
 
-        doc.select(".reading-content img, .page-break img")
+        // Madara theme: .reading-content .page-break img
+        doc.select(".reading-content .page-break img, .reading-content img, .page-break img, img.wp-manga-chapter-img")
             .mapNotNull { img ->
                 val src = img.attr("abs:src").ifEmpty {
                     img.attr("data-src").ifEmpty { img.attr("src") }.absoluteUrl()
                 }.encodeForUrl()
-                src.takeIf { it.isNotBlank() }
+                src.takeIf { it.isNotBlank() && !it.contains("logo") && !it.contains("avatar") }
             }
             .distinct()
             .mapIndexed { index, src ->
