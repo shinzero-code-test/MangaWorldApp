@@ -91,6 +91,7 @@ fun LocalStorageScreen(
     val mangas by viewModel.downloadedMangas.collectAsStateWithLifecycle()
     val confirmDelete by viewModel.confirmDelete.collectAsStateWithLifecycle()
     val autoTags by viewModel.autoTags.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     Box(Modifier.fillMaxSize().background(MangaColors.Background)) {
         Column(Modifier.fillMaxSize()) {
@@ -146,7 +147,16 @@ fun LocalStorageScreen(
                             manga = manga,
                             autoTags = autoTags[manga.mangaId].orEmpty(),
                             downloadedChapters = viewModel.chapterCount(manga),
-                            onClick = { onMangaClick(manga.sourceId, manga.slug) },
+                            onClick = {
+                                if (manga.sourceId == "imported") {
+                                    android.widget.Toast.makeText(
+                                        context, "مانجا محلية — اقرأها من التخزين المحلي",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    onMangaClick(manga.sourceId, manga.slug)
+                                }
+                            },
                             onDelete = { viewModel.promptDelete(manga) }
                         )
                     }

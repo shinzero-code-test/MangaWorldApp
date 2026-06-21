@@ -171,7 +171,8 @@ open class MangaReaderBaseScraper(
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-        val doc = fetchDocument("${source.baseUrl}/page/$page/?s=$encoded")
+        val url = if (page <= 1) "${source.baseUrl}/?s=$encoded" else "${source.baseUrl}/page/$page/?s=$encoded"
+        val doc = fetchDocument(url)
         parseMangaCards(doc)
     }
 
@@ -254,18 +255,47 @@ open class MangaReaderBaseScraper(
     }
 
     protected open fun parsePopularManga(doc: org.jsoup.nodes.Document): List<MangaItem> {
-        return parseMangaCards(doc).take(10)
+        // Try sidebar popular widget first, then fall back to the main list
+        val sidebar = doc.select(".popular-item-wrap, .widget_manga_popular .popular-item-wrap, .sidebar .popular-item-wrap").mapNotNull { item ->
+            val img = item.selectFirst("img") ?: return@mapNotNull null
+            val link = item.selectFirst("a[href*='/manga/']") ?: return@mapNotNull null
+            val title = item.selectFirst(".post-title a, .popular-title, h3 a")?.text()?.cleanText()
+                ?: link.attr("title").cleanText()
+            val href = link.attr("abs:href").ifEmpty { link.attr("href").absoluteUrl() }
+            val slug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
+            if (slug.isBlank()) return@mapNotNull null
+            MangaItem(
+                id = "${source.id}_$slug",
+                slug = slug,
+                title = title,
+                coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() },
+                source = source,
+                url = href
+            )
+        }.distinctBy { it.id }
+        return if (sidebar.isNotEmpty()) sidebar.take(10)
+        else parseMangaCards(doc).take(10)
     }
 
     protected open fun parseMangaCards(doc: org.jsoup.nodes.Document): List<MangaItem> {
-        return doc.select(".listupd .bs .bsx, .bs .bsx, .bsx").mapNotNull { card ->
-            val linkEl = card.selectFirst("a[href*='/manga/']") ?: return@mapNotNull null
+        return doc.select(
+            ".listupd .bs .bsx, .bs .bsx, .bsx, .bixbox .bsx, .listupd .bs, " +
+            "article.post, div.page-item-detail, .c-tabs-item__content"
+        ).mapNotNull { card ->
+            val linkEl = card.selectFirst("a[href*='/manga/'], a[href*='manga/'], a[href]") ?: return@mapNotNull null
             val imgEl = card.selectFirst("img")
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-            val slug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
-            if (slug.isBlank()) return@mapNotNull null
-            val title = card.selectFirst(".tt")?.text()?.cleanText()
-                ?: imgEl?.attr("alt")?.cleanText() ?: return@mapNotNull null
+            val slug = href.trimEnd('/').let { url ->
+                val segments = url.split("/")
+                val last = segments.lastOrNull() ?: ""
+                if (last.isNotBlank() && !last.startsWith("page")) last
+                else segments.dropLast(1).lastOrNull() ?: ""
+            }.trimEnd('/')
+            if (slug.isBlank() || slug == "manga") return@mapNotNull null
+            val title = card.selectFirst(".tt, .bigor .tt, h3 a, .entry-title, .post-title a")?.text()?.cleanText()
+                ?: imgEl?.attr("alt")?.cleanText()
+                ?: linkEl.attr("title").cleanText().ifBlank { slug }
+            if (title.isBlank()) return@mapNotNull null
             val coverUrl = imgEl?.let {
                 it.attr("abs:src").ifEmpty {
                     (it.attr("data-src").ifEmpty { it.attr("src") }).absoluteUrl()

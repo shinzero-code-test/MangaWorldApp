@@ -66,8 +66,14 @@ open class MadaraBaseScraper(
     // ─── Manga Detail ─────────────────────────────────────────────────────────
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
-        val url = "${source.baseUrl}/manga/$slug/"
-        val doc = fetchDocument(url)
+        // Try /manga/ first, then /comics/ as fallback for some Madara sites
+        var url = "${source.baseUrl}/manga/$slug/"
+        var doc = runCatching { fetchDocument(url) }.getOrNull()
+        if (doc == null || doc.selectFirst("body.error-404, .page-not-found, h1")?.text()?.contains("404") == true) {
+            url = "${source.baseUrl}/comics/$slug/"
+            doc = fetchDocument(url)
+        }
+        doc ?: error("Could not load manga detail for $slug")
 
         val coverUrl = doc.selectFirst(".summary_image img, .profile-manga img, img.wp-post-image")
             ?.let { img ->
@@ -180,9 +186,20 @@ open class MadaraBaseScraper(
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+        // Try standard GET search first
         val url = "${source.baseUrl}/?s=$encoded&post_type=wp-manga&paged=$page"
         val doc = fetchDocument(url)
-        parseMangaGrid(doc)
+        val results = parseMangaGrid(doc)
+        if (results.isNotEmpty()) return@runCatching results
+
+        // Fallback: try /manga/ path search
+        val url2 = "${source.baseUrl}${listPath}?s=$encoded&page=$page"
+        val doc2 = runCatching { fetchDocument(url2) }.getOrNull()
+        if (doc2 != null) {
+            val results2 = parseMangaGrid(doc2)
+            if (results2.isNotEmpty()) return@runCatching results2
+        }
+        results
     }
 
     // ─── Browse ───────────────────────────────────────────────────────────────
