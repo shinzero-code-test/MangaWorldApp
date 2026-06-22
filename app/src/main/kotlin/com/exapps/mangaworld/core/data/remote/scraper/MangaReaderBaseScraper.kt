@@ -2,6 +2,7 @@ package com.exapps.mangaworld.core.data.remote.scraper
 
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import okhttp3.OkHttpClient
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
