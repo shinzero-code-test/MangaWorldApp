@@ -78,15 +78,17 @@ class AreaScansScraper @Inject constructor(
         )
 
         // Try to get chapters from the chapters-list
-        val chapters = doc.select(".chapters-list a.chapter-item, .chapters-list a[href], .chapters-list .chapter-row")
+        val chapters = doc.select(".chapters-list .chapter-item.ch-item, .chapters-list a.chapter-item, .chapters-list a[href], .chapters-list .chapter-row")
             .mapNotNull { el ->
                 val chLink = el.takeIf { el.tagName() == "a" }
                     ?: el.selectFirst("a[href]")
                     ?: return@mapNotNull null
                 val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
-                val chText = chLink.selectFirst(".chap-num")?.text()?.cleanText()
-                    ?: chLink.text().cleanText()
-                val chNum = chText.replace("الفصل", "").replace("[^0-9.]".toRegex(), "").trim().toFloatOrNull()
+                // Prefer data-ch attribute (reliable integer)
+                val chNum = el.attr("data-ch").toFloatOrNull()
+                    ?: chLink.selectFirst(".chap-num")?.text()?.cleanText()
+                        ?.replace("الفصل", "")?.replace("[^0-9.]".toRegex(), "")?.trim()?.toFloatOrNull()
+                    ?: chLink.text().cleanText().replace("الفصل", "").replace("[^0-9.]".toRegex(), "").trim().toFloatOrNull()
                     ?: chHref.trimEnd('/').substringAfterLast("/").substringBefore("?").toFloatOrNull()
                     ?: return@mapNotNull null
                 val dateText = chLink.selectFirst(".chap-date")?.text()?.cleanText()

@@ -70,8 +70,14 @@ open class MadaraBaseScraper(
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
         // Progressive URL resolution: try /manga/ → /comics/ → /manhwa/ → bare /
         // Some Madara sites use different path prefixes for manga detail pages.
-        val hasMadaraElements: (org.jsoup.nodes.Document?) -> Boolean = { d ->
-            d?.selectFirst(".post-title, h1.entry-title, .summary_image, .entry-content, .tsinfo") != null
+        // Check for DETAIL-SPECIFIC elements (not just any Madara element) to avoid
+        // matching library/list pages which may have .post-title in manga cards.
+        val isMangaDetailPage: (org.jsoup.nodes.Document?) -> Boolean = { d ->
+            d != null && (
+                // Must have a summary_image OR h1.entry-title AND chapters listing
+                (d.selectFirst(".summary_image, .profile-manga .summary_image") != null) ||
+                (d.selectFirst("h1.entry-title") != null && d.selectFirst(".listing-chapters_wrap, .eplister, #chapterlist") != null)
+            )
         }
         val pathsToTry = listOf("/manga/", "/comics/", "/manhwa/")
         var url = ""
@@ -82,7 +88,7 @@ open class MadaraBaseScraper(
             val tryDoc = runCatching { fetchDocument(tryUrl) }.getOrNull()
             if (tryDoc != null) {
                 val isExplicit404 = tryDoc.selectFirst("body.error-404, body.page-not-found, .page-404, .error-page") != null
-                if (!isExplicit404 && hasMadaraElements(tryDoc)) {
+                if (!isExplicit404 && isMangaDetailPage(tryDoc)) {
                     url = tryUrl
                     doc = tryDoc
                     break
@@ -93,7 +99,7 @@ open class MadaraBaseScraper(
         if (doc == null) {
             val bareUrl = "${source.baseUrl}/$slug/"
             val bareDoc = runCatching { fetchDocument(bareUrl) }.getOrNull()
-            if (bareDoc != null && hasMadaraElements(bareDoc)) {
+            if (bareDoc != null && isMangaDetailPage(bareDoc)) {
                 url = bareUrl
                 doc = bareDoc
             }

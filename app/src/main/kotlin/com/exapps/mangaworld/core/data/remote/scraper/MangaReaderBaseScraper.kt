@@ -67,8 +67,11 @@ open class MangaReaderBaseScraper(
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
         // Progressive URL resolution: some sites use /manga/, others use direct slug
-        val hasMangaElements: (org.jsoup.nodes.Document) -> Boolean = { d ->
-            d.selectFirst("h1.entry-title, .seriestucont, .manga-poster, .lh-title, .bigcover, .entry-content, .eplister") != null
+        // Check for DETAIL-SPECIFIC elements to avoid matching library/list pages
+        val isMangaDetailPage: (org.jsoup.nodes.Document) -> Boolean = { d ->
+            // Must have a title AND either chapters list or manga-specific content
+            d.selectFirst("h1.entry-title, h1.manga-title-large, .lh-title, h1") != null &&
+            (d.selectFirst("#chapterlist, .eplister, .ch-list-grid, .chapters-list, .entry-content") != null)
         }
         val pathsToTry = listOf("/manga/", "/")
         var resolvedUrl = ""
@@ -77,7 +80,7 @@ open class MangaReaderBaseScraper(
         for (path in pathsToTry) {
             val tryUrl = "${source.baseUrl}$path$slug/"
             val tryDoc = runCatching { fetchDocument(tryUrl) }.getOrNull()
-            if (tryDoc != null && hasMangaElements(tryDoc)) {
+            if (tryDoc != null && isMangaDetailPage(tryDoc)) {
                 resolvedUrl = tryUrl
                 resolvedDoc = tryDoc
                 break
