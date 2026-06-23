@@ -129,7 +129,6 @@ class ProComicScraper @Inject constructor(
             )
         }
     }
-    }
 
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
         // Try to extract series info from URL: /series/{type}/{id}/{slug}/{chapterNumber}
