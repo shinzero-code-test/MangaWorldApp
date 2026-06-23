@@ -122,19 +122,66 @@ class AreaScansScraper @Inject constructor(
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
         val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to source.baseUrl + "/"))
 
-        // ar.kenmanga.com uses #reader-canvas for chapter images (all inline)
+        // Try AJAX endpoint first (get_secure_chapter_images) - most reliable
+        val chapterId = doc.selectFirst("script")?.let { script ->
+            Regex("chapterId\\s*=\\s*(\\d+)").find(script.html())?.groupValues?.get(1)
+        } ?: doc.body().classNames().let { classes ->
+            Regex("postid-(\\d+)").find(classes)?.groupValues?.get(1)
+        }
+
+        if (!chapterId.isNullOrBlank()) {
+            try {
+                val ajaxImages = withContext(Dispatchers.IO) {
+                    val formBody = FormBody.Builder()
+                        .add("action", "get_secure_chapter_images")
+                        .add("chapter_id", chapterId)
+                        .build()
+                    val request = Request.Builder()
+                        .url("${source.baseUrl}/wp-admin/admin-ajax.php")
+                        .header("User-Agent", USER_AGENT)
+                        .header("Accept", "application/json")
+                        .header("Referer", chapterUrl)
+                        .post(formBody)
+                        .build()
+                    val response = client.newCall(request).execute()
+                    val body = response.body?.string() ?: "{}"
+                    response.close()
+                    val json = org.json.JSONObject(body)
+                    if (json.optBoolean("success", false)) {
+                        val html = json.optJSONObject("data")?.optString("content", "") ?: ""
+                        if (html.isNotBlank()) {
+                            val imgDoc = Jsoup.parse(html, source.baseUrl)
+                            imgDoc.select("img[src]").mapNotNull { img ->
+                                val src = img.attr("src")
+                                if (src.isNotBlank() && !src.startsWith("data:")) src else null
+                            }.distinct()
+                        } else emptyList()
+                    } else emptyList()
+                }
+                if (ajaxImages.isNotEmpty()) {
+                    return@runCatching ajaxImages.mapIndexed { index, src ->
+                        ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
+                    }
+                }
+            } catch (_: Exception) { }
+        }
+
+        // Fallback: parse from HTML
         val images = doc.select(
-            "#reader-canvas img, .reading-content img, .page-break img, img.wp-manga-chapter-img"
+            "#reader-canvas img, .reader-container img, .reading-content img, .page-break img"
         )
             .mapNotNull { img ->
                 val dataSrc = img.attr("data-src").ifEmpty { null }
-                val src = img.attr("abs:src").ifEmpty { img.attr("src") }
-                val actualSrc = dataSrc ?: src
+                val absSrc = img.attr("abs:src").ifEmpty { null }
+                val src = img.attr("src").ifEmpty { null }
+                val actualSrc = dataSrc
+                    ?: absSrc?.takeIf { !it.startsWith("data:") && !it.contains("readerarea.svg") }
+                    ?: src?.takeIf { !it.startsWith("data:") && !it.contains("readerarea.svg") }
                 if (actualSrc.isNullOrBlank()) return@mapNotNull null
                 val fullSrc = if (actualSrc.startsWith("http")) actualSrc else actualSrc.absoluteUrl()
                 fullSrc.encodeForUrl().takeIf {
                     it.isNotBlank() && !it.contains("logo") && !it.contains("avatar") &&
-                    !it.contains("loading") && !it.contains("placeholder") && !it.contains("readerarea.svg")
+                    !it.contains("loading") && !it.contains("placeholder")
                 }
             }
             .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains(".gif") || it.contains("wp-content") }

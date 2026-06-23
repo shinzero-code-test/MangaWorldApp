@@ -99,9 +99,15 @@ open class MangaReaderBaseScraper(
             ".lh-poster img, .manga-poster img, img.wp-post-image, .bigcover img, " +
             ".manga-cover img, .sb-cover img, .hero-cover-area img, .manga-cover-wrap img"
         )?.let { img ->
-            img.attr("abs:src").ifEmpty {
-                (img.attr("data-src").ifEmpty { img.attr("src") }).absoluteUrl()
-            }
+            // For lazy-loaded images, src may be a base64 placeholder or SVG.
+            // Always prefer data-src if present, otherwise use abs:src but skip data: URIs.
+            val dataSrc = img.attr("data-src").ifEmpty { null }
+            val absSrc = img.attr("abs:src").ifEmpty { null }
+            val src = img.attr("src").ifEmpty { null }
+            val realSrc = dataSrc
+                ?: absSrc?.takeIf { !it.startsWith("data:") && !it.contains("readerarea.svg") }
+                ?: src?.takeIf { !it.startsWith("data:") && !it.contains("readerarea.svg") }
+            realSrc?.absoluteUrl() ?: ""
         } ?: ""
 
         // Title: multiple patterns
@@ -205,15 +211,19 @@ open class MangaReaderBaseScraper(
             ".reading-content img, img.ts-main-image, .chapter-pages img"
         )
             .mapNotNull { img ->
-                // Prefer data-src (lazy-loaded) over src (placeholder SVG)
+                // For lazy-loaded images, src may be a base64 placeholder or SVG.
+                // Always prefer data-src if present, otherwise use abs:src but skip data: URIs.
                 val dataSrc = img.attr("data-src").ifEmpty { null }
-                val src = img.attr("abs:src").ifEmpty { null }
-                val actualSrc = dataSrc ?: src
+                val absSrc = img.attr("abs:src").ifEmpty { null }
+                val src = img.attr("src").ifEmpty { null }
+                val actualSrc = dataSrc
+                    ?: absSrc?.takeIf { !it.startsWith("data:") && !it.contains("readerarea.svg") }
+                    ?: src?.takeIf { !it.startsWith("data:") && !it.contains("readerarea.svg") }
                 if (actualSrc.isNullOrBlank()) return@mapNotNull null
                 val fullSrc = if (actualSrc.startsWith("http")) actualSrc else actualSrc.absoluteUrl()
                 fullSrc.encodeForUrl().takeIf {
                     it.isNotBlank() && !it.contains("logo") && !it.contains("avatar") &&
-                    !it.contains("readerarea.svg") && !it.contains("loading")
+                    !it.contains("loading")
                 }
             }
             .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains(".gif") || it.contains("wp-content") || it.contains("blogger.googleusercontent") }

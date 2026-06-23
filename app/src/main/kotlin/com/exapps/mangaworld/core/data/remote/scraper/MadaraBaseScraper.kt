@@ -199,10 +199,14 @@ open class MadaraBaseScraper(
         // Madara theme: .reading-content .page-break img
         doc.select(".reading-content .page-break img, .reading-content img, .page-break img, img.wp-manga-chapter-img")
             .mapNotNull { img ->
-                // Prefer data-src (lazy-loaded) over src (may be placeholder)
+                // For lazy-loaded images, src may be a base64 placeholder or SVG.
+                // Always prefer data-src if present, otherwise use abs:src but skip data: URIs.
                 val dataSrc = img.attr("data-src").ifEmpty { null }
-                val src = img.attr("abs:src").ifEmpty { null }
-                val actualSrc = dataSrc ?: src
+                val absSrc = img.attr("abs:src").ifEmpty { null }
+                val src = img.attr("src").ifEmpty { null }
+                val actualSrc = dataSrc
+                    ?: absSrc?.takeIf { !it.startsWith("data:") && !it.contains("readerarea.svg") }
+                    ?: src?.takeIf { !it.startsWith("data:") && !it.contains("readerarea.svg") }
                 if (actualSrc.isNullOrBlank()) return@mapNotNull null
                 val fullSrc = if (actualSrc.startsWith("http")) actualSrc else actualSrc.absoluteUrl()
                 fullSrc.encodeForUrl().takeIf {
