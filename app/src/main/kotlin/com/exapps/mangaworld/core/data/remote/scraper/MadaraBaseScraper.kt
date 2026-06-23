@@ -392,50 +392,79 @@ open class MadaraBaseScraper(
             parseChapterLi(li, slug)?.let { allChapters.add(it) }
         }
 
-        // Try AJAX for full chapter list
+        // Try AJAX for full chapter list — use the /ajax/chapters/ pattern
+        // (which is the standard Madara endpoint used by kotatsu parsers)
         try {
-            val postId = doc.selectFirst("input.rating-post-id")?.attr("value")
-                ?: doc.selectFirst("body")?.let { body ->
-                    body.classNames().firstOrNull { it.startsWith("postid-") }
-                        ?.removePrefix("postid-")
-                } ?: return allChapters
+            val ajaxUrl = "${pageUrl.trimEnd('/')}/ajax/chapters/"
+            val ajaxRequest = Request.Builder()
+                .url(ajaxUrl)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "*/*")
+                .header("Accept-Language", "ar,en;q=0.9")
+                .header("Referer", pageUrl)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .post(FormBody.Builder().build())
+                .build()
 
-            if (postId.isBlank()) return allChapters
+            val response = withContext(Dispatchers.IO) {
+                client.newCall(ajaxRequest).execute()
+            }
+            val body = response.body?.string() ?: ""
+            response.close()
 
-            for (action in listOf("wp-manga-get-chapters", "manga-get-chapters")) {
-                val formBody = FormBody.Builder()
-                    .add("action", action)
-                    .add("manga", postId)
-                    .build()
-
-                val ajaxRequest = Request.Builder()
-                    .url("${source.baseUrl}/wp-admin/admin-ajax.php")
-                    .header("User-Agent", USER_AGENT)
-                    .header("Accept", "*/*")
-                    .header("Accept-Language", "ar,en;q=0.9")
-                    .header("Referer", pageUrl)
-                    .header("X-Requested-With", "XMLHttpRequest")
-                    .post(formBody)
-                    .build()
-
-                val (bodyStr, json) = withContext(Dispatchers.IO) {
-                    val response = client.newCall(ajaxRequest).execute()
-                    val body = response.body?.string() ?: "{}"
-                    response.close()
-                    body to JSONObject(body)
-                }
-
-                if (json.optBoolean("success", false)) {
-                    val html = json.optString("data", "")
-                    val chapDoc = Jsoup.parse(html, source.baseUrl)
-                    val ajaxChapters = chapDoc.select("li").mapNotNull { li -> parseChapterLi(li, slug) }
-                    if (ajaxChapters.isNotEmpty()) {
-                        allChapters.addAll(ajaxChapters)
-                        break
-                    }
+            if (body.isNotBlank() && body.contains("wp-manga-chapter")) {
+                val chapDoc = Jsoup.parse(body, source.baseUrl)
+                val ajaxChapters = chapDoc.select("li.wp-manga-chapter, li")
+                    .mapNotNull { li -> parseChapterLi(li, slug) }
+                if (ajaxChapters.isNotEmpty()) {
+                    allChapters.clear()
+                    allChapters.addAll(ajaxChapters)
                 }
             }
         } catch (_: Exception) { }
+
+        // Fallback: try wp-admin AJAX (some Madara sites use this instead)
+        if (allChapters.isEmpty()) {
+            try {
+                val postId = doc.selectFirst("input.rating-post-id")?.attr("value")
+                    ?: doc.selectFirst("body")?.let { body ->
+                        body.classNames().firstOrNull { it.startsWith("postid-") }
+                            ?.removePrefix("postid-")
+                    }
+
+                if (!postId.isNullOrBlank()) {
+                    for (action in listOf("wp-manga-get-chapters", "manga-get-chapters")) {
+                        val formBody = FormBody.Builder()
+                            .add("action", action)
+                            .add("manga", postId)
+                            .build()
+                        val ajaxRequest = Request.Builder()
+                            .url("${source.baseUrl}/wp-admin/admin-ajax.php")
+                            .header("User-Agent", USER_AGENT)
+                            .header("Accept", "*/*")
+                            .header("Referer", pageUrl)
+                            .header("X-Requested-With", "XMLHttpRequest")
+                            .post(formBody)
+                            .build()
+                        val (bodyStr, json) = withContext(Dispatchers.IO) {
+                            val response = client.newCall(ajaxRequest).execute()
+                            val body = response.body?.string() ?: "{}"
+                            response.close()
+                            body to JSONObject(body)
+                        }
+                        if (json.optBoolean("success", false)) {
+                            val html = json.optString("data", "")
+                            val chapDoc = Jsoup.parse(html, source.baseUrl)
+                            val ajaxChapters = chapDoc.select("li").mapNotNull { li -> parseChapterLi(li, slug) }
+                            if (ajaxChapters.isNotEmpty()) {
+                                allChapters.addAll(ajaxChapters)
+                                break
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) { }
+        }
 
         return allChapters.distinctBy { it.url }.sortedByDescending { it.number }
     }

@@ -93,7 +93,8 @@ open class MangaReaderBaseScraper(
         // Cover: multiple patterns for different MangaReader variants
         val coverUrl = doc.selectFirst(
             ".imgseries img, .postbody img, .thumb img, .sorthumb img, " +
-            ".lh-poster img, .manga-poster img, img.wp-post-image, .bigcover img"
+            ".lh-poster img, .manga-poster img, img.wp-post-image, .bigcover img, " +
+            ".manga-cover img, .sb-cover img, .hero-cover-area img, .manga-cover-wrap img"
         )?.let { img ->
             img.attr("abs:src").ifEmpty {
                 (img.attr("data-src").ifEmpty { img.attr("src") }).absoluteUrl()
