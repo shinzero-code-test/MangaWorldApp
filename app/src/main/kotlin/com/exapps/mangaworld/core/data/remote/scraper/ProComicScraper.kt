@@ -30,27 +30,41 @@ class ProComicScraper @Inject constructor(
     private val apiBase = "${source.baseUrl}/api/public/series/search"
 
     private suspend fun apiGet(url: String): JSONObject? = withContext(Dispatchers.IO) {
-        runCatching {
-            val cookies = getCookiesForDomain(url)
-            val req = Request.Builder()
-                .url(url)
-                .header("User-Agent", USER_AGENT)
-                .header("Accept", "application/json")
-                .header("Referer", "${source.baseUrl}/")
-                .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
-                .build()
-            val resp = client.newCall(req).execute()
-            val body = resp.body?.string() ?: ""
-            resp.close()
-            if (body.isBlank() || !body.trimStart().startsWith("{")) null
-            else JSONObject(body)
-        }.getOrNull()
+        val cookies = getCookiesForDomain(url)
+        val req = Request.Builder()
+            .url(url)
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/json")
+            .header("Referer", "${source.baseUrl}/")
+            .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
+            .build()
+        val resp = client.newCall(req).execute()
+        val body = resp.body?.string() ?: ""
+        resp.close()
+        if (body.isBlank() || !body.trimStart().startsWith("{")) return@withContext null
+        val json = JSONObject(body)
+        // Detect Turnstile / Cloudflare blocking — propagate to trigger WebView solver
+        val message = json.optString("message", "")
+        if (message.contains("Turnstile", ignoreCase = true) ||
+            message.contains("cloudflare", ignoreCase = true)) {
+            throw CloudflareChallengeException(
+                source.baseUrl.removePrefix("https://").removePrefix("http://"),
+                url
+            )
+        }
+        json
     }
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
-        // Use the public API to get latest series
-        val json = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=20&page=1&sort=latest")
-        val items = parseApiResults(json)
+        // Try API first, fall back to HTML scraping
+        val items = try {
+            val json = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=20&page=1&sort=latest")
+            parseApiResults(json)
+        } catch (_: Exception) {
+            // API blocked by Turnstile — scrape SSR HTML instead
+            val doc = fetchDocument("${source.baseUrl}/series")
+            parseMangaGridFromHtml(doc)
+        }
 
         HomeData(
             featured = items.take(8),
@@ -60,13 +74,13 @@ class ProComicScraper @Inject constructor(
     }
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
-        // Search for the manga by slug
-        val encoded = java.net.URLEncoder.encode(slug.replace("-", " "), "UTF-8")
-        val searchJson = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=50&page=1&sort=latest&search=$encoded")
-        val allItems = parseApiResults(searchJson)
-
-        // Find the matching manga by slug
-        val matchedItem = allItems.find { it.slug == slug || it.url.endsWith("/$slug") }
+        // Try API first, fall back to HTML scraping
+        val matchedItem = try {
+            val encoded = java.net.URLEncoder.encode(slug.replace("-", " "), "UTF-8")
+            val searchJson = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=50&page=1&sort=latest&search=$encoded")
+            val allItems = parseApiResults(searchJson)
+            allItems.find { it.slug == slug || it.url.endsWith("/$slug") }
+        } catch (_: Exception) { null }
 
         if (matchedItem != null) {
             // Extract type and id from URL: /series/{type}/{id}/{slug}
@@ -76,7 +90,9 @@ class ProComicScraper @Inject constructor(
             val seriesId = parts.getOrElse(1) { "" }
 
             // Get full detail from the series API (includes chapters)
-            val detailJson = apiGet("${source.baseUrl}/api/public/series/$seriesType/$seriesId/$slug")
+            val detailJson = try {
+                apiGet("${source.baseUrl}/api/public/series/$seriesType/$seriesId/$slug")
+            } catch (_: Exception) { null }
             val description = detailJson?.optString("description", "") ?: ""
             val cdnPath = detailJson?.optString("cdn_path", "cdn3") ?: "cdn3"
 
@@ -142,26 +158,27 @@ class ProComicScraper @Inject constructor(
             val seriesSlug = parts[2]
             val chapterNum = parts[3]
 
-            // Fetch full series detail to get chapter images
-            val detailJson = apiGet("${source.baseUrl}/api/public/series/$seriesType/$seriesId/$seriesSlug")
-            val cdnPath = detailJson?.optString("cdn_path", "cdn3") ?: "cdn3"
-            val chaptersJson = detailJson?.optJSONArray("chapters") ?: JSONArray()
+            // Try API first
+            try {
+                val detailJson = apiGet("${source.baseUrl}/api/public/series/$seriesType/$seriesId/$seriesSlug")
+                val cdnPath = detailJson?.optString("cdn_path", "cdn3") ?: "cdn3"
+                val chaptersJson = detailJson?.optJSONArray("chapters") ?: JSONArray()
 
-            // Find the matching chapter
-            val matchingChapter = (0 until chaptersJson.length()).mapNotNull { i ->
-                chaptersJson.optJSONObject(i)
-            }.firstOrNull { ch ->
-                ch.optString("chapter_number", "") == chapterNum
-            }
-
-            if (matchingChapter != null) {
-                val chMeta = matchingChapter.optJSONObject("metadata")
-                val images = chMeta?.optJSONArray("images") ?: JSONArray()
-                cdnImages = (0 until images.length()).mapNotNull { i ->
-                    val imgPath = images.optString(i)
-                    if (imgPath.isNotBlank()) "https://$cdnPath.prochan.net$imgPath" else null
+                val matchingChapter = (0 until chaptersJson.length()).mapNotNull { i ->
+                    chaptersJson.optJSONObject(i)
+                }.firstOrNull { ch ->
+                    ch.optString("chapter_number", "") == chapterNum
                 }
-            }
+
+                if (matchingChapter != null) {
+                    val chMeta = matchingChapter.optJSONObject("metadata")
+                    val images = chMeta?.optJSONArray("images") ?: JSONArray()
+                    cdnImages = (0 until images.length()).mapNotNull { i ->
+                        val imgPath = images.optString(i)
+                        if (imgPath.isNotBlank()) "https://$cdnPath.prochan.net$imgPath" else null
+                    }
+                }
+            } catch (_: Exception) { }
         }
 
         if (cdnImages.isNotEmpty()) {
@@ -169,14 +186,16 @@ class ProComicScraper @Inject constructor(
                 ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
             }
         } else {
-            // Fallback: try to parse the chapter page HTML
+            // Fallback: scrape chapter page HTML (SSR has images inline)
             val doc = fetchDocument(chapterUrl)
-            doc.select("img[src*='cdn'], img[data-src*='cdn'], img[src*='procomic'], img[src*='app.procomic']")
+            doc.select("img[alt^='page']")
                 .mapNotNull { img ->
-                    val src = img.attr("data-src").ifEmpty { img.attr("abs:src") }.ifEmpty { img.attr("src") }
-                    if (src.isNullOrBlank()) return@mapNotNull null
-                    val fullSrc = if (src.startsWith("http")) src else src.absoluteUrl()
-                    fullSrc.encodeForUrl().takeIf { it.isNotBlank() }
+                    // Prefer desktop version (md:block) over mobile (md:hidden)
+                    val cls = img.attr("class")
+                    val isDesktop = cls.contains("md:block") || !cls.contains("md:hidden")
+                    val src = img.attr("src")
+                    if (src.isNullOrBlank() || !isDesktop) return@mapNotNull null
+                    src.encodeForUrl().takeIf { it.isNotBlank() }
                 }
                 .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains(".avif") }
                 .distinct()
@@ -187,9 +206,17 @@ class ProComicScraper @Inject constructor(
     }
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
+        // Try API first, fall back to HTML scraping
+        try {
+            val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+            val json = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=18&page=$page&search=$encoded&sort=latest")
+            val items = parseApiResults(json)
+            if (items.isNotEmpty()) return@runCatching items
+        } catch (_: Exception) { }
+        // Fallback: HTML scraping
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-        val json = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=18&page=$page&search=$encoded&sort=latest")
-        parseApiResults(json)
+        val doc = fetchDocument("${source.baseUrl}/series?search=$encoded")
+        parseMangaGridFromHtml(doc)
     }
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
@@ -199,23 +226,35 @@ class ProComicScraper @Inject constructor(
     }
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
-        val json = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=30&page=1&sort=popular")
-        parseApiResults(json)
+        try {
+            val json = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=30&page=1&sort=popular")
+            val items = parseApiResults(json)
+            if (items.isNotEmpty()) return@runCatching items
+        } catch (_: Exception) { }
+        val doc = fetchDocument("${source.baseUrl}/series?sort=popular")
+        parseMangaGridFromHtml(doc)
     }
 
     override suspend fun browseManga(
         page: Int, genre: String?, status: MangaStatus?, type: MangaType?, sortBy: SortBy
     ): Result<List<MangaItem>> = runCatching {
-        val sort = when (sortBy) {
-            SortBy.POPULARITY -> "popular"
-            SortBy.RATING -> "total_popularity"
-            SortBy.OLDEST -> "oldest"
-            SortBy.LATEST -> "latest"
-        }
-        val params = mutableListOf("status=approved", "limit=18", "page=$page", "sort=$sort")
-        genre?.takeIf { it.isNotBlank() }?.let { params += "search=${java.net.URLEncoder.encode(it, "UTF-8")}" }
-        val json = apiGet("${source.baseUrl}/api/public/series/search?${params.joinToString("&")}")
-        parseApiResults(json)
+        // Try API first, fall back to HTML scraping
+        try {
+            val sort = when (sortBy) {
+                SortBy.POPULARITY -> "popular"
+                SortBy.RATING -> "total_popularity"
+                SortBy.OLDEST -> "oldest"
+                SortBy.LATEST -> "latest"
+            }
+            val params = mutableListOf("status=approved", "limit=18", "page=$page", "sort=$sort")
+            genre?.takeIf { it.isNotBlank() }?.let { params += "search=${java.net.URLEncoder.encode(it, "UTF-8")}" }
+            val json = apiGet("${source.baseUrl}/api/public/series/search?${params.joinToString("&")}")
+            val items = parseApiResults(json)
+            if (items.isNotEmpty()) return@runCatching items
+        } catch (_: Exception) { }
+        // Fallback: HTML scraping
+        val doc = fetchDocument("${source.baseUrl}/series")
+        parseMangaGridFromHtml(doc)
     }
 
     override suspend fun getGenres(): Result<List<String>> = runCatching {
@@ -258,16 +297,21 @@ class ProComicScraper @Inject constructor(
     }
 
     private fun parseMangaGridFromHtml(doc: org.jsoup.nodes.Document): List<MangaItem> {
-        return doc.select("a[href*='/series/']").mapNotNull { a ->
+        return doc.select("a[href^='/series/']").mapNotNull { a ->
             val href = a.attr("abs:href").ifEmpty { a.attr("href").absoluteUrl() }
             val parts = href.substringAfter("/series/").trimEnd('/').split("/")
-            val slug = parts.lastOrNull() ?: return@mapNotNull null
+            if (parts.size < 3) return@mapNotNull null
+            val seriesType = parts[0]
+            val seriesId = parts[1]
+            val slug = parts[2]
             if (slug.isBlank()) return@mapNotNull null
             val img = a.selectFirst("img")
             val title = a.selectFirst("h3")?.text()?.cleanText() ?: slug
+            // Extract cover URL from img src (app.procomic.pro/series-cards/...)
+            val coverUrl = img?.attr("src")?.takeIf { it.isNotBlank() } ?: ""
             MangaItem(
                 id = "procomic_$slug", slug = slug, title = title,
-                coverUrl = img?.attr("abs:src")?.encodeForUrl().orEmpty(),
+                coverUrl = coverUrl.encodeForUrl(),
                 source = source, url = href
             )
         }.distinctBy { it.id }

@@ -123,11 +123,13 @@ class AreaScansScraper @Inject constructor(
         val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to source.baseUrl + "/"))
 
         // Try AJAX endpoint first (get_secure_chapter_images) - most reliable
-        val chapterId = doc.selectFirst("script")?.let { script ->
+        val chapterId = doc.select("script").mapNotNull { script ->
             Regex("chapterId\\s*=\\s*(\\d+)").find(script.html())?.groupValues?.get(1)
-        } ?: doc.body().classNames().joinToString(" ").let { classes ->
-            Regex("postid-(\\d+)").find(classes)?.groupValues?.get(1)
-        }
+                ?: Regex("ARYA_CHAPTER_ID\\s*=\\s*(\\d+)").find(script.html())?.groupValues?.get(1)
+        }.firstOrNull()
+            ?: doc.body().classNames().joinToString(" ").let { classes ->
+                Regex("postid-(\\d+)").find(classes)?.groupValues?.get(1)
+            }
 
         if (!chapterId.isNullOrBlank()) {
             try {
