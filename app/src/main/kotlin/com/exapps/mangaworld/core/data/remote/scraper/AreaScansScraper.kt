@@ -125,7 +125,7 @@ class AreaScansScraper @Inject constructor(
         // Try AJAX endpoint first (get_secure_chapter_images) - most reliable
         val chapterId = doc.selectFirst("script")?.let { script ->
             Regex("chapterId\\s*=\\s*(\\d+)").find(script.html())?.groupValues?.get(1)
-        } ?: doc.body().classNames().let { classes ->
+        } ?: doc.body().classNames().joinToString(" ").let { classes ->
             Regex("postid-(\\d+)").find(classes)?.groupValues?.get(1)
         }
 
