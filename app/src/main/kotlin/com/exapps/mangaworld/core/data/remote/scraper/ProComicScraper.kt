@@ -109,7 +109,7 @@ class ProComicScraper @Inject constructor(
                 title = matchedItem.title,
                 coverUrl = matchedItem.coverUrl,
                 source = source,
-                description = description.ifBlank { matchedItem.description },
+                description = description,
                 genres = matchedItem.genres,
                 status = matchedItem.status,
                 type = matchedItem.type,
