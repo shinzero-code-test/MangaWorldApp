@@ -96,7 +96,8 @@ class AreaScansScraper @Inject constructor(
                     id = "${slug}_$chNum",
                     mangaId = "${source.id}_$slug",
                     number = chNum,
-                    title = chText.replace("الفصل", "").trim().ifBlank { null },
+                    title = chLink.selectFirst(".chap-num")?.text()?.cleanText()?.replace("الفصل", "")?.trim()?.ifBlank { null }
+                        ?: "الفصل ${chNum.toInt()}",
                     url = chHref
                 )
             }.distinctBy { it.url }.sortedByDescending { it.number }
