@@ -86,7 +86,6 @@ class LocalStorageViewModel @Inject constructor(
 fun LocalStorageScreen(
     onMangaClick: (sourceId: String, slug: String) -> Unit,
     onImportManga: () -> Unit = {},
-    onLocalMangaClick: (mangaId: String) -> Unit = {},
     viewModel: LocalStorageViewModel = hiltViewModel()
 ) {
     val mangas by viewModel.downloadedMangas.collectAsStateWithLifecycle()
@@ -148,11 +147,9 @@ fun LocalStorageScreen(
                             autoTags = autoTags[manga.mangaId].orEmpty(),
                             downloadedChapters = viewModel.chapterCount(manga),
                             onClick = {
-                                if (manga.sourceId == "imported") {
-                                    onLocalMangaClick(manga.mangaId)
-                                } else {
-                                    onMangaClick(manga.sourceId, manga.slug)
-                                }
+                                // All manga (imported + downloaded) go through the regular detail screen
+                                // which has local-disk loading support
+                                onMangaClick(manga.sourceId, manga.slug)
                             },
                             onDelete = { viewModel.promptDelete(manga) }
                         )

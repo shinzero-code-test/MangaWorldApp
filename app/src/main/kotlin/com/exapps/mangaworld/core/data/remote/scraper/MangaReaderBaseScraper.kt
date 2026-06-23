@@ -66,8 +66,29 @@ open class MangaReaderBaseScraper(
     // ─── Manga Detail ─────────────────────────────────────────────────────────
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
-        val url = "${source.baseUrl}/manga/$slug/"
-        val doc = fetchDocument(url)
+        // Progressive URL resolution: some sites use /manga/, others use direct slug
+        val hasMangaElements: (org.jsoup.nodes.Document?) -> Boolean = { d ->
+            d?.selectFirst("h1.entry-title, .seriestucont, .manga-poster, .lh-title, .bigcover, .entry-content, .eplister") != null
+        }
+        val pathsToTry = listOf("/manga/", "/")
+        var url = ""
+        var doc: org.jsoup.nodes.Document? = null
+
+        for (path in pathsToTry) {
+            val tryUrl = "${source.baseUrl}$path$slug/"
+            val tryDoc = runCatching { fetchDocument(tryUrl) }.getOrNull()
+            if (tryDoc != null && hasMangaElements(tryDoc)) {
+                url = tryUrl
+                doc = tryDoc
+                break
+            }
+        }
+        doc ?: run {
+            // Final attempt with the original path
+            val fallbackUrl = "${source.baseUrl}/manga/$slug/"
+            url = fallbackUrl
+            fetchDocument(fallbackUrl)
+        }
 
         // Cover: multiple patterns for different MangaReader variants
         val coverUrl = doc.selectFirst(
@@ -275,10 +296,17 @@ open class MangaReaderBaseScraper(
         val latestItems = mutableListOf<LatestChapterItem>()
 
         doc.select(".listupd .bs .bsx, .bixbox.hothome .bs .bsx, .big-slider .swiper-slide").forEach { card ->
-            val linkEl = card.selectFirst("a[href*='/manga/']") ?: return@forEach
+            val linkEl = card.selectFirst("a[href]")
+                ?: return@forEach
             val imgEl = card.selectFirst("img")
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-            val slug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
+            // Extract slug from URL - handle /manga/slug/ and direct /slug/ patterns
+            val slug = href.substringBefore("?").trimEnd('/').let { url ->
+                val segments = url.split("/")
+                val last = segments.lastOrNull() ?: ""
+                if (last.isNotBlank() && !last.startsWith("page")) last
+                else segments.dropLast(1).lastOrNull() ?: ""
+            }.trimEnd('/')
             if (slug.isBlank()) return@forEach
 
             val coverUrl = imgEl?.let {
@@ -308,13 +336,18 @@ open class MangaReaderBaseScraper(
 
     protected open fun parsePopularManga(doc: org.jsoup.nodes.Document): List<MangaItem> {
         // Try sidebar popular widget first, then fall back to the main list
-        val sidebar = doc.select(".popular-item-wrap, .widget_manga_popular .popular-item-wrap, .sidebar .popular-item-wrap").mapNotNull { item ->
+        val sidebar = doc.select(".popular-item-wrap, .widget_manga_popular .popular-item-wrap, .sidebar .popular-item-wrap, .serieslist.pop li").mapNotNull { item ->
             val img = item.selectFirst("img") ?: return@mapNotNull null
-            val link = item.selectFirst("a[href*='/manga/']") ?: return@mapNotNull null
-            val title = item.selectFirst(".post-title a, .popular-title, h3 a")?.text()?.cleanText()
+            val link = item.selectFirst("a[href]") ?: return@mapNotNull null
+            val title = item.selectFirst(".post-title a, .popular-title, h3 a, h2 a")?.text()?.cleanText()
                 ?: link.attr("title").cleanText()
             val href = link.attr("abs:href").ifEmpty { link.attr("href").absoluteUrl() }
-            val slug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
+            val slug = href.substringBefore("?").trimEnd('/').let { url ->
+                val segments = url.split("/")
+                val last = segments.lastOrNull() ?: ""
+                if (last.isNotBlank() && !last.startsWith("page")) last
+                else segments.dropLast(1).lastOrNull() ?: ""
+            }.trimEnd('/')
             if (slug.isBlank()) return@mapNotNull null
             MangaItem(
                 id = "${source.id}_$slug",
@@ -336,7 +369,7 @@ open class MangaReaderBaseScraper(
         doc.select(
             ".listupd .bs .bsx, .bs .bsx, .bsx, .bixbox .bsx, .listupd .bs"
         ).forEach { card ->
-            val linkEl = card.selectFirst("a[href*='/manga/'], a[href*='manga/'], a[href]")
+            val linkEl = card.selectFirst("a[href]")
                 ?: return@forEach
             val imgEl = card.selectFirst("img")
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }

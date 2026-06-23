@@ -4,6 +4,8 @@ import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import okhttp3.OkHttpClient
 import org.jsoup.Jsoup
+import org.json.JSONObject
+import org.json.JSONArray
 import javax.inject.Inject
 
 /**
@@ -113,19 +115,19 @@ class AreaScansScraper @Inject constructor(
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
         val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to source.baseUrl + "/"))
 
-        // ar.kenmanga.com uses #reader-canvas for chapter images
-        doc.select(
+        // ar.kenmanga.com uses #reader-canvas for chapter images (all inline)
+        val images = doc.select(
             "#reader-canvas img, .reading-content img, .page-break img, img.wp-manga-chapter-img"
         )
             .mapNotNull { img ->
                 val dataSrc = img.attr("data-src").ifEmpty { null }
-                val src = img.attr("abs:src").ifEmpty { null }
+                val src = img.attr("abs:src").ifEmpty { img.attr("src") }
                 val actualSrc = dataSrc ?: src
                 if (actualSrc.isNullOrBlank()) return@mapNotNull null
                 val fullSrc = if (actualSrc.startsWith("http")) actualSrc else actualSrc.absoluteUrl()
                 fullSrc.encodeForUrl().takeIf {
                     it.isNotBlank() && !it.contains("logo") && !it.contains("avatar") &&
-                    !it.contains("loading") && !it.contains("placeholder")
+                    !it.contains("loading") && !it.contains("placeholder") && !it.contains("readerarea.svg")
                 }
             }
             .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains(".gif") || it.contains("wp-content") }
@@ -133,11 +135,31 @@ class AreaScansScraper @Inject constructor(
             .mapIndexed { index, src ->
                 ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
             }
+
+        if (images.isNotEmpty()) return@runCatching images
+
+        // Fallback: extract from ts_reader.run() JSON config if present
+        val rawHtml = doc.outerHtml()
+        val jsonMatch = Regex("ts_reader\\.run\\((\\{.*?\\})\\)").find(rawHtml)
+        if (jsonMatch != null) {
+            try {
+                val json = org.json.JSONObject(jsonMatch.groupValues[1])
+                val sources = json.optJSONArray("sources") ?: org.json.JSONArray()
+                val imgArray = sources.optJSONObject(0)?.optJSONArray("images") ?: org.json.JSONArray()
+                (0 until imgArray.length()).mapNotNull { i ->
+                    val imgSrc = imgArray.optString(i)
+                    if (imgSrc.isNotBlank() && (imgSrc.contains(".jpg") || imgSrc.contains(".png") || imgSrc.contains(".webp"))) {
+                        ChapterPage(index = i, url = imgSrc.encodeForUrl(), headers = buildImageHeaders(imgSrc, chapterUrl))
+                    } else null
+                }
+            } catch (_: Exception) { images }
+        } else images
     }
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-        val url = if (page <= 1) "${source.baseUrl}/?s=$encoded&post_type=wp-manga" else "${source.baseUrl}/page/$page/?s=$encoded&post_type=wp-manga"
+        // ar.kenmanga.com uses standard WP search without post_type parameter
+        val url = if (page <= 1) "${source.baseUrl}/?s=$encoded" else "${source.baseUrl}/page/$page/?s=$encoded"
         val doc = fetchDocument(url)
         parseMangaCards(doc)
     }

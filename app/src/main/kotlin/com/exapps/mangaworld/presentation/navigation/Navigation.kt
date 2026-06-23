@@ -210,8 +210,7 @@ fun MangaNavGraph(navController: NavHostController) {
         composable(Screen.LocalStorage.route) {
             LocalStorageScreen(
                 onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) },
-                onImportManga = { navController.navigate(Screen.ImportManga.route) },
-                onLocalMangaClick = { mangaId -> navController.navigate(Screen.LocalMangaDetail.createRoute(mangaId)) }
+                onImportManga = { navController.navigate(Screen.ImportManga.route) }
             )
         }
         composable(Screen.ReadingStats.route) {

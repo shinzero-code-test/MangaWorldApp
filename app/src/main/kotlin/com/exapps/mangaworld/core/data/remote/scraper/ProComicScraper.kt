@@ -61,42 +61,72 @@ class ProComicScraper @Inject constructor(
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
         // Try to find the series in search results first
-        val searchJson = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=50&page=1&sort=latest")
+        val searchJson = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=100&page=1&sort=latest&search=${java.net.URLEncoder.encode(slug.replace("-", " "), "UTF-8")}")
         val allItems = parseApiResults(searchJson)
         
         // Find the matching manga by slug
         val matchedItem = allItems.find { it.slug == slug || it.url.contains("/$slug") }
         
         if (matchedItem != null) {
+            // Try to get chapter list from the detail API
+            val seriesType = matchedItem.url.substringAfter("/series/").substringBefore("/")
+            val seriesId = matchedItem.url.substringAfter("/$seriesType/").substringBefore("/")
+            val chapters = try {
+                val detailJson = apiGet("${source.baseUrl}/api/public/series/$seriesType/$seriesId/$slug")
+                val chaptersJson = detailJson?.optJSONArray("chapters")
+                if (chaptersJson != null) {
+                    (0 until chaptersJson.length()).mapNotNull { i ->
+                        val ch = chaptersJson.optJSONObject(i) ?: return@mapNotNull null
+                        val chNum = ch.optString("chapter", ch.optString("number", "")).toFloatOrNull() ?: return@mapNotNull null
+                        val chSlug = ch.optString("slug", ch.optString("chapter_slug", ""))
+                        val chId = ch.optString("id", "")
+                        Chapter(
+                            id = "${slug}_${chNum}",
+                            mangaId = matchedItem.id,
+                            number = chNum,
+                            title = ch.optString("title", null),
+                            url = if (chSlug.isNotBlank()) "${source.baseUrl}/series/$seriesType/$seriesId/$slug/$chSlug"
+                            else matchedItem.url
+                        )
+                    }.sortedByDescending { it.number }
+                } else emptyList()
+            } catch (_: Exception) { emptyList() }
+
             MangaDetail(
                 id = matchedItem.id,
                 slug = matchedItem.slug,
                 title = matchedItem.title,
                 coverUrl = matchedItem.coverUrl,
                 source = source,
+                description = searchJson?.optJSONObject("data")?.let {
+                    // Try to find description from search results
+                    null
+                } ?: "",
                 genres = matchedItem.genres,
                 status = matchedItem.status,
                 type = matchedItem.type,
+                totalChapters = chapters.size,
+                chapters = chapters,
                 url = matchedItem.url
             )
         } else {
-            // Fallback: try to extract from the URL pattern
+            // Fallback: try the series page directly
+            val seriesUrl = "${source.baseUrl}/series/manga/$slug/$slug"
             MangaDetail(
                 id = "procomic_$slug",
                 slug = slug,
                 title = slug.replace("-", " ").replaceFirstChar { it.uppercase() },
                 coverUrl = "",
                 source = source,
-                url = "${source.baseUrl}/series/manga/$slug/$slug"
+                url = seriesUrl
             )
         }
     }
 
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
-        // ProComic chapter images are loaded via JS/API
-        // Try to parse the chapter page for any embedded image data
+        // Try to extract from the chapter page HTML for embedded images
         val doc = fetchDocument(chapterUrl)
-        doc.select("img[src*='cdn'], img[data-src*='cdn'], img[src*='procomic']")
+        val images = doc.select("img[src*='cdn'], img[data-src*='cdn'], img[src*='procomic'], img[src*='app.procomic']")
             .mapNotNull { img ->
                 val src = img.attr("data-src").ifEmpty { img.attr("abs:src") }.ifEmpty { img.attr("src") }
                 if (src.isNullOrBlank()) return@mapNotNull null
@@ -108,6 +138,43 @@ class ProComicScraper @Inject constructor(
             .mapIndexed { index, src ->
                 ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
             }
+
+        if (images.isNotEmpty()) return@runCatching images
+
+        // Fallback: Try the API endpoint for chapter images
+        // Extract series info from URL: /series/{type}/{id}/{slug}/{chapter}
+        val pathAfterSeries = chapterUrl.substringAfter("/series/").substringBefore("?")
+        val parts = pathAfterSeries.split("/")
+        if (parts.size >= 4) {
+            val seriesType = parts[0]
+            val seriesId = parts[1]
+            val seriesSlug = parts[2]
+            val chapterSlug = parts[3]
+            val apiChapterUrl = "${source.baseUrl}/api/public/series/$seriesType/$seriesId/$seriesSlug/$chapterSlug"
+            val chapterJson = apiGet(apiChapterUrl)
+            val imagesJson = chapterJson?.optJSONObject("images") ?: chapterJson?.optJSONArray("images")
+            if (imagesJson is org.json.JSONArray) {
+                return@runCatching (0 until imagesJson.length()).mapNotNull { i ->
+                    val imgSrc = imagesJson.optString(i)
+                    if (imgSrc.isNotBlank() && (imgSrc.contains(".jpg") || imgSrc.contains(".png") || imgSrc.contains(".webp"))) {
+                        ChapterPage(index = i, url = imgSrc.encodeForUrl(), headers = buildImageHeaders(imgSrc, chapterUrl))
+                    } else null
+                }
+            }
+            // Also try "pages" key
+            val pagesJson = chapterJson?.optJSONArray("pages")
+            if (pagesJson is org.json.JSONArray) {
+                return@runCatching (0 until pagesJson.length()).mapNotNull { i ->
+                    val page = pagesJson.optJSONObject(i) ?: return@mapNotNull null
+                    val imgSrc = page.optString("url", page.optString("image", ""))
+                    if (imgSrc.isNotBlank()) {
+                        ChapterPage(index = i, url = imgSrc.encodeForUrl(), headers = buildImageHeaders(imgSrc, chapterUrl))
+                    } else null
+                }
+            }
+        }
+
+        images
     }
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
@@ -117,8 +184,9 @@ class ProComicScraper @Inject constructor(
     }
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
-        val doc = fetchDocument("${source.baseUrl}/series?page=$page")
-        parseMangaGridFromHtml(doc)
+        val encoded = java.net.URLEncoder.encode(genre, "UTF-8")
+        val json = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=18&page=$page&genre=$encoded&sort=latest")
+        parseApiResults(json)
     }
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
@@ -142,10 +210,18 @@ class ProComicScraper @Inject constructor(
     }
 
     override suspend fun getGenres(): Result<List<String>> = runCatching {
-        val doc = fetchDocument("${source.baseUrl}/series")
-        doc.select("label, .text-sm span").map { it.text().cleanText() }
-            .filter { it.length in 2..20 }
-            .distinct()
+        val json = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=1&page=1&sort=latest")
+        val data = json?.optJSONObject("metadata")?.optJSONArray("genres")
+            ?: json?.optJSONArray("data")?.optJSONObject(0)?.optJSONObject("metadata")?.optJSONArray("genres")
+        if (data != null) {
+            (0 until data.length()).mapNotNull { i -> data.optString(i).ifBlank { null } }.distinct()
+        } else {
+            // Fallback: try to get from HTML
+            val doc = fetchDocument("${source.baseUrl}/series")
+            doc.select("label, .text-sm span").map { it.text().cleanText() }
+                .filter { it.length in 2..20 }
+                .distinct()
+        }
     }
 
     private fun parseApiResults(json: JSONObject?): List<MangaItem> {

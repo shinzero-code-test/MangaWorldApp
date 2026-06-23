@@ -80,7 +80,8 @@ class MangaDetailViewModel @Inject constructor(
 
         currentSlug = slug
         currentSource = source
-        currentMangaId = "${source.id}_$slug"
+        // For imported/downloaded manga, the slug IS the mangaId (starts with "imported_")
+        currentMangaId = if (slug.startsWith("imported_")) slug else "${source.id}_$slug"
 
         // Cancel previous work (including infinite collectors)
         observersJob?.cancel()
@@ -89,7 +90,7 @@ class MangaDetailViewModel @Inject constructor(
         // All manga live on disk: imported manga is always local;
         // downloaded manga uses local metadata.json + chapter dirs until
         // the user explicitly refreshes from the online source.
-        if (source.id == "imported" || hasLocalData(currentMangaId)) {
+        if (source.id == "imported" || slug.startsWith("imported_") || hasLocalData(currentMangaId)) {
             loadFromLocalDisk(slug, source)
             return
         }

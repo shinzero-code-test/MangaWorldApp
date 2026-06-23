@@ -68,24 +68,34 @@ open class MadaraBaseScraper(
     // ─── Manga Detail ─────────────────────────────────────────────────────────
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
-        // Try /manga/ first, then /comics/ as fallback for some Madara sites
-        var url = "${source.baseUrl}/manga/$slug/"
-        var doc = runCatching { fetchDocument(url) }.getOrNull()
-        // Only check for explicit 404 page elements, not h1 tags
-        val is404 = doc?.let { d ->
-            d.selectFirst("body.error-404, body.page-not-found, .page-404, .error-page") != null
-        } ?: true
-        if (is404) {
-            url = "${source.baseUrl}/comics/$slug/"
-            doc = runCatching { fetchDocument(url) }.getOrNull()
+        // Progressive URL resolution: try /manga/ → /comics/ → /manhwa/ → bare /
+        // Some Madara sites use different path prefixes for manga detail pages.
+        val hasMadaraElements: (org.jsoup.nodes.Document?) -> Boolean = { d ->
+            d?.selectFirst(".post-title, h1.entry-title, .summary_image, .entry-content, .tsinfo") != null
         }
-        // Also try /manhwa/ for sites like manga-leko.site
-        if ((doc?.selectFirst(".post-title, h1.entry-title, .summary_image") == null)) {
-            val altUrl = "${source.baseUrl}/manhwa/$slug/"
-            val altDoc = runCatching { fetchDocument(altUrl) }.getOrNull()
-            if (altDoc?.selectFirst(".post-title, h1.entry-title, .summary_image") != null) {
-                url = altUrl
-                doc = altDoc
+        val pathsToTry = listOf("/manga/", "/comics/", "/manhwa/")
+        var url = ""
+        var doc: org.jsoup.nodes.Document? = null
+
+        for (path in pathsToTry) {
+            val tryUrl = "${source.baseUrl}$path$slug/"
+            val tryDoc = runCatching { fetchDocument(tryUrl) }.getOrNull()
+            if (tryDoc != null) {
+                val isExplicit404 = tryDoc.selectFirst("body.error-404, body.page-not-found, .page-404, .error-page") != null
+                if (!isExplicit404 && hasMadaraElements(tryDoc)) {
+                    url = tryUrl
+                    doc = tryDoc
+                    break
+                }
+            }
+        }
+        // Last resort: try the slug directly on the base URL (for hijala-like sites)
+        if (doc == null) {
+            val bareUrl = "${source.baseUrl}/$slug/"
+            val bareDoc = runCatching { fetchDocument(bareUrl) }.getOrNull()
+            if (bareDoc != null && hasMadaraElements(bareDoc)) {
+                url = bareUrl
+                doc = bareDoc
             }
         }
         doc ?: error("Could not load manga detail for $slug")
