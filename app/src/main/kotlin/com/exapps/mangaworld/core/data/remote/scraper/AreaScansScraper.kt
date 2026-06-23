@@ -2,7 +2,11 @@ package com.exapps.mangaworld.core.data.remote.scraper
 
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.FormBody
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.jsoup.Jsoup
 import org.json.JSONObject
 import org.json.JSONArray
@@ -158,7 +162,35 @@ class AreaScansScraper @Inject constructor(
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-        // ar.kenmanga.com uses standard WP search without post_type parameter
+
+        // Try AJAX search first (ar.kenmanga.com uses ts_ac_do_search action)
+        val ajaxResults = try {
+            withContext(Dispatchers.IO) {
+                val formBody = FormBody.Builder()
+                    .add("action", "ts_ac_do_search")
+                    .add("ts_ac_query", query)
+                    .build()
+                val request = Request.Builder()
+                    .url("${source.baseUrl}/wp-admin/admin-ajax.php")
+                    .header("User-Agent", USER_AGENT)
+                    .header("Accept", "application/json")
+                    .header("Referer", source.baseUrl)
+                    .post(formBody)
+                    .build()
+                val response = client.newCall(request).execute()
+                val body = response.body?.string() ?: "{}"
+                response.close()
+                if (body.isBlank() || !body.trimStart().startsWith("{")) null
+                else JSONObject(body)
+            }
+        } catch (_: Exception) { null }
+
+        if (ajaxResults != null) {
+            val items = parseAjaxSearchResults(ajaxResults)
+            if (items.isNotEmpty()) return@runCatching items
+        }
+
+        // Fallback: standard WP search page
         val url = if (page <= 1) "${source.baseUrl}/?s=$encoded" else "${source.baseUrl}/page/$page/?s=$encoded"
         val doc = fetchDocument(url)
         parseMangaCards(doc)
@@ -228,5 +260,39 @@ class AreaScansScraper @Inject constructor(
                 url = href
             )
         }.distinctBy { it.id }
+    }
+
+    /**
+     * Parse AJAX search results from ts_ac_do_search action.
+     * Response format: {"series": [{"all": [...], "template": "...", "title": "Search"}]}
+     */
+    private fun parseAjaxSearchResults(json: JSONObject): List<MangaItem> {
+        val results = mutableListOf<MangaItem>()
+        val series = json.optJSONObject("series") ?: return results
+        for (key in series.keys()) {
+            val category = series.optJSONObject(key) ?: continue
+            val allArray = category.optJSONArray("all") ?: continue
+            val template = category.optString("template", "")
+            for (i in 0 until allArray.length()) {
+                val item = allArray.optJSONObject(i) ?: continue
+                val postLink = item.optString("post_link", "")
+                val postTitle = item.optString("post_title", "")
+                val postImage = item.optString("post_image_html", "")
+                if (postLink.isBlank()) continue
+                val slug = postLink.trimEnd('/').substringAfterLast("/").substringBefore("?")
+                val coverImg = Regex("""src="([^"]+)"""").find(postImage)?.groupValues?.get(1) ?: ""
+                results.add(
+                    MangaItem(
+                        id = "${source.id}_$slug",
+                        slug = slug,
+                        title = postTitle.cleanText().ifBlank { slug },
+                        coverUrl = coverImg.absoluteUrl(),
+                        source = source,
+                        url = postLink.absoluteUrl()
+                    )
+                )
+            }
+        }
+        return results.distinctBy { it.id }
     }
 }

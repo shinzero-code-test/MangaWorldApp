@@ -90,7 +90,10 @@ class MangaDetailViewModel @Inject constructor(
         // All manga live on disk: imported manga is always local;
         // downloaded manga uses local metadata.json + chapter dirs until
         // the user explicitly refreshes from the online source.
-        if (source.id == "imported" || slug.startsWith("imported_") || hasLocalData(currentMangaId)) {
+        // source.id == "local" means it was routed from LocalStorageScreen for imported manga
+        val isLocalManga = source.id == "local" || source.id == "imported"
+            || slug.startsWith("imported_") || hasLocalData(currentMangaId)
+        if (isLocalManga) {
             loadFromLocalDisk(slug, source)
             return
         }

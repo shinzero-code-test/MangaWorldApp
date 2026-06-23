@@ -209,7 +209,14 @@ fun MangaNavGraph(navController: NavHostController) {
         }
         composable(Screen.LocalStorage.route) {
             LocalStorageScreen(
-                onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) },
+                onMangaClick = { src, slug ->
+                    if (MangaSource.isLocalSource(src)) {
+                        // Imported manga → use the regular detail screen which loads from local disk
+                        navController.navigate(Screen.Detail.createRoute("local", slug))
+                    } else {
+                        navController.navigate(Screen.Detail.createRoute(src, slug))
+                    }
+                },
                 onImportManga = { navController.navigate(Screen.ImportManga.route) }
             )
         }

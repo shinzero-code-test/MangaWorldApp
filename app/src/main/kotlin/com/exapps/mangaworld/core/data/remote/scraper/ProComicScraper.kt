@@ -60,37 +60,48 @@ class ProComicScraper @Inject constructor(
     }
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
-        // Try to find the series in search results first
-        val searchJson = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=100&page=1&sort=latest&search=${java.net.URLEncoder.encode(slug.replace("-", " "), "UTF-8")}")
+        // Search for the manga by slug
+        val encoded = java.net.URLEncoder.encode(slug.replace("-", " "), "UTF-8")
+        val searchJson = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=50&page=1&sort=latest&search=$encoded")
         val allItems = parseApiResults(searchJson)
-        
+
         // Find the matching manga by slug
-        val matchedItem = allItems.find { it.slug == slug || it.url.contains("/$slug") }
-        
+        val matchedItem = allItems.find { it.slug == slug || it.url.endsWith("/$slug") }
+
         if (matchedItem != null) {
-            // Try to get chapter list from the detail API
-            val seriesType = matchedItem.url.substringAfter("/series/").substringBefore("/")
-            val seriesId = matchedItem.url.substringAfter("/$seriesType/").substringBefore("/")
-            val chapters = try {
-                val detailJson = apiGet("${source.baseUrl}/api/public/series/$seriesType/$seriesId/$slug")
-                val chaptersJson = detailJson?.optJSONArray("chapters")
-                if (chaptersJson != null) {
-                    (0 until chaptersJson.length()).mapNotNull { i ->
-                        val ch = chaptersJson.optJSONObject(i) ?: return@mapNotNull null
-                        val chNum = ch.optString("chapter", ch.optString("number", "")).toFloatOrNull() ?: return@mapNotNull null
-                        val chSlug = ch.optString("slug", ch.optString("chapter_slug", ""))
-                        val chId = ch.optString("id", "")
-                        Chapter(
-                            id = "${slug}_${chNum}",
-                            mangaId = matchedItem.id,
-                            number = chNum,
-                            title = ch.optString("title", null),
-                            url = if (chSlug.isNotBlank()) "${source.baseUrl}/series/$seriesType/$seriesId/$slug/$chSlug"
-                            else matchedItem.url
-                        )
-                    }.sortedByDescending { it.number }
-                } else emptyList()
-            } catch (_: Exception) { emptyList() }
+            // Extract type and id from URL: /series/{type}/{id}/{slug}
+            val pathAfterSeries = matchedItem.url.substringAfter("/series/")
+            val parts = pathAfterSeries.trimEnd('/').split("/")
+            val seriesType = parts.getOrElse(0) { "manga" }
+            val seriesId = parts.getOrElse(1) { "" }
+
+            // Get full detail from the series API (includes chapters)
+            val detailJson = apiGet("${source.baseUrl}/api/public/series/$seriesType/$seriesId/$slug")
+            val description = detailJson?.optString("description", "") ?: ""
+            val cdnPath = detailJson?.optString("cdn_path", "cdn3") ?: "cdn3"
+
+            // Parse chapters from the full detail response
+            val chaptersJson = detailJson?.optJSONArray("chapters") ?: JSONArray()
+            val chapters = (0 until chaptersJson.length()).mapNotNull { i ->
+                val ch = chaptersJson.optJSONObject(i) ?: return@mapNotNull null
+                val chNum = ch.optString("chapter_number", "").toFloatOrNull() ?: return@mapNotNull null
+                val chId = ch.optInt("id", 0)
+                val chMeta = ch.optJSONObject("metadata")
+                val images = chMeta?.optJSONArray("images") ?: JSONArray()
+
+                // Build chapter page URL
+                val chapterUrl = "${source.baseUrl}/series/$seriesType/$seriesId/$slug/$chNum"
+
+                Chapter(
+                    id = "${slug}_${chNum}",
+                    mangaId = matchedItem.id,
+                    number = chNum,
+                    title = ch.optString("title").ifBlank { null },
+                    url = chapterUrl,
+                    // Store image count in totalPages for display
+                    totalPages = images.length()
+                )
+            }.sortedByDescending { it.number }
 
             MangaDetail(
                 id = matchedItem.id,
@@ -98,10 +109,7 @@ class ProComicScraper @Inject constructor(
                 title = matchedItem.title,
                 coverUrl = matchedItem.coverUrl,
                 source = source,
-                description = searchJson?.optJSONObject("data")?.let {
-                    // Try to find description from search results
-                    null
-                } ?: "",
+                description = description.ifBlank { matchedItem.description },
                 genres = matchedItem.genres,
                 status = matchedItem.status,
                 type = matchedItem.type,
@@ -111,20 +119,59 @@ class ProComicScraper @Inject constructor(
             )
         } else {
             // Fallback: try the series page directly
-            val seriesUrl = "${source.baseUrl}/series/manga/$slug/$slug"
             MangaDetail(
                 id = "procomic_$slug",
                 slug = slug,
                 title = slug.replace("-", " ").replaceFirstChar { it.uppercase() },
                 coverUrl = "",
                 source = source,
-                url = seriesUrl
+                url = "${source.baseUrl}/series/manga/$slug/$slug"
             )
         }
     }
+    }
 
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
-        // Try to extract from the chapter page HTML for embedded images
+        // Try to extract series info from URL: /series/{type}/{id}/{slug}/{chapterNumber}
+        val pathAfterSeries = chapterUrl.substringAfter("/series/").substringBefore("?")
+        val parts = pathAfterSeries.trimEnd('/').split("/")
+        val cdnImages = if (parts.size >= 4) {
+            val seriesType = parts[0]
+            val seriesId = parts[1]
+            val seriesSlug = parts[2]
+            val chapterNum = parts[3]
+
+            // Fetch full series detail to get chapter images
+            val detailJson = apiGet("${source.baseUrl}/api/public/series/$seriesType/$seriesId/$seriesSlug")
+            val cdnPath = detailJson?.optString("cdn_path", "cdn3") ?: "cdn3"
+            val chaptersJson = detailJson?.optJSONArray("chapters") ?: JSONArray()
+
+            // Find the matching chapter
+            val matchingChapter = (0 until chaptersJson.length()).mapNotNull { i ->
+                chaptersJson.optJSONObject(i)
+            }.firstOrNull { ch ->
+                ch.optString("chapter_number", "") == chapterNum
+            }
+
+            if (matchingChapter != null) {
+                val chMeta = matchingChapter.optJSONObject("metadata")
+                val images = chMeta?.optJSONArray("images") ?: JSONArray()
+                (0 until images.length()).mapNotNull { i ->
+                    val imgPath = images.optString(i)
+                    if (imgPath.isNotBlank()) {
+                        "https://$cdnPath.prochan.net$imgPath"
+                    } else null
+                }
+            } else emptyList()
+        } else emptyList()
+
+        if (cdnImages.isNotEmpty()) {
+            return@runCatching cdnImages.mapIndexed { index, src ->
+                ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
+            }
+        }
+
+        // Fallback: try to parse the chapter page HTML
         val doc = fetchDocument(chapterUrl)
         val images = doc.select("img[src*='cdn'], img[data-src*='cdn'], img[src*='procomic'], img[src*='app.procomic']")
             .mapNotNull { img ->
@@ -133,46 +180,11 @@ class ProComicScraper @Inject constructor(
                 val fullSrc = if (src.startsWith("http")) src else src.absoluteUrl()
                 fullSrc.encodeForUrl().takeIf { it.isNotBlank() }
             }
-            .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") }
+            .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains(".avif") }
             .distinct()
             .mapIndexed { index, src ->
                 ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
             }
-
-        if (images.isNotEmpty()) return@runCatching images
-
-        // Fallback: Try the API endpoint for chapter images
-        // Extract series info from URL: /series/{type}/{id}/{slug}/{chapter}
-        val pathAfterSeries = chapterUrl.substringAfter("/series/").substringBefore("?")
-        val parts = pathAfterSeries.split("/")
-        if (parts.size >= 4) {
-            val seriesType = parts[0]
-            val seriesId = parts[1]
-            val seriesSlug = parts[2]
-            val chapterSlug = parts[3]
-            val apiChapterUrl = "${source.baseUrl}/api/public/series/$seriesType/$seriesId/$seriesSlug/$chapterSlug"
-            val chapterJson = apiGet(apiChapterUrl)
-            val imagesJson = chapterJson?.optJSONObject("images") ?: chapterJson?.optJSONArray("images")
-            if (imagesJson is org.json.JSONArray) {
-                return@runCatching (0 until imagesJson.length()).mapNotNull { i ->
-                    val imgSrc = imagesJson.optString(i)
-                    if (imgSrc.isNotBlank() && (imgSrc.contains(".jpg") || imgSrc.contains(".png") || imgSrc.contains(".webp"))) {
-                        ChapterPage(index = i, url = imgSrc.encodeForUrl(), headers = buildImageHeaders(imgSrc, chapterUrl))
-                    } else null
-                }
-            }
-            // Also try "pages" key
-            val pagesJson = chapterJson?.optJSONArray("pages")
-            if (pagesJson is org.json.JSONArray) {
-                return@runCatching (0 until pagesJson.length()).mapNotNull { i ->
-                    val page = pagesJson.optJSONObject(i) ?: return@mapNotNull null
-                    val imgSrc = page.optString("url", page.optString("image", ""))
-                    if (imgSrc.isNotBlank()) {
-                        ChapterPage(index = i, url = imgSrc.encodeForUrl(), headers = buildImageHeaders(imgSrc, chapterUrl))
-                    } else null
-                }
-            }
-        }
 
         images
     }

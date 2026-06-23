@@ -52,6 +52,9 @@ enum class MangaSource(
             return found ?: AZORA
         }
 
+        /** Check if the sourceId represents a local/imported manga (not an online source) */
+        fun isLocalSource(id: String): Boolean = id == "imported"
+
         /** All sources added in v4.0.0 — these appear on the Sources screen grid */
         val NEW_SOURCES = setOf(
             ASQ3, LEKMANGA, LEKMANGAONLINE, LIKEMANGA, LINKMANGA,
