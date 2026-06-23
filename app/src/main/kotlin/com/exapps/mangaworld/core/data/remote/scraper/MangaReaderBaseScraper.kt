@@ -67,28 +67,28 @@ open class MangaReaderBaseScraper(
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
         // Progressive URL resolution: some sites use /manga/, others use direct slug
-        val hasMangaElements: (org.jsoup.nodes.Document?) -> Boolean = { d ->
-            d?.selectFirst("h1.entry-title, .seriestucont, .manga-poster, .lh-title, .bigcover, .entry-content, .eplister") != null
+        val hasMangaElements: (org.jsoup.nodes.Document) -> Boolean = { d ->
+            d.selectFirst("h1.entry-title, .seriestucont, .manga-poster, .lh-title, .bigcover, .entry-content, .eplister") != null
         }
         val pathsToTry = listOf("/manga/", "/")
-        var url = ""
-        var doc: org.jsoup.nodes.Document? = null
+        var resolvedUrl = ""
+        var resolvedDoc: org.jsoup.nodes.Document? = null
 
         for (path in pathsToTry) {
             val tryUrl = "${source.baseUrl}$path$slug/"
             val tryDoc = runCatching { fetchDocument(tryUrl) }.getOrNull()
             if (tryDoc != null && hasMangaElements(tryDoc)) {
-                url = tryUrl
-                doc = tryDoc
+                resolvedUrl = tryUrl
+                resolvedDoc = tryDoc
                 break
             }
         }
-        doc ?: run {
-            // Final attempt with the original path
-            val fallbackUrl = "${source.baseUrl}/manga/$slug/"
-            url = fallbackUrl
-            fetchDocument(fallbackUrl)
+        // Final fallback: try the original path
+        if (resolvedDoc == null) {
+            resolvedUrl = "${source.baseUrl}/manga/$slug/"
+            resolvedDoc = fetchDocument(resolvedUrl)
         }
+        val doc = resolvedDoc!!
 
         // Cover: multiple patterns for different MangaReader variants
         val coverUrl = doc.selectFirst(
@@ -182,7 +182,7 @@ open class MangaReaderBaseScraper(
             type = type,
             totalChapters = chapters.size,
             chapters = chapters,
-            url = url
+            url = resolvedUrl
         )
     }
 
