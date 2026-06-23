@@ -135,7 +135,9 @@ class ProComicScraper @Inject constructor(
         // Try to extract series info from URL: /series/{type}/{id}/{slug}/{chapterNumber}
         val pathAfterSeries = chapterUrl.substringAfter("/series/").substringBefore("?")
         val parts = pathAfterSeries.trimEnd('/').split("/")
-        val cdnImages = if (parts.size >= 4) {
+
+        var cdnImages: List<String> = emptyList()
+        if (parts.size >= 4) {
             val seriesType = parts[0]
             val seriesId = parts[1]
             val seriesSlug = parts[2]
@@ -156,37 +158,33 @@ class ProComicScraper @Inject constructor(
             if (matchingChapter != null) {
                 val chMeta = matchingChapter.optJSONObject("metadata")
                 val images = chMeta?.optJSONArray("images") ?: JSONArray()
-                (0 until images.length()).mapNotNull { i ->
+                cdnImages = (0 until images.length()).mapNotNull { i ->
                     val imgPath = images.optString(i)
-                    if (imgPath.isNotBlank()) {
-                        "https://$cdnPath.prochan.net$imgPath"
-                    } else null
+                    if (imgPath.isNotBlank()) "https://$cdnPath.prochan.net$imgPath" else null
                 }
-            } else emptyList()
-        } else emptyList()
-
-        if (cdnImages.isNotEmpty()) {
-            return@runCatching cdnImages.mapIndexed { index, src ->
-                ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
             }
         }
 
-        // Fallback: try to parse the chapter page HTML
-        val doc = fetchDocument(chapterUrl)
-        val images = doc.select("img[src*='cdn'], img[data-src*='cdn'], img[src*='procomic'], img[src*='app.procomic']")
-            .mapNotNull { img ->
-                val src = img.attr("data-src").ifEmpty { img.attr("abs:src") }.ifEmpty { img.attr("src") }
-                if (src.isNullOrBlank()) return@mapNotNull null
-                val fullSrc = if (src.startsWith("http")) src else src.absoluteUrl()
-                fullSrc.encodeForUrl().takeIf { it.isNotBlank() }
-            }
-            .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains(".avif") }
-            .distinct()
-            .mapIndexed { index, src ->
+        if (cdnImages.isNotEmpty()) {
+            cdnImages.mapIndexed { index, src ->
                 ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
             }
-
-        images
+        } else {
+            // Fallback: try to parse the chapter page HTML
+            val doc = fetchDocument(chapterUrl)
+            doc.select("img[src*='cdn'], img[data-src*='cdn'], img[src*='procomic'], img[src*='app.procomic']")
+                .mapNotNull { img ->
+                    val src = img.attr("data-src").ifEmpty { img.attr("abs:src") }.ifEmpty { img.attr("src") }
+                    if (src.isNullOrBlank()) return@mapNotNull null
+                    val fullSrc = if (src.startsWith("http")) src else src.absoluteUrl()
+                    fullSrc.encodeForUrl().takeIf { it.isNotBlank() }
+                }
+                .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains(".avif") }
+                .distinct()
+                .mapIndexed { index, src ->
+                    ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
+                }
+        }
     }
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
