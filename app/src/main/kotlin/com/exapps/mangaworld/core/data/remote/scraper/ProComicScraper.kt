@@ -198,7 +198,7 @@ class ProComicScraper @Inject constructor(
             // Extract chapter image URLs from the raw HTML
             // Procomic embeds URLs as string literals in JS without https:// prefix
             // Pattern: procomic.pro/chapters/{seriesId}/{chapterId}/p{page}/{hash}-desktop.avif
-            val imgUrls = Regex("(?:https?://)?(?:app\\.)?procomic\\.(?:pro|net)/chapters/[^\s\"<>\\\\]+?desktop\\.avif")
+            val imgUrls = Regex("(?:https?://)?(?:app\\.)?procomic\\.(?:pro|net)/chapters/[^\\s\"<>]+?desktop\\.avif")
                 .findAll(html).map { match ->
                     val url = match.value
                     if (url.startsWith("http")) url else "https://$url"
