@@ -186,22 +186,32 @@ class ProComicScraper @Inject constructor(
                 ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
             }
         } else {
-            // Fallback: scrape chapter page HTML (SSR has images inline)
+            // Fallback: scrape chapter page HTML
+            // Procomic SSR embeds image URLs in page content, not always as <img> tags
             val doc = fetchDocument(chapterUrl)
-            doc.select("img[alt^='page']")
-                .mapNotNull { img ->
-                    // Prefer desktop version (md:block) over mobile (md:hidden)
-                    val cls = img.attr("class")
-                    val isDesktop = cls.contains("md:block") || !cls.contains("md:hidden")
-                    val src = img.attr("src")
-                    if (src.isNullOrBlank() || !isDesktop) return@mapNotNull null
-                    src.encodeForUrl().takeIf { it.isNotBlank() }
-                }
-                .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains(".avif") }
-                .distinct()
-                .mapIndexed { index, src ->
+            val html = doc.outerHtml()
+            
+            // Extract desktop-quality image URLs from the raw HTML
+            val imgUrls = Regex("https://app\\.procomic\\.pro/chapters/[^\"]+desktop\\.avif")
+                .findAll(html).map { it.value }.distinct().toList()
+            
+            if (imgUrls.isNotEmpty()) {
+                imgUrls.mapIndexed { index, src ->
                     ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
                 }
+            } else {
+                // Last resort: try <img> tags
+                doc.select("img[alt^='page']")
+                    .mapNotNull { img ->
+                        val src = img.attr("src")
+                        if (src.isNotBlank() && !src.startsWith("data:")) src else null
+                    }
+                    .filter { it.contains(".jpg") || it.contains(".png") || it.contains(".webp") || it.contains(".avif") }
+                    .distinct()
+                    .mapIndexed { index, src ->
+                        ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
+                    }
+            }
         }
     }
 
