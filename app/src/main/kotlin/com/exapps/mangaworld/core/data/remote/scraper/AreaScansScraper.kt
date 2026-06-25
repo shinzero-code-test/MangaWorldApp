@@ -316,13 +316,13 @@ class AreaScansScraper @Inject constructor(
      */
     private fun parseAjaxSearchResults(json: JSONObject): List<MangaItem> {
         val results = mutableListOf<MangaItem>()
-        val series = json.optJSONObject("series") ?: return results
-        for (key in series.keys()) {
-            val category = series.optJSONObject(key) ?: continue
+        val series = json.optJSONArray("series") ?: return results
+        // series is a JSONArray of objects, each with "all" array
+        for (i in 0 until series.length()) {
+            val category = series.optJSONObject(i) ?: continue
             val allArray = category.optJSONArray("all") ?: continue
-            val template = category.optString("template", "")
-            for (i in 0 until allArray.length()) {
-                val item = allArray.optJSONObject(i) ?: continue
+            for (j in 0 until allArray.length()) {
+                val item = allArray.optJSONObject(j) ?: continue
                 val postLink = item.optString("post_link", "")
                 val postTitle = item.optString("post_title", "")
                 val postImage = item.optString("post_image_html", "")
