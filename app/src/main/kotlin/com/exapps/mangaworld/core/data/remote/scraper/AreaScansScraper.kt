@@ -215,10 +215,17 @@ class AreaScansScraper @Inject constructor(
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
 
-        // Try AJAX search first — GET request (POST body is ignored by server)
-        val ajaxResults = try {
+        // Standard WP search page is more reliable than AJAX for this site
+        val url = if (page <= 1) "${source.baseUrl}/?s=$encoded" else "${source.baseUrl}/page/$page/?s=$encoded"
+        val doc = fetchDocument(url)
+        val results = parseMangaCards(doc)
+
+        if (results.isNotEmpty()) return@runCatching results
+
+        // Fallback: try AJAX search (GET with query params — POST body is ignored)
+        try {
+            val searchUrl = "${source.baseUrl}/wp-admin/admin-ajax.php?action=ts_ac_do_search&ts_ac_query=$encoded"
             withContext(Dispatchers.IO) {
-                val searchUrl = "${source.baseUrl}/wp-admin/admin-ajax.php?action=ts_ac_do_search&ts_ac_query=$encoded"
                 val request = Request.Builder()
                     .url(searchUrl)
                     .header("User-Agent", USER_AGENT)
@@ -228,20 +235,15 @@ class AreaScansScraper @Inject constructor(
                 val response = client.newCall(request).execute()
                 val body = response.body?.string() ?: "{}"
                 response.close()
-                if (body.isBlank() || !body.trimStart().startsWith("{")) null
-                else JSONObject(body)
+                if (body.isNotBlank() && body.trimStart().startsWith("{")) {
+                    val json = JSONObject(body)
+                    val items = parseAjaxSearchResults(json)
+                    if (items.isNotEmpty()) return@withContext items
+                }
             }
-        } catch (_: Exception) { null }
+        } catch (_: Exception) { }
 
-        if (ajaxResults != null) {
-            val items = parseAjaxSearchResults(ajaxResults)
-            if (items.isNotEmpty()) return@runCatching items
-        }
-
-        // Fallback: standard WP search page
-        val url = if (page <= 1) "${source.baseUrl}/?s=$encoded" else "${source.baseUrl}/page/$page/?s=$encoded"
-        val doc = fetchDocument(url)
-        parseMangaCards(doc)
+        results
     }
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
