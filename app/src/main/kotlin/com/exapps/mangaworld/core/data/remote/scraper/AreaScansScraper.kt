@@ -142,7 +142,7 @@ class AreaScansScraper @Inject constructor(
                 .url("${source.baseUrl}/wp-admin/admin-ajax.php")
                 .header("User-Agent", USER_AGENT)
                 .header("Accept", "application/json")
-                .header("Referer", chapterUrl)
+                .header("Referer", chapterUrl.encodeForHeader())
                 .header("X-Requested-With", "XMLHttpRequest")
                 .post(formBody)
                 .build()
