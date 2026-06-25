@@ -179,7 +179,7 @@ class ProComicScraper @Inject constructor(
                     val images = chMeta?.optJSONArray("images") ?: JSONArray()
                     cdnImages = (0 until images.length()).mapNotNull { i ->
                         val imgPath = images.optString(i)
-                        if (imgPath.isNotBlank()) "https://$cdnPath.prochan.net$imgPath" else null
+                        if (imgPath.isNotBlank()) "https://$cdnPath.procomic.pro$imgPath" else null
                     }
                 }
             } catch (_: Exception) { }
