@@ -132,44 +132,43 @@ class AreaScansScraper @Inject constructor(
             }
 
         if (!chapterId.isNullOrBlank()) {
-            try {
-                val ajaxImages = withContext(Dispatchers.IO) {
-                    val formBody = FormBody.Builder()
-                        .add("action", "get_secure_chapter_images")
-                        .add("chapter_id", chapterId)
-                        .build()
-                    val request = Request.Builder()
-                        .url("${source.baseUrl}/wp-admin/admin-ajax.php")
-                        .header("User-Agent", USER_AGENT)
-                        .header("Accept", "application/json")
-                        .header("Referer", chapterUrl)
-                        .header("X-Requested-With", "XMLHttpRequest")
-                        .post(formBody)
-                        .build()
-                    val response = client.newCall(request).execute()
-                    val body = response.body?.string() ?: "{}"
-                    response.close()
-                    val json = org.json.JSONObject(body)
-                    if (json.optBoolean("success", false)) {
-                        val html = json.optJSONObject("data")?.optString("content", "") ?: ""
-                        if (html.isNotBlank()) {
-                            val imgDoc = Jsoup.parse(html, source.baseUrl)
-                            imgDoc.select("img[src]").mapNotNull { img ->
-                                val src = img.attr("src")
-                                if (src.isNotBlank() && !src.startsWith("data:")) src else null
-                            }.distinct()
-                        } else emptyList()
-                    } else emptyList()
-                }
-                if (ajaxImages.isNotEmpty()) {
-                    return@runCatching ajaxImages.mapIndexed { index, src ->
-                        ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
+            // AJAX endpoint (get_secure_chapter_images) is the primary and only reliable method.
+            // The page is JS-rendered, so HTML parsing (Strategy 2/3) won't find images.
+            val formBody = FormBody.Builder()
+                .add("action", "get_secure_chapter_images")
+                .add("chapter_id", chapterId)
+                .build()
+            val request = Request.Builder()
+                .url("${source.baseUrl}/wp-admin/admin-ajax.php")
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json")
+                .header("Referer", chapterUrl)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .post(formBody)
+                .build()
+            val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
+            val body = response.body?.string() ?: "{}"
+            response.close()
+            val json = org.json.JSONObject(body)
+            if (json.optBoolean("success", false)) {
+                val html = json.optJSONObject("data")?.optString("content", "") ?: ""
+                if (html.isNotBlank()) {
+                    val imgDoc = Jsoup.parse(html, source.baseUrl)
+                    val ajaxImages = imgDoc.select("img[src]").mapNotNull { img ->
+                        val src = img.attr("src")
+                        if (src.isNotBlank() && !src.startsWith("data:")) src else null
+                    }.distinct()
+                    if (ajaxImages.isNotEmpty()) {
+                        return@runCatching ajaxImages.mapIndexed { index, src ->
+                            ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
+                        }
                     }
                 }
-            } catch (_: Exception) { }
+            }
+            // AJAX returned but no images found — don't silently fail, let it fall through
         }
 
-        // Strategy 2: Parse from HTML directly
+        // Strategy 2: Parse from HTML directly (only works for non-JS-rendered pages)
         val images = doc.select(
             "#reader-canvas img, .reader-container img, .reading-content img, .page-break img"
         )
@@ -216,19 +215,15 @@ class AreaScansScraper @Inject constructor(
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
 
-        // Try AJAX search first (ar.kenmanga.com uses ts_ac_do_search action)
+        // Try AJAX search first — GET request (POST body is ignored by server)
         val ajaxResults = try {
             withContext(Dispatchers.IO) {
-                val formBody = FormBody.Builder()
-                    .add("action", "ts_ac_do_search")
-                    .add("ts_ac_query", query)
-                    .build()
+                val searchUrl = "${source.baseUrl}/wp-admin/admin-ajax.php?action=ts_ac_do_search&ts_ac_query=$encoded"
                 val request = Request.Builder()
-                    .url("${source.baseUrl}/wp-admin/admin-ajax.php")
+                    .url(searchUrl)
                     .header("User-Agent", USER_AGENT)
                     .header("Accept", "application/json")
                     .header("Referer", source.baseUrl)
-                    .post(formBody)
                     .build()
                 val response = client.newCall(request).execute()
                 val body = response.body?.string() ?: "{}"
