@@ -67,9 +67,9 @@ class ProComicScraper @Inject constructor(
         }
 
         HomeData(
-            featured = items.take(8),
+            featured = items.distinctBy { it.id }.take(8),
             latestChapters = emptyList(),
-            trending = items
+            trending = items.distinctBy { it.id }
         )
     }
 
@@ -105,11 +105,15 @@ class ProComicScraper @Inject constructor(
                 val chMeta = ch.optJSONObject("metadata")
                 val images = chMeta?.optJSONArray("images") ?: JSONArray()
 
-                // Build chapter page URL
-                val chapterUrl = "${source.baseUrl}/series/$seriesType/$seriesId/$slug/$chNum"
+                // Build chapter page URL — use chapter ID for uniqueness
+                val chapterUrl = if (chId > 0) {
+                    "${source.baseUrl}/series/$seriesType/$seriesId/$slug/$chId"
+                } else {
+                    "${source.baseUrl}/series/$seriesType/$seriesId/$slug/$chNum"
+                }
 
                 Chapter(
-                    id = "${slug}_${chNum}",
+                    id = "${slug}_${chId}_${chNum}",
                     mangaId = matchedItem.id,
                     number = chNum,
                     title = ch.optString("title").ifBlank { null },
@@ -117,7 +121,7 @@ class ProComicScraper @Inject constructor(
                     // Store image count in totalPages for display
                     totalPages = images.length()
                 )
-            }.sortedByDescending { it.number }
+            }.distinctBy { it.id }.sortedByDescending { it.number }
 
             MangaDetail(
                 id = matchedItem.id,
@@ -221,7 +225,7 @@ class ProComicScraper @Inject constructor(
             val encoded = java.net.URLEncoder.encode(query, "UTF-8")
             val json = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=18&page=$page&search=$encoded&sort=latest")
             val items = parseApiResults(json)
-            if (items.isNotEmpty()) return@runCatching items
+            if (items.isNotEmpty()) return@runCatching items.distinctBy { it.id }
         } catch (_: Exception) { }
         // Fallback: HTML scraping
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
@@ -239,7 +243,7 @@ class ProComicScraper @Inject constructor(
         try {
             val json = apiGet("${source.baseUrl}/api/public/series/search?status=approved&limit=30&page=1&sort=popular")
             val items = parseApiResults(json)
-            if (items.isNotEmpty()) return@runCatching items
+            if (items.isNotEmpty()) return@runCatching items.distinctBy { it.id }
         } catch (_: Exception) { }
         val doc = fetchDocument("${source.baseUrl}/series?sort=popular")
         parseMangaGridFromHtml(doc)
@@ -260,7 +264,7 @@ class ProComicScraper @Inject constructor(
             genre?.takeIf { it.isNotBlank() }?.let { params += "search=${java.net.URLEncoder.encode(it, "UTF-8")}" }
             val json = apiGet("${source.baseUrl}/api/public/series/search?${params.joinToString("&")}")
             val items = parseApiResults(json)
-            if (items.isNotEmpty()) return@runCatching items
+            if (items.isNotEmpty()) return@runCatching items.distinctBy { it.id }
         } catch (_: Exception) { }
         // Fallback: HTML scraping
         val doc = fetchDocument("${source.baseUrl}/series")
