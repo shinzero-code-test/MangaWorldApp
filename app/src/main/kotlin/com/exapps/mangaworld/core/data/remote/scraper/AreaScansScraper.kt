@@ -122,7 +122,7 @@ class AreaScansScraper @Inject constructor(
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
         val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to source.baseUrl + "/"))
 
-        // Try AJAX endpoint first (get_secure_chapter_images) - most reliable
+        // Strategy 1: Try AJAX endpoint (get_secure_chapter_images) - most reliable
         val chapterId = doc.select("script").mapNotNull { script ->
             Regex("chapterId\\s*=\\s*(\\d+)").find(script.html())?.groupValues?.get(1)
                 ?: Regex("ARYA_CHAPTER_ID\\s*=\\s*(\\d+)").find(script.html())?.groupValues?.get(1)
@@ -143,6 +143,7 @@ class AreaScansScraper @Inject constructor(
                         .header("User-Agent", USER_AGENT)
                         .header("Accept", "application/json")
                         .header("Referer", chapterUrl)
+                        .header("X-Requested-With", "XMLHttpRequest")
                         .post(formBody)
                         .build()
                     val response = client.newCall(request).execute()
@@ -168,7 +169,7 @@ class AreaScansScraper @Inject constructor(
             } catch (_: Exception) { }
         }
 
-        // Fallback: parse from HTML
+        // Strategy 2: Parse from HTML directly
         val images = doc.select(
             "#reader-canvas img, .reader-container img, .reading-content img, .page-break img"
         )
@@ -194,7 +195,7 @@ class AreaScansScraper @Inject constructor(
 
         if (images.isNotEmpty()) return@runCatching images
 
-        // Fallback: extract from ts_reader.run() JSON config if present
+        // Strategy 3: Fallback - extract from ts_reader.run() JSON config if present
         val rawHtml = doc.outerHtml()
         val jsonMatch = Regex("ts_reader\\.run\\((\\{.*?\\})\\)").find(rawHtml)
         if (jsonMatch != null) {
