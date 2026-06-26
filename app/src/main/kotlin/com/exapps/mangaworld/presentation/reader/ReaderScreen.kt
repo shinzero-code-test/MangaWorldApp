@@ -23,9 +23,6 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.focus.focusable
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -83,12 +80,9 @@ fun ReaderScreen(
         }
     }
 
-    val focusRequester = remember { FocusRequester() }
     Box(
         Modifier.fillMaxSize().background(Color.Black)
             .systemBarsPadding()
-            .focusRequester(focusRequester)
-            .focusable()
             .onPreviewKeyEvent { event ->
                 if (state.volumeButtonPageTurn && event.type == KeyEventType.KeyDown) {
                     when (event.nativeKeyEvent.keyCode) {
@@ -107,9 +101,6 @@ fun ReaderScreen(
                 } else false
             }
     ) {
-        // Request focus so volume key events are received
-        LaunchedEffect(Unit) { focusRequester.requestFocus() }
-
         DisposableEffect(state.secureReaderEnabled, activity) {
             val window = activity?.window
             if (state.secureReaderEnabled) {
