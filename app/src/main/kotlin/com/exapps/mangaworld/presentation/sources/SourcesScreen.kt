@@ -1,8 +1,9 @@
 package com.exapps.mangaworld.presentation.sources
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -10,9 +11,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,20 +25,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
-/**
- * Redesigned sources screen — displays ALL sources in a unified grid view
- * with real site logos under the heading "المصادر العربية".
- * Tapping a source navigates to its dedicated SourceBrowseScreen.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SourcesScreen(
     onBack: () -> Unit,
-    onSourceClick: (sourceId: String) -> Unit = {}
+    onSourceClick: (sourceId: String) -> Unit = {},
+    viewModel: SourcesViewModel = hiltViewModel()
 ) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    var selectedSource by remember { mutableStateOf<MangaSource?>(null) }
+
     Scaffold(
         containerColor = MangaColors.Background,
         topBar = {
@@ -68,6 +69,14 @@ fun SourcesScreen(
                 modifier = Modifier.padding(vertical = 12.dp)
             )
 
+            // Hint
+            Text(
+                "اضغط مطولاً على مصدر لإعداداته",
+                style = MaterialTheme.typography.bodySmall,
+                color = MangaColors.Muted,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
             // Unified grid for ALL sources
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
@@ -79,18 +88,36 @@ fun SourcesScreen(
                 items(MangaSource.entries) { source ->
                     SourceGridCard(
                         source = source,
-                        onClick = { onSourceClick(source.id) }
+                        isEnabled = state.enabledSources[source.id] != false,
+                        onClick = { onSourceClick(source.id) },
+                        onLongClick = { selectedSource = source }
                     )
                 }
             }
         }
     }
+
+    // Source Settings Bottom Sheet
+    selectedSource?.let { source ->
+        SourceSettingsSheet(
+            source = source,
+            isEnabled = state.enabledSources[source.id] != false,
+            isNotificationEnabled = state.notificationStates[source.id] != false,
+            onToggleEnabled = { enabled -> viewModel.toggleSource(source.id, enabled) },
+            onToggleNotification = { enabled -> viewModel.toggleSourceNotification(source.id, enabled) },
+            onClearCookies = { viewModel.clearCookies(source) },
+            onDismiss = { selectedSource = null }
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SourceGridCard(
     source: MangaSource,
-    onClick: () -> Unit
+    isEnabled: Boolean = true,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     val sourceColor = getSourceColor(source)
 
@@ -98,7 +125,10 @@ private fun SourceGridCard(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(0.85f)
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         colors = CardDefaults.cardColors(containerColor = MangaColors.Surface),
         shape = RoundedCornerShape(16.dp)
     ) {
@@ -128,7 +158,10 @@ private fun SourceGridCard(
                     Image(
                         painter = painterResource(id = source.logoDrawableRes),
                         contentDescription = source.displayName,
-                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)),
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .then(if (!isEnabled) Modifier.background(Color.Black.copy(alpha = 0.3f)) else Modifier),
                         contentScale = ContentScale.Fit
                     )
                 } else {
@@ -145,7 +178,7 @@ private fun SourceGridCard(
             Text(
                 text = source.displayName,
                 style = MaterialTheme.typography.labelSmall,
-                color = MangaColors.OnSurface,
+                color = if (isEnabled) MangaColors.OnSurface else MangaColors.Muted,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
@@ -173,6 +206,16 @@ private fun SourceGridCard(
                 )
             } else {
                 Spacer(Modifier.height(10.dp))
+            }
+
+            // Disabled badge
+            if (!isEnabled) {
+                Text(
+                    "معطّل",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                    color = MangaColors.Error,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

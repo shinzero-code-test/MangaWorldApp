@@ -16,6 +16,10 @@ object AppLaunchIntents {
 
     fun downloads(context: Context): Intent = intent(context, "$Scheme://screen/downloads")
 
+    fun library(context: Context): Intent = intent(context, "$Scheme://screen/library")
+
+    fun sourceBrowse(context: Context, sourceId: String): Intent = intent(context, "$Scheme://screen/source_browse/$sourceId")
+
     fun detail(context: Context, sourceId: String, slug: String): Intent =
         intent(context, "$Scheme://manga/$sourceId/$slug")
 

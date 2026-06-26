@@ -105,6 +105,9 @@ interface SettingsRepository {
     fun getCookies(domain: String): Flow<String?>
     suspend fun saveCookies(domain: String, cookies: String)
     suspend fun clearCookies(domain: String)
+
+    fun isSourceNotificationEnabled(sourceId: String): Flow<Boolean>
+    suspend fun setSourceNotification(sourceId: String, enabled: Boolean)
 }
 
 interface CommunityRepository {

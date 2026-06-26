@@ -58,6 +58,7 @@ class AppPreferences @Inject constructor(
         val KEY_DOUBLE_TAP_ZOOM = booleanPreferencesKey("reader_double_tap_zoom")
 
         fun cookieKey(domain: String) = stringPreferencesKey("cookie_$domain")
+        fun sourceNotificationKey(sourceId: String) = booleanPreferencesKey("notif_source_$sourceId")
     }
 
     val appSettings: Flow<AppSettings> = dataStore.data
@@ -241,4 +242,12 @@ class AppPreferences @Inject constructor(
 
     suspend fun clearCookies(domain: String) =
         dataStore.edit { it.remove(cookieKey(domain)) }
+
+    // Source-specific notification settings (default: enabled)
+    fun isSourceNotificationEnabled(sourceId: String): Flow<Boolean> = dataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map { prefs -> prefs[sourceNotificationKey(sourceId)] ?: true }
+
+    suspend fun setSourceNotification(sourceId: String, enabled: Boolean) =
+        dataStore.edit { it[sourceNotificationKey(sourceId)] = enabled }
 }

@@ -455,4 +455,7 @@ class SettingsRepositoryImpl @Inject constructor(
     override fun getCookies(domain: String) = prefs.getCookies(domain)
     override suspend fun saveCookies(domain: String, cookies: String) { prefs.saveCookies(domain, cookies) }
     override suspend fun clearCookies(domain: String) { prefs.clearCookies(domain) }
+
+    override fun isSourceNotificationEnabled(sourceId: String) = prefs.isSourceNotificationEnabled(sourceId)
+    override suspend fun setSourceNotification(sourceId: String, enabled: Boolean) { prefs.setSourceNotification(sourceId, enabled) }
 }

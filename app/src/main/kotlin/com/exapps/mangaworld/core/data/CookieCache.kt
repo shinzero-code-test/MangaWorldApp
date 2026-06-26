@@ -32,4 +32,11 @@ object CookieCache {
     }
 
     fun clear() = store.clear()
+
+    fun clearDomain(domain: String) {
+        val lower = domain.lowercase()
+        store.remove(lower)
+        // Also remove any subdomain entries
+        store.keys.removeAll { key -> key == lower || key.endsWith(".$lower") }
+    }
 }

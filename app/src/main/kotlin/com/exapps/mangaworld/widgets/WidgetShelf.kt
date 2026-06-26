@@ -10,8 +10,12 @@ import androidx.glance.LocalContext
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.provideContent
+import androidx.glance.background
+import androidx.glance.clickable
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
@@ -22,9 +26,11 @@ import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
+import androidx.glance.unit.ColorProvider
+import androidx.glance.color.ColorProvider as GlanceColorProvider
+import dagger.hilt.android.EntryPointAccessors
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.core.widget.WidgetEntryPoint
-import dagger.hilt.android.EntryPointAccessors
 
 class WidgetShelf : GlanceAppWidget() {
     override val sizeMode = SizeMode.Single
@@ -68,23 +74,23 @@ private fun WidgetShelfContent(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             ShelfItem(
-                label = "الرئيسية",
-                onClick = AppLaunchIntents.home(context)
+                label = "🏠 الرئيسية",
+                onClick = actionStartActivity(AppLaunchIntents.home(context))
             )
-            Spacer(GlanceModifier.width(8.dp))
+            Spacer(GlanceModifier.width(6.dp))
             ShelfItem(
-                label = "البحث",
-                onClick = AppLaunchIntents.search(context)
+                label = "🔍 البحث",
+                onClick = actionStartActivity(AppLaunchIntents.search(context))
             )
-            Spacer(GlanceModifier.width(8.dp))
+            Spacer(GlanceModifier.width(6.dp))
             ShelfItem(
-                label = "المكتبة",
-                onClick = AppLaunchIntents.home(context)
+                label = "📚 المكتبة",
+                onClick = actionStartActivity(AppLaunchIntents.library(context))
             )
-            Spacer(GlanceModifier.width(8.dp))
+            Spacer(GlanceModifier.width(6.dp))
             ShelfItem(
-                label = "التنزيلات",
-                onClick = AppLaunchIntents.downloads(context)
+                label = "⬇️ التنزيلات",
+                onClick = actionStartActivity(AppLaunchIntents.downloads(context))
             )
         }
     }
@@ -93,18 +99,26 @@ private fun WidgetShelfContent(
 @Composable
 private fun ShelfItem(
     label: String,
-    onClick: android.content.Intent
+    onClick: androidx.glance.appwidget.action.Action
 ) {
-    Column(
+    Box(
         modifier = GlanceModifier
-            .padding(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(4.dp)
+            .background(GlanceColorProvider(
+                day = android.graphics.Color.parseColor("#1AFFFFFF"),
+                night = android.graphics.Color.parseColor("#33FFFFFF")
+            ))
+            .clickable(onClick)
+            .padding(horizontal = 8.dp, vertical = 12.dp),
+        contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
             style = TextStyle(
-                fontSize = 12.sp
-            )
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            ),
+            maxLines = 1
         )
     }
 }
