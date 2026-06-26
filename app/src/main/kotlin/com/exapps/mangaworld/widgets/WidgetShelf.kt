@@ -117,26 +117,3 @@ private fun WidgetShelfContent(
         }
     }
 }
-
-@Composable
-private fun ShelfItem(
-    label: String,
-    onClick: androidx.glance.appwidget.action.Action
-) {
-    Box(
-        modifier = GlanceModifier
-            .padding(4.dp)
-            .background(ColorProvider(day = Color(0x1AFFFFFF), night = Color(0x33FFFFFF)))
-            .clickable(onClick)
-            .padding(horizontal = 8.dp, vertical = 12.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            style = TextStyle(
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium
-            )
-        )
-    }
-}
