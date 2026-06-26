@@ -73,25 +73,47 @@ private fun WidgetShelfContent(
             modifier = GlanceModifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            ShelfItem(
-                label = "🏠 الرئيسية",
-                onClick = actionStartActivity(AppLaunchIntents.home(context))
-            )
+            Box(
+                modifier = GlanceModifier
+                    .padding(4.dp)
+                    .background(ColorProvider(day = Color(0x1AFFFFFF), night = Color(0x33FFFFFF)))
+                    .clickable(actionStartActivity(AppLaunchIntents.home(context)))
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) { Text("🏠 الرئيسية", style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium)) }
+
             Spacer(GlanceModifier.width(6.dp))
-            ShelfItem(
-                label = "🔍 البحث",
-                onClick = actionStartActivity(AppLaunchIntents.search(context))
-            )
+
+            Box(
+                modifier = GlanceModifier
+                    .padding(4.dp)
+                    .background(ColorProvider(day = Color(0x1AFFFFFF), night = Color(0x33FFFFFF)))
+                    .clickable(actionStartActivity(AppLaunchIntents.search(context)))
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) { Text("🔍 البحث", style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium)) }
+
             Spacer(GlanceModifier.width(6.dp))
-            ShelfItem(
-                label = "📚 المكتبة",
-                onClick = actionStartActivity(AppLaunchIntents.library(context))
-            )
+
+            Box(
+                modifier = GlanceModifier
+                    .padding(4.dp)
+                    .background(ColorProvider(day = Color(0x1AFFFFFF), night = Color(0x33FFFFFF)))
+                    .clickable(actionStartActivity(AppLaunchIntents.library(context)))
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) { Text("📚 المكتبة", style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium)) }
+
             Spacer(GlanceModifier.width(6.dp))
-            ShelfItem(
-                label = "⬇️ التنزيلات",
-                onClick = actionStartActivity(AppLaunchIntents.downloads(context))
-            )
+
+            Box(
+                modifier = GlanceModifier
+                    .padding(4.dp)
+                    .background(ColorProvider(day = Color(0x1AFFFFFF), night = Color(0x33FFFFFF)))
+                    .clickable(actionStartActivity(AppLaunchIntents.downloads(context)))
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) { Text("⬇️ التنزيلات", style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium)) }
         }
     }
 }
