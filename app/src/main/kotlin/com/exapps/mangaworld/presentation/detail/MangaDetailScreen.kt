@@ -52,6 +52,11 @@ fun MangaDetailScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
 
+    // Cache sorted chapters to avoid recomputation on every recomposition
+    val sortedChapters = remember(state.manga, state.readChapters, state.readingProgress, state.downloadedChapters, state.chaptersReversed) {
+        viewModel.sortedChapters()
+    }
+
     // Launcher for Cloudflare WebView solver
     val cfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -73,7 +78,7 @@ fun MangaDetailScreen(
                     cfLauncher.launch(
                         android.content.Intent(ctx, WebViewSolverActivity::class.java).apply {
                             putExtra(WebViewSolverActivity.EXTRA_URL, state.cloudflareUrl)
-                            putExtra(WebViewSolverActivity.EXTRA_DOMAIN, state.cloudfareDomain ?: "")
+                            putExtra(WebViewSolverActivity.EXTRA_DOMAIN, state.cloudflareDomain ?: "")
                         }
                     )
                 }
@@ -87,7 +92,7 @@ fun MangaDetailScreen(
                 otherSourceMatches = state.otherSourceMatches,
                 readChapters = state.readChapters,
                 chaptersReversed = state.chaptersReversed,
-                sortedChapters = viewModel.sortedChapters(),
+                sortedChapters = sortedChapters,
                 filteredChapters = viewModel.getFilteredChapters(),
                 chapterSearchQuery = state.chapterSearchQuery,
                 downloadingChapters = state.downloadingChapters,
@@ -122,8 +127,8 @@ fun MangaDetailScreen(
     // Download options dialog
     if (state.showDownloadDialog) {
         DownloadOptionsDialog(
-            unreadCount = viewModel.sortedChapters().count { !it.isRead && !it.isDownloaded },
-            allCount = viewModel.sortedChapters().count { !it.isDownloaded },
+            unreadCount = sortedChapters.count { !it.isRead && !it.isDownloaded },
+            allCount = sortedChapters.count { !it.isDownloaded },
             onDownloadAll = viewModel::downloadAllChapters,
             onDownloadUnread = viewModel::downloadUnreadChapters,
             onDismiss = viewModel::hideDownloadDialog

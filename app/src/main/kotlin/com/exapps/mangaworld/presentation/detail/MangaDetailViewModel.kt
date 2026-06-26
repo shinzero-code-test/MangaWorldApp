@@ -39,7 +39,7 @@ data class DetailUiState(
     val downloadingChapters: Set<Float> = emptySet(),
     val showDownloadDialog: Boolean = false,
     val cloudflareUrl: String? = null,
-    val cloudfareDomain: String? = null,
+    val cloudflareDomain: String? = null,
     val userLists: List<CustomUserList> = emptyList(),
     val showAddToListDialog: Boolean = false,
     val chapterSearchQuery: String = ""
@@ -131,11 +131,12 @@ class MangaDetailViewModel @Inject constructor(
                         }
                         launch {
                             libraryRepo.getReadChapters(mangaId)
-                                .collect { read -> _state.update { it.copy(readChapters = read) } }
-                        }
-                        launch {
-                            val progress = libraryRepo.getReadingProgressMap(mangaId)
-                            _state.update { it.copy(readingProgress = progress) }
+                                .collect { read ->
+                                    _state.update { it.copy(readChapters = read) }
+                                    // Re-fetch reading progress whenever read chapters change
+                                    val progress = libraryRepo.getReadingProgressMap(mangaId)
+                                    _state.update { it.copy(readingProgress = progress) }
+                                }
                         }
                         launch {
                             val downloaded = withContext(Dispatchers.IO) {
@@ -162,7 +163,7 @@ class MangaDetailViewModel @Inject constructor(
                             isLoading = false,
                             error = if (it.manga == null) (e.message ?: "خطأ في التحميل") else null,
                             cloudflareUrl = if (e is CloudflareChallengeException) e.targetUrl else null,
-                            cloudfareDomain = if (e is CloudflareChallengeException) e.domain else null
+                            cloudflareDomain = if (e is CloudflareChallengeException) e.domain else null
                         )
                     }
                 }
@@ -422,7 +423,7 @@ class MangaDetailViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepo.saveCookies(domain, cookies)
             delay(300)
-            _state.update { it.copy(cloudflareUrl = null, cloudfareDomain = null, error = null) }
+            _state.update { it.copy(cloudflareUrl = null, cloudflareDomain = null, error = null) }
             load(currentSlug, currentSource)
         }
     }

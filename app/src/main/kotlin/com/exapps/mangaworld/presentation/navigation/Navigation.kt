@@ -63,7 +63,7 @@ sealed class Screen(val route: String) {
     object LatestUpdates : Screen("latest_updates")
     object ReadingStats : Screen("reading_stats")
     object Collections : Screen("collections/{collectionId}") {
-        fun createRoute(collectionId: String = "") = if (collectionId.isBlank()) "collections/" else "collections/$collectionId"
+        fun createRoute(collectionId: String = "") = "collections/$collectionId"
     }
     object Goals : Screen("goals")
     object More : Screen("more")
@@ -230,8 +230,7 @@ fun MangaNavGraph(navController: NavHostController) {
             arguments = listOf(
                 navArgument("collectionId") { type = NavType.StringType; defaultValue = "" }
             )
-        ) { back ->
-            val collectionId = back.arguments?.getString("collectionId") ?: ""
+        ) {
             CollectionsScreen(
                 onBack = { navController.popBackStack() },
                 onCollectionClick = { id -> navController.navigate(Screen.Collections.createRoute(id)) }

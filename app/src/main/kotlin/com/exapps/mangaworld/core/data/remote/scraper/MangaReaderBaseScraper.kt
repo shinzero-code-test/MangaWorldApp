@@ -91,7 +91,7 @@ open class MangaReaderBaseScraper(
             resolvedUrl = "${source.baseUrl}/manga/$slug/"
             resolvedDoc = fetchDocument(resolvedUrl)
         }
-        val doc = resolvedDoc!!
+        val doc = resolvedDoc ?: error("Could not load manga detail for $slug")
 
         // Cover: multiple patterns for different MangaReader variants
         val coverUrl = doc.selectFirst(

@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.json.JSONObject
 import java.time.LocalDate
@@ -47,6 +48,8 @@ class ReadingStatsStore @Inject constructor(
     suspend fun addReadingTime(durationMs: Long) {
         if (durationMs <= 0L) return
         val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        // Read the previous date BEFORE writing today's date
+        val previousDate = dataStore.data.first()[lastReadDateKey]
         dataStore.edit { prefs ->
             prefs[totalReadingTimeKey] = (prefs[totalReadingTimeKey] ?: 0L) + durationMs
             prefs[lastReadDateKey] = today
@@ -55,7 +58,7 @@ class ReadingStatsStore @Inject constructor(
             timeMap[today] = (timeMap[today] ?: 0) + durationMs.toInt()
             prefs[dailyTimeKey] = JSONObject(timeMap as Map<String, Any>).toString()
         }
-        updateStreak(today)
+        updateStreak(today, previousDate)
     }
 
     suspend fun recordPageRead(pagesRead: Int) {
@@ -75,13 +78,12 @@ class ReadingStatsStore @Inject constructor(
         }
     }
 
-    private suspend fun updateStreak(today: String) {
+    private suspend fun updateStreak(today: String, previousDate: String?) {
         dataStore.edit { prefs ->
-            val lastDate = prefs[lastReadDateKey]
             val currentStreak = prefs[currentStreakKey] ?: 0
             val longestStreak = prefs[longestStreakKey] ?: 0
 
-            if (lastDate == null || lastDate == today) {
+            if (previousDate == null || previousDate == today) {
                 // First read or same day
                 if (currentStreak == 0) {
                     prefs[currentStreakKey] = 1

@@ -64,7 +64,27 @@ class LocalStorageViewModel @Inject constructor(
         }
         viewModelScope.launch {
             manager.observeDownloadedMangas().collectLatest { mangas ->
-                _autoTags.value = emptyMap()
+                // Compute auto-tags from manga metadata (source + genres + status)
+                val tags = mangas.associate { manga ->
+                    val tagsList = mutableListOf<String>()
+                    // Source tag
+                    val sourceName = MangaSource.fromId(manga.sourceId).displayName
+                    if (sourceName.isNotBlank()) tagsList.add(sourceName)
+                    // Genre tags
+                    try {
+                        val genres = org.json.JSONArray(manga.genresJson)
+                        for (i in 0 until genres.length()) {
+                            val genre = genres.optString(i)
+                            if (genre.isNotBlank()) tagsList.add(genre)
+                        }
+                    } catch (_: Exception) {}
+                    // Status tag
+                    if (manga.statusStr.isNotBlank() && manga.statusStr != "UNKNOWN") {
+                        tagsList.add(manga.statusStr)
+                    }
+                    manga.mangaId to tagsList.distinct().take(4)
+                }
+                _autoTags.value = tags
             }
         }
     }

@@ -71,7 +71,7 @@ abstract class BaseScraperImpl(
             }
             val doc = Jsoup.parse(body, url)
             val title = doc.title().lowercase()
-            val isCf = code == 403 ||
+            val isCf = code == 403 || code == 503 ||
                 title.contains("just a moment") ||
                 title.contains("attention required") ||
                 body.contains("cf-chl", ignoreCase = true)

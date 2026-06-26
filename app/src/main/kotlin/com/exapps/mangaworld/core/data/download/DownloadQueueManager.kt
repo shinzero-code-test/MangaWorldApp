@@ -60,7 +60,7 @@ class DownloadQueueManager @Inject constructor(
 
     fun getLocalChapterPages(mangaId: String, chapterUrl: String, title: String? = null): List<ChapterPage> {
         val dir = chapterDir(mangaId, chapterUrl, title)
-        if (!dir.exists()) return emptyList()
+        if (!dir.exists() || !File(dir, ".completed").exists()) return emptyList()
         return dir.listFiles()
             ?.filter { it.isFile && it.extension.lowercase() in setOf("jpg", "png", "webp") }
             ?.sortedBy { it.nameWithoutExtension.toIntOrNull() ?: Int.MAX_VALUE }
@@ -170,6 +170,10 @@ class DownloadQueueManager @Inject constructor(
         val task = downloadTaskDao.getById(taskId) ?: return
         downloadTaskDao.upsert(task.copy(status = "queued", errorMessage = null,
             updatedAt = System.currentTimeMillis()))
+        // Default to wifi-only (safe default) since DownloadTaskEntity doesn't persist wifiOnly
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.UNMETERED)
+            .build()
         WorkManager.getInstance(app).enqueue(
             OneTimeWorkRequestBuilder<ChapterDownloadWorker>()
                 .setInputData(Data.Builder()
@@ -187,6 +191,7 @@ class DownloadQueueManager @Inject constructor(
                         }.getOrDefault(emptyArray())
                     )
                     .build())
+                .setConstraints(constraints)
                 .addTag(taskId)
                 .addTag("manga_${task.mangaId}")
                 .build()
@@ -300,7 +305,7 @@ class DownloadQueueManager @Inject constructor(
      */
     suspend fun syncFileSystemWithDatabase() = withContext(Dispatchers.IO) {
         if (!downloadsRoot.exists()) return@withContext
-        val existingIds = downloadedMangaDao.getAll().map { it.mangaId }.toSet()
+        val existingIds = downloadedMangaDao.getAll().map { it.mangaId }.toMutableSet()
 
         downloadsRoot.listFiles()?.filter { it.isDirectory }?.forEach { dir ->
             val metadataFile = File(dir, "metadata.json")
@@ -336,7 +341,7 @@ class DownloadQueueManager @Inject constructor(
                         json.optLong("importedAt", System.currentTimeMillis()))
                 )
                 downloadedMangaDao.upsert(entity)
-                existingIds.plus(mangaId) // avoid duplicates in same scan
+                existingIds.add(mangaId) // avoid duplicates in same scan
             } catch (_: Exception) { /* skip malformed metadata */ }
         }
     }

@@ -27,8 +27,6 @@ class ProComicScraper @Inject constructor(
     settingsRepo: SettingsRepository
 ) : BaseScraperImpl(client, MangaSource.PROCOMIC, settingsRepo) {
 
-    private val apiBase = "${source.baseUrl}/api/public/series/search"
-
     private suspend fun apiGet(url: String): JSONObject? = withContext(Dispatchers.IO) {
         val cookies = getCookiesForDomain(url)
         val req = Request.Builder()

@@ -304,11 +304,17 @@ class ReaderViewModel @Inject constructor(
             val referer = st.pages.firstOrNull()?.headers?.get("Referer")
                 ?.takeIf { it.isNotBlank() }
                 ?: st.chapterUrl
+            // Resolve proper manga title from cache instead of using the slug
+            val mangaTitle = withContext(Dispatchers.IO) {
+                cacheDao.get(st.mangaId)?.title
+                    ?: resolveDetailForChapter(st.mangaId, currentSource)?.title
+                    ?: st.mangaId.substringAfter("_").ifBlank { st.mangaId }
+            }
             _state.update { it.copy(downloadInProgress = true, downloadProgress = 0f, downloadMessage = "بدء التنزيل...", activeDownloadTaskId = taskId) }
             downloadQueueManager.enqueueAndRun(
                 taskId = taskId,
                 mangaId = st.mangaId,
-                mangaTitle = st.mangaId.substringAfter("_").ifBlank { st.mangaId },
+                mangaTitle = mangaTitle,
                 chapterUrl = st.chapterUrl,
                 chapterTitle = st.chapterTitle,
                 pages = st.pages,
