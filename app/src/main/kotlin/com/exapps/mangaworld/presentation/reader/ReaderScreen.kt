@@ -2,7 +2,7 @@ package com.exapps.mangaworld.presentation.reader
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Bitmap
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,7 +21,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusable
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -53,7 +57,7 @@ fun ReaderScreen(
     onOpenCommunity: () -> Unit,
     viewModel: ReaderViewModel = hiltViewModel()
 ) {
-    LaunchedEffect(chapterUrl) { viewModel.loadChapter(chapterUrl, mangaId, source) }
+    LaunchedEffect(chapterUrl, mangaId, source) { viewModel.loadChapter(chapterUrl, mangaId, source) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val haptics = LocalHapticFeedback.current
@@ -79,10 +83,33 @@ fun ReaderScreen(
         }
     }
 
+    val focusRequester = remember { FocusRequester() }
     Box(
         Modifier.fillMaxSize().background(Color.Black)
             .systemBarsPadding()
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (state.volumeButtonPageTurn && event.type == KeyEventType.KeyDown) {
+                    when (event.nativeKeyEvent.keyCode) {
+                        KeyEvent.KEYCODE_VOLUME_UP -> {
+                            val prev = state.currentPage - 1
+                            if (prev >= 0) viewModel.onPageChanged(prev)
+                            true
+                        }
+                        KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                            val next = state.currentPage + 1
+                            if (next < state.totalPages) viewModel.onPageChanged(next)
+                            true
+                        }
+                        else -> false
+                    }
+                } else false
+            }
     ) {
+        // Request focus so volume key events are received
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
         DisposableEffect(state.secureReaderEnabled, activity) {
             val window = activity?.window
             if (state.secureReaderEnabled) {
@@ -375,12 +402,13 @@ fun ReaderScreen(
                     onCancelDownload = { viewModel.cancelDownload() },
                     onRetryDownload = { viewModel.retryCurrentChapterDownload() },
                     onToggleBookmark = { viewModel.toggleBookmarkCurrentPage() },
-                    onEditNote = { 
+                    onEditNote = {
                         noteText = state.pageNotes[state.currentPage].orEmpty()
-                        noteDialog = true 
+                        settingsSheetOpen = false
+                        noteDialog = true
                     },
-                    onBrowseAnnotations = { annotationsSheetOpen = true },
-                    onOpenComments = { commentsSheetOpen = true }
+                    onBrowseAnnotations = { settingsSheetOpen = false; annotationsSheetOpen = true },
+                    onOpenComments = { settingsSheetOpen = false; commentsSheetOpen = true }
                 )
             }
         }
@@ -402,8 +430,7 @@ private fun ReaderContent(
     onPageChanged: (Int) -> Unit,
     onTap: (Float, Float) -> Unit,
     onLongPress: () -> Unit = {},
-    onModeChange: (ReaderMode) -> Unit,
-    onZoom: ((Float) -> Unit)? = null
+    onModeChange: (ReaderMode) -> Unit
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
@@ -411,12 +438,14 @@ private fun ReaderContent(
             ReaderMode.VERTICAL_SCROLL, ReaderMode.WEBTOON ->
                 WebtoonReader(
                     pages = state.pages,
+                    initialPage = state.currentPage,
                     imageFilter = state.imageFilter,
                     autoStitch = state.webtoonAutoStitch,
                     onTap = onTap,
                     onLongPress = onLongPress,
                     onPageChanged = onPageChanged,
-                    pageSpacing = state.pageSpacing
+                    pageSpacing = state.pageSpacing,
+                    currentPage = state.currentPage
                 )
         ReaderMode.HORIZONTAL_RTL ->
             if (state.dualPageLandscape && isLandscape) {
@@ -456,18 +485,34 @@ private fun ReaderContent(
 @Composable
 private fun WebtoonReader(
     pages: List<ChapterPage>,
+    initialPage: Int = 0,
     imageFilter: ReaderImageFilter,
     autoStitch: Boolean,
     onTap: (Float, Float) -> Unit,
     onLongPress: () -> Unit = {},
     onPageChanged: (Int) -> Unit,
-    pageSpacing: Int = 0
+    pageSpacing: Int = 0,
+    currentPage: Int = 0
 ) {
-    val listState = rememberLazyListState()
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = initialPage.coerceIn(0, maxOf(0, pages.size - 1))
+    )
 
-    // Track current page
+    // Only advance reading progress — never save backward scrolling
+    var highestPage by remember { mutableIntStateOf(initialPage) }
     LaunchedEffect(listState.firstVisibleItemIndex) {
-        onPageChanged(listState.firstVisibleItemIndex)
+        val newPage = listState.firstVisibleItemIndex
+        if (newPage > highestPage) {
+            highestPage = newPage
+            onPageChanged(newPage)
+        }
+    }
+
+    // Allow slider / external code to scroll to a specific page
+    LaunchedEffect(currentPage) {
+        if (currentPage in pages.indices && listState.firstVisibleItemIndex != currentPage) {
+            listState.animateScrollToItem(currentPage)
+        }
     }
 
     val spacing = when {
@@ -556,7 +601,12 @@ private fun HorizontalReader(
     onLongPress: () -> Unit = {}
 ) {
     val orderedPages = if (rtl) pages.reversed() else pages
-    val pagerState = rememberPagerState(initialPage = initialPage.coerceIn(0, maxOf(0, orderedPages.size - 1))) { orderedPages.size }
+    val adjustedInitial = if (rtl && orderedPages.isNotEmpty()) {
+        (orderedPages.size - 1 - initialPage).coerceIn(0, maxOf(0, orderedPages.size - 1))
+    } else {
+        initialPage.coerceIn(0, maxOf(0, orderedPages.size - 1))
+    }
+    val pagerState = rememberPagerState(initialPage = adjustedInitial) { orderedPages.size }
 
     LaunchedEffect(pagerState.currentPage) {
         val realIndex = if (rtl) orderedPages.size - 1 - pagerState.currentPage else pagerState.currentPage
@@ -585,6 +635,15 @@ private fun HorizontalReader(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .pointerInput(pageScale) {
+                    detectTapGestures(
+                        onDoubleTap = {
+                            // Toggle zoom: 1x ↔ 2x
+                            pageScale = if (pageScale > 1f) 1f else 2f
+                            if (pageScale == 1f) { pageOffsetX = 0f; pageOffsetY = 0f }
+                        }
+                    )
+                }
                 .pointerInput(Unit) {
                     detectTransformGestures { _, pan, zoom, _ ->
                         val newScale = (pageScale * zoom).coerceIn(1f, 5f)
@@ -628,9 +687,7 @@ private fun MangaPageImage(page: ChapterPage, imageFilter: ReaderImageFilter, mo
                 .data(page.url)
                 .crossfade(200)
                 .allowHardware(false)
-                .bitmapConfig(Bitmap.Config.RGB_565)
                 .precision(Precision.INEXACT)
-                .size(1600, 4096)
                 .withFirebaseTrace("reader_page")
                 .apply { if (transformations.isNotEmpty()) transformations(transformations) }
                 .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
@@ -766,7 +823,9 @@ private fun ReaderSettingsSheet(
     var expandedSection by remember { mutableStateOf<String?>("actions") }
 
     Column(
-        Modifier.fillMaxWidth().padding(16.dp),
+        Modifier.fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("إعدادات القارئ", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -779,7 +838,7 @@ private fun ReaderSettingsSheet(
             ) {
                 ActionButton(
                     modifier = Modifier.weight(1f),
-                    icon = if (state.bookmarkedPages.isNotEmpty()) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                    icon = if (state.currentPage in state.bookmarkedPages) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                     label = "إشارة",
                     onClick = onToggleBookmark
                 )
