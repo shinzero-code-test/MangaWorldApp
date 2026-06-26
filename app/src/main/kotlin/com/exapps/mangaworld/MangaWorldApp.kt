@@ -85,7 +85,9 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     }
 
     private fun scheduleFirebaseSync() {
-        val constraints = Constraints.Builder().build()
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+            .build()
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "firebase_sync_periodic",
             ExistingPeriodicWorkPolicy.KEEP,

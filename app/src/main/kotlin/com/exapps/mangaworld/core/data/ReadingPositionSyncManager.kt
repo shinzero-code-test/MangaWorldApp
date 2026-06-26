@@ -22,50 +22,57 @@ class ReadingPositionSyncManager @Inject constructor(
         if (localProgress.isEmpty()) return
 
         val userRef = firestore.collection("users").document(uid)
-            .collection("preferences").document("reading_positions")
+            .collection("preferences")
 
-        val positionsMap = localProgress.associate { progress ->
-            "${progress.mangaId}_${progress.chapterNumber}" to mapOf(
-                "mangaId" to progress.mangaId,
-                "chapterNumber" to progress.chapterNumber,
-                "currentPage" to progress.currentPage,
-                "totalPages" to progress.totalPages,
-                "updatedAt" to progress.updatedAt
-            )
+        // Write in chunks of 500 to stay under Firestore's 1MB document limit
+        localProgress.chunked(500).forEach { chunk ->
+            val positionsMap = chunk.associate { progress ->
+                "${progress.mangaId}_${progress.chapterNumber}" to mapOf(
+                    "mangaId" to progress.mangaId,
+                    "chapterNumber" to progress.chapterNumber,
+                    "currentPage" to progress.currentPage,
+                    "totalPages" to progress.totalPages,
+                    "updatedAt" to progress.updatedAt
+                )
+            }
+            val chunkIndex = localProgress.indexOf(chunk.first()) / 500
+            userRef.document("reading_positions_$chunkIndex").set(positionsMap, SetOptions.merge()).await()
         }
-
-        userRef.set(positionsMap, SetOptions.merge()).await()
     }
 
     suspend fun pullRemotePositions() {
         val uid = sessionManager.ensureGuestSession() ?: return
         val userRef = firestore.collection("users").document(uid)
-            .collection("preferences").document("reading_positions")
+            .collection("preferences")
 
-        val snapshot = userRef.get().await()
-        val remoteData = snapshot.data ?: return
+        // Read from all possible chunked documents
+        for (chunkIndex in 0..10) {
+            val docId = "reading_positions_$chunkIndex"
+            val snapshot = userRef.document(docId).get().await()
+            val remoteData = snapshot.data ?: break // No more chunks
 
-        for ((_, value) in remoteData) {
-            @Suppress("UNCHECKED_CAST")
-            val positionMap = value as? Map<String, Any> ?: continue
-            val mangaId = positionMap["mangaId"] as? String ?: continue
-            val chapterNumber = (positionMap["chapterNumber"] as? Number)?.toFloat() ?: continue
-            val currentPage = (positionMap["currentPage"] as? Number)?.toInt() ?: continue
-            val totalPages = (positionMap["totalPages"] as? Number)?.toInt() ?: continue
-            val updatedAt = (positionMap["updatedAt"] as? Number)?.toLong() ?: continue
+            for ((_, value) in remoteData) {
+                @Suppress("UNCHECKED_CAST")
+                val positionMap = value as? Map<String, Any> ?: continue
+                val mangaId = positionMap["mangaId"] as? String ?: continue
+                val chapterNumber = (positionMap["chapterNumber"] as? Number)?.toFloat() ?: continue
+                val currentPage = (positionMap["currentPage"] as? Number)?.toInt() ?: continue
+                val totalPages = (positionMap["totalPages"] as? Number)?.toInt() ?: continue
+                val updatedAt = (positionMap["updatedAt"] as? Number)?.toLong() ?: continue
 
-            // Only update if remote is newer
-            val localProgress = progressDao.get(mangaId, chapterNumber)
-            if (localProgress == null || updatedAt > localProgress.updatedAt) {
-                progressDao.save(
-                    ReadingProgressEntity(
-                        mangaId = mangaId,
-                        chapterNumber = chapterNumber,
-                        currentPage = currentPage,
-                        totalPages = totalPages,
-                        updatedAt = updatedAt
+                // Only update if remote is newer
+                val localProgress = progressDao.get(mangaId, chapterNumber)
+                if (localProgress == null || updatedAt > localProgress.updatedAt) {
+                    progressDao.save(
+                        ReadingProgressEntity(
+                            mangaId = mangaId,
+                            chapterNumber = chapterNumber,
+                            currentPage = currentPage,
+                            totalPages = totalPages,
+                            updatedAt = updatedAt
+                        )
                     )
-                )
+                }
             }
         }
     }

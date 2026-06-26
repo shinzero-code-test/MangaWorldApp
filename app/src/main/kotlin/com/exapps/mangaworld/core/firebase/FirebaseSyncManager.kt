@@ -65,7 +65,25 @@ class FirebaseSyncManager @Inject constructor(
                 "spoilerCollapseDefault" to settings.spoilerCollapseDefault,
                 "mutedUserIds" to settings.mutedUserIds.toList()
             )
-            writes += userRef.collection("preferences").document("reader") to reader
+            writes += userRef.collection("preferences").document("reader") to mapOf(
+                "mode" to reader.mode.name,
+                "brightness" to reader.brightness.toDouble(),
+                "pageSpacing" to reader.pageSpacing,
+                "keepScreenOn" to reader.keepScreenOn,
+                "showPageNumber" to reader.showPageNumber,
+                "autoWebtoonDetection" to reader.autoWebtoonDetection,
+                "incognitoMode" to reader.incognitoMode,
+                "smartPrefetchEnabled" to reader.smartPrefetchEnabled,
+                "hapticsEnabled" to reader.hapticsEnabled,
+                "imageFilter" to reader.imageFilter.name,
+                "autoOpenNextChapter" to reader.autoOpenNextChapter,
+                "showLiveReadersOverlay" to reader.showLiveReadersOverlay,
+                "showReactionOverlay" to reader.showReactionOverlay,
+                "dualPageLandscape" to reader.dualPageLandscape,
+                "webtoonAutoStitch" to reader.webtoonAutoStitch,
+                "volumeButtonPageTurn" to reader.volumeButtonPageTurn,
+                "doubleTapZoom" to reader.doubleTapZoom
+            )
             favorites.forEach { favorite -> writes += userRef.collection("favorites").document(favorite.mangaId) to favorite }
             history.forEach { item -> writes += userRef.collection("readingHistory").document(item.mangaId) to item }
             annotations.forEach { annotation -> writes += userRef.collection("readerAnnotations").document(annotationDocId(annotation)) to annotation }

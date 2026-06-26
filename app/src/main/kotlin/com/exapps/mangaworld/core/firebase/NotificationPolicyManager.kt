@@ -25,6 +25,13 @@ class NotificationPolicyManager @Inject constructor(
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     suspend fun checkAndSendReminders() {
+        val prefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+
+        // Throttle: only send inactivity reminders once per 24 hours
+        val lastInactivitySent = prefs.getLong("last_inactivity_sent", 0L)
+        val now = System.currentTimeMillis()
+        if (now - lastInactivitySent < 24 * 60 * 60 * 1000L) return
+
         val favorites = favoriteDao.getFavoritesList()
         val history = historyDao.getAll()
 
@@ -32,10 +39,11 @@ class NotificationPolicyManager @Inject constructor(
         val lastRead = history.maxByOrNull { it.lastReadAt }
         if (lastRead != null) {
             val daysSinceLastRead = TimeUnit.MILLISECONDS.toDays(
-                System.currentTimeMillis() - lastRead.lastReadAt
+                now - lastRead.lastReadAt
             )
             if (daysSinceLastRead >= 3) {
                 sendInactivityReminder(lastRead.title)
+                prefs.edit().putLong("last_inactivity_sent", now).apply()
             }
         }
 

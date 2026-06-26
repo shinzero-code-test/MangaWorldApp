@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -14,8 +15,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import org.json.JSONObject
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -57,14 +56,19 @@ data class Achievement(
 
 @Singleton
 class AchievementManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val sessionManager: FirebaseSessionManager
 ) {
     private val dataStore = context.goalsDataStore
     private val goalsKey = stringPreferencesKey("reading_goals")
     private val achievementsKey = stringPreferencesKey("achievements")
     private val totalPagesReadKey = intPreferencesKey("total_pages_read")
     private val totalChaptersReadKey = intPreferencesKey("total_chapters_read")
+    private val lastFirestoreSyncKey = intPreferencesKey("last_firestore_sync")
     private val firestore = FirebaseFirestore.getInstance()
+
+    // Throttle Firestore syncs to max once every 30 minutes
+    private val FIRESTORE_SYNC_INTERVAL_MS = 30 * 60 * 1000L
 
     val goals: Flow<List<ReadingGoal>> = dataStore.data.map { prefs ->
         parseGoals(prefs[goalsKey] ?: "[]")
@@ -200,48 +204,52 @@ class AchievementManager @Inject constructor(
             }
         }
 
-        dataStore.edit { prefs ->
-            prefs[totalPagesReadKey] = totalPages
-            prefs[totalChaptersReadKey] = totalChapters
-            if (changed) {
-                prefs[achievementsKey] = achievementsToJson(mergedAchievements)
+        // Single DataStore write for all updates (achievements + goals)
+        val goals = parseGoals(prefs[goalsKey] ?: "[]").toMutableList()
+        var goalsChanged = false
+        goals.forEachIndexed { index, goal ->
+            if (goal.isActive && !goal.isCompleted) {
+                val newValue = when (goal.type) {
+                    GoalType.PAGES_READ -> totalPages
+                    GoalType.CHAPTERS_READ -> totalChapters
+                    GoalType.READING_TIME -> {
+                        // Wire to actual reading time from ReadingStatsStore
+                        runCatching {
+                            val statsPrefs = context.getSharedPreferences("reading_stats_prefs", 0)
+                            // Reading time is tracked separately; use a best-effort read
+                            0 // TODO: inject ReadingStatsStore for proper integration
+                        }.getOrDefault(0)
+                    }
+                }
+                if (newValue != goal.currentValue) {
+                    goals[index] = goal.copy(currentValue = newValue)
+                    goalsChanged = true
+                }
             }
         }
 
-        // Update goals progress
-        updateGoalProgressFromStats(totalPages, totalChapters)
-
-        // Sync to Firestore
-        syncToFirestore()
-    }
-
-    private suspend fun updateGoalProgressFromStats(totalPages: Int, totalChapters: Int) {
-        dataStore.edit { prefs ->
-            val goals = parseGoals(prefs[goalsKey] ?: "[]").toMutableList()
-            val today = LocalDate.now()
-            var changed = false
-
-            goals.forEachIndexed { index, goal ->
-                if (goal.isActive && !goal.isCompleted) {
-                    val newValue = when (goal.type) {
-                        GoalType.PAGES_READ -> totalPages
-                        GoalType.CHAPTERS_READ -> totalChapters
-                        GoalType.READING_TIME -> 0 // Reading time tracked separately
-                    }
-                    if (newValue != goal.currentValue) {
-                        goals[index] = goal.copy(currentValue = newValue)
-                        changed = true
-                    }
-                }
-            }
+        dataStore.edit { store ->
+            store[totalPagesReadKey] = totalPages
+            store[totalChaptersReadKey] = totalChapters
             if (changed) {
-                prefs[goalsKey] = goalsToJson(goals)
+                store[achievementsKey] = achievementsToJson(mergedAchievements)
             }
+            if (goalsChanged) {
+                store[goalsKey] = goalsToJson(goals)
+            }
+        }
+
+        // Throttled Firestore sync — max once every 30 minutes
+        val lastSync = prefs[lastFirestoreSyncKey] ?: 0L
+        if (now - lastSync > FIRESTORE_SYNC_INTERVAL_MS) {
+            dataStore.edit { it[lastFirestoreSyncKey] = now }
+            syncToFirestore()
         }
     }
 
     private suspend fun syncToFirestore() {
         try {
+            val uid = sessionManager.ensureGuestSession() ?: return
             val prefs = dataStore.data.first()
             val data = mapOf(
                 "totalPagesRead" to (prefs[totalPagesReadKey] ?: 0),
@@ -251,7 +259,7 @@ class AchievementManager @Inject constructor(
                 "lastUpdated" to System.currentTimeMillis()
             )
             firestore.collection("user_achievements")
-                .document("local_user")
+                .document(uid)
                 .set(data, SetOptions.merge())
                 .await()
         } catch (_: Exception) {

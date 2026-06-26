@@ -52,6 +52,19 @@ class FirebaseRemoteConfigManager @Inject constructor() {
                 "source_starz_enabled" to true,
                 "source_mangasid_enabled" to true,
                 "source_meshmanga_enabled" to true,
+                "source_asq3_enabled" to true,
+                "source_lekmanga_enabled" to true,
+                "source_lekmangaonline_enabled" to true,
+                "source_likemanga_enabled" to true,
+                "source_linkmanga_enabled" to true,
+                "source_mangaleko_enabled" to true,
+                "source_mangalionz_enabled" to true,
+                "source_areascans_enabled" to true,
+                "source_hijala_enabled" to true,
+                "source_lavascans_enabled" to true,
+                "source_stellarsaber_enabled" to true,
+                "source_procomic_enabled" to true,
+                "source_rockmanga_enabled" to true,
                 "scraper_selector_overrides" to "{}",
                 "scraper_connect_timeout_seconds" to 30,
                 "scraper_read_timeout_seconds" to 30,
@@ -81,6 +94,19 @@ class FirebaseRemoteConfigManager @Inject constructor() {
             if (!remoteConfig.getBoolean("source_starz_enabled")) add("starz")
             if (!remoteConfig.getBoolean("source_mangasid_enabled")) add("mangasid")
             if (!remoteConfig.getBoolean("source_meshmanga_enabled")) add("meshmanga")
+            if (!remoteConfig.getBoolean("source_asq3_enabled")) add("asq3")
+            if (!remoteConfig.getBoolean("source_lekmanga_enabled")) add("lekmanga")
+            if (!remoteConfig.getBoolean("source_lekmangaonline_enabled")) add("lekmangaonline")
+            if (!remoteConfig.getBoolean("source_likemanga_enabled")) add("likemanga")
+            if (!remoteConfig.getBoolean("source_linkmanga_enabled")) add("linkmanga")
+            if (!remoteConfig.getBoolean("source_mangaleko_enabled")) add("mangaleko")
+            if (!remoteConfig.getBoolean("source_mangalionz_enabled")) add("mangalionz")
+            if (!remoteConfig.getBoolean("source_areascans_enabled")) add("areascans")
+            if (!remoteConfig.getBoolean("source_hijala_enabled")) add("hijala")
+            if (!remoteConfig.getBoolean("source_lavascans_enabled")) add("lavascans")
+            if (!remoteConfig.getBoolean("source_stellarsaber_enabled")) add("stellarsaber")
+            if (!remoteConfig.getBoolean("source_procomic_enabled")) add("procomic")
+            if (!remoteConfig.getBoolean("source_rockmanga_enabled")) add("rockmanga")
         }
         _disabledSourceIds.value = disabled
 
