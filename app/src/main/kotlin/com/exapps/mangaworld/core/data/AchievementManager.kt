@@ -3,6 +3,7 @@ package com.exapps.mangaworld.core.data
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
@@ -64,7 +65,7 @@ class AchievementManager @Inject constructor(
     private val achievementsKey = stringPreferencesKey("achievements")
     private val totalPagesReadKey = intPreferencesKey("total_pages_read")
     private val totalChaptersReadKey = intPreferencesKey("total_chapters_read")
-    private val lastFirestoreSyncKey = intPreferencesKey("last_firestore_sync")
+    private val lastFirestoreSyncKey = longPreferencesKey("last_firestore_sync")
     private val firestore = FirebaseFirestore.getInstance()
 
     // Throttle Firestore syncs to max once every 30 minutes
