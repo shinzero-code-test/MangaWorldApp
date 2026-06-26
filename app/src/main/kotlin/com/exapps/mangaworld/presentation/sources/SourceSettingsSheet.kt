@@ -15,7 +15,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
@@ -213,16 +212,32 @@ private fun SourceSettingAction(
 }
 
 private fun createSourceShortcut(context: Context, source: MangaSource) {
-    val shortcutIntent = AppLaunchIntents.sourceBrowse(context, source.id)
-    shortcutIntent.action = Intent.ACTION_VIEW
+    try {
+        // Build a clean intent without flags — the system adds them for shortcuts
+        val shortcutIntent = Intent(Intent.ACTION_VIEW).apply {
+            data = Uri.parse("mangaworld://screen/source_browse/${source.id}")
+            component = android.content.ComponentName(context, "com.exapps.mangaworld.MainActivity")
+            putExtra("sourceId", source.id)
+        }
 
-    val shortcut = android.content.pm.ShortcutInfo.Builder(context, "source_${source.id}")
-        .setShortLabel(source.displayName)
-        .setLongLabel("${source.displayName} — MangaWorld")
-        .setIcon(android.graphics.drawable.Icon.createWithResource(context, if (source.logoDrawableRes != 0) source.logoDrawableRes else android.R.drawable.ic_menu_search))
-        .setIntent(shortcutIntent)
-        .build()
+        val shortLabel = source.displayName.take(10)
+        val longLabel = "${source.displayName.take(18)} — MangaWorld".take(25)
 
-    val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
-    shortcutManager?.addDynamicShortcuts(mutableListOf(shortcut))
+        val shortcut = android.content.pm.ShortcutInfo.Builder(context, "source_${source.id}")
+            .setShortLabel(shortLabel)
+            .setLongLabel(longLabel)
+            .setIcon(
+                android.graphics.drawable.Icon.createWithResource(
+                    context,
+                    if (source.logoDrawableRes != 0) source.logoDrawableRes else android.R.drawable.ic_menu_search
+                )
+            )
+            .setIntent(shortcutIntent)
+            .build()
+
+        val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
+        shortcutManager?.addDynamicShortcuts(mutableListOf(shortcut))
+    } catch (_: Exception) {
+        // Silently fail — shortcut creation is best-effort
+    }
 }
