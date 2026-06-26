@@ -11,8 +11,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class SourceSettingsState(
-    val enabledSources: Map<String, Boolean> = MangaSource.entries.associateWith { true },
-    val notificationStates: Map<String, Boolean> = MangaSource.entries.associateWith { true }
+    val enabledSources: Map<String, Boolean> = MangaSource.entries.associate { it.id to true },
+    val notificationStates: Map<String, Boolean> = MangaSource.entries.associate { it.id to true }
 )
 
 @HiltViewModel
@@ -32,8 +32,8 @@ class SourcesViewModel @Inject constructor(
             val settings = settingsRepository.getAppSettings().first()
             _state.update {
                 it.copy(
-                    enabledSources = MangaSource.entries.associateWith { source ->
-                        source.id in settings.enabledSources
+                    enabledSources = MangaSource.entries.associate { source ->
+                        source.id to (source.id in settings.enabledSources)
                     }
                 )
             }

@@ -2,6 +2,7 @@ package com.exapps.mangaworld.widgets
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -13,7 +14,8 @@ import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
-import androidx.glance.clickable
+import androidx.glance.action.clickable
+import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
@@ -26,11 +28,9 @@ import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
-import androidx.glance.color.ColorProvider as GlanceColorProvider
-import dagger.hilt.android.EntryPointAccessors
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.core.widget.WidgetEntryPoint
+import dagger.hilt.android.EntryPointAccessors
 
 class WidgetShelf : GlanceAppWidget() {
     override val sizeMode = SizeMode.Single
@@ -104,10 +104,7 @@ private fun ShelfItem(
     Box(
         modifier = GlanceModifier
             .padding(4.dp)
-            .background(GlanceColorProvider(
-                day = android.graphics.Color.parseColor("#1AFFFFFF"),
-                night = android.graphics.Color.parseColor("#33FFFFFF")
-            ))
+            .background(ColorProvider(day = Color(0x1AFFFFFF), night = Color(0x33FFFFFF)))
             .clickable(onClick)
             .padding(horizontal = 8.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
@@ -117,8 +114,7 @@ private fun ShelfItem(
             style = TextStyle(
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium
-            ),
-            maxLines = 1
+            )
         )
     }
 }
