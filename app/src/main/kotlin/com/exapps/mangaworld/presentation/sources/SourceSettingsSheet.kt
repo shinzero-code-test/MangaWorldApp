@@ -213,30 +213,27 @@ private fun SourceSettingAction(
 
 private fun createSourceShortcut(context: Context, source: MangaSource) {
     try {
-        // Build a clean intent without flags — the system adds them for shortcuts
         val shortcutIntent = Intent(Intent.ACTION_VIEW).apply {
             data = Uri.parse("mangaworld://screen/source_browse/${source.id}")
             component = android.content.ComponentName(context, "com.exapps.mangaworld.MainActivity")
             putExtra("sourceId", source.id)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
 
-        val shortLabel = source.displayName.take(10)
-        val longLabel = "${source.displayName.take(18)} — MangaWorld".take(25)
+        val icon = if (source.logoDrawableRes != 0) {
+            androidx.core.graphics.drawable.IconCompat.createWithResource(context, source.logoDrawableRes)
+        } else {
+            androidx.core.graphics.drawable.IconCompat.createWithResource(context, android.R.drawable.ic_menu_search)
+        }
 
-        val shortcut = android.content.pm.ShortcutInfo.Builder(context, "source_${source.id}")
-            .setShortLabel(shortLabel)
-            .setLongLabel(longLabel)
-            .setIcon(
-                android.graphics.drawable.Icon.createWithResource(
-                    context,
-                    if (source.logoDrawableRes != 0) source.logoDrawableRes else android.R.drawable.ic_menu_search
-                )
-            )
+        val shortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(context, "source_${source.id}")
+            .setShortLabel(source.displayName)
+            .setLongLabel(source.displayName)
+            .setIcon(icon)
             .setIntent(shortcutIntent)
             .build()
 
-        val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
-        shortcutManager?.addDynamicShortcuts(mutableListOf(shortcut))
+        androidx.core.content.pm.ShortcutManagerCompat.requestPinShortcut(context, shortcut, null)
     } catch (_: Exception) {
         // Silently fail — shortcut creation is best-effort
     }
