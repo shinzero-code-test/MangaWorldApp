@@ -89,7 +89,7 @@ class ReadingStatsStore @Inject constructor(
                     prefs[currentStreakKey] = 1
                 }
             } else {
-                val lastLocalDate = LocalDate.parse(lastDate, DateTimeFormatter.ISO_LOCAL_DATE)
+                val lastLocalDate = LocalDate.parse(previousDate, DateTimeFormatter.ISO_LOCAL_DATE)
                 val todayLocalDate = LocalDate.parse(today, DateTimeFormatter.ISO_LOCAL_DATE)
                 val daysDiff = java.time.temporal.ChronoUnit.DAYS.between(lastLocalDate, todayLocalDate)
 
