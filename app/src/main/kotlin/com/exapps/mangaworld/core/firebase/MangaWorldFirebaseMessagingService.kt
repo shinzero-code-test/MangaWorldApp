@@ -7,7 +7,6 @@ import android.graphics.BitmapFactory
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
 import com.exapps.mangaworld.MangaWorldApp
-import com.exapps.mangaworld.R
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -17,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.net.URL
+import java.net.HttpURLConnection
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -61,7 +61,7 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
         )
 
         val notificationBuilder = NotificationCompat.Builder(this, MangaWorldApp.CLOUD_CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -70,9 +70,11 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
 
         loadNotificationBitmap(imageUrl)?.let { bitmap ->
+            // Keep BigTextStyle as primary so full text is visible; BigPictureStyle is expanded only
             notificationBuilder.setStyle(
                 NotificationCompat.BigPictureStyle()
                     .bigPicture(bitmap)
+                    .setBigContentTitle(title)
                     .setSummaryText(body)
             )
         }
@@ -84,7 +86,10 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
     private fun loadNotificationBitmap(imageUrl: String?): Bitmap? {
         if (imageUrl.isNullOrBlank()) return null
         return runCatching {
-            URL(imageUrl).openStream().use(BitmapFactory::decodeStream)
+            val connection = URL(imageUrl).openConnection() as HttpURLConnection
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+            connection.inputStream.use(BitmapFactory::decodeStream)
         }.getOrNull()
     }
 }

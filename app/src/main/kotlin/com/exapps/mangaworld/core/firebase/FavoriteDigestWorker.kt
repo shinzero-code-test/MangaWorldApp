@@ -9,7 +9,6 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.exapps.mangaworld.MangaWorldApp
-import com.exapps.mangaworld.R
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.domain.model.NotificationDeliveryMode
 import com.exapps.mangaworld.domain.repository.LibraryRepository
@@ -48,19 +47,23 @@ class FavoriteDigestWorker @AssistedInject constructor(
         val intent = AppLaunchIntents.latestUpdates(applicationContext)
         val pendingIntent = PendingIntent.getActivity(
             applicationContext,
-            5001,
+            5002,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notification = NotificationCompat.Builder(applicationContext, MangaWorldApp.CLOUD_CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
-        applicationContext.getSystemService<NotificationManager>()?.notify(5001, notification)
+        applicationContext.getSystemService<NotificationManager>()?.notify(NOTIFICATION_ID_DAILY_DIGEST, notification)
         return Result.success()
+    }
+
+    companion object {
+        private const val NOTIFICATION_ID_DAILY_DIGEST = 5002
     }
 }

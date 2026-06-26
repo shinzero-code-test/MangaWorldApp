@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.firebase
 
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
@@ -8,8 +9,8 @@ import androidx.core.app.NotificationCompat
 import com.exapps.mangaworld.MangaWorldApp
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
-import com.exapps.mangaworld.core.data.local.entity.FavoriteEntity
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
+import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
@@ -20,11 +21,29 @@ import javax.inject.Singleton
 class NotificationPolicyManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val favoriteDao: FavoriteDao,
-    private val historyDao: ReadingHistoryDao
+    private val historyDao: ReadingHistoryDao,
+    private val settingsRepository: SettingsRepository
 ) {
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+    init {
+        // Create a low-importance channel for reminders (separate from CLOUD_CHANNEL_ID which is HIGH)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            notificationManager.createNotificationChannel(
+                NotificationChannel(
+                    REMINDER_CHANNEL_ID,
+                    "تذكيرات القراءة",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply { description = "تذكيرات غير مزعجة للمتابعة" }
+            )
+        }
+    }
+
     suspend fun checkAndSendReminders() {
+        // Respect the user's notification preference
+        val settings = settingsRepository.getAppSettings().first()
+        if (!settings.enableNotifications) return
+
         val prefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
 
         // Throttle: only send inactivity reminders once per 24 hours
@@ -32,11 +51,9 @@ class NotificationPolicyManager @Inject constructor(
         val now = System.currentTimeMillis()
         if (now - lastInactivitySent < 24 * 60 * 60 * 1000L) return
 
-        val favorites = favoriteDao.getFavoritesList()
-        val history = historyDao.getAll()
+        // Use optimized query instead of loading entire history
+        val lastRead = historyDao.getLatest()
 
-        // Check for inactive users (no reads in 3 days)
-        val lastRead = history.maxByOrNull { it.lastReadAt }
         if (lastRead != null) {
             val daysSinceLastRead = TimeUnit.MILLISECONDS.toDays(
                 now - lastRead.lastReadAt
@@ -45,12 +62,6 @@ class NotificationPolicyManager @Inject constructor(
                 sendInactivityReminder(lastRead.title)
                 prefs.edit().putLong("last_inactivity_sent", now).apply()
             }
-        }
-
-        // Check for favorites with new chapters (simplified - in real app would check remote)
-        favorites.take(3).forEach { favorite ->
-            // In a real implementation, we'd check if there are new chapters
-            // For now, we just track the favorites for potential notifications
         }
     }
 
@@ -87,7 +98,8 @@ class NotificationPolicyManager @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(context, MangaWorldApp.CLOUD_CHANNEL_ID)
+        // Use low-importance reminder channel (created in init block)
+        val notification = NotificationCompat.Builder(context, REMINDER_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle("لم نرك منذ فترة!")
             .setContentText("هل تريد المتابعة في قراءة \"$lastMangaTitle\"؟")
@@ -100,7 +112,6 @@ class NotificationPolicyManager @Inject constructor(
     }
 
     fun muteMangaNotifications(mangaId: String) {
-        // Store muted manga IDs in SharedPreferences
         val prefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
         val muted = prefs.getStringSet("muted_manga", emptySet()) ?: emptySet()
         prefs.edit().putStringSet("muted_manga", muted + mangaId).apply()
@@ -122,5 +133,6 @@ class NotificationPolicyManager @Inject constructor(
         private const val NOTIFICATION_ID_FAVORITE_UPDATE = 5000
         private const val NOTIFICATION_ID_INACTIVITY = 5001
         private const val REMINDER_REQUEST_CODE = 1001
+        private const val REMINDER_CHANNEL_ID = "reminder_channel"
     }
 }

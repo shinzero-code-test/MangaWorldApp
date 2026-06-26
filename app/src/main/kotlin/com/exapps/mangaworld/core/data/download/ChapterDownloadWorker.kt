@@ -160,6 +160,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
 
     private fun buildForegroundInfo(title: String, done: Int, total: Int, mangaId: String, chapterUrl: String): ForegroundInfo {
         val sourceId = mangaId.substringBefore('_')
+        val chapterNotifId = NOTIF_ID_PROGRESS + Math.abs(chapterUrl.hashCode() % 9000)
         val notification = NotificationCompat.Builder(appContext, MangaWorldApp.DOWNLOAD_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_shortcut_downloads)
             .setContentTitle("جاري تنزيل $title")
@@ -178,9 +179,9 @@ class ChapterDownloadWorker @AssistedInject constructor(
             )
             .build()
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ForegroundInfo(NOTIF_ID_PROGRESS, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            ForegroundInfo(chapterNotifId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
-            ForegroundInfo(NOTIF_ID_PROGRESS, notification)
+            ForegroundInfo(chapterNotifId, notification)
         }
     }
 
