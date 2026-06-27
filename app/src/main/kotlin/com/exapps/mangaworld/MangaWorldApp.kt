@@ -98,8 +98,8 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "favorite_digest_periodic",
-            ExistingPeriodicWorkPolicy.KEEP,
-            PeriodicWorkRequestBuilder<FavoriteDigestWorker>(24, TimeUnit.HOURS)
+            ExistingPeriodicWorkPolicy.UPDATE,
+            PeriodicWorkRequestBuilder<FavoriteDigestWorker>(6, TimeUnit.HOURS)
                 .setConstraints(constraints)
                 .build()
         )

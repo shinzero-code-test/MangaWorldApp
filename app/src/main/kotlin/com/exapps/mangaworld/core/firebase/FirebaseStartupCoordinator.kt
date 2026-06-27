@@ -16,7 +16,8 @@ class FirebaseStartupCoordinator @Inject constructor(
     private val topicManager: FirebaseTopicManager,
     private val messagingRegistrar: FirebaseMessagingRegistrar,
     private val userInsightsCoordinator: FirebaseUserInsightsCoordinator,
-    private val notificationPolicyManager: NotificationPolicyManager
+    private val notificationPolicyManager: NotificationPolicyManager,
+    private val chapterUpdateChecker: ChapterUpdateChecker
 ) {
     private val prefs by lazy {
         context.getSharedPreferences("firebase_startup_prefs", Context.MODE_PRIVATE)
@@ -40,5 +41,8 @@ class FirebaseStartupCoordinator @Inject constructor(
             favoriteDao.getFavoritesList().forEach { topicManager.subscribeToManga(it.mangaId) }
         }
         runCatching { notificationPolicyManager.checkAndSendReminders() }
+
+        // Check for new chapters on favorites (local, no FCM needed)
+        runCatching { chapterUpdateChecker.checkForUpdates() }
     }
 }
