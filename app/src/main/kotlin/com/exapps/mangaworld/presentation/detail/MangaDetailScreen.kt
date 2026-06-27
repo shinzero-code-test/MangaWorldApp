@@ -41,6 +41,7 @@ import com.exapps.mangaworld.presentation.theme.MangaColors
 fun MangaDetailScreen(
     source: MangaSource,
     slug: String,
+    rawSourceId: String = source.id,
     onChapterClick: (chapterUrl: String, mangaId: String) -> Unit,
     onOpenCommunity: (mangaId: String) -> Unit,
     onOpenChapterCommunity: (mangaId: String, chapterUrl: String) -> Unit,
@@ -48,7 +49,7 @@ fun MangaDetailScreen(
     onBack: () -> Unit,
     viewModel: MangaDetailViewModel = hiltViewModel()
 ) {
-    LaunchedEffect(slug, source) { viewModel.load(slug, source) }
+    LaunchedEffect(slug, source) { viewModel.load(slug, source, rawSourceId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
 

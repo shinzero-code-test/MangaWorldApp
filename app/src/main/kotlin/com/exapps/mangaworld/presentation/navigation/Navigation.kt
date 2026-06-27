@@ -268,7 +268,8 @@ fun MangaNavGraph(navController: NavHostController) {
             route = Screen.SourceBrowse.route,
             arguments = listOf(
                 navArgument("sourceId") { type = NavType.StringType }
-            )
+            ),
+            deepLinks = listOf(navDeepLink { uriPattern = "mangaworld://screen/source_browse/{sourceId}" })
         ) { back ->
             val sourceId = back.arguments?.getString("sourceId") ?: return@composable
             SourceBrowseScreen(
@@ -321,6 +322,7 @@ fun MangaNavGraph(navController: NavHostController) {
             val slug     = back.arguments?.getString("slug") ?: return@composable
             MangaDetailScreen(
                 source = MangaSource.fromId(sourceId), slug = slug,
+                rawSourceId = sourceId,
                 onChapterClick = { chapterUrl, mangaId ->
                     navController.navigate(Screen.Reader.createRoute(sourceId, mangaId, chapterUrl))
                 },

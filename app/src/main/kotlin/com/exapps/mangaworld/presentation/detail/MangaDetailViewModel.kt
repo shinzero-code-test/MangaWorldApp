@@ -65,12 +65,13 @@ class MangaDetailViewModel @Inject constructor(
     private var currentMangaId: String = ""
     private var currentSource: MangaSource = MangaSource.AZORA
     private var currentSlug: String = ""
+    private var currentRawSourceId: String = ""
 
     // One job for the network fetch, one for the ongoing observers
     private var loadJob: Job? = null
     private var observersJob: Job? = null
 
-    fun load(slug: String, source: MangaSource) {
+    fun load(slug: String, source: MangaSource, rawSourceId: String = source.id) {
         // Skip if already loaded and nothing changed
         if (slug == currentSlug && source == currentSource
             && !_state.value.isLoading
@@ -80,6 +81,7 @@ class MangaDetailViewModel @Inject constructor(
 
         currentSlug = slug
         currentSource = source
+        currentRawSourceId = rawSourceId
         // For imported/downloaded manga, the slug IS the mangaId (starts with "imported_")
         currentMangaId = if (slug.startsWith("imported_")) slug else "${source.id}_$slug"
 
@@ -90,8 +92,8 @@ class MangaDetailViewModel @Inject constructor(
         // All manga live on disk: imported manga is always local;
         // downloaded manga uses local metadata.json + chapter dirs until
         // the user explicitly refreshes from the online source.
-        // source.id == "local" means it was routed from LocalStorageScreen for imported manga
-        val isLocalManga = source.id == "local" || source.id == "imported"
+        // rawSourceId == "local" means it was routed from LocalStorageScreen for imported manga
+        val isLocalManga = rawSourceId == "local" || rawSourceId == "imported"
             || slug.startsWith("imported_") || hasLocalData(currentMangaId)
         if (isLocalManga) {
             loadFromLocalDisk(slug, source)
