@@ -52,6 +52,9 @@ enum class MangaSource(
             return found ?: AZORA
         }
 
+        /** Returns null for unknown source IDs instead of falling back. Use in navigation. */
+        fun fromIdOrNull(id: String): MangaSource? = entries.find { it.id == id }
+
         /** Check if the sourceId represents a local/imported manga (not an online source) */
         fun isLocalSource(id: String): Boolean = id == "imported" || id == "local"
 

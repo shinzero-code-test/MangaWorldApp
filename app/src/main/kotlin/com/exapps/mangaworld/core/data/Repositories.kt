@@ -56,21 +56,22 @@ private fun String.toChapterList(): List<Chapter> = runCatching {
 
 // ─── Cache entity conversions ─────────────────────────────────────────────────
 
-internal fun MangaCacheEntity.toDetail(source: MangaSource) = MangaDetail(
-    id = mangaId, slug = slug, title = title, coverUrl = coverUrl,
-    source = source, description = description,
-    genres = runCatching {
+internal fun MangaCacheEntity.toDetail(source: MangaSource): MangaDetail {
+    val parsedGenres = runCatching {
         val a = JSONArray(genresJson); (0 until a.length()).map { a.getString(it) }
-    }.getOrDefault(emptyList()),
-    tags = runCatching {
-        val a = JSONArray(genresJson); (0 until a.length()).map { a.getString(it) }
-    }.getOrDefault(emptyList()),
-    status = runCatching { MangaStatus.valueOf(statusStr) }.getOrDefault(MangaStatus.UNKNOWN),
-    type = runCatching { MangaType.valueOf(typeStr) }.getOrDefault(MangaType.UNKNOWN),
-    totalChapters = totalChapters ?: 0,
-    url = url, rating = rating,
-    chapters = chaptersJson.toChapterList()
-)
+    }.getOrDefault(emptyList())
+    return MangaDetail(
+        id = mangaId, slug = slug, title = title, coverUrl = coverUrl,
+        source = source, description = description,
+        genres = parsedGenres,
+        tags = parsedGenres,
+        status = runCatching { MangaStatus.valueOf(statusStr) }.getOrDefault(MangaStatus.UNKNOWN),
+        type = runCatching { MangaType.valueOf(typeStr) }.getOrDefault(MangaType.UNKNOWN),
+        totalChapters = totalChapters ?: 0,
+        url = url, rating = rating,
+        chapters = chaptersJson.toChapterList()
+    )
+}
 
 internal fun MangaDetail.toCacheEntity() = MangaCacheEntity(
     mangaId = id, slug = slug, title = title, coverUrl = coverUrl,

@@ -293,7 +293,7 @@ fun MangaNavGraph(navController: NavHostController) {
         composable(Screen.ImportManga.route) {
             ImportMangaScreen(
                 onBack = { navController.popBackStack() },
-                onImportComplete = { /* Refresh local storage */ }
+                onImportComplete = { navController.popBackStack() }
             )
         }
         composable(Screen.Suggestions.route) {
@@ -306,8 +306,8 @@ fun MangaNavGraph(navController: NavHostController) {
             LoginScreen(
                 onLoginClick = { _, _ -> navController.navigate(Screen.Home.route) },
                 onGoogleSignInClick = { navController.navigate(Screen.Home.route) },
-                onForgotPasswordClick = { },
-                onSignUpClick = { }
+                onForgotPasswordClick = { navController.popBackStack() },
+                onSignUpClick = { navController.popBackStack() }
             )
         }
         composable(
@@ -320,8 +320,9 @@ fun MangaNavGraph(navController: NavHostController) {
         ) { back ->
             val sourceId = back.arguments?.getString("sourceId") ?: return@composable
             val slug     = back.arguments?.getString("slug") ?: return@composable
+            val source = MangaSource.fromIdOrNull(sourceId) ?: return@composable
             MangaDetailScreen(
-                source = MangaSource.fromId(sourceId), slug = slug,
+                source = source, slug = slug,
                 rawSourceId = sourceId,
                 onChapterClick = { chapterUrl, mangaId ->
                     navController.navigate(Screen.Reader.createRoute(sourceId, mangaId, chapterUrl))
@@ -351,8 +352,9 @@ fun MangaNavGraph(navController: NavHostController) {
             val chapterUrl = java.net.URLDecoder.decode(
                 back.arguments?.getString("chapterUrl") ?: "", "UTF-8"
             )
+            val source = MangaSource.fromIdOrNull(sourceId) ?: return@composable
             ReaderScreen(
-                source = MangaSource.fromId(sourceId), mangaId = mangaId,
+                source = source, mangaId = mangaId,
                 chapterUrl = chapterUrl,
                 onBack = { navController.popBackStack() },
                 onOpenCommunity = {
@@ -376,8 +378,9 @@ fun MangaNavGraph(navController: NavHostController) {
             val sourceId = back.arguments?.getString("sourceId") ?: return@composable
             val mangaId = back.arguments?.getString("mangaId") ?: return@composable
             val chapterUrl = back.arguments?.getString("chapterUrl") ?: return@composable
+            val source = MangaSource.fromIdOrNull(sourceId) ?: return@composable
             ReaderScreen(
-                source = MangaSource.fromId(sourceId),
+                source = source,
                 mangaId = mangaId,
                 chapterUrl = chapterUrl,
                 onBack = { navController.popBackStack() },

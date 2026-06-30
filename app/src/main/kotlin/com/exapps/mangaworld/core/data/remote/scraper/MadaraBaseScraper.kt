@@ -416,11 +416,11 @@ open class MadaraBaseScraper(
                 .post(FormBody.Builder().build())
                 .build()
 
-            val response = withContext(Dispatchers.IO) {
-                client.newCall(ajaxRequest).execute()
+            val body = withContext(Dispatchers.IO) {
+                client.newCall(ajaxRequest).execute().use { response ->
+                    response.body?.string() ?: ""
+                }
             }
-            val body = response.body?.string() ?: ""
-            response.close()
 
             if (body.isNotBlank() && body.contains("wp-manga-chapter")) {
                 val chapDoc = Jsoup.parse(body, source.baseUrl)
@@ -458,8 +458,7 @@ open class MadaraBaseScraper(
                             .build()
                         val (bodyStr, json) = withContext(Dispatchers.IO) {
                             val response = client.newCall(ajaxRequest).execute()
-                            val body = response.body?.string() ?: "{}"
-                            response.close()
+                            val body = response.use { it.body?.string() ?: "{}" }
                             body to JSONObject(body)
                         }
                         if (json.optBoolean("success", false)) {
