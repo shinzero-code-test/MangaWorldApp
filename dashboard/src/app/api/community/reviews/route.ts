@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
+import { getAdminDb } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,10 +13,10 @@ export async function GET(request: NextRequest) {
 
     let reviews: any[] = [];
     if (mangaId) {
-      const snap = await adminDb.collection("community_manga").doc(mangaId).collection("reviews").orderBy("createdAt", "desc").limit(limit).get();
+      const snap = await getAdminDb().collection("community_manga").doc(mangaId).collection("reviews").orderBy("createdAt", "desc").limit(limit).get();
       reviews = snap.docs.map((d) => ({ id: d.id, mangaId, ...d.data() }));
     } else {
-      const mangas = await adminDb.collection("community_manga").limit(20).get();
+      const mangas = await getAdminDb().collection("community_manga").limit(20).get();
       for (const manga of mangas.docs) {
         const revSnap = await manga.ref.collection("reviews").orderBy("createdAt", "desc").limit(5).get();
         reviews.push(...revSnap.docs.map((d) => ({ id: d.id, mangaId: manga.id, ...d.data() })));
@@ -33,7 +35,7 @@ export async function DELETE(request: NextRequest) {
     await requireRole("moderator");
     const { reviewId, mangaId } = await request.json();
     if (!reviewId || !mangaId) return NextResponse.json({ error: "Missing params" }, { status: 400 });
-    await adminDb.collection("community_manga").doc(mangaId).collection("reviews").doc(reviewId).delete();
+    await getAdminDb().collection("community_manga").doc(mangaId).collection("reviews").doc(reviewId).delete();
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: error.message === "Forbidden" ? 403 : 500 });

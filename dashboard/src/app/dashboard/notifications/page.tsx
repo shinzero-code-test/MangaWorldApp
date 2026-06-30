@@ -1,161 +1,207 @@
 "use client";
+import { useEffect, useState } from "react";
+import { Bell, Smartphone, Megaphone, BookOpen, RefreshCcw, Check, Send, Loader2, CheckCircle2 } from "lucide-react";
+import { PageHeader, StatusBadge, EmptyState } from "@/components/ui";
+import { formatRelative } from "@/lib/utils";
 
-import { useState, useEffect } from "react";
+const TOPICS = [
+  { id:"general",     label:"عام",              desc:"إشعار لجميع المستخدمين",    icon:Megaphone,  color:"var(--primary)"  },
+  { id:"updates",     label:"تحديثات المانجا",   desc:"للمشتركين في التحديثات",    icon:BookOpen,   color:"#10b981"         },
+  { id:"maintenance", label:"صيانة / تحديث",    desc:"إشعارات تقنية",             icon:RefreshCcw, color:"#f59e0b"         },
+];
 
-interface NotificationHistory {
-  id: string;
-  title: string;
-  body: string;
-  topic?: string;
-  sentAt: number;
-  status: string;
+interface HistoryItem {
+  id:string; title:string; body:string; topic?:string; sentAt:string|number; status?:string;
 }
 
 export default function NotificationsPage() {
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [topic, setTopic] = useState("all");
-  const [sending, setSending] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [tokenCount, setTokenCount] = useState(0);
-  const [history, setHistory] = useState<NotificationHistory[]>([]);
-  const [activeTab, setActiveTab] = useState<"send" | "history">("send");
+  const [tab,          setTab]          = useState<"send"|"history">("send");
+  const [topic,        setTopic]        = useState("general");
+  const [title,        setTitle]        = useState("");
+  const [body,         setBody]         = useState("");
+  const [deviceCount,  setDeviceCount]  = useState<number|null>(null);
+  const [sending,      setSending]      = useState(false);
+  const [sent,         setSent]         = useState(false);
+  const [error,        setError]        = useState("");
+  const [history,      setHistory]      = useState<HistoryItem[]>([]);
+  const [histLoading,  setHistLoading]  = useState(false);
 
   useEffect(() => {
-    fetch("/api/notifications/tokens").then(r => r.json()).then(d => setTokenCount(d.tokens?.length || 0));
-    fetch("/api/notifications/history").then(r => r.json()).then(d => setHistory(d.history || []));
+    // API returns { tokens: [{token, platform, updatedAt}] }
+    fetch("/api/notifications/tokens")
+      .then(r => r.json())
+      .then(d => setDeviceCount((d.tokens ?? []).length))
+      .catch(() => setDeviceCount(null));
   }, []);
 
-  const send = async () => {
+  useEffect(() => {
+    if (tab !== "history") return;
+    setHistLoading(true);
+    fetch("/api/notifications/history")
+      .then(r => r.json())
+      .then(d => setHistory(d.history ?? []))
+      .catch(() => setHistory([]))
+      .finally(() => setHistLoading(false));
+  }, [tab]);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!title.trim() || !body.trim()) return;
-    setSending(true);
-    setResult(null);
+    setSending(true); setError("");
     try {
       const res = await fetch("/api/notifications/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), body: body.trim(), topic }),
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ title, body: body, topic }),
       });
-      const data = await res.json();
-      if (data.success) {
-        // Save to history
-        await fetch("/api/notifications/history", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: title.trim(), body: body.trim(), topic }),
-        });
-        setResult({ success: true, message: `تم الإرسال بنجاح! (${data.sent || 1} مستلم)` });
-        setTitle("");
-        setBody("");
-        // Refresh history
-        fetch("/api/notifications/history").then(r => r.json()).then(d => setHistory(d.history || []));
-      } else {
-        setResult({ success: false, message: data.error || "خطأ" });
-      }
-    } catch { setResult({ success: false, message: "خطأ في الاتصال" }); }
-    setSending(false);
+      if (!res.ok) throw new Error((await res.json()).error || "خطأ في الإرسال");
+      setSent(true); setTimeout(() => setSent(false), 3000);
+      setTitle(""); setBody("");
+    } catch (e:any) { setError(e.message); }
+    finally { setSending(false); }
   };
 
-  const topics = [
-    { value: "all", label: "جميع المستخدمين", desc: "إرسال للجميع", icon: "📢" },
-    { value: "new_chapters", label: "الفصول الجديدة", desc: "إشعار بفصل جديد", icon: "📖" },
-    { value: "updates", label: "التحديثات", desc: "إشعار بتحديث", icon: "🔄" },
-  ];
+  const topicLabel = (id?:string) => TOPICS.find(t => t.id===id)?.label ?? (id || "—");
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">الإشعارات</h3>
-        <span className="text-xs text-[var(--muted-foreground)]">📱 {tokenCount} جهاز مسجل</span>
-      </div>
+      <PageHeader
+        title="الإشعارات"
+        subtitle="إرسال إشعارات FCM لمستخدمي التطبيق"
+        icon={Bell}
+        actions={deviceCount !== null ? (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm"
+            style={{ background:"var(--accent)", color:"var(--primary)" }}>
+            <Smartphone size={15} />
+            <span className="font-semibold">{deviceCount.toLocaleString("ar-SA")}</span>
+            <span style={{ color:"var(--muted-foreground)" }}>جهاز مسجّل</span>
+          </div>
+        ) : undefined}
+      />
 
-      {/* Tabs */}
-      <div className="flex gap-2 bg-[var(--card)] p-1 rounded-xl border border-[var(--border)]">
-        {(["send", "history"] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === tab ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "text-[var(--muted-foreground)]"}`}>
-            {tab === "send" ? "إرسال" : "السجل"}
+      <div className="flex gap-1 p-1 rounded-[var(--radius-lg)]" style={{ background:"var(--muted)" }}>
+        {[{id:"send" as const,label:"إرسال"},{id:"history" as const,label:"السجل"}].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className="flex-1 py-2 rounded-[var(--radius-md)] text-sm font-medium transition-all"
+            style={{ background:tab===t.id?"var(--card)":"transparent", color:tab===t.id?"var(--foreground)":"var(--muted-foreground)", boxShadow:tab===t.id?"0 1px 3px rgba(0,0,0,0.15)":undefined }}>
+            {t.label}
           </button>
         ))}
       </div>
 
-      {activeTab === "send" ? (
-        <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-6 space-y-5">
-          {/* Topic Selection */}
-          <div>
-            <label className="block text-sm font-medium mb-2">المستلمون</label>
-            <div className="grid grid-cols-3 gap-2">
-              {topics.map(t => (
-                <button key={t.value} onClick={() => setTopic(t.value)}
-                  className={`p-3 rounded-lg border text-right transition ${topic === t.value ? "border-[var(--primary)] bg-[var(--primary)]/5" : "border-[var(--border)] hover:bg-[var(--accent)]"}`}>
-                  <span className="text-lg block mb-1">{t.icon}</span>
-                  <p className="text-sm font-medium">{t.label}</p>
-                  <p className="text-xs text-[var(--muted-foreground)]">{t.desc}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">العنوان *</label>
-            <input value={title} onChange={e => setTitle(e.target.value)} maxLength={100}
-              className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-sm" placeholder="عنوان الإشعار" />
-            <p className="text-xs text-[var(--muted-foreground)] mt-1">{title.length}/100</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">النص *</label>
-            <textarea value={body} onChange={e => setBody(e.target.value)} maxLength={500} className="w-full h-32 px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-sm resize-none" placeholder="نص الإشعار" />
-            <p className="text-xs text-[var(--muted-foreground)] mt-1">{body.length}/500</p>
-          </div>
-
-          {(title || body) && (
-            <div className="p-4 bg-[var(--background)] rounded-lg border border-[var(--border)]">
-              <p className="text-xs text-[var(--muted-foreground)] mb-2">معاينة:</p>
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[var(--primary)]/10 flex items-center justify-center text-lg shrink-0">📱</div>
-                <div>
-                  <p className="text-sm font-medium">{title || "عنوان الإشعار"}</p>
-                  <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{body || "نص الإشعار"}</p>
-                </div>
+      {tab === "send" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <form onSubmit={handleSend} className="space-y-5">
+            <div>
+              <p className="text-sm font-medium mb-3">الموضوع</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {TOPICS.map(t => {
+                  const Icon   = t.icon;
+                  const active = topic === t.id;
+                  return (
+                    <button key={t.id} type="button" onClick={() => setTopic(t.id)}
+                      className="p-4 rounded-[var(--radius-lg)] border text-start transition-all"
+                      style={{ background:active?`${t.color}10`:"var(--card)", borderColor:active?t.color:"var(--border)", borderWidth:active?2:1 }}>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background:`${t.color}15` }}>
+                          <Icon size={15} style={{ color:t.color }} />
+                        </div>
+                        {active && <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background:t.color }}><Check size={11} className="text-white" /></div>}
+                      </div>
+                      <p className="font-semibold text-sm">{t.label}</p>
+                      <p className="text-xs mt-0.5" style={{ color:"var(--muted-foreground)" }}>{t.desc}</p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          )}
 
-          {result && (
-            <div className={`p-3 rounded-lg text-sm font-medium ${result.success ? "bg-green-500/10 text-green-600 border border-green-500/20" : "bg-red-500/10 text-red-600 border border-red-500/20"}`}>
-              {result.success ? "✓ " : "✗ "}{result.message}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">العنوان</label>
+                <span className="text-xs" style={{ color:"var(--muted-foreground)" }}>{title.length}/60</span>
+              </div>
+              <input type="text" value={title} onChange={e => setTitle(e.target.value.slice(0,60))}
+                placeholder="عنوان الإشعار" className="w-full" required />
             </div>
-          )}
 
-          <button onClick={send} disabled={sending || !title.trim() || !body.trim()}
-            className="w-full py-3 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] font-medium hover:opacity-90 disabled:opacity-50 transition">
-            {sending ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />جاري الإرسال...</span> : "إرسال الإشعار"}
-          </button>
-        </div>
-      ) : (
-        <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] overflow-hidden">
-          {history.length === 0 ? (
-            <div className="p-12 text-center text-[var(--muted-foreground)]">
-              <span className="text-4xl block mb-3">📬</span>
-              لا يوجد سجل إشعارات
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">نص الإشعار</label>
+                <span className="text-xs" style={{ color:"var(--muted-foreground)" }}>{body.length}/200</span>
+              </div>
+              <textarea value={body} onChange={e => setBody(e.target.value.slice(0,200))}
+                placeholder="نص الإشعار الذي سيراه المستخدمون..." rows={4}
+                className="w-full resize-none" required />
             </div>
-          ) : (
-            <div className="divide-y divide-[var(--border)]">
-              {history.map(h => (
-                <div key={h.id} className="px-5 py-4 hover:bg-[var(--accent)]/50 transition">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium">{h.title}</span>
-                    <span className="text-xs text-[var(--muted-foreground)]">
-                      {h.sentAt ? new Date(h.sentAt).toLocaleString("ar-SA") : ""}
-                    </span>
+
+            {error && <p className="text-sm" style={{ color:"var(--destructive)" }}>{error}</p>}
+
+            <button type="submit" disabled={sending||!title.trim()||!body.trim()}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
+              style={{ background:"var(--primary)", color:"var(--primary-foreground)" }}>
+              {sending ? <Loader2 size={16} className="animate-spin" /> : sent ? <CheckCircle2 size={16} /> : <Send size={16} />}
+              {sending?"جاري الإرسال...":sent?"تم الإرسال!":"إرسال الإشعار"}
+            </button>
+          </form>
+
+          <div>
+            <p className="text-sm font-medium mb-3">معاينة مباشرة</p>
+            <div className="rounded-[var(--radius-xl)] border p-5" style={{ background:"var(--muted)", borderColor:"var(--border)" }}>
+              <div className="rounded-xl border p-4" style={{ background:"var(--background)", borderColor:"var(--border)" }}>
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background:"color-mix(in srgb, var(--primary) 10%, transparent)" }}>
+                    <Smartphone size={18} style={{ color:"var(--primary)" }} />
                   </div>
-                  <p className="text-sm text-[var(--muted-foreground)] line-clamp-1">{h.body}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    {h.topic && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent)]">{h.topic}</span>}
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${h.status === "sent" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                      {h.status === "sent" ? "مرسل" : "فشل"}
-                    </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium" style={{ color:"var(--muted-foreground)" }}>MangaWorld</p>
+                      <p className="text-xs" style={{ color:"var(--muted-foreground)" }}>الآن</p>
+                    </div>
+                    <p className="text-sm font-semibold mt-0.5 line-clamp-1" style={{ color:title?"var(--foreground)":"var(--muted-foreground)" }}>
+                      {title || "عنوان الإشعار"}
+                    </p>
+                    <p className="text-xs mt-0.5 line-clamp-2" style={{ color:"var(--muted-foreground)" }}>
+                      {body || "نص الإشعار الذي سيراه المستخدمون..."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ background:"var(--success)" }} />
+                <p className="text-xs" style={{ color:"var(--muted-foreground)" }}>
+                  سيُرسل إلى موضوع: <strong>{topicLabel(topic)}</strong>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "history" && (
+        <div className="rounded-[var(--radius-lg)] border overflow-hidden" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+          {histLoading ? (
+            <div className="p-8 flex justify-center"><Loader2 size={22} className="animate-spin" style={{ color:"var(--primary)" }} /></div>
+          ) : history.length === 0 ? (
+            <EmptyState icon={Bell} title="لا يوجد سجل إشعارات" description="لم يتم إرسال أي إشعارات بعد" />
+          ) : (
+            <div className="divide-y" style={{ borderColor:"var(--border)" }}>
+              {history.map(item => (
+                <div key={item.id} className="flex items-start gap-4 px-5 py-4">
+                  <div className="w-2 h-2 mt-2 rounded-full shrink-0"
+                    style={{ background: item.status==="sent"?"var(--success)":"var(--destructive)" }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-sm">{item.title}</p>
+                      {item.topic && (
+                        <span className="text-xs px-2 py-0.5 rounded-full font-mono" style={{ background:"var(--muted)", color:"var(--muted-foreground)" }}>
+                          {topicLabel(item.topic)}
+                        </span>
+                      )}
+                      <StatusBadge status={item.status==="sent"?"active":"banned"} label={item.status==="sent"?"أُرسل":"فشل"} size="sm" />
+                    </div>
+                    <p className="text-sm mt-0.5 line-clamp-1" style={{ color:"var(--muted-foreground)" }}>{item.body}</p>
+                    <p className="text-xs mt-1" style={{ color:"var(--muted-foreground)" }}>{formatRelative(item.sentAt)}</p>
                   </div>
                 </div>
               ))}

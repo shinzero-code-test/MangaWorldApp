@@ -1,139 +1,198 @@
 "use client";
-
 import { useEffect, useState } from "react";
+import {
+  TrendingUp, Sparkles, BookOpen, Clock, Star, Users
+} from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  AreaChart, Area, PieChart, Pie, Cell
+} from "recharts";
+import { PageHeader, SkeletonCard, Skeleton } from "@/components/ui";
+import { formatAr } from "@/lib/utils";
+
+const PERIODS = [
+  { id:"7d", label:"٧ أيام" },
+  { id:"30d", label:"٣٠ يوم" },
+  { id:"90d", label:"٩٠ يوم" },
+];
+
+const ROLE_COLORS: Record<string,string> = {
+  "super-admin":"#ef4444", moderator:"#3b82f6", viewer:"#6b7280",
+};
 
 export default function AnalyticsPage() {
+  const [period, setPeriod] = useState("30d");
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<"7d" | "30d" | "90d">("7d");
 
   useEffect(() => {
+    setLoading(true);
     fetch(`/api/analytics/summary?period=${period}`)
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, [period]);
 
-  const kpis = [
-    { label: "إجمالي المستخدمين", value: data?.overview?.totalUsers || 0, icon: "👥", color: "from-blue-500/20 to-blue-600/5", change: `+${data?.overview?.recentSignUps || 0}` },
-    { label: "القوائم", value: data?.overview?.totalLists || 0, icon: "📋", color: "from-green-500/20 to-green-600/5", change: "" },
-    { label: "الftime", value: data?.overview?.openReports || 0, icon: "🛡️", color: "from-red-500/20 to-red-600/5", change: "" },
-    { label: "المستخدمون الجدد", value: data?.overview?.recentSignUps || 0, icon: "🆕", color: "from-purple-500/20 to-purple-600/5", change: "7 أيام" },
-  ];
+  // API shape: { overview: {totalUsers, openReports, totalLists, recentSignUps, roleDistribution},
+  //              engagement: {dailyActive, sourceUsage, avgReadingTime, retentionRate, avgPagesPerSession} }
+  const overview   = data?.overview   ?? {};
+  const engagement = data?.engagement ?? {};
 
-  const dailyActive = data?.engagement?.dailyActive || [];
-  const maxVal = Math.max(...dailyActive.map((d: any) => d.users), 1);
+  const dailyData   = engagement.dailyActive   ?? [];
+  const sourceData  = engagement.sourceUsage   ?? [];
+
+  const roleDistribution = overview.roleDistribution
+    ? Object.entries(overview.roleDistribution as Record<string,number>).map(([role, count]) => ({
+        role, count, label: role === "super-admin" ? "مدير عام" : role === "moderator" ? "مشرف" : "مشاهد",
+      }))
+    : [];
+  const roleTotal = roleDistribution.reduce((a,r) => a + r.count, 0);
+
+  const kpiCards = [
+    { label:"إجمالي المستخدمين", value: overview.totalUsers        ?? 0,   icon:Users,    color:"var(--primary)", isNum:true },
+    { label:"مستخدمون جدد هذا الأسبوع", value: overview.recentSignUps ?? 0, icon:Sparkles, color:"#8b5cf6",        isNum:true },
+    { label:"معدل الاحتفاظ",     value: engagement.retentionRate    ?? 0,   icon:Star,     color:"#f59e0b",        isNum:false, suffix:"%" },
+    { label:"متوسط وقت القراءة", value: engagement.avgReadingTime   ?? 0,   icon:Clock,    color:"#10b981",        isNum:true, suffix:" دقيقة" },
+  ];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">التحليلات</h3>
-        <div className="flex gap-1 bg-[var(--card)] p-1 rounded-lg border border-[var(--border)]">
-          {(["7d", "30d", "90d"] as const).map(p => (
-            <button key={p} onClick={() => setPeriod(p)}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition ${period === p ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "text-[var(--muted-foreground)]"}`}>
-              {p === "7d" ? "7 أيام" : p === "30d" ? "30 يوم" : "90 يوم"}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map(kpi => (
-          <div key={kpi.label} className={`p-5 rounded-xl bg-gradient-to-br ${kpi.color} border border-[var(--border)]`}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-2xl">{kpi.icon}</span>
-              {kpi.change && <span className="text-xs font-medium text-green-500">{kpi.change}</span>}
-            </div>
-            <p className="text-sm text-[var(--muted-foreground)]">{kpi.label}</p>
-            <p className={`text-3xl font-bold mt-1 ${loading ? "animate-pulse" : ""}`}>
-              {loading ? "—" : (kpi.value || 0).toLocaleString("ar-SA")}
-            </p>
+      <PageHeader
+        title="التحليلات"
+        subtitle="تحليل نشاط المستخدمين والمصادر"
+        icon={TrendingUp}
+        actions={
+          <div className="flex gap-1 p-1 rounded-lg" style={{ background:"var(--muted)" }}>
+            {PERIODS.map(p => (
+              <button key={p.id} onClick={() => setPeriod(p.id)}
+                className="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
+                style={{
+                  background: period===p.id ? "var(--card)" : "transparent",
+                  color:      period===p.id ? "var(--foreground)" : "var(--muted-foreground)",
+                  boxShadow:  period===p.id ? "0 1px 3px rgba(0,0,0,0.1)" : undefined,
+                }}>{p.label}</button>
+            ))}
           </div>
-        ))}
+        }
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {loading ? Array.from({length:4}).map((_,i) => <SkeletonCard key={i} />) :
+          kpiCards.map((card, i) => {
+            const Icon = card.icon;
+            return (
+              <div key={i} className="relative overflow-hidden p-5 rounded-[var(--radius-xl)] border"
+                style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+                <div className="absolute -top-10 -end-10 w-24 h-24 rounded-full opacity-30"
+                  style={{ background:card.color }} />
+                <div className="relative">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
+                    style={{ background:`${card.color}18` }}>
+                    <Icon size={18} style={{ color:card.color }} />
+                  </div>
+                  <p className="text-sm mb-1" style={{ color:"var(--muted-foreground)" }}>{card.label}</p>
+                  <p className="text-2xl font-bold">
+                    {card.isNum ? formatAr(card.value) : card.value}{card.suffix ?? ""}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Daily Active Users Chart */}
-        <div className="p-6 bg-[var(--card)] rounded-xl border border-[var(--border)]">
-          <h4 className="font-medium mb-4">النشاط اليومي</h4>
-          <div className="flex items-end gap-2 h-48">
-            {dailyActive.map((d: any, i: number) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <span className="text-xs text-[var(--muted-foreground)]">{d.users}</span>
-                <div className="w-full bg-[var(--primary)]/30 rounded-t-md hover:bg-[var(--primary)]/50 transition-all"
-                  style={{ height: `${(d.users / maxVal) * 100}%` }} />
-                <span className="text-[10px] text-[var(--muted-foreground)]">{d.date}</span>
-              </div>
-            ))}
+        {/* Daily Active */}
+        <div className="rounded-[var(--radius-lg)] border overflow-hidden" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+          <div className="px-5 py-4 border-b flex items-center gap-2.5" style={{ borderColor:"var(--border)" }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background:"var(--accent)" }}>
+              <Users size={16} style={{ color:"var(--primary)" }} />
+            </div>
+            <h3 className="font-semibold text-sm">المستخدمون النشطون يومياً</h3>
+          </div>
+          <div className="p-5">
+            {loading ? <Skeleton className="h-[200px] w-full" /> :
+              dailyData.length === 0 ? (
+                <div className="h-[200px] flex items-center justify-center text-sm" style={{ color:"var(--muted-foreground)" }}>
+                  لا توجد بيانات يومية
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={dailyData} barSize={8}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                    <XAxis dataKey="date" tick={{ fill:"var(--muted-foreground)", fontSize:11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill:"var(--muted-foreground)", fontSize:11 }} axisLine={false} tickLine={false} width={35} />
+                    <Tooltip contentStyle={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, color:"var(--foreground)" }} cursor={{ fill:"rgba(139,92,246,0.08)" }} />
+                    <Bar dataKey="users" fill="var(--primary)" radius={[4,4,0,0]} name="المستخدمون" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
           </div>
         </div>
 
         {/* Source Usage */}
-        <div className="p-6 bg-[var(--card)] rounded-xl border border-[var(--border)]">
-          <h4 className="font-medium mb-4">استخدام المصادر</h4>
-          <div className="space-y-3">
-            {(data?.engagement?.sourceUsage || []).map((s: any, i: number) => (
-              <div key={i}>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span>{s.name}</span>
-                  <span className="text-[var(--muted-foreground)]">{s.value}%</span>
+        <div className="rounded-[var(--radius-lg)] border overflow-hidden" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+          <div className="px-5 py-4 border-b flex items-center gap-2.5" style={{ borderColor:"var(--border)" }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background:"var(--accent)" }}>
+              <BookOpen size={16} style={{ color:"var(--primary)" }} />
+            </div>
+            <h3 className="font-semibold text-sm">استخدام المصادر</h3>
+          </div>
+          <div className="p-5">
+            {loading ? <Skeleton className="h-[200px] w-full" /> :
+              sourceData.length === 0 ? (
+                <div className="h-[200px] flex items-center justify-center text-sm" style={{ color:"var(--muted-foreground)" }}>
+                  لا توجد بيانات مصادر
                 </div>
-                <div className="h-2 bg-[var(--accent)] rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all duration-700"
-                    style={{ width: `${s.value}%`, backgroundColor: s.color }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Engagement Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="p-5 bg-[var(--card)] rounded-xl border border-[var(--border)]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-lg">📖</div>
-            <div>
-              <p className="text-sm text-[var(--muted-foreground)]">متوسط وقت القراءة</p>
-              <p className="text-xl font-bold">{data?.engagement?.avgReadingTime || 0} دقيقة</p>
-            </div>
-          </div>
-        </div>
-        <div className="p-5 bg-[var(--card)] rounded-xl border border-[var(--border)]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-lg">📊</div>
-            <div>
-              <p className="text-sm text-[var(--muted-foreground)]">معدل الاحتفاظ</p>
-              <p className="text-xl font-bold">{data?.engagement?.retentionRate || 0}%</p>
-            </div>
-          </div>
-        </div>
-        <div className="p-5 bg-[var(--card)] rounded-xl border border-[var(--border)]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-lg">📄</div>
-            <div>
-              <p className="text-sm text-[var(--muted-foreground)]">صفحات/جلسة</p>
-              <p className="text-xl font-bold">{data?.engagement?.avgPagesPerSession || 0}</p>
-            </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart layout="vertical" data={sourceData} margin={{ top:0, right:0, bottom:0, left:60 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
+                    <XAxis type="number" tick={{ fill:"var(--muted-foreground)", fontSize:11 }} axisLine={false} tickLine={false} />
+                    <YAxis type="category" dataKey="name" tick={{ fill:"var(--muted-foreground)", fontSize:11 }} axisLine={false} tickLine={false} width={55} orientation="right" />
+                    <Tooltip contentStyle={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, color:"var(--foreground)" }} />
+                    <Bar dataKey="value" fill="var(--primary)" radius={[0,4,4,0]} name="الاستخدام" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
           </div>
         </div>
       </div>
 
       {/* Role Distribution */}
-      {data?.overview?.roleDistribution && (
-        <div className="p-6 bg-[var(--card)] rounded-xl border border-[var(--border)]">
-          <h4 className="font-medium mb-4">توزيع الأدوار</h4>
-          <div className="grid grid-cols-3 gap-4">
-            {Object.entries(data.overview.roleDistribution).map(([role, count]: [string, any]) => (
-              <div key={role} className="text-center p-4 bg-[var(--background)] rounded-lg">
-                <p className="text-2xl font-bold">{count}</p>
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  {role === "super-admin" ? "مدير عام" : role === "moderator" ? "مشرف" : "مشاهد"}
-                </p>
-              </div>
-            ))}
+      {!loading && roleDistribution.length > 0 && (
+        <div className="rounded-[var(--radius-lg)] border overflow-hidden" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+          <div className="px-5 py-4 border-b flex items-center gap-2.5" style={{ borderColor:"var(--border)" }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background:"var(--accent)" }}>
+              <Users size={16} style={{ color:"var(--primary)" }} />
+            </div>
+            <h3 className="font-semibold text-sm">توزيع الأدوار</h3>
+          </div>
+          <div className="p-5 flex flex-col sm:flex-row items-center gap-8">
+            <div className="shrink-0">
+              <ResponsiveContainer width={200} height={200}>
+                <PieChart>
+                  <Pie data={roleDistribution} dataKey="count" nameKey="label" cx="50%" cy="50%" innerRadius="55%" outerRadius="80%" paddingAngle={3}>
+                    {roleDistribution.map((entry) => (
+                      <Cell key={entry.role} fill={ROLE_COLORS[entry.role] ?? "#6b7280"} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, color:"var(--foreground)" }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex flex-col gap-3 flex-1">
+              {roleDistribution.map(r => {
+                const pct = roleTotal > 0 ? ((r.count / roleTotal) * 100).toFixed(1) : "0";
+                return (
+                  <div key={r.role} className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-sm shrink-0" style={{ background:ROLE_COLORS[r.role]??"#6b7280" }} />
+                    <span className="text-sm flex-1">{r.label}</span>
+                    <span className="font-mono text-sm font-semibold">{formatAr(r.count)}</span>
+                    <span className="text-xs w-12 text-end" style={{ color:"var(--muted-foreground)" }}>{pct}%</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

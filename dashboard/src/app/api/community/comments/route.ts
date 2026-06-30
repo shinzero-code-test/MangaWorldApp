@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
+import { getAdminDb } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,16 +13,16 @@ export async function GET(request: NextRequest) {
 
     let comments: any[] = [];
     if (mangaId) {
-      const mangaDoc = await adminDb.collection("community_manga").doc(mangaId).get();
+      const mangaDoc = await getAdminDb().collection("community_manga").doc(mangaId).get();
       if (mangaDoc.exists) {
-        const chaptersCol = await adminDb.collection("community_manga").doc(mangaId).collection("chapters").get();
+        const chaptersCol = await getAdminDb().collection("community_manga").doc(mangaId).collection("chapters").get();
         for (const chapter of chaptersCol.docs) {
           const commentsSnap = await chapter.ref.collection("comments").orderBy("createdAt", "desc").limit(limit).get();
           comments.push(...commentsSnap.docs.map((d) => ({ id: d.id, mangaId, chapterId: chapter.id, ...d.data() })));
         }
       }
     } else {
-      const mangas = await adminDb.collection("community_manga").limit(20).get();
+      const mangas = await getAdminDb().collection("community_manga").limit(20).get();
       for (const manga of mangas.docs) {
         const chaptersCol = await manga.ref.collection("chapters").limit(5).get();
         for (const chapter of chaptersCol.docs) {
@@ -44,7 +46,7 @@ export async function DELETE(request: NextRequest) {
     if (!commentId || !mangaId || !chapterId) {
       return NextResponse.json({ error: "Missing params" }, { status: 400 });
     }
-    await adminDb.collection("community_manga").doc(mangaId)
+    await getAdminDb().collection("community_manga").doc(mangaId)
       .collection("chapters").doc(chapterId)
       .collection("comments").doc(commentId).delete();
     return NextResponse.json({ success: true });

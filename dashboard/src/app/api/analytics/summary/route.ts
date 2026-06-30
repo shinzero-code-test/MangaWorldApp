@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
-import { adminDb } from "@/lib/firebase-admin";
+import { getAdminDb } from "@/lib/firebase-admin";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,14 +12,14 @@ export async function GET(request: NextRequest) {
 
     // Get real data from Firestore
     const [profilesSnap, reportsSnap, listsSnap] = await Promise.all([
-      adminDb.collection("publicProfiles").count().get(),
-      adminDb.collection("moderationReports").where("status", "==", "open").count().get(),
-      adminDb.collectionGroup("lists").count().get(),
+      getAdminDb().collection("publicProfiles").count().get(),
+      getAdminDb().collection("moderationReports").where("status", "==", "open").count().get(),
+      getAdminDb().collectionGroup("lists").count().get(),
     ]);
 
     // Get role distribution
     const roleCounts = { "super-admin": 0, moderator: 0, viewer: 0 };
-    const profiles = await adminDb.collection("publicProfiles").limit(100).get();
+    const profiles = await getAdminDb().collection("publicProfiles").limit(100).get();
     profiles.docs.forEach((doc: any) => {
       const role = doc.data().role || "viewer";
       if (role in roleCounts) roleCounts[role as keyof typeof roleCounts]++;
@@ -25,24 +27,43 @@ export async function GET(request: NextRequest) {
 
     // Get recent sign-ups (last 7 days)
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const recentProfiles = await adminDb.collection("publicProfiles")
+    const recentProfiles = await getAdminDb().collection("publicProfiles")
       .where("updatedAt", ">=", weekAgo).count().get();
 
-    // Mock engagement data (would come from Firebase Analytics in production)
-    const dailyActive = [
-      { date: "Sat", users: 45 }, { date: "Sun", users: 38 },
-      { date: "Mon", users: 52 }, { date: "Tue", users: 48 },
-      { date: "Wed", users: 61 }, { date: "Thu", users: 55 },
-      { date: "Fri", users: 42 },
-    ];
+    // Real daily active users from Firestore
+    const dailyActive = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+      const start = d.getTime();
+      const end = start + 86400000;
+      try {
+        const snap = await getAdminDb().collection("publicProfiles")
+          .where("updatedAt", ">=", start).where("updatedAt", "<", end).count().get();
+        dailyActive.push({ date: d.toLocaleDateString('ar-EG', { weekday: 'short' }), users: snap.data().count });
+      } catch {
+        dailyActive.push({ date: d.toLocaleDateString('ar-EG', { weekday: 'short' }), users: 0 });
+      }
+    }
 
-    const sourceUsage = [
-      { name: "Olympus", value: 35, color: "#6366f1" },
-      { name: "Azora", value: 25, color: "#22c55e" },
-      { name: "Starz", value: 20, color: "#f59e0b" },
-      { name: "MangaSid", value: 12, color: "#a855f7" },
-      { name: "Meshmanga", value: 8, color: "#ef4444" },
-    ];
+    // Source usage from community manga
+    const sourceCounts: Record<string, number> = {};
+    try {
+      const mangasSnap = await getAdminDb().collection("community_manga").limit(200).get();
+      mangasSnap.docs.forEach((doc: any) => {
+        const s = doc.data().source || "Unknown";
+        sourceCounts[s] = (sourceCounts[s] || 0) + 1;
+      });
+    } catch { /* ignore if collection doesn't exist */ }
+    
+    const sourceUsage = Object.entries(sourceCounts)
+      .map(([name, value], i) => {
+        const colors = ["#6366f1", "#22c55e", "#f59e0b", "#a855f7", "#ef4444"];
+        return { name, value, color: colors[i % colors.length] };
+      })
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
 
     return NextResponse.json({
       overview: {

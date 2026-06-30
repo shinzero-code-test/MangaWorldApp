@@ -1,48 +1,50 @@
 "use client";
 
 import React from "react";
-
-interface Props {
-  children: React.ReactNode;
-  fallback?: React.ReactNode;
-}
+import { AlertTriangle, RefreshCcw } from "lucide-react";
 
 interface State {
   hasError: boolean;
-  error: Error | null;
+  error?: Error;
 }
 
-export class ErrorBoundary extends React.Component<Props, State> {
-  constructor(props: Props) {
+export class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  State
+> {
+  constructor(props: { children: React.ReactNode }) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false };
   }
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("Dashboard Error:", error, errorInfo);
-  }
-
   render() {
     if (this.state.hasError) {
-      return this.props.fallback || (
-        <div className="min-h-[200px] flex items-center justify-center p-8 bg-[var(--card)] rounded-xl border border-[var(--border)]">
-          <div className="text-center">
-            <span className="text-4xl block mb-3">⚠️</span>
-            <h3 className="text-lg font-semibold mb-2">حدث خطأ</h3>
-            <p className="text-sm text-[var(--muted-foreground)] mb-4">
-              {this.state.error?.message || "خطأ غير متوقع"}
-            </p>
-            <button
-              onClick={() => this.setState({ hasError: false, error: null })}
-              className="px-4 py-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] text-sm hover:opacity-90"
-            >
-              إعادة المحاولة
-            </button>
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 p-8">
+          <div className="w-14 h-14 rounded-2xl bg-destructive/10 flex items-center justify-center">
+            <AlertTriangle size={24} className="text-destructive" style={{ color: "var(--destructive)" }} />
           </div>
+          <div className="text-center">
+            <p className="font-semibold text-base">حدث خطأ غير متوقع</p>
+            <p className="text-sm mt-1" style={{ color: "var(--muted-foreground)" }}>
+              {this.state.error?.message || "يرجى إعادة تحميل الصفحة"}
+            </p>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition"
+            style={{
+              background: "var(--primary)",
+              color: "var(--primary-foreground)",
+            }}
+          >
+            <RefreshCcw size={14} />
+            إعادة تحميل
+          </button>
         </div>
       );
     }

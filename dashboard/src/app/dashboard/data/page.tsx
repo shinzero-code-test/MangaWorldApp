@@ -1,181 +1,366 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import {
+  Database, Users, BookOpen, MessageSquare, Star, Shield,
+  Eye, Trash2, Plus, RefreshCcw, ChevronLeft, X, Loader2
+} from "lucide-react";
+import { PageHeader, ConfirmDialog, EmptyState, Spinner } from "@/components/ui";
+import { truncate } from "@/lib/utils";
 
-const COLLECTIONS = [
-  { id: "publicProfiles", label: "الملفات العامة", icon: "👤", description: "ملفات المستخدمين العامة" },
-  { id: "users", label: "بيانات المستخدمين", icon: "📂", description: "بيانات المستخدمين الفرعية" },
-  { id: "community_manga", label: "مجتمع المانجا", icon: "💬", description: "التعليقات والمراجعات" },
-  { id: "moderationReports", label: "التقارير الإشرافية", icon: "🛡️", description: "تقارير المحتوى" },
-  { id: "user_achievements", label: "الإنجازات", icon: "🏆", description: "إنجازات القراءة" },
-  { id: "app_config", label: "إعدادات التطبيق", icon: "⚙️", description: "الإعدادات الافتراضية" },
+interface Collection {
+  id:          string;
+  label:       string;
+  description: string;
+  icon:        React.ComponentType<any>;
+}
+
+const COLLECTIONS: Collection[] = [
+  { id: "users",    label: "المستخدمون", description: "بيانات حسابات المستخدمين", icon: Users },
+  { id: "manga",    label: "المانجا",    description: "فهرس المانجا والمصادر",    icon: BookOpen },
+  { id: "comments", label: "التعليقات", description: "تعليقات المستخدمين",       icon: MessageSquare },
+  { id: "reviews",  label: "المراجعات", description: "تقييمات المستخدمين",       icon: Star },
+  { id: "reports",  label: "البلاغات",  description: "تقارير المخالفات",         icon: Shield },
 ];
 
-export default function FirestoreBrowserPage() {
-  const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
-  const [docs, setDocs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedDoc, setSelectedDoc] = useState<any>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newDoc, setNewDoc] = useState({ id: "", data: "{}" });
+interface DocRow {
+  id:     string;
+  fields: Record<string, any>;
+}
 
-  const loadCollection = async (col: string) => {
-    setSelectedCollection(col);
-    setSelectedDoc(null);
+function JsonViewer({ data }: { data: unknown }) {
+  const str = JSON.stringify(data, null, 2);
+  return (
+    <pre
+      className="text-xs overflow-auto p-3 rounded-lg font-mono max-h-[300px]"
+      style={{ background: "var(--muted)", color: "var(--foreground)" }}
+      dir="ltr"
+    >
+      {str}
+    </pre>
+  );
+}
+
+export default function DataBrowserPage() {
+  const [selected,       setSelected]       = useState<string>("users");
+  const [docs,           setDocs]           = useState<DocRow[]>([]);
+  const [loading,        setLoading]        = useState(false);
+  const [viewDoc,        setViewDoc]        = useState<DocRow | null>(null);
+  const [deleteId,       setDeleteId]       = useState<string | null>(null);
+  const [deleteLoading,  setDeleteLoading]  = useState(false);
+  const [createOpen,     setCreateOpen]     = useState(false);
+  const [newId,          setNewId]          = useState("");
+  const [newJson,        setNewJson]        = useState("{\n  \n}");
+  const [createLoading,  setCreateLoading]  = useState(false);
+  const [jsonError,      setJsonError]      = useState("");
+
+  const loadCollection = useCallback(async (col: string) => {
     setLoading(true);
+    setViewDoc(null);
     try {
-      const res = await fetch(`/api/firestore/${col}?limit=30`);
+      const res  = await fetch(`/api/firestore/${col}`);
       const data = await res.json();
-      setDocs(data.docs || []);
+      setDocs(
+        (data.documents ?? data.docs ?? []).map((d: any) => ({
+          id:     d.id ?? d._id ?? "?",
+          fields: d.data ?? d.fields ?? d,
+        }))
+      );
     } catch { setDocs([]); }
-    setLoading(false);
-  };
+    finally  { setLoading(false); }
+  }, []);
 
-  const loadDoc = async (col: string, docId: string) => {
+  useEffect(() => { loadCollection(selected); }, [selected, loadCollection]);
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    setDeleteLoading(true);
     try {
-      const res = await fetch(`/api/firestore/${col}/${docId}`);
-      const data = await res.json();
-      setSelectedDoc(data);
-    } catch {}
+      await fetch(`/api/firestore/${selected}/${deleteId}`, { method: "DELETE" });
+      setDocs((prev) => prev.filter((d) => d.id !== deleteId));
+    } finally {
+      setDeleteLoading(false);
+      setDeleteId(null);
+    }
   };
 
-  const deleteDoc = async (col: string, docId: string) => {
-    if (!confirm("حذف المستند؟")) return;
-    await fetch(`/api/firestore/${col}/${docId}`, { method: "DELETE" });
-    loadCollection(col);
-    setSelectedDoc(null);
-  };
-
-  const createDoc = async () => {
-    if (!selectedCollection) return;
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setJsonError("");
+    let parsed: any;
+    try { parsed = JSON.parse(newJson); }
+    catch { setJsonError("JSON غير صالح"); return; }
+    setCreateLoading(true);
     try {
-      const data = JSON.parse(newDoc.data);
-      await fetch("/api/firestore", {
-        method: "POST",
+      const res = await fetch(`/api/firestore/${selected}`, {
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ collection: selectedCollection, data, docId: newDoc.id || undefined }),
+        body:    JSON.stringify({ id: newId || undefined, data: parsed }),
       });
-      setShowCreateModal(false);
-      setNewDoc({ id: "", data: "{}" });
-      loadCollection(selectedCollection);
-    } catch { alert("JSON غير صالح"); }
+      const d = await res.json();
+      setDocs((prev) => [{ id: d.id ?? newId, fields: parsed }, ...prev]);
+      setCreateOpen(false);
+      setNewId(""); setNewJson("{\n  \n}");
+    } catch { setJsonError("فشل إنشاء المستند"); }
+    finally  { setCreateLoading(false); }
   };
+
+  const colCfg = COLLECTIONS.find((c) => c.id === selected)!;
+  const previewFields = (fields: Record<string, any>) =>
+    Object.entries(fields).slice(0, 2).map(([k, v]) => (
+      <span
+        key={k}
+        className="text-xs px-1.5 py-0.5 rounded font-mono"
+        style={{ background: "var(--muted)", color: "var(--muted-foreground)" }}
+        dir="ltr"
+      >
+        {k}: {String(v).slice(0, 20)}
+      </span>
+    ));
 
   return (
-    <div className="space-y-6">
-      <h3 className="text-lg font-semibold">متصفح Firestore</h3>
+    <div className="space-y-5">
+      <PageHeader
+        title="متصفح البيانات"
+        subtitle="Firestore — تصفح وإدارة قواعد البيانات"
+        icon={Database}
+        actions={
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition hover:opacity-90"
+            style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+          >
+            <Plus size={15} />
+            مستند جديد
+          </button>
+        }
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Collections List */}
-        <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-4">
-          <h4 className="font-medium mb-3">المجموعات</h4>
-          <div className="space-y-1">
-            {COLLECTIONS.map(col => (
-              <button key={col.id} onClick={() => loadCollection(col.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${
-                  selectedCollection === col.id ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "hover:bg-[var(--accent)] text-[var(--muted-foreground)]"
-                }`}>
-                <span>{col.icon}</span>
-                <div className="text-right">
-                  <p className="font-medium">{col.label}</p>
-                  <p className="text-xs opacity-70">{col.description}</p>
-                </div>
-              </button>
-            ))}
+      <div className="flex gap-5 min-h-[500px]">
+        {/* Collection sidebar */}
+        <div
+          className="w-[220px] shrink-0 rounded-[var(--radius-lg)] border overflow-hidden"
+          style={{ background: "var(--card)", borderColor: "var(--border)" }}
+        >
+          <div
+            className="px-4 py-3 border-b text-xs font-semibold uppercase tracking-wider"
+            style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}
+          >
+            المجموعات
           </div>
-        </div>
-
-        {/* Documents List */}
-        <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="font-medium">{selectedCollection || "اختر مجموعة"}</h4>
-            {selectedCollection && (
-              <button onClick={() => setShowCreateModal(true)} className="text-xs text-[var(--primary)] hover:underline">+ إضافة</button>
-            )}
-          </div>
-          {loading ? (
-            <div className="space-y-2">
-              {[1,2,3].map(i => <div key={i} className="h-12 bg-[var(--muted)] rounded animate-pulse" />)}
-            </div>
-          ) : docs.length === 0 ? (
-            <p className="text-sm text-[var(--muted-foreground)] text-center py-8">
-              {selectedCollection ? "لا توجد مستندات" : "اختر مجموعة لعرض المستندات"}
-            </p>
-          ) : (
-            <div className="space-y-1 max-h-[500px] overflow-y-auto">
-              {docs.map(doc => (
-                <button key={doc.id} onClick={() => loadDoc(selectedCollection!, doc.id)}
-                  className={`w-full text-right px-3 py-2 rounded-lg text-sm transition ${
-                    selectedDoc?.id === doc.id ? "bg-[var(--primary)]/10" : "hover:bg-[var(--accent)]"
-                  }`}>
-                  <p className="font-mono text-xs truncate">{doc.id}</p>
-                  {doc.username && <p className="text-xs text-[var(--muted-foreground)]">{doc.username}</p>}
-                  {doc.role && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent)]">{doc.role}</span>}
+          <div className="p-2 space-y-0.5">
+            {COLLECTIONS.map((col) => {
+              const active = selected === col.id;
+              const Icon   = col.icon;
+              return (
+                <button
+                  key={col.id}
+                  onClick={() => setSelected(col.id)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all text-start"
+                  style={{
+                    background: active
+                      ? "color-mix(in srgb, var(--primary) 10%, transparent)"
+                      : "transparent",
+                    color:      active ? "var(--primary)" : "var(--foreground)",
+                  }}
+                >
+                  <Icon size={15} style={{ color: active ? "var(--primary)" : "var(--muted-foreground)" }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{col.label}</p>
+                    <p className="text-[10px] truncate" style={{ color: "var(--muted-foreground)" }}>
+                      {col.description}
+                    </p>
+                  </div>
                 </button>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
         </div>
 
-        {/* Document Detail */}
-        <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="font-medium">تفاصيل المستند</h4>
-            {selectedDoc && (
-              <button onClick={() => deleteDoc(selectedCollection!, selectedDoc.id)} className="text-xs text-red-500 hover:underline">حذف</button>
-            )}
-          </div>
-          {selectedDoc ? (
-            <div className="space-y-3">
-              <div className="p-2 bg-[var(--background)] rounded-lg">
-                <p className="text-xs text-[var(--muted-foreground)]">ID</p>
-                <p className="text-sm font-mono">{selectedDoc.id}</p>
-              </div>
-              <pre className="p-3 bg-[var(--background)] rounded-lg text-xs font-mono overflow-auto max-h-[400px] whitespace-pre-wrap">
-                {JSON.stringify(
-                  Object.fromEntries(Object.entries(selectedDoc).filter(([k]) => !k.startsWith("_"))),
-                  null, 2
-                )}
-              </pre>
-              {selectedDoc._subcollections && Object.keys(selectedDoc._subcollections).length > 0 && (
-                <div>
-                  <p className="text-xs text-[var(--muted-foreground)] mb-2">المجموعات الفرعية</p>
-                  {Object.entries(selectedDoc._subcollections).map(([name, items]: [string, any]) => (
-                    <div key={name} className="p-2 bg-[var(--background)] rounded-lg mb-1">
-                      <p className="text-xs font-medium">{name} ({items.length})</p>
-                    </div>
-                  ))}
-                </div>
+        {/* Document table */}
+        <div className="flex-1 rounded-[var(--radius-lg)] border overflow-hidden" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+          <div
+            className="px-5 py-3 border-b flex items-center justify-between"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <div className="flex items-center gap-2">
+              <colCfg.icon size={16} style={{ color: "var(--primary)" }} />
+              <span className="font-semibold text-sm">{colCfg.label}</span>
+              {!loading && (
+                <span
+                  className="text-xs font-mono px-1.5 py-0.5 rounded"
+                  style={{ background: "var(--muted)", color: "var(--muted-foreground)" }}
+                >
+                  {docs.length}
+                </span>
               )}
             </div>
+            <button
+              onClick={() => loadCollection(selected)}
+              className="p-1.5 rounded-lg transition hover:bg-[var(--accent)]"
+              aria-label="تحديث"
+            >
+              <RefreshCcw size={14} style={{ color: "var(--muted-foreground)" }} />
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center h-48">
+              <Spinner />
+            </div>
+          ) : docs.length === 0 ? (
+            <EmptyState
+              icon={Database}
+              title="المجموعة فارغة"
+              description="لا توجد مستندات في هذه المجموعة"
+            />
           ) : (
-            <p className="text-sm text-[var(--muted-foreground)] text-center py-8">اختر مستنداً لعرض التفاصيل</p>
+            <div className="overflow-x-auto">
+              <table aria-label="جدول المستندات">
+                <thead>
+                  <tr>
+                    <th scope="col">المعرّف</th>
+                    <th scope="col">البيانات</th>
+                    <th scope="col" className="w-20"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {docs.map((doc) => (
+                    <tr key={doc.id}>
+                      <td>
+                        <code
+                          className="text-xs font-mono"
+                          style={{ color: "var(--primary)" }}
+                          dir="ltr"
+                        >
+                          {truncate(doc.id, 24)}
+                        </code>
+                      </td>
+                      <td>
+                        <div className="flex flex-wrap gap-1.5">
+                          {previewFields(doc.fields)}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => setViewDoc(doc)}
+                            className="p-1.5 rounded-lg transition hover:bg-[var(--accent)]"
+                            aria-label="عرض"
+                          >
+                            <Eye size={14} style={{ color: "var(--muted-foreground)" }} />
+                          </button>
+                          <button
+                            onClick={() => setDeleteId(doc.id)}
+                            className="p-1.5 rounded-lg transition hover:bg-red-500/10"
+                            aria-label="حذف"
+                          >
+                            <Trash2 size={14} style={{ color: "var(--destructive)" }} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Create Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateModal(false)}>
-          <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-4">إضافة مستند جديد</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium">Document ID (اختياري)</label>
-                <input value={newDoc.id} onChange={e => setNewDoc({...newDoc, id: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-sm font-mono mt-1" placeholder="اتركه فارغاً للإنشاء التلقائي" dir="ltr" />
-              </div>
-              <div>
-                <label className="text-sm font-medium">البيانات (JSON)</label>
-                <textarea value={newDoc.data} onChange={e => setNewDoc({...newDoc, data: e.target.value})} className="w-full h-40 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-sm font-mono mt-1" dir="ltr" />
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 rounded-lg border border-[var(--border)] text-sm">إلغاء</button>
-                <button onClick={createDoc} className="px-4 py-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-medium">إنشاء</button>
-              </div>
+      {/* View doc modal */}
+      {viewDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setViewDoc(null)} />
+          <dialog
+            open aria-modal="true"
+            className="relative w-full max-w-lg rounded-2xl border shadow-2xl z-10 overflow-hidden"
+            style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+              <p className="font-semibold font-mono text-sm" dir="ltr">{viewDoc.id}</p>
+              <button onClick={() => setViewDoc(null)} className="p-1 rounded hover:bg-[var(--accent)]">
+                <X size={16} />
+              </button>
             </div>
-          </div>
+            <div className="p-5">
+              <JsonViewer data={viewDoc.fields} />
+            </div>
+          </dialog>
         </div>
       )}
+
+      {/* Create modal */}
+      {createOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setCreateOpen(false)} />
+          <dialog
+            open aria-modal="true"
+            className="relative w-full max-w-md rounded-2xl border shadow-2xl z-10"
+            style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+              <p className="font-semibold">إنشاء مستند جديد</p>
+              <button onClick={() => setCreateOpen(false)} className="p-1 rounded hover:bg-[var(--accent)]">
+                <X size={16} />
+              </button>
+            </div>
+            <form onSubmit={handleCreate} className="p-5 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">معرّف المستند (اختياري)</label>
+                <input
+                  type="text" value={newId}
+                  onChange={(e) => setNewId(e.target.value)}
+                  placeholder="auto-generated"
+                  className="w-full font-mono"
+                  dir="ltr"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">البيانات (JSON)</label>
+                <textarea
+                  value={newJson}
+                  onChange={(e) => setNewJson(e.target.value)}
+                  rows={6}
+                  className="w-full font-mono text-sm resize-none"
+                  dir="ltr"
+                />
+                {jsonError && <p className="text-xs" style={{ color: "var(--destructive)" }}>{jsonError}</p>}
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(false)}
+                  className="px-4 py-2 rounded-lg text-sm border transition hover:bg-[var(--accent)]"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={createLoading}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition hover:opacity-90 disabled:opacity-60"
+                  style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+                >
+                  {createLoading && <Loader2 size={14} className="animate-spin" />}
+                  إنشاء
+                </button>
+              </div>
+            </form>
+          </dialog>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={!!deleteId}
+        title="حذف المستند"
+        description={`هل تريد حذف المستند "${deleteId}"؟ هذا الإجراء لا يمكن التراجع عنه.`}
+        confirmLabel="حذف"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteId(null)}
+        loading={deleteLoading}
+      />
     </div>
   );
 }

@@ -1,150 +1,158 @@
 "use client";
-
 import { useEffect, useState } from "react";
+import { Bug, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { RadialBarChart, RadialBar, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { PageHeader, StatusBadge, EmptyState, SkeletonCard, Skeleton } from "@/components/ui";
+import { formatAr, formatRelative } from "@/lib/utils";
 
 interface CrashIssue {
-  id: string;
-  title: string;
-  subtitle: string;
-  state: string;
-  count: number;
-  users: number;
-  firstOccurrence: string;
-  lastOccurrence: string;
-  appVersions: string[];
-  osVersions: string[];
-  devices: string[];
+  id:string; title:string; subtitle?:string; state:"open"|"resolved";
+  count:number; users:number; lastOccurrence:string; firstOccurrence?:string;
+  appVersions?:string[]; osVersions?:string[]; devices?:string[];
 }
 
-interface CrashStats {
-  crashFreeRate: number;
-  crashFreeRateDelta: number;
-  totalIssues: number;
-  openIssues: number;
-  totalCrashes: number;
-  affectedUsers: number;
+interface Stats {
+  crashFreeRate:number; crashFreeRateDelta?:number;
+  totalIssues:number; openIssues:number; totalCrashes:number; affectedUsers:number;
 }
 
 export default function CrashlyticsPage() {
-  const [issues, setIssues] = useState<CrashIssue[]>([]);
-  const [stats, setStats] = useState<CrashStats | null>(null);
+  const [issues,  setIssues]  = useState<CrashIssue[]>([]);
+  const [stats,   setStats]   = useState<Stats|null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedIssue, setSelectedIssue] = useState<CrashIssue | null>(null);
-  const [filter, setFilter] = useState<"all" | "open" | "resolved">("all");
+  const [filter,  setFilter]  = useState<"all"|"open"|"resolved">("all");
+  const [expanded,setExpanded]= useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch("/api/crashlytics")
       .then(r => r.json())
-      .then(data => { setIssues(data.issues || []); setStats(data.stats); setLoading(false); })
+      .then(d => {
+        setIssues(d.issues ?? []);
+        setStats(d.stats ?? null);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, []);
 
-  const filtered = filter === "all" ? issues : issues.filter(i => i.state === filter);
+  const toggleExpand = (id:string) =>
+    setExpanded(p => { const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n; });
 
-  if (loading) return (
-    <div className="space-y-4">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="h-20 bg-[var(--card)] rounded-xl border border-[var(--border)] animate-pulse" />
-      ))}
-    </div>
-  );
+  const filtered = issues.filter(i => filter==="all" ? true : i.state===filter);
+  const cfr      = stats?.crashFreeRate ?? 99.5;
+  const cfrColor = cfr>=99?"var(--success)":cfr>=95?"var(--warning)":"var(--destructive)";
+
+  const STAT_CARDS = [
+    { label:"معدل خالٍ من الأعطال", custom: "gauge" },
+    { label:"إجمالي الأعطال",        val: stats?.totalCrashes   ?? 0, color:"var(--destructive)" },
+    { label:"مشاكل مفتوحة",          val: stats?.openIssues     ?? 0, color:"var(--warning)"     },
+    { label:"مستخدمون متأثرون",      val: stats?.affectedUsers  ?? 0, color:"var(--info)"        },
+  ];
 
   return (
     <div className="space-y-6">
-      <h3 className="text-lg font-semibold">مراقبة الأعطال — Crashlytics</h3>
+      <PageHeader title="الأعطال" subtitle="Crashlytics — تتبع أعطال التطبيق" icon={Bug} />
 
-      {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="p-4 bg-[var(--card)] rounded-xl border border-[var(--border)]">
-            <p className="text-xs text-[var(--muted-foreground)]">نسبة بدون أخطاء</p>
-            <p className="text-2xl font-bold mt-1">{stats.crashFreeRate}%</p>
-            <p className={`text-xs mt-1 ${stats.crashFreeRateDelta >= 0 ? "text-green-500" : "text-red-500"}`}>
-              {stats.crashFreeRateDelta >= 0 ? "+" : ""}{stats.crashFreeRateDelta}%
-            </p>
-          </div>
-          <div className="p-4 bg-[var(--card)] rounded-xl border border-[var(--border)]">
-            <p className="text-xs text-[var(--muted-foreground)]">إجمالي الأعطال</p>
-            <p className="text-2xl font-bold mt-1">{stats.totalCrashes}</p>
-          </div>
-          <div className="p-4 bg-[var(--card)] rounded-xl border border-[var(--border)]">
-            <p className="text-xs text-[var(--muted-foreground)]">مشاكل مفتوحة</p>
-            <p className="text-2xl font-bold mt-1 text-red-500">{stats.openIssues}</p>
-          </div>
-          <div className="p-4 bg-[var(--card)] rounded-xl border border-[var(--border)]">
-            <p className="text-xs text-[var(--muted-foreground)]">مستخدمون متأثرون</p>
-            <p className="text-2xl font-bold mt-1">{stats.affectedUsers}</p>
-          </div>
-        </div>
-      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {loading ? Array.from({length:4}).map((_,i) => <SkeletonCard key={i} />) : (
+          <>
+            {/* Gauge card */}
+            <div className="p-5 rounded-[var(--radius-xl)] border flex flex-col items-center justify-center gap-2"
+              style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+              <div className="relative w-24 h-24">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadialBarChart innerRadius="65%" outerRadius="85%" data={[{value:cfr}]} startAngle={90} endAngle={-270}>
+                    <RadialBar dataKey="value" fill={cfrColor} cornerRadius={4} background={{ fill:"var(--muted)" } as any} />
+                  </RadialBarChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-sm font-bold" style={{ color:cfrColor }}>{cfr.toFixed(1)}%</span>
+                </div>
+              </div>
+              <p className="text-xs text-center" style={{ color:"var(--muted-foreground)" }}>خالٍ من الأعطال</p>
+              {stats?.crashFreeRateDelta !== undefined && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: stats.crashFreeRateDelta>=0?"rgba(16,185,129,0.1)":"rgba(239,68,68,0.1)", color: stats.crashFreeRateDelta>=0?"var(--success)":"var(--destructive)" }}>
+                  {stats.crashFreeRateDelta>=0?"+":""}{stats.crashFreeRateDelta.toFixed(2)}%
+                </span>
+              )}
+            </div>
 
-      {/* Filter */}
-      <div className="flex gap-2">
-        {(["all", "open", "resolved"] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${filter === f ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-[var(--card)] border border-[var(--border)] hover:bg-[var(--accent)]"}`}>
-            {f === "all" ? "الكل" : f === "open" ? "مفتوح" : "تم الحل"}
-            <span className="mr-1.5 text-xs opacity-70">
-              ({f === "all" ? issues.length : issues.filter(i => i.state === f).length})
-            </span>
+            {STAT_CARDS.slice(1).map(s => (
+              <div key={s.label} className="p-5 rounded-[var(--radius-xl)] border" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+                <p className="text-sm mb-2" style={{ color:"var(--muted-foreground)" }}>{s.label}</p>
+                <p className="text-3xl font-bold" style={{ color: s.color }}>{formatAr(s.val ?? 0)}</p>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+
+      <div className="flex gap-2 flex-wrap">
+        {[{id:"all" as const,label:"الكل"},{id:"open" as const,label:"مفتوحة"},{id:"resolved" as const,label:"محلولة"}].map(f => (
+          <button key={f.id} onClick={() => setFilter(f.id)}
+            className="px-3 py-1.5 rounded-lg border text-sm font-medium transition-all"
+            style={{ background:filter===f.id?"color-mix(in srgb, var(--primary) 10%, transparent)":"var(--card)", borderColor:filter===f.id?"color-mix(in srgb, var(--primary) 30%, transparent)":"var(--border)", color:filter===f.id?"var(--primary)":"var(--muted-foreground)" }}>
+            {f.label}
           </button>
         ))}
       </div>
 
-      {/* Issues List */}
-      <div className="space-y-3">
-        {filtered.map(issue => (
-          <div key={issue.id}
-            className={`p-5 bg-[var(--card)] rounded-xl border cursor-pointer transition hover:shadow-md ${
-              selectedIssue?.id === issue.id ? "border-[var(--primary)]" :
-              issue.state === "open" ? "border-yellow-500/30" : "border-[var(--border)]"
-            }`}
-            onClick={() => setSelectedIssue(selectedIssue?.id === issue.id ? null : issue)}>
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${issue.state === "open" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-                    {issue.state === "open" ? "مفتوح" : "تم الحل"}
-                  </span>
-                  <span className="text-xs text-[var(--muted-foreground)]">
-                    {issue.count} حدث • {issue.users} مستخدم
-                  </span>
-                </div>
-                <h4 className="font-medium text-sm">{issue.title}</h4>
-                <p className="text-xs text-[var(--muted-foreground)] font-mono mt-0.5">{issue.subtitle}</p>
-              </div>
-              <div className="text-left text-xs text-[var(--muted-foreground)]">
-                <p>الأحدث: {new Date(issue.lastOccurrence).toLocaleDateString("ar-SA")}</p>
-                <p>الأقدم: {new Date(issue.firstOccurrence).toLocaleDateString("ar-SA")}</p>
-              </div>
-            </div>
+      {loading ? (
+        <div className="space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-24 w-full" />)}</div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-[var(--radius-lg)] border" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+          <EmptyState icon={Bug} title="لا توجد مشاكل" description="تطبيقك يعمل بشكل مثالي!" color="var(--success)" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map(issue => {
+            const isExp    = expanded.has(issue.id);
+            const isOpen   = issue.state === "open";
+            const bdrColor = isOpen ? "rgba(239,68,68,0.3)" : "rgba(16,185,129,0.2)";
+            return (
+              <div key={issue.id} className="rounded-[var(--radius-lg)] border overflow-hidden"
+                style={{ background:"var(--card)", borderColor:"var(--border)", borderInlineStartWidth:4, borderInlineStartColor:bdrColor }}>
+                <button onClick={() => toggleExpand(issue.id)}
+                  className="w-full flex items-center gap-3 px-5 py-4 text-start hover:bg-[var(--accent)]/30 transition-colors">
+                  <StatusBadge status={isOpen?"open":"resolved"} size="sm" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-mono text-sm font-semibold truncate" dir="ltr">{issue.title}</p>
+                    {issue.subtitle && <p className="text-xs font-mono truncate mt-0.5" dir="ltr" style={{ color:"var(--muted-foreground)" }}>{issue.subtitle}</p>}
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      <span className="text-xs" style={{ color:"var(--muted-foreground)" }}>{formatAr(issue.count)} حدث</span>
+                      <span className="text-xs" style={{ color:"var(--muted-foreground)" }}>{formatAr(issue.users)} مستخدم</span>
+                      <span className="text-xs" style={{ color:"var(--muted-foreground)" }}>{formatRelative(issue.lastOccurrence)}</span>
+                    </div>
+                  </div>
+                  {isExp ? <ChevronUp size={16} style={{ color:"var(--muted-foreground)" }} /> : <ChevronDown size={16} style={{ color:"var(--muted-foreground)" }} />}
+                </button>
 
-            {/* Expanded Detail */}
-            {selectedIssue?.id === issue.id && (
-              <div className="mt-4 pt-4 border-t border-[var(--border)] grid grid-cols-3 gap-4 text-xs">
-                <div>
-                  <p className="text-[var(--muted-foreground)] mb-1">إصدارات التطبيق</p>
-                  <div className="flex flex-wrap gap-1">
-                    {issue.appVersions.map(v => <span key={v} className="px-2 py-0.5 bg-[var(--accent)] rounded">{v}</span>)}
+                {isExp && (
+                  <div className="border-t px-5 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4" style={{ borderColor:"var(--border)" }}>
+                    {[
+                      { label:"إصدارات التطبيق", items: issue.appVersions ?? [] },
+                      { label:"إصدارات النظام",  items: issue.osVersions  ?? [] },
+                      { label:"الأجهزة",          items: issue.devices     ?? [] },
+                    ].map(col => (
+                      <div key={col.label}>
+                        <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color:"var(--muted-foreground)" }}>{col.label}</p>
+                        {col.items.length===0 ? <p className="text-xs" style={{ color:"var(--muted-foreground)" }}>—</p> : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {col.items.map(item => (
+                              <span key={item} className="text-xs px-2 py-0.5 rounded font-mono"
+                                style={{ background:"var(--muted)", color:"var(--muted-foreground)" }} dir="ltr">{item}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                </div>
-                <div>
-                  <p className="text-[var(--muted-foreground)] mb-1">إصدارات النظام</p>
-                  <div className="flex flex-wrap gap-1">
-                    {issue.osVersions.map(v => <span key={v} className="px-2 py-0.5 bg-[var(--accent)] rounded">{v}</span>)}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-[var(--muted-foreground)] mb-1">الأجهزة</p>
-                  <div className="flex flex-wrap gap-1">
-                    {issue.devices.map(d => <span key={d} className="px-2 py-0.5 bg-[var(--accent)] rounded">{d}</span>)}
-                  </div>
-                </div>
+                )}
               </div>
-            )}
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

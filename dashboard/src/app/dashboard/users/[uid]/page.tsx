@@ -1,287 +1,221 @@
 "use client";
-
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
+import { User, ChevronRight, ShieldOff, Shield, Save, Loader2, Mail, Calendar, Key, Globe, BookOpen, Heart, FileText } from "lucide-react";
+import { StatusBadge, ConfirmDialog, Skeleton } from "@/components/ui";
+import { formatDate, formatRelative, avatarColor, getInitials } from "@/lib/utils";
 
-interface UserData {
-  uid: string;
-  email: string;
-  emailVerified: boolean;
-  disabled: boolean;
-  lastSignIn: string;
-  createdAt: string;
-  providers: { providerId: string; email: string; displayName: string }[];
-  customClaims: Record<string, any>;
-  phoneNumber: string;
-  username: string;
-  avatarUrl: string;
-  role: string;
-  bio: string;
-  isPublic: boolean;
-  favoriteCount: number;
-  historyCount: number;
-  annotationCount: number;
-  deviceCount: number;
-  recentHistory: any[];
-  lists: any[];
+interface UserDetail {
+  id: string; email: string | null; username?: string; role: string;
+  disabled: boolean; lastSignIn?: string; createdAt?: string;
+  emailVerified?: boolean; providers?: { providerId: string; email?: string }[];
+  bio?: string; avatarUrl?: string;
+  favoriteCount?: number; historyCount?: number; annotationCount?: number; deviceCount?: number;
+  customClaims?: Record<string, any>;
 }
 
 export default function UserDetailPage() {
-  const { uid } = useParams();
-  const router = useRouter();
-  const [user, setUser] = useState<UserData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "activity" | "devices" | "settings">("overview");
-  const [editMode, setEditMode] = useState(false);
-  const [editData, setEditData] = useState({ username: "", bio: "", role: "" });
+  const { uid }           = useParams<{ uid: string }>();
+  const router            = useRouter();
+  const [user, setUser]   = useState<UserDetail | null>(null);
+  const [loading,setLoading]     = useState(true);
+  const [role, setRole]          = useState("");
+  const [roleLoading,setRoleLoading] = useState(false);
+  const [roleSaved,setRoleSaved] = useState(false);
+  const [banOpen,setBanOpen]     = useState(false);
+  const [banLoading,setBanLoading] = useState(false);
 
-  const loadUser = async () => {
-    try {
-      const res = await fetch(`/api/users/${uid}`);
-      const data = await res.json();
-      setUser(data);
-      setEditData({ username: data.username || "", bio: data.bio || "", role: data.role || "viewer" });
-    } catch {}
-    setLoading(false);
-  };
+  useEffect(() => {
+    if (!uid) return;
+    fetch(`/api/users/${uid}`)
+      .then(r => r.json())
+      .then(d => { setUser(d); setRole(d.role ?? "viewer"); setLoading(false); })
+      .catch(() => { setLoading(false); router.back(); });
+  }, [uid, router]);
 
-  useEffect(() => { loadUser(); }, [uid]);
-
-  const saveUser = async () => {
-    setSaving(true);
+  const handleRoleSave = async () => {
+    if (!user) return;
+    setRoleLoading(true);
     try {
       await fetch(`/api/users/${uid}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editData),
+        method:"PATCH",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ role }),
       });
-      await loadUser();
-      setEditMode(false);
-    } catch {}
-    setSaving(false);
+      setUser(p => p ? { ...p, role } : p);
+      setRoleSaved(true);
+      setTimeout(() => setRoleSaved(false), 2000);
+    } finally { setRoleLoading(false); }
   };
 
-  const toggleBan = async () => {
-    if (!confirm(user?.disabled ? "فك الحظر؟" : "حظر المستخدم؟")) return;
-    setSaving(true);
-    await fetch(`/api/users/${uid}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ disabled: !user?.disabled }),
-    });
-    await loadUser();
-    setSaving(false);
-  };
-
-  const deleteUser = async () => {
-    if (!confirm("⚠️ حذف المستخدم نهائياً؟ لا يمكن التراجع عن هذا الإجراء.")) return;
-    if (!confirm("هل أنت متأكد？ سيتم حذف جميع بيانات المستخدم.")) return;
-    setSaving(true);
-    const res = await fetch("/api/users", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uid }),
-    });
-    if (res.ok) router.push("/dashboard/users");
-    setSaving(false);
+  const handleBanToggle = async () => {
+    if (!user) return;
+    setBanLoading(true);
+    try {
+      await fetch(`/api/users/${uid}/ban`, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ banned: !user.disabled }),
+      });
+      setUser(p => p ? { ...p, disabled: !p.disabled } : p);
+    } finally { setBanLoading(false); setBanOpen(false); }
   };
 
   if (loading) return (
-    <div className="space-y-4 animate-pulse">
-      <div className="h-8 w-32 bg-[var(--muted)] rounded" />
-      <div className="h-40 bg-[var(--card)] rounded-xl border border-[var(--border)]" />
-      <div className="grid grid-cols-4 gap-4">
-        {[1,2,3,4].map(i => <div key={i} className="h-24 bg-[var(--card)] rounded-xl border border-[var(--border)]" />)}
+    <div className="space-y-5">
+      <Skeleton className="h-8 w-40" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2 space-y-4"><Skeleton className="h-48 w-full" /><Skeleton className="h-32 w-full" /></div>
+        <Skeleton className="h-48 w-full" />
       </div>
     </div>
   );
+  if (!user) return null;
 
-  if (!user) return <div className="text-center py-12 text-[var(--muted-foreground)]">المستخدم غير موجود</div>;
+  const initials  = getInitials(user.username, user.email ?? undefined);
+  const avatarBg  = avatarColor(user.id);
+  const providerIds = user.providers?.map(p => p.providerId) ?? [];
 
-  const tabs = [
-    { id: "overview" as const, label: "نظرة عامة", icon: "📋" },
-    { id: "activity" as const, label: "النشاط", icon: "📊" },
-    { id: "devices" as const, label: "الأجهزة", icon: "📱" },
-    { id: "settings" as const, label: "الإعدادات", icon: "⚙️" },
+  const stats = [
+    { label:"المفضلة", val: user.favoriteCount ?? 0, icon: Heart },
+    { label:"سجل القراءة", val: user.historyCount ?? 0, icon: BookOpen },
+    { label:"الأجهزة", val: user.deviceCount ?? 0, icon: Globe },
+    { label:"التعليقات", val: user.annotationCount ?? 0, icon: FileText },
   ];
 
-  const providerLabels: Record<string, string> = {
-    "google.com": "Google",
-    "password": "البريد الإلكتروني",
-    "anonymous": "مجهول",
-    "phone": "الهاتف",
-  };
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <button onClick={() => router.back()} className="text-[var(--primary)] text-sm hover:underline">← رجوع</button>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setEditMode(!editMode)} className="px-3 py-1.5 text-sm rounded-lg border border-[var(--border)] hover:bg-[var(--accent)]">
-            {editMode ? "إلغاء" : "تعديل"}
-          </button>
-          <button onClick={toggleBan} disabled={saving} className={`px-3 py-1.5 text-sm rounded-lg font-medium ${user.disabled ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}`}>
-            {user.disabled ? "فك الحظر" : "حظر"}
-          </button>
-          <button onClick={deleteUser} disabled={saving} className="px-3 py-1.5 text-sm rounded-lg bg-red-600 text-white font-medium disabled:opacity-50">
-            حذف المستخدم
-          </button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <button onClick={() => router.back()}
+        className="flex items-center gap-1.5 text-sm transition hover:opacity-70"
+        style={{ color:"var(--muted-foreground)" }}>
+        <ChevronRight size={16} />
+        العودة إلى المستخدمين
+      </button>
 
-      {/* Profile Header */}
-      <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-6">
-        <div className="flex items-start gap-4">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[var(--primary)]/30 to-[var(--primary)]/10 flex items-center justify-center text-2xl font-bold text-[var(--primary)]">
-            {user.avatarUrl ? (
-              <img src={user.avatarUrl} alt="" className="w-16 h-16 rounded-full" />
-            ) : (
-              user.username?.[0]?.toUpperCase() || "?"
-            )}
-          </div>
-          <div className="flex-1">
-            {editMode ? (
-              <div className="space-y-2">
-                <input value={editData.username} onChange={e => setEditData({...editData, username: e.target.value})} className="w-full px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-sm" placeholder="اسم المستخدم" />
-                <textarea value={editData.bio} onChange={e => setEditData({...editData, bio: e.target.value})} className="w-full px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-sm h-16" placeholder="النبذة التعريفية" />
-                <div className="flex items-center gap-2">
-                  <select value={editData.role} onChange={e => setEditData({...editData, role: e.target.value})} className="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-sm">
-                    <option value="viewer">مشاهد</option>
-                    <option value="moderator">مشرف</option>
-                    <option value="super-admin">مدير عام</option>
-                  </select>
-                  <button onClick={saveUser} disabled={saving} className="px-4 py-1.5 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-medium disabled:opacity-50">
-                    {saving ? "..." : "حفظ"}
-                  </button>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2 space-y-4">
+          {/* Main card */}
+          <div className="rounded-[var(--radius-lg)] border p-6" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+            <div className="flex items-start gap-4">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold text-white shrink-0"
+                style={{ background: user.avatarUrl ? undefined : avatarBg }}>
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={initials} className="w-full h-full rounded-2xl object-cover" />
+                ) : initials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-xl font-bold">{user.username || "بدون اسم"}</h2>
+                  <StatusBadge status={user.role} />
+                  <StatusBadge status={user.disabled ? "banned" : "active"} />
                 </div>
-              </div>
-            ) : (
-              <>
-                <h2 className="text-xl font-bold">{user.username || "بدون اسم"}</h2>
-                <p className="text-sm text-[var(--muted-foreground)]" dir="ltr">{user.email || "لا بريد إلكتروني"}</p>
-                {user.bio && <p className="text-sm mt-1">{user.bio}</p>}
-              </>
-            )}
-          </div>
-          <div className="text-left space-y-2">
-            <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-              user.role === "super-admin" ? "bg-red-100 text-red-700" :
-              user.role === "moderator" ? "bg-blue-100 text-blue-700" :
-              "bg-gray-100 text-gray-700"
-            }`}>
-              {user.role === "super-admin" ? "مدير عام" : user.role === "moderator" ? "مشرف" : "مشاهد"}
-            </span>
-            {user.disabled && <span className="block px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-500">محظور</span>}
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "المفضلة", value: user.favoriteCount, icon: "❤️" },
-          { label: "سجل القراءة", value: user.historyCount, icon: "📖" },
-          { label: "الملاحظات", value: user.annotationCount, icon: "📝" },
-          { label: "الأجهزة", value: user.deviceCount, icon: "📱" },
-        ].map(stat => (
-          <div key={stat.label} className="p-4 bg-[var(--card)] rounded-xl border border-[var(--border)]">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xl">{stat.icon}</span>
-            </div>
-            <p className="text-sm text-[var(--muted-foreground)]">{stat.label}</p>
-            <p className="text-2xl font-bold">{stat.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Tabs */}
-      <div className="border-b border-[var(--border)]">
-        <div className="flex gap-4">
-          {tabs.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`pb-3 px-1 text-sm font-medium border-b-2 transition ${activeTab === tab.id ? "border-[var(--primary)] text-[var(--primary)]" : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"}`}>
-              {tab.icon} {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Tab Content */}
-      <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-6">
-        {activeTab === "overview" && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div><p className="text-xs text-[var(--muted-foreground)]">تاريخ الإنشاء</p><p className="text-sm font-medium">{user.createdAt ? new Date(user.createdAt).toLocaleString("ar-SA") : "—"}</p></div>
-              <div><p className="text-xs text-[var(--muted-foreground)]">آخر دخول</p><p className="text-sm font-medium">{user.lastSignIn ? new Date(user.lastSignIn).toLocaleString("ar-SA") : "—"}</p></div>
-              <div><p className="text-xs text-[var(--muted-foreground)]">البريد موثق</p><p className="text-sm font-medium">{user.emailVerified ? "✓ نعم" : "✗ لا"}</p></div>
-              <div><p className="text-xs text-[var(--muted-foreground)]">الحالة</p><p className="text-sm font-medium">{user.disabled ? "محظور" : "نشط"}</p></div>
-            </div>
-            <div>
-              <p className="text-xs text-[var(--muted-foreground)] mb-2">طرق تسجيل الدخول</p>
-              <div className="flex gap-2 flex-wrap">
-                {user.providers.map((p, i) => (
-                  <span key={i} className="px-2 py-1 rounded-lg bg-[var(--accent)] text-xs font-medium">
-                    {providerLabels[p.providerId] || p.providerId}
-                  </span>
-                ))}
+                <p className="text-sm font-mono mt-1" style={{ color:"var(--muted-foreground)" }} dir="ltr">
+                  {user.email ?? "—"}
+                </p>
+                {user.bio && <p className="text-sm mt-2" style={{ color:"var(--muted-foreground)" }}>{user.bio}</p>}
               </div>
             </div>
-            {Object.keys(user.customClaims).length > 0 && (
-              <div>
-                <p className="text-xs text-[var(--muted-foreground)] mb-2">Custom Claims</p>
-                <pre className="p-3 bg-[var(--background)] rounded-lg text-xs font-mono overflow-auto">{JSON.stringify(user.customClaims, null, 2)}</pre>
-              </div>
-            )}
-          </div>
-        )}
 
-        {activeTab === "activity" && (
-          <div className="space-y-3">
-            <h4 className="font-medium">آخر نشاط قراءة</h4>
-            {user.recentHistory.length === 0 ? (
-              <p className="text-sm text-[var(--muted-foreground)]">لا يوجد نشاط</p>
-            ) : (
-              user.recentHistory.map((h: any, i: number) => (
-                <div key={i} className="flex items-center gap-3 p-3 bg-[var(--background)] rounded-lg">
-                  <span className="text-lg">📖</span>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{h.title || h.mangaId}</p>
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      فصل {h.lastChapterNumber} • {h.lastReadAt ? new Date(h.lastReadAt).toLocaleDateString("ar-SA") : ""}
-                    </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+              {[
+                { icon:Key,      label:"المعرف",          val: user.id,                                        mono:true },
+                { icon:Mail,     label:"البريد",           val: user.email ?? "—",                              mono:true },
+                { icon:Calendar, label:"تاريخ الإنشاء",   val: user.createdAt ? formatDate(user.createdAt) : "—",  mono:false },
+                { icon:Globe,    label:"آخر دخول",         val: user.lastSignIn ? formatRelative(user.lastSignIn) : "—", mono:false },
+              ].map(field => {
+                const Icon = field.icon;
+                return (
+                  <div key={field.label} className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background:"var(--accent)" }}>
+                      <Icon size={14} style={{ color:"var(--primary)" }} />
+                    </div>
+                    <div>
+                      <p className="text-xs" style={{ color:"var(--muted-foreground)" }}>{field.label}</p>
+                      <p className={`text-sm font-medium mt-0.5 break-all ${field.mono ? "font-mono" : ""}`} dir={field.mono ? "ltr" : "auto"}>
+                        {field.val}
+                      </p>
+                    </div>
                   </div>
+                );
+              })}
+            </div>
+
+            {providerIds.length > 0 && (
+              <div className="mt-5 pt-4 border-t" style={{ borderColor:"var(--border)" }}>
+                <p className="text-xs font-semibold mb-2" style={{ color:"var(--muted-foreground)" }}>مزودو المصادقة</p>
+                <div className="flex gap-2 flex-wrap">
+                  {providerIds.map(p => (
+                    <span key={p} className="text-xs font-mono px-2.5 py-1 rounded-full" style={{ background:"var(--accent)", color:"var(--primary)" }} dir="ltr">{p}</span>
+                  ))}
                 </div>
-              ))
+              </div>
             )}
           </div>
-        )}
 
-        {activeTab === "devices" && (
-          <div className="space-y-3">
-            <h4 className="font-medium">الأجهزة المسجلة ({user.deviceCount})</h4>
-            <p className="text-sm text-[var(--muted-foreground)]">عرض أجهزة المستخدم المسجلة عبر FCM</p>
+          {/* Stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {stats.map(s => {
+              const Icon = s.icon;
+              return (
+                <div key={s.label} className="p-4 rounded-[var(--radius-lg)] border text-center" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+                  <Icon size={16} className="mx-auto mb-2" style={{ color:"var(--primary)" }} />
+                  <p className="text-xl font-bold">{s.val}</p>
+                  <p className="text-xs mt-0.5" style={{ color:"var(--muted-foreground)" }}>{s.label}</p>
+                </div>
+              );
+            })}
           </div>
-        )}
+        </div>
 
-        {activeTab === "settings" && (
-          <div className="space-y-4">
-            <h4 className="font-medium">إعدادات الحساب</h4>
+        {/* Right: actions */}
+        <div className="space-y-4">
+          <div className="rounded-[var(--radius-lg)] border p-5" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+            <p className="font-semibold text-sm mb-4">إدارة الصلاحيات</p>
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-[var(--background)] rounded-lg">
-                <span className="text-sm">الملف العام</span>
-                <span className="text-sm">{user.isPublic ? "عام" : "خاص"}</span>
+              <div>
+                <label className="text-xs font-medium block mb-1.5" style={{ color:"var(--muted-foreground)" }}>الدور</label>
+                <select value={role} onChange={e => setRole(e.target.value)} className="w-full">
+                  <option value="viewer">مشاهد</option>
+                  <option value="moderator">مشرف</option>
+                  <option value="super-admin">مدير عام</option>
+                </select>
               </div>
-              <div className="flex items-center justify-between p-3 bg-[var(--background)] rounded-lg">
-                <span className="text-sm">الحظر</span>
-                <button onClick={toggleBan} className={`px-3 py-1 rounded-lg text-xs font-medium ${user.disabled ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}`}>
-                  {user.disabled ? "فك الحظر" : "حظر"}
-                </button>
-              </div>
+              <button onClick={handleRoleSave} disabled={roleLoading || role === user.role}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
+                style={{ background:"var(--primary)", color:"var(--primary-foreground)" }}>
+                {roleLoading ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                {roleSaved ? "تم الحفظ!" : "حفظ الدور"}
+              </button>
             </div>
           </div>
-        )}
+
+          <div className="rounded-[var(--radius-lg)] border p-5" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+            <p className="font-semibold text-sm mb-2">{user.disabled ? "إلغاء الحظر" : "حظر المستخدم"}</p>
+            <p className="text-xs mb-4" style={{ color:"var(--muted-foreground)" }}>
+              {user.disabled ? "المستخدم محظور حالياً. إلغاء الحظر سيتيح له الدخول مجدداً." : "حظر المستخدم يمنعه من تسجيل الدخول."}
+            </p>
+            <button onClick={() => setBanOpen(true)}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold border transition hover:opacity-90"
+              style={user.disabled
+                ? { background:"rgba(16,185,129,0.1)", borderColor:"rgba(16,185,129,0.3)", color:"var(--success)" }
+                : { background:"rgba(239,68,68,0.1)", borderColor:"rgba(239,68,68,0.3)", color:"var(--destructive)" }}>
+              {user.disabled ? <Shield size={15} /> : <ShieldOff size={15} />}
+              {user.disabled ? "إلغاء الحظر" : "حظر المستخدم"}
+            </button>
+          </div>
+        </div>
       </div>
+
+      <ConfirmDialog
+        open={banOpen}
+        title={user.disabled ? "إلغاء حظر المستخدم" : "حظر المستخدم"}
+        description={user.disabled ? `هل تريد إلغاء حظر "${user.email}"؟` : `هل تريد حظر "${user.email}"؟ لن يتمكن من الدخول حتى يتم رفع الحظر.`}
+        confirmLabel={user.disabled ? "إلغاء الحظر" : "حظر"}
+        variant="danger"
+        onConfirm={handleBanToggle}
+        onCancel={() => setBanOpen(false)}
+        loading={banLoading}
+      />
     </div>
   );
 }

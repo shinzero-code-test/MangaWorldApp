@@ -1,199 +1,143 @@
 "use client";
-
 import { useEffect, useState } from "react";
+import { Smartphone, Globe, BookOpen, Shield, Bell, Palette, Save, CheckCircle2, Loader2 } from "lucide-react";
+import { PageHeader, Toggle } from "@/components/ui";
 
-interface Settings {
-  downloadOnWifiOnly: boolean;
-  autoDownloadNewChapters: boolean;
-  enableNotifications: boolean;
-  secureReaderEnabled: boolean;
-  autoCleanupReadDownloads: boolean;
-  cleanupAfterHours: number;
-  imageCacheLimitMb: number;
-  spoilerCollapseDefault: boolean;
-  notificationDeliveryMode: string;
+interface AppSettings {
+  appName?: string; defaultLanguage?: string; maintenanceMode?: boolean;
+  maxSourcesPerManga?: number; enableAds?: boolean; adFrequency?: number;
+  autoModeration?: boolean; reportThreshold?: number; banOnHighPriority?: boolean;
+  enablePushNotif?: boolean; notifFrequency?: string;
+  defaultTheme?: string; enableRTL?: boolean; showRatings?: boolean; showComments?: boolean;
+  [key: string]: any;
 }
 
-const DEFAULT_SETTINGS: Settings = {
-  downloadOnWifiOnly: true,
-  autoDownloadNewChapters: false,
-  enableNotifications: true,
-  secureReaderEnabled: false,
-  autoCleanupReadDownloads: false,
-  cleanupAfterHours: 24,
-  imageCacheLimitMb: 250,
-  spoilerCollapseDefault: true,
-  notificationDeliveryMode: "INSTANT",
+const DEFAULT: AppSettings = {
+  appName:"MangaWorld", defaultLanguage:"ar", maintenanceMode:false,
+  maxSourcesPerManga:5, enableAds:false, adFrequency:3,
+  autoModeration:true, reportThreshold:5, banOnHighPriority:false,
+  enablePushNotif:true, notifFrequency:"daily",
+  defaultTheme:"dark", enableRTL:true, showRatings:true, showComments:true,
 };
 
+const SECTIONS = [
+  { id:"general", label:"الإعدادات العامة", icon:Globe, fields:[
+    { key:"appName", label:"اسم التطبيق", desc:"الاسم الظاهر للمستخدمين", type:"text" },
+    { key:"defaultLanguage", label:"اللغة الافتراضية", desc:"اللغة الرئيسية للتطبيق", type:"select", options:[{v:"ar",l:"العربية"},{v:"en",l:"English"}] },
+    { key:"maintenanceMode", label:"وضع الصيانة", desc:"إيقاف التطبيق مؤقتاً", type:"toggle" },
+  ]},
+  { id:"content", label:"إعدادات المحتوى", icon:BookOpen, fields:[
+    { key:"maxSourcesPerManga", label:"الحد الأقصى للمصادر", desc:"عدد المصادر لكل مانجا", type:"number" },
+    { key:"enableAds", label:"تفعيل الإعلانات", desc:"عرض إعلانات للمستخدمين", type:"toggle" },
+    { key:"adFrequency", label:"تكرار الإعلانات", desc:"عدد الفصول بين كل إعلان", type:"number" },
+  ]},
+  { id:"moderation", label:"إعدادات الإشراف", icon:Shield, fields:[
+    { key:"autoModeration", label:"الإشراف التلقائي", desc:"حجب المحتوى المخالف تلقائياً", type:"toggle" },
+    { key:"reportThreshold", label:"حد التقارير", desc:"عدد التقارير قبل الإجراء التلقائي", type:"number" },
+    { key:"banOnHighPriority", label:"حظر تلقائي", desc:"حظر المستخدم عند تقرير عالي الأولوية", type:"toggle" },
+  ]},
+  { id:"notifications", label:"الإشعارات", icon:Bell, fields:[
+    { key:"enablePushNotif", label:"إشعارات Push", desc:"إرسال إشعارات للمستخدمين", type:"toggle" },
+    { key:"notifFrequency", label:"تكرار الإشعارات", desc:"مدى تكرار إشعارات التحديثات", type:"select", options:[{v:"realtime",l:"فوري"},{v:"daily",l:"يومي"},{v:"weekly",l:"أسبوعي"}] },
+  ]},
+  { id:"ui", label:"إعدادات الواجهة", icon:Palette, fields:[
+    { key:"defaultTheme", label:"الثيم الافتراضي", desc:"الثيم الأولي عند التثبيت", type:"select", options:[{v:"dark",l:"داكن"},{v:"light",l:"فاتح"},{v:"system",l:"النظام"}] },
+    { key:"enableRTL", label:"دعم RTL", desc:"تفعيل الاتجاه من اليمين لليسار", type:"toggle" },
+    { key:"showRatings", label:"إظهار التقييمات", desc:"عرض نجوم التقييم في القوائم", type:"toggle" },
+    { key:"showComments", label:"إظهار التعليقات", desc:"تفعيل قسم التعليقات", type:"toggle" },
+  ]},
+];
+
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT);
+  const [loading,  setLoading]  = useState(true);
+  const [saving,   setSaving]   = useState(false);
+  const [saved,    setSaved]    = useState(false);
 
   useEffect(() => {
     fetch("/api/settings")
-      .then((r) => r.json())
-      .then((data) => { setSettings({ ...DEFAULT_SETTINGS, ...data.settings }); setLoading(false); })
+      .then(r => r.json())
+      .then(d => {
+        // API returns { settings: {...} }
+        const s = d.settings ?? d ?? {};
+        setSettings({ ...DEFAULT, ...s });
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, []);
 
-  const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
-    setSettings({ ...settings, [key]: value });
-    setSaved(false);
-  };
+  const update = (key: string, val: any) => setSettings(p => ({ ...p, [key]: val }));
 
-  const save = async () => {
+  const handleSave = async () => {
     setSaving(true);
     try {
       await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        method:"PUT",
+        headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ settings }),
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch {}
-    setSaving(false);
+    } finally { setSaving(false); }
   };
 
-  const sections = [
-    {
-      title: "التنزيلات",
-      icon: "📥",
-      fields: [
-        { key: "downloadOnWifiOnly" as const, label: "التنزيل عبر الواي فاي فقط", description: "يمنع التنزيل عبر البيانات المحمولة" },
-        { key: "autoDownloadNewChapters" as const, label: "تنزيل الفصول الجديدة تلقائياً", description: "تنزيل 3 فصول غير مقروءة من المفضلة" },
-        { key: "autoCleanupReadDownloads" as const, label: "حذف التنزيلات المقروءة تلقائياً", description: "حذف الفصول المقروءة بعد فترة" },
-      ],
-    },
-    {
-      title: "الإشعارات",
-      icon: "🔔",
-      fields: [
-        { key: "enableNotifications" as const, label: "تفعيل الإشعارات", description: "استقبال إشعارات الفصول الجديدة" },
-      ],
-      selects: [
-        {
-          key: "notificationDeliveryMode" as const,
-          label: "طريقة الإرسال",
-          options: [
-            { value: "INSTANT", label: "فوري" },
-            { value: "DAILY_DIGEST", label: "ملخص يومي" },
-            { value: "SILENT", label: "صامت" },
-          ],
-        },
-      ],
-    },
-    {
-      title: "القارئ",
-      icon: "📖",
-      fields: [
-        { key: "secureReaderEnabled" as const, label: "تأمين القارئ", description: "منع لقطة الشاشة والتسجيل" },
-        { key: "spoilerCollapseDefault" as const, label: "طي التعليقات الحساسة", description: "إخفاء التعليقات المُعلَّمة كسبويْلر" },
-      ],
-    },
-    {
-      title: "التخزين",
-      icon: "💾",
-      numbers: [
-        { key: "cleanupAfterHours" as const, label: "ساعات الحذف التلقائي", min: 12, max: 168, step: 12 },
-        { key: "imageCacheLimitMb" as const, label: "حد ذاكرة التخزين المؤقت (MB)", min: 64, max: 1024, step: 64 },
-      ],
-    },
-  ];
-
-  if (loading) return (
-    <div className="space-y-4">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="h-32 bg-[var(--card)] rounded-xl border border-[var(--border)] animate-pulse" />
-      ))}
-    </div>
-  );
-
   return (
-    <div className="space-y-6 max-w-3xl">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">إعدادات التطبيق</h3>
-          <p className="text-sm text-[var(--muted-foreground)]">الإعدادات الافتراضية لجميع المستخدمين</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {saved && <span className="text-sm text-green-500 font-medium">✓ تم الحفظ</span>}
-          <button
-            onClick={save}
-            disabled={saving}
-            className="px-5 py-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
-          >
-            {saving ? "جاري الحفظ..." : "حفظ"}
-          </button>
-        </div>
+    <div className="space-y-5 pb-24">
+      <PageHeader title="إعدادات التطبيق" subtitle="ضبط إعدادات تطبيق مانجا وورلد" icon={Smartphone} />
+
+      {SECTIONS.map(section => {
+        const Icon = section.icon;
+        return (
+          <div key={section.id} className="rounded-[var(--radius-lg)] border overflow-hidden" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+            <div className="px-5 py-4 border-b flex items-center gap-2.5" style={{ borderColor:"var(--border)" }}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background:"var(--accent)" }}>
+                <Icon size={16} style={{ color:"var(--primary)" }} />
+              </div>
+              <h3 className="font-semibold text-sm">{section.label}</h3>
+            </div>
+            <div className="divide-y" style={{ borderColor:"var(--border)" }}>
+              {section.fields.map(field => {
+                const val = settings[field.key];
+                return (
+                  <div key={field.key} className="flex items-center gap-4 px-5 py-4 flex-wrap">
+                    <div className="flex-1 min-w-[180px]">
+                      <p className="font-medium text-sm">{field.label}</p>
+                      <p className="text-xs mt-0.5" style={{ color:"var(--muted-foreground)" }}>{field.desc}</p>
+                    </div>
+                    <div className="shrink-0">
+                      {field.type === "toggle" ? (
+                        <Toggle enabled={!!val} onChange={v => update(field.key, v)} disabled={loading} ariaLabel={field.label} />
+                      ) : field.type === "select" ? (
+                        <select value={String(val ?? "")} onChange={e => update(field.key, e.target.value)} disabled={loading} className="min-w-[130px]">
+                          {field.options?.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                        </select>
+                      ) : field.type === "number" ? (
+                        <input type="number" value={Number(val ?? 0)} dir="ltr" min={0}
+                          onChange={e => update(field.key, Number(e.target.value))} disabled={loading}
+                          className="w-24 text-end font-mono text-sm" />
+                      ) : (
+                        <input type="text" value={String(val ?? "")}
+                          onChange={e => update(field.key, e.target.value)} disabled={loading}
+                          className="w-48 text-sm" />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      <div className="fixed bottom-0 start-0 end-0 z-20 flex items-center justify-end gap-3 px-6 py-4 border-t"
+        style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+        <button onClick={handleSave} disabled={saving}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition hover:opacity-90 disabled:opacity-60"
+          style={{ background:"var(--primary)", color:"var(--primary-foreground)" }}>
+          {saving ? <Loader2 size={16} className="animate-spin" /> : saved ? <CheckCircle2 size={16} /> : <Save size={16} />}
+          {saving ? "جاري الحفظ..." : saved ? "تم الحفظ!" : "حفظ الإعدادات"}
+        </button>
       </div>
-
-      {/* Settings Sections */}
-      {sections.map((section) => (
-        <div key={section.title} className="bg-[var(--card)] rounded-xl border border-[var(--border)] overflow-hidden">
-          <div className="px-5 py-4 border-b border-[var(--border)] flex items-center gap-2">
-            <span className="text-lg">{section.icon}</span>
-            <h4 className="font-medium">{section.title}</h4>
-          </div>
-          <div className="divide-y divide-[var(--border)]">
-            {section.fields?.map((field) => (
-              <div key={field.key} className="px-5 py-4 flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium">{field.label}</p>
-                  <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{field.description}</p>
-                </div>
-                <button
-                  onClick={() => update(field.key, !settings[field.key])}
-                  className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
-                    settings[field.key] ? "bg-green-500" : "bg-gray-300"
-                  }`}
-                >
-                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                    settings[field.key] ? "right-0.5" : "right-[22px]"
-                  }`} />
-                </button>
-              </div>
-            ))}
-
-            {section.selects?.map((sel) => (
-              <div key={sel.key} className="px-5 py-4 flex items-center justify-between gap-4">
-                <p className="text-sm font-medium">{sel.label}</p>
-                <select
-                  value={settings[sel.key] as string}
-                  onChange={(e) => update(sel.key, e.target.value as any)}
-                  className="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-sm"
-                >
-                  {sel.options.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
-
-            {section.numbers?.map((num) => (
-              <div key={num.key} className="px-5 py-4 flex items-center justify-between gap-4">
-                <p className="text-sm font-medium">{num.label}</p>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min={num.min}
-                    max={num.max}
-                    step={num.step}
-                    value={settings[num.key] as number}
-                    onChange={(e) => update(num.key, parseInt(e.target.value) as any)}
-                    className="w-32"
-                  />
-                  <span className="text-sm font-mono w-12 text-center">{settings[num.key]}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
     </div>
   );
 }

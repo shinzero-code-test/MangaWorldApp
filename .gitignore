@@ -19,6 +19,7 @@ local.properties
 keystore.properties
 google-services.json
 .gitignore
+AGENTS.md
 logs/
 sessions/
-/.mimocode/
+/.mimocode/plans

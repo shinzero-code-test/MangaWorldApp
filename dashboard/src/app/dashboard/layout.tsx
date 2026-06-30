@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { ErrorBoundary } from "@/components/shared/error-boundary";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { Spinner } from "@/components/ui";
 
 interface UserInfo {
   uid: string;
@@ -20,7 +21,8 @@ export default function DashboardLayout({
 }) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -29,17 +31,33 @@ export default function DashboardLayout({
         if (!res.ok) throw new Error("Unauthorized");
         return res.json();
       })
-      .then((data) => { setUser(data); setLoading(false); })
-      .catch(() => { router.push("/login"); setLoading(false); });
+      .then((data) => {
+        setUser(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        router.push("/login");
+        setLoading(false);
+      });
   }, [router]);
 
   if (loading) {
     return (
       <ThemeProvider>
-        <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
+        <div
+          className="min-h-screen flex items-center justify-center"
+          style={{ background: "var(--background)" }}
+        >
           <div className="flex flex-col items-center gap-3">
-            <div className="w-10 h-10 border-3 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm text-[var(--muted-foreground)]">جاري التحميل...</p>
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center"
+              style={{ background: "var(--accent)" }}
+            >
+              <Spinner size={22} />
+            </div>
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+              جاري التحميل...
+            </p>
           </div>
         </div>
       </ThemeProvider>
@@ -50,23 +68,44 @@ export default function DashboardLayout({
 
   return (
     <ThemeProvider>
-      <div className="flex min-h-screen bg-[var(--background)]" dir="rtl">
+      <div
+        className="flex min-h-screen"
+        dir="rtl"
+        style={{ background: "var(--background)" }}
+      >
+        {/* Mobile overlay */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-sm"
             onClick={() => setSidebarOpen(false)}
           />
         )}
 
-        <div className={`fixed lg:static z-50 transition-transform ${sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0 lg:w-0 lg:overflow-hidden"}`}>
-          <Sidebar userRole={user.role} />
+        {/* Sidebar */}
+        <div
+          className={`fixed end-0 top-0 z-50 h-screen lg:sticky transition-transform duration-300 ${
+            sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
+          }`}
+        >
+          <Sidebar
+            userRole={user.role}
+            userEmail={user.email}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            onNavItemClick={() => setSidebarOpen(false)}
+          />
         </div>
 
-        <div className="flex-1 flex flex-col min-w-0">
-          <Header onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+        {/* Main */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <Header
+            onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+            userEmail={user.email}
+            userRole={user.role}
+          />
           <main className="flex-1 p-4 md:p-6 overflow-auto">
             <ErrorBoundary>
-              {children}
+              <div className="page-enter">{children}</div>
             </ErrorBoundary>
           </main>
         </div>

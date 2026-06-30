@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminMessaging } from "@/lib/firebase-admin";
+import { getAdminMessaging } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,13 +12,13 @@ export async function POST(request: NextRequest) {
     const message: any = { notification: { title, body: msgBody } };
     if (topic) message.topic = topic;
     if (tokens && tokens.length > 0) {
-      const response = await adminMessaging.sendEachForMulticast({
+      const response = await getAdminMessaging().sendEachForMulticast({
         tokens, notification: { title, body: msgBody },
       });
       return NextResponse.json({ success: true, sent: response.successCount, failed: response.failureCount });
     }
 
-    const messageId = await adminMessaging.send(message);
+    const messageId = await getAdminMessaging().send(message);
     return NextResponse.json({ success: true, messageId });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

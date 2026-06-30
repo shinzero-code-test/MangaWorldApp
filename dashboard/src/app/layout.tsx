@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MangaWorld Admin",
-  description: "Admin dashboard for MangaWorld",
+  title: "MangaWorld Admin | لوحة تحكم مانجا وورلد",
+  description: "لوحة إدارة تطبيق مانجا وورلد",
 };
 
 export default function RootLayout({
@@ -13,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl" className="dark">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased min-h-screen">{children}</body>
     </html>
   );
 }

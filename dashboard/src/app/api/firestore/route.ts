@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
+import { getAdminDb } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
@@ -9,10 +9,11 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const startAfter = searchParams.get("startAfter") || "";
 
-    let query: any = adminDb.collection("publicProfiles");
+    const db = getAdminDb();
+    let query: any = db.collection("publicProfiles");
     query = query.orderBy("updatedAt", "desc").limit(limit + 1);
     if (startAfter) {
-      const startDoc = await adminDb.collection("publicProfiles").doc(startAfter).get();
+      const startDoc = await db.collection("publicProfiles").doc(startAfter).get();
       if (startDoc.exists) query = query.startAfter(startDoc);
     }
 
@@ -46,10 +47,11 @@ export async function POST(request: NextRequest) {
 
     let ref;
     if (docId) {
-      ref = adminDb.collection(collection).doc(docId);
+      const db = getAdminDb();
+      ref = db.collection(collection).doc(docId);
       await ref.set(data, { merge: true });
     } else {
-      ref = adminDb.collection(collection).add(data);
+      ref = getAdminDb().collection(collection).add(data);
     }
 
     const id = (await ref).id || docId;

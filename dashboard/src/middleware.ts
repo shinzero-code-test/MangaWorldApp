@@ -1,21 +1,18 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/google"];
 
 export function middleware(request: NextRequest) {
-  const session = request.cookies.get("session")?.value;
-  const pathname = request.nextUrl.pathname;
+  const { pathname } = request.nextUrl;
 
-  const isLoginPage = pathname === "/login";
-  const isApiAuth = pathname.startsWith("/api/auth");
-
-  if (isLoginPage || isApiAuth) {
-    if (session && isLoginPage) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
-    }
+  // Allow public paths
+  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
-  if (!session && pathname.startsWith("/dashboard")) {
+  // Check session cookie
+  const session = request.cookies.get("session");
+  if (!session?.value && !pathname.startsWith("/api/")) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
@@ -23,5 +20,7 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/login", "/api/:path*"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.png$|.*\\.svg$).*)",
+  ],
 };

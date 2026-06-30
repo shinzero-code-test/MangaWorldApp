@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb, adminAuth } from "@/lib/firebase-admin";
+import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ uid: string }> }) {
   try {
@@ -10,30 +12,30 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     // Get Firebase Auth user
     let authUser: any = null;
     try {
-      authUser = await adminAuth.getUser(uid);
+      authUser = await getAdminAuth().getUser(uid);
     } catch {}
 
     // Get Firestore profile
-    const profileDoc = await adminDb.collection("publicProfiles").doc(uid).get();
+    const profileDoc = await getAdminDb().collection("publicProfiles").doc(uid).get();
     const profile = profileDoc.data() || {};
 
     // Get user data counts
     const [favSnap, histSnap, annotSnap, deviceSnap] = await Promise.all([
-      adminDb.collection("users").doc(uid).collection("favorites").count().get(),
-      adminDb.collection("users").doc(uid).collection("readingHistory").count().get(),
-      adminDb.collection("users").doc(uid).collection("readerAnnotations").count().get(),
-      adminDb.collection("users").doc(uid).collection("devices").count().get(),
+      getAdminDb().collection("users").doc(uid).collection("favorites").count().get(),
+      getAdminDb().collection("users").doc(uid).collection("readingHistory").count().get(),
+      getAdminDb().collection("users").doc(uid).collection("readerAnnotations").count().get(),
+      getAdminDb().collection("users").doc(uid).collection("devices").count().get(),
     ]);
 
     // Get recent activity
-    const recentHistory = await adminDb
+    const recentHistory = await getAdminDb()
       .collection("users").doc(uid).collection("readingHistory")
       .orderBy("lastReadAt", "desc").limit(10).get();
 
     const history = recentHistory.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
 
     // Get user's custom lists
-    const listsSnap = await adminDb.collection("users").doc(uid).collection("lists").limit(10).get();
+    const listsSnap = await getAdminDb().collection("users").doc(uid).collection("lists").limit(10).get();
     const lists = listsSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
 
     return NextResponse.json({
@@ -88,17 +90,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (body.bio !== undefined) profileUpdates.bio = body.bio;
     if (body.isPublic !== undefined) profileUpdates.isPublic = body.isPublic;
 
-    await adminDb.collection("publicProfiles").doc(uid).update(profileUpdates);
+    await getAdminDb().collection("publicProfiles").doc(uid).update(profileUpdates);
 
     // Update Auth
     if (body.disabled !== undefined) {
-      await adminAuth.updateUser(uid, { disabled: body.disabled });
+      await getAdminAuth().updateUser(uid, { disabled: body.disabled });
     }
     if (body.email) {
-      await adminAuth.updateUser(uid, { email: body.email });
+      await getAdminAuth().updateUser(uid, { email: body.email });
     }
     if (body.role) {
-      await adminAuth.setCustomUserClaims(uid, { role: body.role });
+      await getAdminAuth().setCustomUserClaims(uid, { role: body.role });
     }
 
     return NextResponse.json({ success: true });

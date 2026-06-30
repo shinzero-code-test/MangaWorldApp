@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
+import { getAdminDb } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
     await requireRole("super-admin");
-    const snap = await adminDb.collection("notification_history")
+    const snap = await getAdminDb().collection("notification_history")
       .orderBy("sentAt", "desc").limit(50).get();
     const history = snap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
     return NextResponse.json({ history });
@@ -30,7 +32,7 @@ export async function POST(request: NextRequest) {
       status: "sent",
     };
 
-    await adminDb.collection("notification_history").add(entry);
+    await getAdminDb().collection("notification_history").add(entry);
 
     return NextResponse.json({ success: true, entry });
   } catch (error: any) {

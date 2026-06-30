@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb, adminAuth } from "@/lib/firebase-admin";
+import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,7 +18,7 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
 
     // Get profiles from Firestore
-    let query: any = adminDb.collection("publicProfiles");
+    let query: any = getAdminDb().collection("publicProfiles");
     if (roleFilter) query = query.where("role", "==", roleFilter);
     query = query.orderBy(sortBy, sortDir as "asc" | "desc");
 
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest) {
     const enriched = await Promise.all(
       profilesPage.map(async (profile: any) => {
         try {
-          const authUser = await adminAuth.getUser(profile.id);
+          const authUser = await getAdminAuth().getUser(profile.id);
           return {
             ...profile,
             email: authUser.email || null,
@@ -66,7 +68,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get total count
-    const countSnapshot = await adminDb.collection("publicProfiles").count().get();
+    const countSnapshot = await getAdminDb().collection("publicProfiles").count().get();
     const total = countSnapshot.data().count;
 
     return NextResponse.json({
@@ -93,15 +95,15 @@ export async function PATCH(request: NextRequest) {
     if (role && ["viewer", "moderator", "super-admin"].includes(role)) {
       updates.role = role;
       // Also set custom claim
-      await adminAuth.setCustomUserClaims(uid, { role });
+      await getAdminAuth().setCustomUserClaims(uid, { role });
     }
     if (username !== undefined) updates.username = username;
     if (bio !== undefined) updates.bio = bio;
 
-    await adminDb.collection("publicProfiles").doc(uid).update(updates);
+    await getAdminDb().collection("publicProfiles").doc(uid).update(updates);
 
     if (disabled !== undefined) {
-      await adminAuth.updateUser(uid, { disabled });
+      await getAdminAuth().updateUser(uid, { disabled });
     }
 
     return NextResponse.json({ success: true });
@@ -118,22 +120,22 @@ export async function DELETE(request: NextRequest) {
     if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
 
     // Delete user from Auth
-    await adminAuth.deleteUser(uid);
+    await getAdminAuth().deleteUser(uid);
 
     // Delete profile
-    await adminDb.collection("publicProfiles").doc(uid).delete();
+    await getAdminDb().collection("publicProfiles").doc(uid).delete();
 
     // Delete user subcollections
     const subcols = ["favorites", "readingHistory", "readerAnnotations"];
     for (const subcol of subcols) {
-      const snap = await adminDb.collection("users").doc(uid).collection(subcol).limit(500).get();
-      const batch = adminDb.batch();
+      const snap = await getAdminDb().collection("users").doc(uid).collection(subcol).limit(500).get();
+      const batch = getAdminDb().batch();
       snap.docs.forEach((doc: any) => batch.delete(doc.ref));
       await batch.commit();
     }
 
     // Delete user doc
-    await adminDb.collection("users").doc(uid).delete();
+    await getAdminDb().collection("users").doc(uid).delete();
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

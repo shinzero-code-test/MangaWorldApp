@@ -1,72 +1,27 @@
-import { cookies } from "next/headers";
-import { adminAuth, adminDb } from "./firebase-admin";
-import { DecodedIdToken } from "firebase-admin/auth";
+import { cookies }                             from "next/headers";
+import { getAdminAuth, getAdminDb }            from "./firebase-admin";
 
-export interface AuthUser {
-  uid: string;
-  email: string | null;
-  role: "super-admin" | "moderator" | "viewer";
-}
+export interface AuthUser { uid:string; email:string; role:string; }
 
-export async function verifySession(): Promise<DecodedIdToken> {
-  const cookieStore = await cookies();
-  const session = cookieStore.get("session")?.value;
-  if (!session) throw new Error("Unauthorized");
-  return adminAuth.verifySessionCookie(session);
-}
+const ROLE_RANK: Record<string,number> = { viewer:0, moderator:1, "super-admin":2 };
 
 export async function getCurrentUser(): Promise<AuthUser> {
-  const decoded = await verifySession();
-  const doc = await adminDb.collection("publicProfiles").doc(decoded.uid).get();
-  const data = doc.data();
-  return {
-    uid: decoded.uid,
-    email: decoded.email ?? null,
-    role: (data?.role as AuthUser["role"]) || "viewer",
-  };
+  const store   = await cookies();
+  const session = store.get("session")?.value;
+  if (!session) throw new Error("Unauthorized");
+
+  let decoded;
+  try { decoded = await getAdminAuth().verifySessionCookie(session, true); }
+  catch { throw new Error("Session expired or invalid"); }
+
+  const uid        = decoded.uid;
+  const profileDoc = await getAdminDb().collection("publicProfiles").doc(uid).get();
+  const role       = profileDoc.data()?.role ?? "viewer";
+  return { uid, email: decoded.email ?? "", role };
 }
 
-export async function requireRole(
-  minRole: "viewer" | "moderator" | "super-admin"
-): Promise<AuthUser> {
+export async function requireRole(minRole: string): Promise<AuthUser> {
   const user = await getCurrentUser();
-  const hierarchy: Record<string, number> = { viewer: 0, moderator: 1, "super-admin": 2 };
-  if ((hierarchy[user.role] ?? 0) < (hierarchy[minRole] ?? 0)) {
-    throw new Error("Forbidden");
-  }
+  if ((ROLE_RANK[user.role] ?? 0) < (ROLE_RANK[minRole] ?? 0)) throw new Error(`Forbidden`);
   return user;
-}
-
-export async function createSessionCookie(idToken: string): Promise<string> {
-  const decoded = await adminAuth.verifyIdToken(idToken);
-
-  // Auto-bootstrap: create profile if doesn't exist
-  const profileDoc = await adminDb
-    .collection("publicProfiles")
-    .doc(decoded.uid)
-    .get();
-  const isSuperAdmin = decoded.email === process.env.SUPER_ADMIN_EMAIL;
-
-  if (!profileDoc.exists) {
-    const userRecord = await adminAuth.getUser(decoded.uid);
-    await adminDb.collection("publicProfiles").doc(decoded.uid).set({
-      uid: decoded.uid,
-      username: userRecord.email?.split("@")[0] || "unknown",
-      role: isSuperAdmin ? "super-admin" : "viewer",
-      isPublic: false,
-      showListsPublic: false,
-      showActivityPublic: false,
-      bio: "",
-      updatedAt: Date.now(),
-    });
-  } else if (isSuperAdmin && profileDoc.data()?.role !== "super-admin") {
-    await adminDb.collection("publicProfiles").doc(decoded.uid).update({
-      role: "super-admin",
-      updatedAt: Date.now(),
-    });
-  }
-
-  const expiresIn = 60 * 60 * 24 * 7 * 1000; // 7 days
-  const cookie = await adminAuth.createSessionCookie(idToken, { expiresIn });
-  return cookie;
 }

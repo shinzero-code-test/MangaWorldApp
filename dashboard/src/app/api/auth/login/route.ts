@@ -1,28 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initializeApp, getApps, cert } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 
-const app = getApps().length === 0
-  ? initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT!)) })
-  : getApps()[0];
-const adminAuth = getAuth(app);
-const adminDb = getFirestore(app);
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
 
-    // Verify credentials by creating a custom token
-    const userRecord = await adminAuth.getUserByEmail(email);
-    
-    // Create a custom token for the client to sign in with
-    const customToken = await adminAuth.createCustomToken(userRecord.uid);
-
-    // We need to verify the password server-side
-    // Firebase Admin doesn't have a direct password verify, so we use
-    // the Firebase Auth REST API
-    const apiKey = process.env.NEXT_PUBLIC_FIREBASE_CLIENT_API_KEY;
+    const apiKey = process.env.NEXT_PUBLIC_FIREBASE_CLIENT_API_KEY ||
+                   process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
     const signInRes = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
       {
@@ -37,29 +23,23 @@ export async function POST(request: NextRequest) {
     }
 
     const { idToken } = await signInRes.json();
+    const decoded = await getAdminAuth().verifyIdToken(idToken);
 
-    // Verify the ID token
-    const decoded = await adminAuth.verifyIdToken(idToken);
-
-    // Auto-bootstrap profile
-    const profileDoc = await adminDb.collection("publicProfiles").doc(decoded.uid).get();
+    const profileDoc = await getAdminDb().collection("publicProfiles").doc(decoded.uid).get();
     if (!profileDoc.exists) {
       const isSuperAdmin = email === process.env.SUPER_ADMIN_EMAIL;
-      await adminDb.collection("publicProfiles").doc(decoded.uid).set({
+      await getAdminDb().collection("publicProfiles").doc(decoded.uid).set({
         uid: decoded.uid,
         username: email.split("@")[0],
         role: isSuperAdmin ? "super-admin" : "viewer",
         isPublic: false,
-        showListsPublic: false,
-        showActivityPublic: false,
         bio: "",
         updatedAt: Date.now(),
       });
     }
 
-    // Create session cookie
     const expiresIn = 60 * 60 * 24 * 7 * 1000;
-    const sessionCookie = await adminAuth.createSessionCookie(idToken, { expiresIn });
+    const sessionCookie = await getAdminAuth().createSessionCookie(idToken, { expiresIn });
 
     const response = NextResponse.json({ success: true });
     response.cookies.set("session", sessionCookie, {
@@ -72,10 +52,12 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error: any) {
-    console.error("Login error:", error);
-    return NextResponse.json(
-      { error: error.message || "خطأ في تسجيل الدخول" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message || "خطأ في تسجيل الدخول" }, { status: 500 });
   }
+}
+
+export async function DELETE() {
+  const response = NextResponse.json({ success: true });
+  response.cookies.set("session", "", { httpOnly: true, maxAge: 0, path: "/" });
+  return response;
 }

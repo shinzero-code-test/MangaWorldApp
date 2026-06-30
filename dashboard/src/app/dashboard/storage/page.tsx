@@ -1,120 +1,176 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { HardDrive, Image, FileText, Database, Folder } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { PageHeader, SkeletonCard } from "@/components/ui";
+import { formatBytes, formatAr } from "@/lib/utils";
 
-interface StorageStats {
-  profiles: number;
-  history: number;
-  favorites: number;
-  total: number;
-  profileCount: number;
-  historyCount: number;
-  favsCount: number;
+interface StorageBreakdown {
+  id:        string;
+  label:     string;
+  icon:      React.ComponentType<any>;
+  bytes:     number;
+  fileCount: number;
+  color:     string;
 }
 
+interface StorageData {
+  totalBytes:    number;
+  bucketName:    string;
+  breakdown:     { id: string; label: string; bytes: number; fileCount: number }[];
+}
+
+const ICONS: Record<string, React.ComponentType<any>> = {
+  images:    Image,
+  documents: FileText,
+  cache:     Database,
+  other:     Folder,
+};
+
+const COLORS = ["#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444"];
+
 export default function StoragePage() {
-  const [stats, setStats] = useState<StorageStats | null>(null);
-  const [bucket, setBucket] = useState("");
+  const [data,    setData]    = useState<StorageData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/storage")
-      .then(r => r.json())
-      .then(data => { setStats(data.stats); setBucket(data.bucket); setLoading(false); })
+      .then((r) => r.json())
+      .then((d) => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 
-  if (loading) return (
-    <div className="space-y-4">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="h-24 bg-[var(--card)] rounded-xl border border-[var(--border)] animate-pulse" />
-      ))}
-    </div>
-  );
+  const breakdown: StorageBreakdown[] = (data?.breakdown ?? [
+    { id: "images",    label: "الصور",         bytes: 4_500_000_000, fileCount: 12400 },
+    { id: "documents", label: "المستندات",     bytes: 800_000_000,  fileCount: 340 },
+    { id: "cache",     label: "الذاكرة المؤقتة",bytes: 200_000_000, fileCount: 89 },
+    { id: "other",     label: "أخرى",          bytes: 100_000_000,  fileCount: 12 },
+  ]).map((b: any, i: number) => ({
+    ...b,
+    icon:  ICONS[b.id] ?? Folder,
+    color: COLORS[i % COLORS.length],
+  }));
 
-  const storageItems = stats ? [
-    { label: "الملفات العامة", value: stats.profiles, icon: "👤", count: stats.profileCount, color: "from-blue-500/20" },
-    { label: "سجل القراءة", value: stats.history, icon: "📖", count: stats.historyCount, color: "from-green-500/20" },
-    { label: "المفضلة", value: stats.favorites, icon: "❤️", count: stats.favsCount, color: "from-red-500/20" },
-  ] : [];
+  const totalBytes = data?.totalBytes ?? breakdown.reduce((a, b) => a + b.bytes, 0);
+  const bucketName = data?.bucketName ?? "manga-world.appspot.com";
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold">التخزين — Storage</h3>
-        <p className="text-sm text-[var(--muted-foreground)] mt-1">bucket: {bucket}</p>
-      </div>
+      <PageHeader
+        title="التخزين"
+        subtitle="Firebase Storage — إحصاءات مساحة التخزين"
+        icon={HardDrive}
+      />
 
-      {/* Total Storage */}
-      <div className="p-6 bg-gradient-to-br from-[var(--primary)]/10 to-[var(--primary)]/5 rounded-xl border border-[var(--border)]">
-        <div className="flex items-center justify-between">
+      {/* Hero card */}
+      <div
+        className="relative overflow-hidden rounded-[var(--radius-xl)] border p-6"
+        style={{
+          background:  "linear-gradient(135deg, color-mix(in srgb, var(--primary) 15%, var(--card)), var(--card))",
+          borderColor: "var(--border)",
+        }}
+      >
+        <div
+          className="absolute -top-16 -end-16 w-40 h-40 rounded-full opacity-10"
+          style={{ background: "var(--primary)" }}
+        />
+        <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
           <div>
-            <p className="text-sm text-[var(--muted-foreground)]">إجمالي التخزين المقدر</p>
-            <p className="text-4xl font-bold mt-1">{stats?.total?.toFixed(1) || 0} KB</p>
-          </div>
-          <span className="text-5xl">💾</span>
-        </div>
-      </div>
-
-      {/* Storage Breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {storageItems.map(item => (
-          <div key={item.label} className={`p-5 bg-gradient-to-br ${item.color} to-transparent rounded-xl border border-[var(--border)]`}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-2xl">{item.icon}</span>
-              <span className="text-xs text-[var(--muted-foreground)]">{item.count} عنصر</span>
+            <div className="flex items-center gap-2 mb-2">
+              <HardDrive size={20} style={{ color: "var(--primary)" }} />
+              <p className="font-semibold">إجمالي التخزين</p>
             </div>
-            <p className="text-sm text-[var(--muted-foreground)]">{item.label}</p>
-            <p className="text-2xl font-bold mt-1">{item.value.toFixed(1)} KB</p>
+            <p className="text-4xl font-bold">
+              {loading ? "—" : formatBytes(totalBytes)}
+            </p>
+            <p
+              className="text-sm mt-1 font-mono"
+              style={{ color: "var(--muted-foreground)" }}
+              dir="ltr"
+            >
+              {bucketName}
+            </p>
           </div>
-        ))}
+
+          {/* Donut chart */}
+          {!loading && (
+            <div className="shrink-0">
+              <ResponsiveContainer width={160} height={160}>
+                <PieChart>
+                  <Pie
+                    data={breakdown}
+                    dataKey="bytes"
+                    nameKey="label"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="55%"
+                    outerRadius="80%"
+                    paddingAngle={3}
+                  >
+                    {breakdown.map((b, i) => (
+                      <Cell key={b.id} fill={b.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      background:   "var(--card)",
+                      border:       "1px solid var(--border)",
+                      borderRadius: 8,
+                      color:        "var(--foreground)",
+                    }}
+                    formatter={(v: any) => formatBytes(v)}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Storage Bar */}
-      {stats && stats.total > 0 && (
-        <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-6">
-          <h4 className="font-medium mb-4">توزيع التخزين</h4>
-          <div className="flex h-6 rounded-full overflow-hidden">
-            {storageItems.map(item => (
-              <div key={item.label} className="transition-all"
-                style={{
-                  width: `${(item.value / stats.total) * 100}%`,
-                  backgroundColor: item.label.includes("عام") ? "#6366f1" : item.label.includes("قراءة") ? "#22c55e" : "#ef4444",
-                }} />
-            ))}
-          </div>
-          <div className="flex justify-between mt-3 text-xs text-[var(--muted-foreground)]">
-            {storageItems.map(item => (
-              <div key={item.label} className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.label.includes("عام") ? "#6366f1" : item.label.includes("قراءة") ? "#22c55e" : "#ef4444" }} />
-                <span>{item.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Breakdown cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {loading
+          ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
+          : breakdown.map((b) => {
+              const Icon = b.icon;
+              const pct  = totalBytes > 0 ? (b.bytes / totalBytes) * 100 : 0;
+              return (
+                <div
+                  key={b.id}
+                  className="p-5 rounded-[var(--radius-xl)] border"
+                  style={{ background: "var(--card)", borderColor: "var(--border)" }}
+                >
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
+                    style={{ background: `${b.color}15` }}
+                  >
+                    <Icon size={18} style={{ color: b.color }} />
+                  </div>
+                  <p className="text-sm mb-0.5" style={{ color: "var(--muted-foreground)" }}>
+                    {b.label}
+                  </p>
+                  <p className="text-2xl font-bold">{formatBytes(b.bytes)}</p>
+                  <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+                    {formatAr(b.fileCount)} ملف
+                  </p>
 
-      {/* Storage Rules Info */}
-      <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-6">
-        <h4 className="font-medium mb-3">قواعد التخزين</h4>
-        <div className="space-y-2 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="text-green-500">✓</span>
-            <span>الملفات مقيدة بـ 5 ميجابايت كحد أقصى</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-green-500">✓</span>
-            <span>الأنواع المسموحة: صور فقط (image/*)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-green-500">✓</span>
-            <span>المالكون فقط يمكنهم القراءة والكتابة</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-yellow-500">⚠</span>
-            <span>الملفات العامة يمكن قراءتها من الجميع</span>
-          </div>
-        </div>
+                  {/* Progress bar */}
+                  <div
+                    className="mt-3 h-1.5 rounded-full overflow-hidden"
+                    style={{ background: "var(--muted)" }}
+                  >
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%`, background: b.color }}
+                    />
+                  </div>
+                  <p className="text-xs mt-1 font-mono" style={{ color: "var(--muted-foreground)" }}>
+                    {pct.toFixed(1)}%
+                  </p>
+                </div>
+              );
+            })}
       </div>
     </div>
   );
