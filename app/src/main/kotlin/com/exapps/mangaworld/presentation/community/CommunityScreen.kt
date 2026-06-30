@@ -242,7 +242,9 @@ fun CommunityScreen(
             if (!state.chapterMode) {
                 Button(
                     onClick = { viewModel.setTab(CommunityTab.REVIEWS) },
-                    colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MangaColors.Cyan
+                    )
                 ) { Text("مراجعات المستخدمين", color = MangaColors.Background) }
             }
         }
