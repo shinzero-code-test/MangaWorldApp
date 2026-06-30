@@ -94,7 +94,7 @@ class UserProfileViewModel @Inject constructor(
     var avatarUri by mutableStateOf<Uri?>(null)
         private set
 
-    fun setAvatarUri(uri: Uri) {
+    fun updateAvatarUri(uri: Uri) {
         avatarUri = uri
     }
 
@@ -130,7 +130,7 @@ fun UserProfileScreen(
     var showActivityPublic by remember(profile?.showActivityPublic) { mutableStateOf(profile?.showActivityPublic ?: true) }
 
     val avatarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { viewModel.setAvatarUri(it) }
+        uri?.let { viewModel.updateAvatarUri(it) }
     }
 
     Column(
