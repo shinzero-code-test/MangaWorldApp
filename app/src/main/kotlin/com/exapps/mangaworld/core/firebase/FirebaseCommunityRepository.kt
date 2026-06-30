@@ -502,7 +502,7 @@ class FirebaseCommunityRepository @Inject constructor(
     private suspend fun sendPushNotification(targetUid: String, notification: CommunityNotification) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
-                val baseUrl = "https://mangaworld-dash.vercel.app"
+                val baseUrl = "https://mangaworld-admin.vercel.app"
                 val body = org.json.JSONObject().apply {
                     put("targetUid", targetUid)
                     put("title", notification.title)
