@@ -77,22 +77,23 @@ class ChapterUpdateChecker @Inject constructor(
                     }
 
                     if (latestChapters.isNotEmpty()) {
-                        // Compare with last known chapter count
-                        val lastKnownCount = prefs.getInt("count_${favorite.mangaId}", favorite.totalChapters)
-                        if (favorite.totalChapters > lastKnownCount && lastKnownCount > 0) {
-                            val diff = favorite.totalChapters - lastKnownCount
+                        // Compare the number of latest chapters fetched from the source
+                        // against the count stored from the previous check
+                        val fetchedCount = latestChapters.size
+                        val lastKnownCount = prefs.getInt("count_${favorite.mangaId}", -1)
+                        if (lastKnownCount == -1) {
+                            // First time seeing this manga — store baseline, don't notify
+                            prefs.edit().putInt("count_${favorite.mangaId}", fetchedCount).apply()
+                        } else if (fetchedCount > lastKnownCount) {
+                            val diff = fetchedCount - lastKnownCount
                             newChapters.add(favorite.title to "$diff فصل${if (diff > 1) " جديدة" else " جديد"}")
+                            prefs.edit().putInt("count_${favorite.mangaId}", fetchedCount).apply()
                         }
                     }
                 }
             } catch (_: Exception) {
                 // Skip failed sources silently
             }
-        }
-
-        // Update stored counts for next comparison
-        for (favorite in favorites) {
-            prefs.edit().putInt("count_${favorite.mangaId}", favorite.totalChapters).apply()
         }
 
         // Show notification if new chapters found
@@ -107,8 +108,22 @@ class ChapterUpdateChecker @Inject constructor(
      */
     suspend fun snapshotCurrentCounts() = withContext(Dispatchers.IO) {
         val favorites = favoriteDao.getFavoritesList()
-        for (favorite in favorites) {
-            prefs.edit().putInt("count_${favorite.mangaId}", favorite.totalChapters).apply()
+        val favoritesBySource = favorites.groupBy { it.sourceId }
+        for ((sourceId, sourceFavorites) in favoritesBySource) {
+            try {
+                val source = MangaSource.fromId(sourceId)
+                val homeData = mangaRepository.getHomeData(source).getOrDefault(
+                    com.exapps.mangaworld.domain.model.HomeData()
+                )
+                for (favorite in sourceFavorites) {
+                    val fetchedCount = homeData.latestChapters.filter {
+                        it.mangaId == favorite.mangaId || it.mangaSlug == favorite.slug
+                    }.size
+                    if (fetchedCount > 0) {
+                        prefs.edit().putInt("count_${favorite.mangaId}", fetchedCount).apply()
+                    }
+                }
+            } catch (_: Exception) { }
         }
     }
 

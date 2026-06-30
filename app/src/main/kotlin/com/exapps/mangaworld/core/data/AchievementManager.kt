@@ -58,7 +58,8 @@ data class Achievement(
 @Singleton
 class AchievementManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val sessionManager: FirebaseSessionManager
+    private val sessionManager: FirebaseSessionManager,
+    private val readingStatsStore: ReadingStatsStore
 ) {
     private val dataStore = context.goalsDataStore
     private val goalsKey = stringPreferencesKey("reading_goals")
@@ -214,11 +215,9 @@ class AchievementManager @Inject constructor(
                     GoalType.PAGES_READ -> totalPages
                     GoalType.CHAPTERS_READ -> totalChapters
                     GoalType.READING_TIME -> {
-                        // Wire to actual reading time from ReadingStatsStore
+                        // Read actual total reading time from ReadingStatsStore (ms → minutes)
                         runCatching {
-                            val statsPrefs = context.getSharedPreferences("reading_stats_prefs", 0)
-                            // Reading time is tracked separately; use a best-effort read
-                            0 // TODO: inject ReadingStatsStore for proper integration
+                            (readingStatsStore.totalReadingTimeMs.first() / 60_000).toInt()
                         }.getOrDefault(0)
                     }
                 }
