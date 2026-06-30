@@ -240,7 +240,10 @@ fun CommunityScreen(
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MangaColors.OnSurface) }
             Text(state.title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             if (!state.chapterMode) {
-                FilledTonalButton(onClick = { viewModel.setTab(CommunityTab.REVIEWS) }) { Text("مراجعات المستخدمين") }
+                Button(
+                    onClick = { viewModel.setTab(CommunityTab.REVIEWS) },
+                    colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)
+                ) { Text("مراجعات المستخدمين", color = MangaColors.Background) }
             }
         }
 
