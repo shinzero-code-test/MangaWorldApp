@@ -92,7 +92,8 @@ class ReaderViewModel @Inject constructor(
     private val widgetShortcutCoordinator: WidgetShortcutCoordinator,
     private val analyticsManager: FirebaseAnalyticsManager,
     private val remoteConfigManager: FirebaseRemoteConfigManager,
-    private val positionSyncManager: ReadingPositionSyncManager
+    private val positionSyncManager: ReadingPositionSyncManager,
+    private val imageLoader: coil.ImageLoader
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReaderUiState())
@@ -430,7 +431,7 @@ class ReaderViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val context = app.applicationContext
-                val bitmap = coil.ImageLoader(context).execute(
+                val bitmap = imageLoader.execute(
                     coil.request.ImageRequest.Builder(context)
                         .data(page.url)
                         .allowHardware(false)

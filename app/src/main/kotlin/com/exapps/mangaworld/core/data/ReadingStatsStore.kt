@@ -53,10 +53,10 @@ class ReadingStatsStore @Inject constructor(
         dataStore.edit { prefs ->
             prefs[totalReadingTimeKey] = (prefs[totalReadingTimeKey] ?: 0L) + durationMs
             prefs[lastReadDateKey] = today
-            // Also record daily reading time for the stats chart
-            val timeMap = parseMap(prefs[dailyTimeKey] ?: "{}")
-            timeMap[today] = (timeMap[today] ?: 0) + durationMs.toInt()
-            prefs[dailyTimeKey] = JSONObject(timeMap as Map<String, Any>).toString()
+            // Also record daily reading time for the stats chart (use Long to avoid truncation)
+            val timeMap = parseLongMap(prefs[dailyTimeKey] ?: "{}")
+            timeMap[today] = (timeMap[today] ?: 0L) + durationMs
+            prefs[dailyTimeKey] = longMapToJson(timeMap)
         }
         updateStreak(today, previousDate)
     }
@@ -67,8 +67,7 @@ class ReadingStatsStore @Inject constructor(
             val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
             val pagesMap = parseMap(prefs[dailyPagesKey] ?: "{}")
             pagesMap[today] = (pagesMap[today] ?: 0) + pagesRead
-            // Use JSONObject for correct JSON serialization (Map.toString() produces {key=value})
-            prefs[dailyPagesKey] = JSONObject(pagesMap as Map<String, Any>).toString()
+            prefs[dailyPagesKey] = mapToJson(pagesMap)
         }
     }
 
@@ -110,36 +109,55 @@ class ReadingStatsStore @Inject constructor(
 
     private fun parseDailyStats(pagesJson: String, timeJson: String): List<DailyStat> {
         val pagesMap = parseMap(pagesJson)
-        val timeMap = parseMap(timeJson)
+        val timeMap = parseLongMap(timeJson)
         val allDates = (pagesMap.keys + timeMap.keys).distinct().sorted()
 
         return allDates.takeLast(30).map { date ->
             DailyStat(
                 date = date,
                 pagesRead = pagesMap[date] ?: 0,
-                readingTimeMs = (timeMap[date] ?: 0).toLong()
+                readingTimeMs = timeMap[date] ?: 0L
             )
         }
     }
 
+    /** Parse a JSON object into a mutable Int map (used for page counts). */
     private fun parseMap(json: String): MutableMap<String, Int> {
         return try {
             val obj = JSONObject(json)
             obj.keys().asSequence().associateWith { key -> obj.getInt(key) }.toMutableMap()
         } catch (_: Exception) {
-            // Backward compat: handle old Map.toString() format "{key=value}"
+            mutableMapOf()
+        }
+    }
+
+    /** Parse a JSON object into a mutable Long map (used for reading time in ms). */
+    private fun parseLongMap(json: String): MutableMap<String, Long> {
+        return try {
+            val obj = JSONObject(json)
+            obj.keys().asSequence().associateWith { key -> obj.getLong(key) }.toMutableMap()
+        } catch (_: Exception) {
+            // Backward compat: handle old Int-based format
             try {
-                val cleaned = json.trim().removePrefix("{").removeSuffix("}")
-                if (cleaned.isBlank()) return mutableMapOf()
-                cleaned.split(",").associate { entry ->
-                    val sep = if (entry.contains("=")) "=" else ":"
-                    val parts = entry.split(sep)
-                    parts[0].trim().removeSurrounding("\"") to (parts.getOrNull(1)?.trim()?.removeSurrounding("\"")?.toIntOrNull() ?: 0)
-                }.toMutableMap()
+                parseMap(json).mapValues { it.value.toLong() }.toMutableMap()
             } catch (_: Exception) {
                 mutableMapOf()
             }
         }
+    }
+
+    /** Serialize a String→Int map to JSON. */
+    private fun mapToJson(map: Map<String, Int>): String {
+        val obj = JSONObject()
+        map.forEach { (k, v) -> obj.put(k, v) }
+        return obj.toString()
+    }
+
+    /** Serialize a String→Long map to JSON. */
+    private fun longMapToJson(map: Map<String, Long>): String {
+        val obj = JSONObject()
+        map.forEach { (k, v) -> obj.put(k, v) }
+        return obj.toString()
     }
 }
 

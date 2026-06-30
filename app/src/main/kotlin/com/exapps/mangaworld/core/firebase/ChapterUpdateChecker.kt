@@ -52,7 +52,9 @@ class ChapterUpdateChecker @Inject constructor(
         val lastCheck = prefs.getLong("last_update_check", 0L)
         val now = System.currentTimeMillis()
         if (now - lastCheck < 2 * 60 * 60 * 1000L) return@withContext
-        prefs.edit().putLong("last_update_check", now).apply()
+        // commit() ensures the throttle timestamp is persisted before network calls begin;
+        // apply() could be lost on process death, causing repeated checks
+        prefs.edit().putLong("last_update_check", now).commit()
 
         val favorites = favoriteDao.getFavoritesList()
         if (favorites.isEmpty()) return@withContext

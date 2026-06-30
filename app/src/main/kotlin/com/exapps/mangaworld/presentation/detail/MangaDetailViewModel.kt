@@ -341,39 +341,40 @@ class MangaDetailViewModel @Inject constructor(
 
     private fun loadSourceComparisons(manga: MangaDetail) {
         viewModelScope.launch {
-            val comparisons = MangaSource.entries
+            // Limit to top 10 sources to avoid overwhelming the network
+            val sourcesToCheck = MangaSource.entries
                 .filter { it != currentSource }
-                .map { source ->
-                    SourceComparison(source = source, match = null, isLoading = true)
-                }
+                .take(MAX_SOURCE_COMPARISONS)
+
+            val comparisons = sourcesToCheck.map { source ->
+                SourceComparison(source = source, match = null, isLoading = true)
+            }
             _state.update { it.copy(sourceComparisons = comparisons) }
 
-            val results = MangaSource.entries
-                .filter { it != currentSource }
-                .map { source ->
-                    async {
-                        try {
-                            val result = mangaRepo.searchMangaDirect(manga.title, source)
-                            val match = result.getOrNull()?.firstOrNull { item ->
-                                normalizeTitle(item.title).contains(normalizeTitle(manga.title)) ||
-                                normalizeTitle(manga.title).contains(normalizeTitle(item.title))
-                            }
-                            SourceComparison(
-                                source = source,
-                                match = match,
-                                chapterCount = match?.let { detail ->
-                                    mangaRepo.getMangaDetail(detail.slug, source).getOrNull()?.totalChapters ?: 0
-                                } ?: 0
-                            )
-                        } catch (e: Exception) {
-                            SourceComparison(
-                                source = source,
-                                match = null,
-                                error = e.message ?: "خطأ غير معروف"
-                            )
+            val results = sourcesToCheck.map { source ->
+                async {
+                    try {
+                        val result = mangaRepo.searchMangaDirect(manga.title, source)
+                        val match = result.getOrNull()?.firstOrNull { item ->
+                            normalizeTitle(item.title).contains(normalizeTitle(manga.title)) ||
+                            normalizeTitle(manga.title).contains(normalizeTitle(item.title))
                         }
+                        SourceComparison(
+                            source = source,
+                            match = match,
+                            chapterCount = match?.let { detail ->
+                                mangaRepo.getMangaDetail(detail.slug, source).getOrNull()?.totalChapters ?: 0
+                            } ?: 0
+                        )
+                    } catch (e: Exception) {
+                        SourceComparison(
+                            source = source,
+                            match = null,
+                            error = e.message ?: "خطأ غير معروف"
+                        )
                     }
-                }.awaitAll()
+                }
+            }.awaitAll()
 
             _state.update { it.copy(sourceComparisons = results) }
         }
@@ -578,5 +579,9 @@ class MangaDetailViewModel @Inject constructor(
             }.map { it.url }.toSet()
         }
         _state.update { it.copy(downloadedChapters = downloaded) }
+    }
+
+    companion object {
+        private const val MAX_SOURCE_COMPARISONS = 10
     }
 }
