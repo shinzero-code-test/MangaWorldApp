@@ -495,6 +495,34 @@ class FirebaseCommunityRepository @Inject constructor(
             .collection("notifications").document(notification.id)
             .set(notification.toMap())
             .await()
+        // Also send a push notification via the dashboard API
+        sendPushNotification(targetUid, notification)
+    }
+
+    private suspend fun sendPushNotification(targetUid: String, notification: CommunityNotification) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val baseUrl = "https://mangaworld-dash.vercel.app"
+                val body = org.json.JSONObject().apply {
+                    put("targetUid", targetUid)
+                    put("title", notification.title)
+                    put("body", notification.body)
+                    put("mangaId", notification.mangaId)
+                    put("slug", notification.slug)
+                    put("sourceId", notification.sourceId)
+                    if (notification.chapterUrl != null) put("chapterUrl", notification.chapterUrl)
+                }
+                val conn = java.net.URL("$baseUrl/api/notifications/push-reply").openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.doOutput = true
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
+                conn.outputStream.use { os -> os.write(body.toString().toByteArray()) }
+                conn.responseCode // just trigger the request
+                conn.disconnect()
+            }
+        }
     }
 
     private suspend fun currentProfileOrThrow(): CommunityProfile {

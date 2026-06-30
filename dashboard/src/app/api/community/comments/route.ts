@@ -15,21 +15,16 @@ export async function GET(request: NextRequest) {
     if (mangaId) {
       const mangaDoc = await getAdminDb().collection("community_manga").doc(mangaId).get();
       if (mangaDoc.exists) {
-        const chaptersCol = await getAdminDb().collection("community_manga").doc(mangaId).collection("chapters").get();
-        for (const chapter of chaptersCol.docs) {
-          const commentsSnap = await chapter.ref.collection("comments").orderBy("createdAt", "desc").limit(limit).get();
-          comments.push(...commentsSnap.docs.map((d) => ({ id: d.id, mangaId, chapterId: chapter.id, ...d.data() })));
-        }
+        const snap = await getAdminDb().collection("community_manga").doc(mangaId).collection("comments").orderBy("createdAt", "desc").limit(limit).get();
+        comments.push(...snap.docs.map(d => ({ id: d.id, mangaId, chapterId: d.data().chapterUrl || "", ...d.data() })));
+        
+        // Also get chapter comments
+        const chaptersSnap = await getAdminDb().collectionGroup("comments").where("mangaId", "==", mangaId).orderBy("createdAt", "desc").limit(limit).get();
+        comments.push(...chaptersSnap.docs.map(d => ({ id: d.id, mangaId, chapterId: d.data().chapterUrl || "", ...d.data() })));
       }
     } else {
-      const mangas = await getAdminDb().collection("community_manga").limit(20).get();
-      for (const manga of mangas.docs) {
-        const chaptersCol = await manga.ref.collection("chapters").limit(5).get();
-        for (const chapter of chaptersCol.docs) {
-          const commentsSnap = await chapter.ref.collection("comments").orderBy("createdAt", "desc").limit(10).get();
-          comments.push(...commentsSnap.docs.map((d) => ({ id: d.id, mangaId: manga.id, chapterId: chapter.id, ...d.data() })));
-        }
-      }
+      const snap = await getAdminDb().collectionGroup("comments").orderBy("createdAt", "desc").limit(limit).get();
+      comments = snap.docs.map((d) => ({ id: d.id, mangaId: d.data().mangaId || "", chapterId: d.data().chapterUrl || "", ...d.data() }));
     }
 
     comments.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -43,12 +38,15 @@ export async function DELETE(request: NextRequest) {
   try {
     await requireRole("moderator");
     const { commentId, mangaId, chapterId } = await request.json();
-    if (!commentId || !mangaId || !chapterId) {
+    if (!commentId || !mangaId) {
       return NextResponse.json({ error: "Missing params" }, { status: 400 });
     }
-    await getAdminDb().collection("community_manga").doc(mangaId)
-      .collection("chapters").doc(chapterId)
-      .collection("comments").doc(commentId).delete();
+    
+    let ref: any = getAdminDb().collection("community_manga").doc(mangaId);
+    if (chapterId) {
+      ref = ref.collection("chapters").doc(chapterId);
+    }
+    await ref.collection("comments").doc(commentId).delete();
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: error.message === "Forbidden" ? 403 : 500 });

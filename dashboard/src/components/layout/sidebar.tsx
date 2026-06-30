@@ -94,7 +94,7 @@ export function Sidebar({ userRole, userEmail, collapsed=false, onToggleCollapse
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center"
               style={{ background:"var(--sidebar-active)" }}>
-              <BookOpen size={16} className="text-white" />
+              <img src="/logo.png" alt="Logo" className="w-4 h-4 object-contain" />
             </div>
             <div>
               <p className="text-sm font-bold text-white leading-none">MangaWorld</p>
@@ -105,7 +105,7 @@ export function Sidebar({ userRole, userEmail, collapsed=false, onToggleCollapse
         {collapsed && (
           <div className="w-8 h-8 rounded-lg flex items-center justify-center mx-auto"
             style={{ background:"var(--sidebar-active)" }}>
-            <BookOpen size={16} className="text-white" />
+            <img src="/logo.png" alt="Logo" className="w-4 h-4 object-contain" />
           </div>
         )}
         {!collapsed && onToggleCollapse && (

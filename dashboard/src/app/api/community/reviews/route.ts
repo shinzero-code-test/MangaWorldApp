@@ -16,11 +16,8 @@ export async function GET(request: NextRequest) {
       const snap = await getAdminDb().collection("community_manga").doc(mangaId).collection("reviews").orderBy("createdAt", "desc").limit(limit).get();
       reviews = snap.docs.map((d) => ({ id: d.id, mangaId, ...d.data() }));
     } else {
-      const mangas = await getAdminDb().collection("community_manga").limit(20).get();
-      for (const manga of mangas.docs) {
-        const revSnap = await manga.ref.collection("reviews").orderBy("createdAt", "desc").limit(5).get();
-        reviews.push(...revSnap.docs.map((d) => ({ id: d.id, mangaId: manga.id, ...d.data() })));
-      }
+      const snap = await getAdminDb().collectionGroup("reviews").orderBy("createdAt", "desc").limit(limit).get();
+      reviews = snap.docs.map((d) => ({ id: d.id, mangaId: d.data().mangaId || "", ...d.data() }));
     }
 
     reviews.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));

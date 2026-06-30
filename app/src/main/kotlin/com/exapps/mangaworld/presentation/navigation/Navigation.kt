@@ -306,6 +306,7 @@ fun MangaNavGraph(navController: NavHostController) {
             LoginScreen(
                 onLoginClick = { _, _ -> navController.navigate(Screen.Home.route) },
                 onGoogleSignInClick = { navController.navigate(Screen.Home.route) },
+                onFacebookLoginClick = { navController.navigate(Screen.Home.route) },
                 onForgotPasswordClick = { navController.popBackStack() },
                 onSignUpClick = { navController.popBackStack() }
             )

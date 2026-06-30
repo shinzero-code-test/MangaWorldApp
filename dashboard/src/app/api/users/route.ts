@@ -6,73 +6,71 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireRole("moderator");
+    const admin = await requireRole("moderator");
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get("search") || "";
+    const search = searchParams.get("search")?.toLowerCase() || "";
     const roleFilter = searchParams.get("role") || "";
     const providerFilter = searchParams.get("provider") || "";
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
-    const sortBy = searchParams.get("sortBy") || "updatedAt";
+    const sortBy = searchParams.get("sortBy") || "createdAt";
     const sortDir = searchParams.get("sortDir") || "desc";
-    const offset = (page - 1) * limit;
 
-    // Get profiles from Firestore
-    let query: any = getAdminDb().collection("publicProfiles");
-    if (roleFilter) query = query.where("role", "==", roleFilter);
-    query = query.orderBy(sortBy, sortDir as "asc" | "desc");
+    // 1. Fetch all users from Auth (since publicProfiles may be incomplete)
+    let allAuthUsers: any[] = [];
+    let pageToken: string | undefined = undefined;
+    do {
+      const result = await getAdminAuth().listUsers(1000, pageToken);
+      allAuthUsers.push(...result.users);
+      pageToken = result.pageToken;
+    } while (pageToken);
 
-    const snapshot = await query.offset(offset).limit(limit + 1).get();
-    const profiles = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-    const hasMore = snapshot.docs.length > limit;
-    const profilesPage = profiles.slice(0, limit);
+    // 2. Map to a unified user object
+    let enriched = allAuthUsers.map(authUser => ({
+      id: authUser.uid,
+      email: authUser.email || null,
+      username: authUser.displayName || authUser.email?.split('@')[0] || "مستخدم",
+      role: authUser.customClaims?.role || "viewer",
+      emailVerified: authUser.emailVerified,
+      disabled: authUser.disabled,
+      lastSignIn: authUser.metadata.lastSignInTime,
+      createdAt: authUser.metadata.creationTime,
+      providers: authUser.providerData.map(p => p.providerId),
+      phoneNumber: authUser.phoneNumber || null,
+    }));
 
-    // Enrich with Firebase Auth data
-    const enriched = await Promise.all(
-      profilesPage.map(async (profile: any) => {
-        try {
-          const authUser = await getAdminAuth().getUser(profile.id);
-          return {
-            ...profile,
-            email: authUser.email || null,
-            emailVerified: authUser.emailVerified,
-            disabled: authUser.disabled,
-            lastSignIn: authUser.metadata.lastSignInTime,
-            createdAt: authUser.metadata.creationTime,
-            providers: authUser.providerData.map((p: any) => p.providerId),
-            phoneNumber: authUser.phoneNumber || null,
-          };
-        } catch {
-          return { ...profile, email: null, providers: [] };
-        }
-      })
-    );
-
-    // Apply search filter (after enrichment since search may need email)
-    let filtered = enriched;
+    // 3. Apply filters
+    if (roleFilter) enriched = enriched.filter(u => u.role === roleFilter);
+    if (providerFilter) enriched = enriched.filter(u => u.providers.includes(providerFilter));
     if (search) {
-      const s = search.toLowerCase();
-      filtered = enriched.filter(
-        (u: any) =>
-          u.username?.toLowerCase().includes(s) ||
-          u.email?.toLowerCase().includes(s) ||
-          u.id.toLowerCase().includes(s)
+      enriched = enriched.filter(u => 
+        u.email?.toLowerCase().includes(search) || 
+        u.id.toLowerCase().includes(search) ||
+        u.username.toLowerCase().includes(search)
       );
     }
 
-    // Apply provider filter
-    if (providerFilter) {
-      filtered = filtered.filter((u: any) =>
-        u.providers?.includes(providerFilter)
-      );
-    }
+    // 4. Sort
+    enriched.sort((a, b) => {
+      let valA = a[sortBy as keyof typeof a];
+      let valB = b[sortBy as keyof typeof b];
+      if (sortBy === "createdAt" || sortBy === "lastSignIn") {
+        valA = new Date(valA as string).getTime();
+        valB = new Date(valB as string).getTime();
+      }
+      if (valA! < valB!) return sortDir === "asc" ? -1 : 1;
+      if (valA! > valB!) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
 
-    // Get total count
-    const countSnapshot = await getAdminDb().collection("publicProfiles").count().get();
-    const total = countSnapshot.data().count;
+    // 5. Paginate
+    const total = enriched.length;
+    const offset = (page - 1) * limit;
+    const users = enriched.slice(offset, offset + limit);
+    const hasMore = offset + limit < total;
 
     return NextResponse.json({
-      users: filtered,
+      users,
       total,
       page,
       limit,

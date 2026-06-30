@@ -10,4 +10,8 @@
     <string name="shortcut_latest_long">افتح أحدث التحديثات</string>
     <string name="shortcut_random_short">مانجا عشوائية</string>
     <string name="shortcut_random_long">افتح مانجا عشوائية</string>
+
+    <!-- Facebook SDK — replace with your actual Facebook App ID from developers.facebook.com -->
+    <string name="facebook_app_id">3473309582835491</string>
+    <string name="fb_login_protocol_scheme">fb3473309582835491</string>
 </resources>

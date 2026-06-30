@@ -49,6 +49,8 @@ export async function POST(request: NextRequest) {
       maxAge: expiresIn / 1000,
       path: "/",
     });
+    // Clear any existing 2FA verification so user must re-verify
+    response.cookies.set("2fa_verified", "", { httpOnly: true, maxAge: 0, path: "/" });
 
     return response;
   } catch (error: any) {
@@ -59,5 +61,6 @@ export async function POST(request: NextRequest) {
 export async function DELETE() {
   const response = NextResponse.json({ success: true });
   response.cookies.set("session", "", { httpOnly: true, maxAge: 0, path: "/" });
+  response.cookies.set("2fa_verified", "", { httpOnly: true, maxAge: 0, path: "/" });
   return response;
 }

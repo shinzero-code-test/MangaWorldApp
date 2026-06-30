@@ -4,6 +4,13 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "MangaWorld Admin | لوحة تحكم مانجا وورلد",
   description: "لوحة إدارة تطبيق مانجا وورلد",
+  manifest: "/manifest.json",
+  themeColor: "#7c3aed",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "MangaWorld Admin",
+  },
 };
 
 export default function RootLayout({

@@ -50,6 +50,7 @@ import com.exapps.mangaworld.presentation.theme.MangaColors
 fun LoginScreen(
     onLoginClick: (email: String, password: String) -> Unit,
     onGoogleSignInClick: () -> Unit,
+    onFacebookLoginClick: () -> Unit = {},
     onForgotPasswordClick: () -> Unit,
     onSignUpClick: () -> Unit,
     isLoading: Boolean = false,
@@ -187,6 +188,22 @@ fun LoginScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text("متابعة باستخدام Google", color = MangaColors.OnSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Facebook Login button
+                OutlinedButton(
+                    onClick = onFacebookLoginClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF1877F2))
+                ) {
+                    Text("f", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text("متابعة باستخدام Facebook", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
 
                 Spacer(modifier = Modifier.height(28.dp))

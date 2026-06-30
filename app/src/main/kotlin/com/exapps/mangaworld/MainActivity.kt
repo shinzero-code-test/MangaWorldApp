@@ -110,6 +110,9 @@ private fun MangaApp(
         AppTheme.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
     }
 
+    // After onboarding completes, show login screen once
+    var showPostOnboardingLogin by rememberSaveable { mutableStateOf(false) }
+
     val biometricSupported = remember {
         BiometricManager.from(context).canAuthenticate(
             BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -138,16 +141,35 @@ private fun MangaApp(
 
     MangaWorldTheme(darkTheme = isDark, useDynamicColors = settings.useDynamicColors) {
         Box(Modifier.fillMaxSize()) {
-            if (!settings.onboardingCompleted) {
-                OnboardingScreen(
-                    onFinish = {
-                        scope.launch {
-                            settingsRepo.setOnboardingCompleted(true)
+            when {
+                showPostOnboardingLogin -> {
+                    com.exapps.mangaworld.presentation.auth.login.LoginScreen(
+                        onLoginClick = { _, _ ->
+                            showPostOnboardingLogin = false
+                        },
+                        onGoogleSignInClick = {
+                            showPostOnboardingLogin = false
+                        },
+                        onFacebookLoginClick = {
+                            showPostOnboardingLogin = false
+                        },
+                        onForgotPasswordClick = { showPostOnboardingLogin = false },
+                        onSignUpClick = { showPostOnboardingLogin = false }
+                    )
+                }
+                !settings.onboardingCompleted -> {
+                    OnboardingScreen(
+                        onFinish = {
+                            scope.launch {
+                                settingsRepo.setOnboardingCompleted(true)
+                                showPostOnboardingLogin = true
+                            }
                         }
-                    }
-                )
-            } else {
-                MangaWorldContent(launchIntent = launchIntent, deepLinkIntents = deepLinkIntents)
+                    )
+                }
+                else -> {
+                    MangaWorldContent(launchIntent = launchIntent, deepLinkIntents = deepLinkIntents)
+                }
             }
 
             if (settings.biometricLockEnabled && biometricSupported && isLocked) {

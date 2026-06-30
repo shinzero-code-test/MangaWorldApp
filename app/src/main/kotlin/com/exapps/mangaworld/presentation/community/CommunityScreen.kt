@@ -98,7 +98,8 @@ class CommunityViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val sessionManager: FirebaseSessionManager,
     private val analyticsManager: FirebaseAnalyticsManager,
-    private val remoteConfigManager: FirebaseRemoteConfigManager
+    private val remoteConfigManager: FirebaseRemoteConfigManager,
+    private val mangaCacheDao: com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 ) : ViewModel() {
     private val mangaId: String = checkNotNull(savedStateHandle["mangaId"])
     private val slug: String = checkNotNull(savedStateHandle["slug"])
@@ -107,6 +108,12 @@ class CommunityViewModel @Inject constructor(
     private val focusCommentId: String? = savedStateHandle.get<String>("commentId")?.takeIf { it.isNotBlank() }
 
     private val _tab = MutableStateFlow(if (chapterUrl == null) CommunityTab.REVIEWS else CommunityTab.COMMENTS)
+
+    // Look up manga title from cache for the header
+    private val mangaTitle: StateFlow<String> = kotlinx.coroutines.flow.flow {
+        val cached = mangaCacheDao.get(mangaId)
+        emit(cached?.title ?: slug)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, slug)
     private val _replyTo = MutableStateFlow<CommunityComment?>(null)
     private val _error = MutableStateFlow<String?>(null)
     private val _suggestions = MutableStateFlow<List<String>>(emptyList())
@@ -115,25 +122,21 @@ class CommunityViewModel @Inject constructor(
     private val profileFlow: Flow<CommunityProfile?> = flow { emit(communityRepository.getCurrentProfile()) }
     private val appSettingsFlow = settingsRepository.getAppSettings()
 
-    val state: StateFlow<CommunityUiState> = combine(commentsFlow, reviewsFlow, profileFlow, appSettingsFlow) { comments, reviews, profile, appSettings ->
-        Quadruple(comments, reviews, profile, appSettings)
-    }.combine(_tab) { triple, tab ->
-        Pair(triple, tab)
-    }.combine(_replyTo) { pair, replyTo ->
-        Triple(pair.first, pair.second, replyTo)
-    }.combine(_error) { triple, error ->
-        val comments = triple.first.first
-        val reviews = triple.first.second
-        val profile = triple.first.third
-        val appSettings = triple.first.fourth
-        val tab = triple.second
-        val replyTo = triple.third
+    val state: StateFlow<CommunityUiState> = combine(
+        combine(commentsFlow, reviewsFlow, profileFlow, appSettingsFlow) { comments, reviews, profile, appSettings ->
+            Quadruple(comments, reviews, profile, appSettings)
+        },
+        _tab,
+        _replyTo,
+        _error,
+        mangaTitle
+    ) { quadruple, tab, replyTo, error, title ->
         CommunityUiState(
-            title = if (chapterUrl == null) "مراجعات ومناقشات المانجا" else "نقاش الفصل",
-            comments = filterMutedComments(comments, appSettings.mutedUserIds),
-            reviews = reviews,
-            profile = profile,
-            appSettings = appSettings,
+            title = if (chapterUrl == null) "تعليقات $title" else "نقاش الفصل",
+            comments = filterMutedComments(quadruple.first, quadruple.fourth.mutedUserIds),
+            reviews = quadruple.second,
+            profile = quadruple.third,
+            appSettings = quadruple.fourth,
             tab = tab,
             chapterMode = chapterUrl != null,
             focusCommentId = focusCommentId,
@@ -235,8 +238,10 @@ fun CommunityScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MangaColors.OnSurface) }
-            Text(state.title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Button(onClick = onOpenChat) { Text("الدردشة") }
+            Text(state.title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            if (!state.chapterMode) {
+                FilledTonalButton(onClick = { viewModel.setTab(CommunityTab.REVIEWS) }) { Text("مراجعات المستخدمين") }
+            }
         }
 
         Row(

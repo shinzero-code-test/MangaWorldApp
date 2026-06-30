@@ -31,7 +31,18 @@ export default function DashboardLayout({
         if (!res.ok) throw new Error("Unauthorized");
         return res.json();
       })
-      .then((data) => {
+      .then(async (data) => {
+        // Check 2FA status
+        try {
+          const tfaRes = await fetch("/api/auth/2fa/status");
+          if (tfaRes.ok) {
+            const tfa = await tfaRes.json();
+            if (tfa.needsSetup || tfa.needsValidation) {
+              router.push("/2fa");
+              return;
+            }
+          }
+        } catch { /* proceed if 2FA check fails */ }
         setUser(data);
         setLoading(false);
       })

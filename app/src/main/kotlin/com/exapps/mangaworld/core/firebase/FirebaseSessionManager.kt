@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FacebookAuthProvider
 import com.google.firebase.auth.GoogleAuthProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
@@ -76,6 +77,20 @@ class FirebaseSessionManager @Inject constructor(
             }
         }.getOrElse {
             auth.createUserWithEmailAndPassword(email, password).await().user?.uid
+        }
+    }
+
+    suspend fun signInWithFacebook(accessToken: String): String? {
+        val credential = FacebookAuthProvider.getCredential(accessToken)
+        val current = auth.currentUser
+        return runCatching {
+            when {
+                current == null -> auth.signInWithCredential(credential).await().user?.uid
+                current.isAnonymous -> current.linkWithCredential(credential).await().user?.uid
+                else -> auth.signInWithCredential(credential).await().user?.uid
+            }
+        }.getOrElse {
+            auth.signInWithCredential(credential).await().user?.uid
         }
     }
 

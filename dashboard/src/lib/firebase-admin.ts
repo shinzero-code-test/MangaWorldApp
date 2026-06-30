@@ -3,11 +3,13 @@ import { getAuth,       type Auth }       from "firebase-admin/auth";
 import { getFirestore,  type Firestore }  from "firebase-admin/firestore";
 import { getStorage,    type Storage }    from "firebase-admin/storage";
 import { getMessaging,  type Messaging }  from "firebase-admin/messaging";
+import { getRemoteConfig, type RemoteConfig } from "firebase-admin/remote-config";
 
 let _auth:      Auth      | undefined;
 let _db:        Firestore | undefined;
 let _storage:   Storage   | undefined;
 let _messaging: Messaging | undefined;
+let _remoteConfig: RemoteConfig | undefined;
 
 function getApp() {
   const existing = getApps();
@@ -39,4 +41,7 @@ export function getAdminStorage(): Storage {
 }
 export function getAdminMessaging(): Messaging {
   return (_messaging ??= getMessaging(getApp()));
+}
+export function getAdminRemoteConfig(): RemoteConfig {
+  return (_remoteConfig ??= getRemoteConfig(getApp()));
 }

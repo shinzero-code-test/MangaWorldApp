@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Smartphone, Globe, BookOpen, Shield, Bell, Palette, Save, CheckCircle2, Loader2 } from "lucide-react";
+import { Smartphone, Globe, BookOpen, Shield, Bell, Palette, Save, CheckCircle2, Loader2, Zap } from "lucide-react";
 import { PageHeader, Toggle } from "@/components/ui";
 
 interface AppSettings {
@@ -13,38 +13,44 @@ interface AppSettings {
 }
 
 const DEFAULT: AppSettings = {
-  appName:"MangaWorld", defaultLanguage:"ar", maintenanceMode:false,
-  maxSourcesPerManga:5, enableAds:false, adFrequency:3,
-  autoModeration:true, reportThreshold:5, banOnHighPriority:false,
-  enablePushNotif:true, notifFrequency:"daily",
-  defaultTheme:"dark", enableRTL:true, showRatings:true, showComments:true,
+  home_layout_variant: "default",
+  community_banned_keywords: "",
+  remote_alert_message: "",
+  scraper_connect_timeout_seconds: 15,
+  scraper_read_timeout_seconds: 30,
+  scraper_write_timeout_seconds: 15,
+  scraper_retry_count: 1,
+  source_olympus_enabled: true,
+  source_azora_enabled: true,
+  source_starz_enabled: true,
+  source_mangasid_enabled: true,
+  source_meshmanga_enabled: true,
+  source_areascans_enabled: true,
+  source_lekmanga_enabled: true,
 };
 
 const SECTIONS = [
-  { id:"general", label:"الإعدادات العامة", icon:Globe, fields:[
-    { key:"appName", label:"اسم التطبيق", desc:"الاسم الظاهر للمستخدمين", type:"text" },
-    { key:"defaultLanguage", label:"اللغة الافتراضية", desc:"اللغة الرئيسية للتطبيق", type:"select", options:[{v:"ar",l:"العربية"},{v:"en",l:"English"}] },
-    { key:"maintenanceMode", label:"وضع الصيانة", desc:"إيقاف التطبيق مؤقتاً", type:"toggle" },
+  { id:"ui", label:"واجهة التطبيق", icon:Palette, fields:[
+    { key:"home_layout_variant", label:"تصميم الرئيسية", desc:"شكل تخطيط الصفحة الرئيسية", type:"select", options:[{v:"default",l:"الافتراضي"},{v:"modern",l:"عصري"},{v:"compact",l:"مضغوط"}] },
+    { key:"remote_alert_message", label:"رسالة تنبيه عامة", desc:"تظهر لجميع المستخدمين في أعلى التطبيق (اتركها فارغة للإخفاء)", type:"text" },
   ]},
-  { id:"content", label:"إعدادات المحتوى", icon:BookOpen, fields:[
-    { key:"maxSourcesPerManga", label:"الحد الأقصى للمصادر", desc:"عدد المصادر لكل مانجا", type:"number" },
-    { key:"enableAds", label:"تفعيل الإعلانات", desc:"عرض إعلانات للمستخدمين", type:"toggle" },
-    { key:"adFrequency", label:"تكرار الإعلانات", desc:"عدد الفصول بين كل إعلان", type:"number" },
+  { id:"sources", label:"المصادر", icon:Globe, fields:[
+    { key:"source_olympus_enabled", label:"Olympus", desc:"تفعيل مصدر Olympus", type:"toggle" },
+    { key:"source_azora_enabled", label:"Azora", desc:"تفعيل مصدر Azora", type:"toggle" },
+    { key:"source_starz_enabled", label:"Starz", desc:"تفعيل مصدر Starz", type:"toggle" },
+    { key:"source_mangasid_enabled", label:"MangaSid", desc:"تفعيل مصدر MangaSid", type:"toggle" },
+    { key:"source_meshmanga_enabled", label:"MeshManga", desc:"تفعيل مصدر MeshManga", type:"toggle" },
+    { key:"source_areascans_enabled", label:"AreaScans", desc:"تفعيل مصدر AreaScans", type:"toggle" },
+    { key:"source_lekmanga_enabled", label:"LekManga", desc:"تفعيل مصدر LekManga", type:"toggle" },
   ]},
-  { id:"moderation", label:"إعدادات الإشراف", icon:Shield, fields:[
-    { key:"autoModeration", label:"الإشراف التلقائي", desc:"حجب المحتوى المخالف تلقائياً", type:"toggle" },
-    { key:"reportThreshold", label:"حد التقارير", desc:"عدد التقارير قبل الإجراء التلقائي", type:"number" },
-    { key:"banOnHighPriority", label:"حظر تلقائي", desc:"حظر المستخدم عند تقرير عالي الأولوية", type:"toggle" },
+  { id:"scrapers", label:"إعدادات الجلب (Scrapers)", icon:Zap, fields:[
+    { key:"scraper_connect_timeout_seconds", label:"مهلة الاتصال (ثواني)", desc:"مهلة إنشاء الاتصال بالمصدر (5-90)", type:"number" },
+    { key:"scraper_read_timeout_seconds", label:"مهلة القراءة (ثواني)", desc:"مهلة قراءة البيانات (5-120)", type:"number" },
+    { key:"scraper_write_timeout_seconds", label:"مهلة الكتابة (ثواني)", desc:"مهلة الإرسال للمصدر (5-90)", type:"number" },
+    { key:"scraper_retry_count", label:"عدد محاولات الإعادة", desc:"المحاولات عند الفشل (0-3)", type:"number" },
   ]},
-  { id:"notifications", label:"الإشعارات", icon:Bell, fields:[
-    { key:"enablePushNotif", label:"إشعارات Push", desc:"إرسال إشعارات للمستخدمين", type:"toggle" },
-    { key:"notifFrequency", label:"تكرار الإشعارات", desc:"مدى تكرار إشعارات التحديثات", type:"select", options:[{v:"realtime",l:"فوري"},{v:"daily",l:"يومي"},{v:"weekly",l:"أسبوعي"}] },
-  ]},
-  { id:"ui", label:"إعدادات الواجهة", icon:Palette, fields:[
-    { key:"defaultTheme", label:"الثيم الافتراضي", desc:"الثيم الأولي عند التثبيت", type:"select", options:[{v:"dark",l:"داكن"},{v:"light",l:"فاتح"},{v:"system",l:"النظام"}] },
-    { key:"enableRTL", label:"دعم RTL", desc:"تفعيل الاتجاه من اليمين لليسار", type:"toggle" },
-    { key:"showRatings", label:"إظهار التقييمات", desc:"عرض نجوم التقييم في القوائم", type:"toggle" },
-    { key:"showComments", label:"إظهار التعليقات", desc:"تفعيل قسم التعليقات", type:"toggle" },
+  { id:"community", label:"المجتمع والإشراف", icon:Shield, fields:[
+    { key:"community_banned_keywords", label:"الكلمات المحظورة", desc:"كلمات تمنع في التعليقات (مفصولة بفاصلة)", type:"text" },
   ]},
 ];
 

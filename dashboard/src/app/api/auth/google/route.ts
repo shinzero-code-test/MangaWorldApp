@@ -48,6 +48,8 @@ export async function POST(request: NextRequest) {
       maxAge: expiresIn / 1000,
       path: "/",
     });
+    // Clear 2FA verification so user must re-verify
+    response.cookies.set("2fa_verified", "", { httpOnly: true, maxAge: 0, path: "/" });
 
     return response;
   } catch (error: any) {

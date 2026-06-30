@@ -45,7 +45,7 @@ export default function LoginPage() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "خطأ في تسجيل الدخول");
-    router.push("/dashboard");
+    router.push("/2fa");
     router.refresh();
   };
 
@@ -131,7 +131,7 @@ export default function LoginPage() {
               boxShadow: "0 20px 60px rgba(124,58,237,0.4)",
             }}
           >
-            <BookOpen size={36} className="text-white" />
+            <img src="/logo.png" alt="Logo" className="w-12 h-12 object-contain" />
           </div>
           <div>
             <h1 className="text-4xl font-bold text-white tracking-tight">
@@ -189,7 +189,7 @@ export default function LoginPage() {
               className="w-10 h-10 rounded-xl flex items-center justify-center"
               style={{ background: "var(--primary)" }}
             >
-              <BookOpen size={18} className="text-white" />
+              <img src="/logo.png" alt="Logo" className="w-6 h-6 object-contain" />
             </div>
             <div>
               <p className="font-bold">MangaWorld</p>

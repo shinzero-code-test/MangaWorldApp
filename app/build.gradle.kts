@@ -229,6 +229,10 @@ dependencies {
     implementation(libs.play.services.auth)
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
+    // Facebook SDK
+    implementation("com.facebook.android:facebook-android-sdk:16.3.0")
+    implementation("com.facebook.android:facebook-login:16.3.0")
+
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
