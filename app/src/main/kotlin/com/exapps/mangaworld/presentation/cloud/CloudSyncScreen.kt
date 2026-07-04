@@ -5,8 +5,6 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,15 +21,137 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
+import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
+import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
+import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
+import com.exapps.mangaworld.domain.model.CloudRestorePreview
 import com.exapps.mangaworld.domain.model.CloudRestoreStrategy
+import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import com.google.android.gms.auth.api.signin.GoogleSignIn
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+@Stable
+data class CloudSyncUiState(
+    val busy: Boolean = false,
+    val statusMessage: String? = null,
+    val errorMessage: String? = null,
+    val restorePreview: CloudRestorePreview? = null
+)
+
+@HiltViewModel
+class CloudSyncViewModel @Inject constructor(
+    private val sessionManager: FirebaseSessionManager,
+    private val syncManager: FirebaseSyncManager,
+    private val remoteConfigManager: FirebaseRemoteConfigManager,
+    private val communityRepository: CommunityRepository,
+    private val analyticsManager: FirebaseAnalyticsManager
+) : ViewModel() {
+    private val _state = MutableStateFlow(CloudSyncUiState())
+    val state: StateFlow<CloudSyncUiState> = _state.asStateFlow()
+    val currentUser = sessionManager.authState.stateIn(viewModelScope, SharingStarted.Eagerly, sessionManager.currentUser())
+    val profile = flow { emit(communityRepository.getCurrentProfile()) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val notifications = communityRepository.observeNotifications()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun googleSignInIntent(): Intent = sessionManager.googleSignInClient().signInIntent
+    fun hasGoogleSignIn(): Boolean = sessionManager.hasGoogleClientId()
+
+    fun signInWithGoogleIdToken(idToken: String?) {
+        if (idToken.isNullOrBlank()) { _state.value = CloudSyncUiState(errorMessage = "Failed to get Google token"); return }
+        viewModelScope.launch {
+            _state.value = CloudSyncUiState(busy = true, statusMessage = "Signing in...")
+            runCatching { sessionManager.signInWithGoogleIdToken(idToken); syncManager.pushLocalSnapshot(); remoteConfigManager.refresh() }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Signed in and synced") }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Google sign-in failed") }
+        }
+    }
+
+    fun signInWithEmail(email: String, password: String) {
+        viewModelScope.launch {
+            _state.value = CloudSyncUiState(busy = true, statusMessage = "Signing in...")
+            runCatching { sessionManager.signInWithEmail(email, password); syncManager.pushLocalSnapshot() }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Signed in successfully") }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Sign-in failed") }
+        }
+    }
+
+    fun signUpWithEmail(email: String, password: String) {
+        viewModelScope.launch {
+            _state.value = CloudSyncUiState(busy = true, statusMessage = "Creating account...")
+            runCatching { sessionManager.signUpWithEmail(email, password); syncManager.pushLocalSnapshot() }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Account created and synced") }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Account creation failed") }
+        }
+    }
+
+    fun syncNow() {
+        viewModelScope.launch {
+            _state.value = CloudSyncUiState(busy = true, statusMessage = "Uploading data...")
+            runCatching { syncManager.pushLocalSnapshot() }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Data uploaded to cloud") }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Upload failed") }
+        }
+    }
+
+    fun restoreFromCloud() {
+        viewModelScope.launch {
+            _state.value = CloudSyncUiState(busy = true, statusMessage = "Fetching cloud data...")
+            runCatching { syncManager.previewRemoteSnapshot() }
+                .onSuccess { preview -> _state.value = CloudSyncUiState(restorePreview = preview, statusMessage = "Review conflicts before restoring") }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Restore preview failed") }
+        }
+    }
+
+    fun applyRestore(strategy: CloudRestoreStrategy) {
+        viewModelScope.launch {
+            _state.value = CloudSyncUiState(busy = true, statusMessage = "Applying restore...")
+            runCatching { syncManager.applyRemoteRestore(strategy) }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Restore applied successfully") }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Restore failed") }
+        }
+    }
+
+    fun saveProfile(username: String, bio: String, isPublic: Boolean) {
+        viewModelScope.launch {
+            _state.value = CloudSyncUiState(busy = true, statusMessage = "Saving profile...")
+            runCatching { communityRepository.upsertProfile(username, bio, isPublic) }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Profile saved") }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Profile save failed") }
+        }
+    }
+
+    fun markNotificationRead(id: String) { viewModelScope.launch { runCatching { communityRepository.markNotificationRead(id) } } }
+
+    fun signOut() {
+        viewModelScope.launch {
+            _state.value = CloudSyncUiState(busy = true, statusMessage = "Signing out...")
+            runCatching { sessionManager.signOut() }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Signed out") }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Sign-out failed") }
+        }
+    }
+
+    fun clearMessages() { _state.value = CloudSyncUiState() }
+    fun onScreenViewed() { analyticsManager.logScreen("cloud_sync") }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
