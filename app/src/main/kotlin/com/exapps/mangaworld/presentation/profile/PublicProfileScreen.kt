@@ -78,9 +78,12 @@ data class PublicProfileUiState(
 @HiltViewModel
 class PublicProfileViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    communityRepository: CommunityRepository
+    communityRepository: CommunityRepository,
+    sessionManager: com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 ) : ViewModel() {
     private val userId: String = checkNotNull(savedStateHandle["userId"])
+
+    val isOwnProfile: Boolean = userId == sessionManager.currentUserId()
 
     private val _isFollowing = MutableStateFlow(false)
     val isFollowing: StateFlow<Boolean> = _isFollowing.asStateFlow()
@@ -107,6 +110,7 @@ fun PublicProfileScreen(onBack: () -> Unit, viewModel: PublicProfileViewModel = 
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isFollowing by viewModel.isFollowing.collectAsStateWithLifecycle()
     val profile = state.profile
+    val isOwnProfile = viewModel.isOwnProfile
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(MangaColors.Background),
@@ -116,11 +120,14 @@ fun PublicProfileScreen(onBack: () -> Unit, viewModel: PublicProfileViewModel = 
             PublicProfileHeader(profile = profile, onBack = onBack)
         }
 
-        item {
-            FollowButton(
-                isFollowing = isFollowing,
-                onClick = { viewModel.toggleFollow() }
-            )
+        // Only show follow button if NOT viewing own profile
+        if (!isOwnProfile) {
+            item {
+                FollowButton(
+                    isFollowing = isFollowing,
+                    onClick = { viewModel.toggleFollow() }
+                )
+            }
         }
 
         if (state.lists.isNotEmpty()) {

@@ -105,6 +105,7 @@ fun MangaDetailScreen(
                 onOpenChapterCommunity = onOpenChapterCommunity,
                 onOpenOtherSource = onOpenOtherSource,
                 onShowAddToList = viewModel::showAddToListDialog,
+                onShowComparison = viewModel::showSourceComparison,
                 onChapterClick = { ch -> onChapterClick(ch.url, "${source.id}_$slug") },
                 onChapterSearch = viewModel::updateChapterSearchQuery,
                 onToggleChapterRead = viewModel::toggleChapterReadStatus,
@@ -159,6 +160,16 @@ fun MangaDetailScreen(
             dismissButton = {}
         )
     }
+
+    // Source comparison sheet
+    if (state.showSourceComparison) {
+        SourceComparisonSheet(
+            currentSource = source,
+            otherSources = state.sourceComparisons,
+            onSourceSelected = { selectedSource, slug -> viewModel.switchSource(selectedSource, slug) },
+            onDismiss = viewModel::hideSourceComparison
+        )
+    }
 }
 
 @Composable
@@ -180,6 +191,7 @@ private fun DetailContent(
     onOpenChapterCommunity: (mangaId: String, chapterUrl: String) -> Unit,
     onOpenOtherSource: (sourceId: String, slug: String) -> Unit,
     onShowAddToList: () -> Unit,
+    onShowComparison: () -> Unit,
     onChapterClick: (Chapter) -> Unit,
     onChapterSearch: (String) -> Unit,
     onToggleChapterRead: (Chapter) -> Unit,
@@ -304,6 +316,15 @@ private fun DetailContent(
                         .background(MangaColors.SurfaceContainer, RoundedCornerShape(12.dp))
                 ) {
                     Icon(Icons.Filled.PlaylistAdd, "إضافة لقائمة", tint = MangaColors.Cyan)
+                }
+                // Source comparison button
+                IconButton(
+                    onClick = { viewModel.showSourceComparison() },
+                    modifier = Modifier
+                        .size(50.dp)
+                        .background(MangaColors.SurfaceContainer, RoundedCornerShape(12.dp))
+                ) {
+                    Icon(Icons.Filled.CompareArrows, "مقارنة المصادر", tint = MangaColors.Yellow)
                 }
             }
         }
