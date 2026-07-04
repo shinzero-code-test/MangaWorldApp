@@ -13,6 +13,7 @@ import androidx.work.WorkManager
 import coil.disk.DiskCache
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import coil.memory.MemoryCache
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
@@ -54,6 +55,11 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
                 DiskCache.Builder()
                     .directory(File(cacheDir, "coil_image_cache"))
                     .maxSizeBytes(DEFAULT_IMAGE_CACHE_MB.toLong() * 1024L * 1024L)
+                    .build()
+            }
+            .memoryCache {
+                coil.memory.MemoryCache.Builder(this)
+                    .maxSizePercent(0.30) // Use 30% of app memory for image cache
                     .build()
             }
             .crossfade(true)

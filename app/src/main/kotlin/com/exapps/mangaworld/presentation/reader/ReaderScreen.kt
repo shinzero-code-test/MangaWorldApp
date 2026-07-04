@@ -607,18 +607,8 @@ private fun HorizontalReader(
     HorizontalPager(
         state = pagerState,
         modifier = Modifier.fillMaxSize()
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onLongPress = { _ -> onLongPress() },
-                    onTap = { offset ->
-                        val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
-                        val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
-                        onTap(nx, ny)
-                    }
-                )
-            }
     ) { pageIndex ->
-        // Pinch-to-zoom wrapper for each page
+        // Pinch-to-zoom + tap wrapper for each page
         var pageScale by remember { mutableFloatStateOf(1f) }
         var pageOffsetX by remember { mutableFloatStateOf(0f) }
         var pageOffsetY by remember { mutableFloatStateOf(0f) }
@@ -626,8 +616,14 @@ private fun HorizontalReader(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(pageScale) {
+                .pointerInput(Unit) {
                     detectTapGestures(
+                        onLongPress = { _ -> onLongPress() },
+                        onTap = { offset ->
+                            val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
+                            val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
+                            onTap(nx, ny)
+                        },
                         onDoubleTap = {
                             // Toggle zoom: 1x ↔ 2x
                             pageScale = if (pageScale > 1f) 1f else 2f

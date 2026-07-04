@@ -74,6 +74,9 @@ sealed class Screen(val route: String) {
     object Collections : Screen("collections/{collectionId}") {
         fun createRoute(collectionId: String = "") = "collections/$collectionId"
     }
+    object CollectionDetail : Screen("collection_detail/{collectionId}") {
+        fun createRoute(collectionId: String) = "collection_detail/$collectionId"
+    }
     object Goals : Screen("goals")
     object More : Screen("more")
     object Sources : Screen("sources")
@@ -244,7 +247,20 @@ fun MangaNavGraph(navController: NavHostController) {
         ) {
             CollectionsScreen(
                 onBack = { navController.popBackStack() },
-                onCollectionClick = { id -> navController.navigate(Screen.Collections.createRoute(id)) }
+                onCollectionClick = { id -> navController.navigate(Screen.CollectionDetail.createRoute(id)) }
+            )
+        }
+        composable(
+            route = Screen.CollectionDetail.route,
+            arguments = listOf(
+                navArgument("collectionId") { type = NavType.StringType }
+            )
+        ) { back ->
+            val collectionId = back.arguments?.getString("collectionId") ?: return@composable
+            com.exapps.mangaworld.presentation.collections.CollectionDetailScreen(
+                collectionId = collectionId,
+                onBack = { navController.popBackStack() },
+                onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) }
             )
         }
         composable(Screen.Goals.route) {
