@@ -147,7 +147,7 @@ fun UserProfileScreen(
     var showActivityPublic by remember(profile?.showActivityPublic) { mutableStateOf(profile?.showActivityPublic ?: true) }
 
     val avatarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { viewModel.updateAvatarUri(it) }
+        uri?.let { viewModel.uploadAvatar(it) }
     }
 
     Column(
