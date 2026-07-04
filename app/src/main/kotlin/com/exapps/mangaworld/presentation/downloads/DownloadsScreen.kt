@@ -1,10 +1,6 @@
 package com.exapps.mangaworld.presentation.downloads
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -59,6 +55,12 @@ class DownloadsViewModel @Inject constructor(
     fun cancelAll() {
         viewModelScope.launch {
             tasks.value.filter { it.status == "queued" || it.status == "running" }
+                .forEach { manager.cancelTask(it.id) }
+        }
+    }
+    fun cancelMangaDownloads(mangaId: String) {
+        viewModelScope.launch {
+            tasks.value.filter { it.mangaId == mangaId && (it.status == "queued" || it.status == "running" || it.status == "paused") }
                 .forEach { manager.cancelTask(it.id) }
         }
     }
@@ -159,76 +161,73 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
             return@Scaffold
         }
 
+        // Group tasks by mangaId
+        val grouped = remember(tasks) {
+            tasks.groupBy { it.mangaId }
+                .toSortedMap(compareByDescending { mangaId ->
+                    tasks.filter { it.mangaId == mangaId }
+                        .maxOfOrNull { it.createdAt } ?: 0L
+                })
+        }
+
         LazyColumn(
             modifier = Modifier.padding(padding),
             contentPadding = PaddingValues(bottom = 80.dp, top = 4.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (inProgress.isNotEmpty()) {
-                item("section_in_progress") {
-                    SectionHeader("جاري التنزيل", inProgress.size, MangaColors.Cyan)
-                }
-                items(inProgress, key = { it.id }) { task ->
-                    DownloadTaskCard(
-                        task = task,
-                        onPause = { viewModel.pauseTask(task.id) },
-                        onResume = null,
-                        onSkip = null,
-                        onCancel = { viewModel.cancelTask(task.id) },
-                        onRetry = null,
-                        onExpand = { /* expand handled inside card */ }
-                    )
-                }
-            }
+            grouped.forEach { (mangaId, mangaTasks) ->
+                val mangaTitle = mangaTasks.firstOrNull()?.mangaTitle ?: mangaId
+                val inProgress = mangaTasks.filter { it.status == "running" }
+                val queued = mangaTasks.filter { it.status == "queued" || it.status == "paused" }
+                val completed = mangaTasks.filter { it.status == "completed" }
+                val failed = mangaTasks.filter { it.status == "failed" || it.status == "cancelled" }
 
-            if (queued.isNotEmpty()) {
-                item("section_queued") {
-                    SectionHeader("في الانتظار", queued.size, MangaColors.Yellow)
-                }
-                items(queued, key = { it.id }) { task ->
-                    DownloadTaskCard(
-                        task = task,
-                        onPause = null,
-                        onResume = { viewModel.resumeTask(task.id) },
-                        onSkip = null,
-                        onCancel = { viewModel.cancelTask(task.id) },
-                        onRetry = null,
-                        onExpand = { /* expand handled inside card */ }
+                item("manga_header_$mangaId") {
+                    MangaGroupHeader(
+                        mangaTitle = mangaTitle,
+                        totalChapters = mangaTasks.size,
+                        completedCount = completed.size,
+                        inProgressCount = inProgress.size,
+                        queuedCount = queued.size,
+                        failedCount = failed.size,
+                        onCancelAll = { viewModel.cancelMangaDownloads(mangaId) }
                     )
                 }
-            }
 
-            if (completed.isNotEmpty()) {
-                item("section_completed") {
-                    SectionHeader("مكتملة", completed.size, MangaColors.Primary)
+                // Show active tasks (in-progress + queued + paused)
+                val activeTasks = inProgress + queued
+                activeTasks.forEach { task ->
+                    item("task_${task.id}") {
+                        ChapterDownloadCard(
+                            task = task,
+                            onPause = if (task.status == "running") {{ viewModel.pauseTask(task.id) }} else null,
+                            onResume = if (task.status == "paused") {{ viewModel.resumeTask(task.id) }} else null,
+                            onCancel = { viewModel.cancelTask(task.id) }
+                        )
+                    }
                 }
-                items(completed, key = { it.id }) { task ->
-                    DownloadTaskCard(
-                        task = task,
-                        onPause = null,
-                        onResume = null,
-                        onSkip = null,
-                        onCancel = null,
-                        onRetry = null,
-                        onExpand = { /* expand handled inside card */ }
-                    )
-                }
-            }
 
-            if (failed.isNotEmpty()) {
-                item("section_failed") {
-                    SectionHeader("فشل", failed.size, MangaColors.Error)
+                // Show completed tasks (collapsed by default, expandable)
+                if (completed.isNotEmpty()) {
+                    item("completed_header_$mangaId") {
+                        CompletedChaptersSummary(
+                            count = completed.size,
+                            onCancelAll = { completed.forEach { viewModel.cancelTask(it.id) } }
+                        )
+                    }
                 }
-                items(failed, key = { it.id }) { task ->
-                    DownloadTaskCard(
-                        task = task,
-                        onPause = null,
-                        onResume = null,
-                        onSkip = null,
-                        onCancel = null,
-                        onRetry = { viewModel.retryTask(task.id) },
-                        onExpand = { /* expand handled inside card */ }
-                    )
+
+                // Show failed tasks
+                failed.forEach { task ->
+                    item("task_${task.id}") {
+                        ChapterDownloadCard(
+                            task = task,
+                            onPause = null,
+                            onResume = null,
+                            onCancel = null,
+                            onRetry = { viewModel.retryTask(task.id) }
+                        )
+                    }
                 }
             }
         }
@@ -287,46 +286,92 @@ private fun EmptyState(modifier: Modifier = Modifier) {
     }
 }
 
-// ─── Section Header ───────────────────────────────────────────────────────────
+// ─── Manga Group Header ──────────────────────────────────────────────────────
 
 @Composable
-private fun SectionHeader(title: String, count: Int, color: Color) {
-    Row(
-        Modifier
+private fun MangaGroupHeader(
+    mangaTitle: String,
+    totalChapters: Int,
+    completedCount: Int,
+    inProgressCount: Int,
+    queuedCount: Int,
+    failedCount: Int,
+    onCancelAll: () -> Unit
+) {
+    Card(
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer),
     ) {
-        Box(
-            Modifier
-                .size(10.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(color)
-        )
-        Text(
-            "$title ($count)",
-            style = MaterialTheme.typography.labelLarge,
-            color = color,
-            fontWeight = FontWeight.SemiBold
-        )
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    mangaTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MangaColors.OnSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                if (inProgressCount + queuedCount > 0) {
+                    IconButton(onClick = onCancelAll, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Close, "إلغاء الكل", modifier = Modifier.size(18.dp), tint = MangaColors.Muted)
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (inProgressCount > 0) StatusChip("$inProgressCount جاري", MangaColors.Cyan)
+                if (queuedCount > 0) StatusChip("$queuedCount انتظار", MangaColors.Yellow)
+                if (completedCount > 0) StatusChip("$completedCount مكتمل", MangaColors.Primary)
+                if (failedCount > 0) StatusChip("$failedCount فشل", MangaColors.Error)
+            }
+            // Progress bar
+            val total = totalChapters.coerceAtLeast(1)
+            val progress = completedCount.toFloat() / total
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                color = MangaColors.Primary,
+                trackColor = MangaColors.Background,
+            )
+            Text(
+                "$completedCount / $totalChapters فصل",
+                style = MaterialTheme.typography.labelSmall,
+                color = MangaColors.Muted
+            )
+        }
     }
 }
 
-// ─── Download Task Card ───────────────────────────────────────────────────────
+@Composable
+private fun StatusChip(text: String, color: Color) {
+    Box(
+        Modifier
+            .background(color.copy(alpha = 0.15f), RoundedCornerShape(100.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(text, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.Medium)
+    }
+}
+
+// ─── Chapter Download Card (compact) ──────────────────────────────────────────
 
 @Composable
-private fun DownloadTaskCard(
+private fun ChapterDownloadCard(
     task: DownloadTaskEntity,
     onPause: (() -> Unit)?,
     onResume: (() -> Unit)?,
-    onSkip: (() -> Unit)?,
     onCancel: (() -> Unit)?,
-    onRetry: (() -> Unit)?,
-    onExpand: (() -> Unit)? = null
+    onRetry: (() -> Unit)? = null
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
+    val progress by animateFloatAsState(targetValue = task.progress.coerceIn(0f, 1f), label = "p")
     val statusColor = when (task.status) {
         "running" -> MangaColors.Cyan
         "paused" -> MangaColors.Yellow
@@ -335,291 +380,112 @@ private fun DownloadTaskCard(
         else -> MangaColors.Yellow
     }
 
-    val progress by animateFloatAsState(
-        targetValue = task.progress.coerceIn(0f, 1f),
-        label = "progress"
-    )
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .animateContentSize(),
-        shape = RoundedCornerShape(12.dp),
+            .padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = MangaColors.CardBg),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(
-            Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // ── Row 1: Cover + Title/Status + Actions ──
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Manga cover placeholder
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MangaColors.SurfaceContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        when (task.status) {
-                            "running" -> Icons.Filled.CloudDownload
-                            "completed" -> Icons.Filled.CheckCircle
-                            "failed" -> Icons.Filled.ErrorOutline
-                            "cancelled" -> Icons.Filled.Cancel
-                            else -> Icons.Filled.HourglassEmpty
-                        },
-                        contentDescription = null,
-                        modifier = Modifier.size(28.dp),
-                        tint = statusColor.copy(alpha = 0.7f)
-                    )
-                }
-
-                // Title + status + progress info
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        task.mangaTitle ?: "مانجا",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MangaColors.OnSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        task.chapterTitle ?: task.chapterUrl.substringAfterLast("/"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MangaColors.OnSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            Modifier
-                                .size(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(statusColor)
-                        )
-                        Text(
-                            when (task.status) {
-                                "queued" -> "في الانتظار"
-                                "running" -> "جاري التنزيل"
-                                "paused" -> "متوقف مؤقتاً"
-                                "completed" -> "مكتمل"
-                                "failed" -> "فشل"
-                                "cancelled" -> "ملغي"
-                                else -> task.status
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MangaColors.Muted
-                        )
-                        if (task.status == "running" && task.totalPages > 0) {
-                            Text(
-                                "• ${task.downloadedPages}/${task.totalPages} صفحة",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MangaColors.Muted
-                            )
-                        }
-                    }
-                }
-
-                // Action buttons
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    if (task.status == "running" && onPause != null) {
-                        IconButton(onClick = onPause, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.Pause, "إيقاف", modifier = Modifier.size(18.dp), tint = MangaColors.Yellow)
-                        }
-                    }
-                    if (task.status == "paused" && onResume != null) {
-                        IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.PlayArrow, "استئناف", modifier = Modifier.size(18.dp), tint = MangaColors.Cyan)
-                        }
-                    }
-                    if (task.status == "queued" && onResume != null) {
-                        IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.PlayArrow, "استئناف", modifier = Modifier.size(18.dp), tint = MangaColors.Cyan)
-                        }
-                    }
-                    if (onRetry != null && task.status in listOf("failed", "cancelled")) {
-                        IconButton(onClick = onRetry, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.Refresh, "إعادة المحاولة", modifier = Modifier.size(18.dp), tint = MangaColors.Cyan)
-                        }
-                    }
-                    if (onCancel != null && task.status in listOf("queued", "running")) {
-                        IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.Close, "إلغاء", modifier = Modifier.size(18.dp), tint = MangaColors.Muted)
-                        }
-                    }
-                }
-            }
-
-            // ── Progress bar (active tasks only) ──
-            if (task.status in listOf("running", "queued")) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // Status dot
+            Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor))
+            Spacer(Modifier.width(10.dp))
+            // Chapter info
+            Column(Modifier.weight(1f)) {
+                Text(
+                    task.chapterTitle ?: task.chapterUrl.substringAfterLast("/"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MangaColors.OnSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (task.status == "running" && task.totalPages > 0) {
                     LinearProgressIndicator(
                         progress = { progress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp)),
+                        modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
                         color = MangaColors.Cyan,
                         trackColor = MangaColors.SurfaceContainer,
                     )
-                    if (task.totalPages > 0) {
-                        Text(
-                            "${(progress * 100).toInt()}%",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MangaColors.Cyan,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.align(Alignment.End)
-                        )
-                    }
                 }
             }
-
-            // ── Error message ──
-            if (task.status == "failed" && !task.errorMessage.isNullOrBlank()) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MangaColors.Error.copy(alpha = 0.1f)
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        task.errorMessage,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MangaColors.Error,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+            // Status text
+            Text(
+                when (task.status) {
+                    "queued" -> "انتظار"
+                    "running" -> "${(progress * 100).toInt()}%"
+                    "paused" -> "متوقف"
+                    "completed" -> "✓"
+                    "failed" -> "فشل"
+                    "cancelled" → "ملغي"
+                    else -> task.status
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = statusColor,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+            // Action buttons
+            if (onPause != null) {
+                IconButton(onClick = onPause, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Filled.Pause, "إيقاف", modifier = Modifier.size(16.dp), tint = MangaColors.Yellow)
                 }
             }
-
-            // ── Expandable chapters section ──
-            val totalPages = remember(task.pagesJson) {
-                try {
-                    org.json.JSONArray(task.pagesJson).length()
-                } catch (_: Exception) { 0 }
-            }
-
-            if (totalPages > 0) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val expandedText = if (expanded) "طي" else "عرض الصفحات ($totalPages)"
-                    TextButton(
-                        onClick = { expanded = !expanded },
-                        modifier = Modifier.height(28.dp),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-                    ) {
-                        Text(
-                            expandedText,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MangaColors.Cyan
-                        )
-                        Icon(
-                            if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MangaColors.Cyan
-                        )
-                    }
-                }
-
-                AnimatedVisibility(
-                    visible = expanded,
-                    enter = expandVertically(),
-                    exit = shrinkVertically()
-                ) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 240.dp),
-                        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        LazyColumn(
-                            modifier = Modifier.padding(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            items(totalPages) { index ->
-                                val pageStatus = when {
-                                    index < task.downloadedPages -> "✓"
-                                    index == task.downloadedPages && task.status == "running" -> "↓"
-                                    else -> ""
-                                }
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 6.dp, vertical = 3.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        "صفحة ${index + 1}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MangaColors.OnSurfaceVariant
-                                    )
-                                    Text(
-                                        when {
-                                            pageStatus == "✓" -> "✓"
-                                            pageStatus == "↓" -> "↓"
-                                            index < task.downloadedPages -> "✓"
-                                            else -> "—"
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = when {
-                                            index < task.downloadedPages -> MangaColors.Green
-                                            index == task.downloadedPages && task.status == "running" -> MangaColors.Cyan
-                                            else -> MangaColors.Muted.copy(alpha = 0.4f)
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
+            if (onResume != null) {
+                IconButton(onClick = onResume, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Filled.PlayArrow, "استئناف", modifier = Modifier.size(16.dp), tint = MangaColors.Cyan)
                 }
             }
-
-            // ── Created / updated timestamps ──
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    formatDate(task.createdAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MangaColors.Muted.copy(alpha = 0.5f)
-                )
-                if (task.retries > 0) {
-                    Text(
-                        "إعادة المحاولة: ${task.retries}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MangaColors.Muted.copy(alpha = 0.5f)
-                    )
+            if (onRetry != null) {
+                IconButton(onClick = onRetry, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Filled.Refresh, "إعادة", modifier = Modifier.size(16.dp), tint = MangaColors.Cyan)
+                }
+            }
+            if (onCancel != null) {
+                IconButton(onClick = onCancel, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Filled.Close, "إلغاء", modifier = Modifier.size(16.dp), tint = MangaColors.Muted)
                 }
             }
         }
     }
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Completed Chapters Summary ───────────────────────────────────────────────
 
-private fun formatDate(timestamp: Long): String {
-    val cal = java.util.Calendar.getInstance().apply { timeInMillis = timestamp }
-    val day = cal.get(java.util.Calendar.DAY_OF_MONTH)
-    val month = cal.get(java.util.Calendar.MONTH) + 1
-    val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
-    val minute = cal.get(java.util.Calendar.MINUTE)
-    return "$day/$month ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+@Composable
+private fun CompletedChaptersSummary(count: Int, onCancelAll: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = MangaColors.CardBg.copy(alpha = 0.5f)),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Filled.CheckCircle, null, tint = MangaColors.Primary, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "$count فصل مكتمل",
+                style = MaterialTheme.typography.bodySmall,
+                color = MangaColors.Primary,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(0.dp)) {
+                Text(
+                    if (expanded) "طي" else "عرض",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MangaColors.Muted
+                )
+            }
+        }
+    }
 }
+
+

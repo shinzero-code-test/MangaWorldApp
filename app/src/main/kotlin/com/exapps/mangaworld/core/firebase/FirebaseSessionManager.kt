@@ -97,7 +97,7 @@ class FirebaseSessionManager @Inject constructor(
     suspend fun signOut() {
         googleSignInClient().signOut().await()
         auth.signOut()
-        ensureGuestSession()
+        // Do NOT call ensureGuestSession() — user should be fully signed out
     }
 
     private fun googleSignInOptions(): GoogleSignInOptions {
