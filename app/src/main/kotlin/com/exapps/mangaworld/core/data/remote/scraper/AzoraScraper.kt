@@ -34,7 +34,7 @@ import javax.inject.Inject
  *  Home  → HomepageMainSliderIsland    → sliderPosts (featured)
  *  Home  → HomepageSharedSliderIsland  → posts (trending)
  *  Detail→ SeriesChaptersPanelIsland   → post + initialChap (ALL chapters)
- *  Chapter→ <img src> in rendered HTML → storage.azoramoon.com/WP-manga/…
+ *  Chapter→ <img src> in rendered HTML → storage.azorafly.com/WP-manga/…
  *  Series→ <a href="/series/"> in HTML → rendered manga card list
  */
 class AzoraScraper @Inject constructor(
