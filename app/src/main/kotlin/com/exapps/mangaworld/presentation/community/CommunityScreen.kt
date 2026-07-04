@@ -2,209 +2,30 @@ package com.exapps.mangaworld.presentation.community
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Forum
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.SavedStateHandle
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
-import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
-import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
-import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
-import com.exapps.mangaworld.core.firebase.filterMutedComments
-import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
-import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.CommunityComment
-import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.MangaReview
-import com.exapps.mangaworld.domain.repository.CommunityRepository
-import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.Stable
-import javax.inject.Inject
 
-enum class CommunityTab { COMMENTS, REVIEWS }
-
-@Stable
-data class CommunityUiState(
-    val title: String = "المجتمع",
-    val comments: List<CommunityComment> = emptyList(),
-    val reviews: List<MangaReview> = emptyList(),
-    val profile: CommunityProfile? = null,
-    val appSettings: AppSettings = AppSettings(),
-    val tab: CommunityTab = CommunityTab.COMMENTS,
-    val chapterMode: Boolean = false,
-    val focusCommentId: String? = null,
-    val replyTo: CommunityComment? = null,
-    val error: String? = null
-)
-
-@HiltViewModel
-class CommunityViewModel @Inject constructor(
-    savedStateHandle: SavedStateHandle,
-    private val communityRepository: CommunityRepository,
-    private val settingsRepository: SettingsRepository,
-    private val sessionManager: FirebaseSessionManager,
-    private val analyticsManager: FirebaseAnalyticsManager,
-    private val remoteConfigManager: FirebaseRemoteConfigManager,
-    private val mangaCacheDao: com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
-) : ViewModel() {
-    private val mangaId: String = checkNotNull(savedStateHandle["mangaId"])
-    private val slug: String = checkNotNull(savedStateHandle["slug"])
-    private val sourceId: String = checkNotNull(savedStateHandle["sourceId"])
-    private val chapterUrl: String? = savedStateHandle.get<String>("chapterUrl")
-    private val focusCommentId: String? = savedStateHandle.get<String>("commentId")?.takeIf { it.isNotBlank() }
-
-    private val _tab = MutableStateFlow(if (chapterUrl == null) CommunityTab.REVIEWS else CommunityTab.COMMENTS)
-
-    // Look up manga title from cache for the header
-    private val mangaTitle: StateFlow<String> = kotlinx.coroutines.flow.flow {
-        val cached = mangaCacheDao.get(mangaId)
-        emit(cached?.title ?: slug)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, slug)
-    private val _replyTo = MutableStateFlow<CommunityComment?>(null)
-    private val _error = MutableStateFlow<String?>(null)
-    private val _suggestions = MutableStateFlow<List<String>>(emptyList())
-    private val commentsFlow = if (chapterUrl == null) communityRepository.observeMangaComments(mangaId) else communityRepository.observeChapterComments(mangaId, chapterUrl.orEmpty())
-    private val reviewsFlow = if (chapterUrl == null) communityRepository.observeReviews(mangaId) else kotlinx.coroutines.flow.flowOf(emptyList())
-    private val profileFlow: Flow<CommunityProfile?> = flow { emit(communityRepository.getCurrentProfile()) }
-    private val appSettingsFlow = settingsRepository.getAppSettings()
-
-    val state: StateFlow<CommunityUiState> = combine(
-        combine(commentsFlow, reviewsFlow, profileFlow, appSettingsFlow) { comments, reviews, profile, appSettings ->
-            Quadruple(comments, reviews, profile, appSettings)
-        },
-        _tab,
-        _replyTo,
-        _error,
-        mangaTitle
-    ) { quadruple, tab, replyTo, error, title ->
-        CommunityUiState(
-            title = if (chapterUrl == null) "تعليقات $title" else "نقاش الفصل",
-            comments = filterMutedComments(quadruple.first, quadruple.fourth.mutedUserIds),
-            reviews = quadruple.second,
-            profile = quadruple.third,
-            appSettings = quadruple.fourth,
-            tab = tab,
-            chapterMode = chapterUrl != null,
-            focusCommentId = focusCommentId,
-            replyTo = replyTo,
-            error = error
-        )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, CommunityUiState(chapterMode = chapterUrl != null))
-
-    val suggestions: StateFlow<List<String>> = _suggestions.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            combine(commentsFlow, _replyTo) { comments, replyTo ->
-                Pair(comments, replyTo)
-            }.collectLatest { (comments, replyTo) ->
-                    _suggestions.value = emptyList()
-                }
-        }
-    }
-
-    fun setTab(tab: CommunityTab) { _tab.value = tab }
-    fun setReply(comment: CommunityComment?) { _replyTo.value = comment }
-
-    fun postComment(text: String, spoiler: Boolean) {
-        viewModelScope.launch {
-            runCatching {
-                if (chapterUrl == null) {
-                    communityRepository.postMangaComment(mangaId, slug, sourceId, text, spoiler, _replyTo.value?.id)
-                } else {
-                    communityRepository.postChapterComment(mangaId, slug, sourceId, chapterUrl, text, spoiler, _replyTo.value?.id)
-                }
-            }.onSuccess {
-                _replyTo.value = null
-                _error.value = null
-            }.onFailure { e ->
-                _error.value = e.message ?: "فشل إرسال التعليق"
-            }
-        }
-    }
-
-    fun upsertReview(rating: Int, title: String, body: String) {
-        viewModelScope.launch {
-            runCatching { communityRepository.upsertReview(mangaId, slug, sourceId, rating, title, body) }
-                .onFailure { e -> _error.value = e.message ?: "فشل حفظ المراجعة" }
-        }
-    }
-
-    fun reportComment(comment: CommunityComment, reason: String) {
-        viewModelScope.launch {
-            runCatching { communityRepository.reportComment(comment, reason) }
-                .onFailure { e -> _error.value = e.message ?: "فشل الإبلاغ" }
-        }
-    }
-
-    fun muteUser(uid: String) {
-        viewModelScope.launch {
-            val current = settingsRepository.getAppSettings().first().mutedUserIds
-            settingsRepository.setMutedUserIds(current + uid)
-        }
-    }
-
-    fun onSuggestionSelected(reply: String) {
-        analyticsManager.logSmartReplySelected("community_comments", reply.length)
-    }
-}
-
-private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CommunityScreen(
     onBack: () -> Unit,
@@ -213,7 +34,6 @@ fun CommunityScreen(
     viewModel: CommunityViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     var commentText by remember { mutableStateOf("") }
     var spoiler by remember { mutableStateOf(false) }
     var reviewDialog by remember { mutableStateOf(false) }
@@ -231,186 +51,396 @@ fun CommunityScreen(
         if (index >= 0) listState.animateScrollToItem(index)
     }
 
-    Column(Modifier.fillMaxSize().background(MangaColors.Background)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MangaColors.OnSurface) }
-            Text(state.title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            if (!state.chapterMode) {
-                Button(
-                    onClick = { viewModel.setTab(CommunityTab.REVIEWS) },
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                        containerColor = MangaColors.Cyan
-                    )
-                ) { Text("مراجعات المستخدمين", color = MangaColors.Background) }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FilterChip(selected = state.tab == CommunityTab.COMMENTS, onClick = { viewModel.setTab(CommunityTab.COMMENTS) }, label = { Text("التعليقات") })
-            if (!state.chapterMode) {
-                FilterChip(selected = state.tab == CommunityTab.REVIEWS, onClick = { viewModel.setTab(CommunityTab.REVIEWS) }, label = { Text("المراجعات") })
-            }
-        }
-
-        if (state.tab == CommunityTab.COMMENTS) {
-            LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(state.comments, key = { it.id }) { comment ->
-                    val focused = state.focusCommentId == comment.id
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = if (focused) MangaColors.GlowPurple else MangaColors.SurfaceContainer),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Column {
-                                    Text(
-                                        comment.authorName,
-                                        color = MangaColors.OnSurface,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.clickable { onOpenProfile(comment.authorUid) }
-                                    )
-                                    Text(comment.authorBadge, color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
-                                }
-                                Text(comment.replyCount.toString() + " رد", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
-                            }
-                            val revealed = comment.id in expandedSpoilers
-                            if (comment.spoiler && state.appSettings.spoilerCollapseDefault && !revealed) {
-                                Button(onClick = { expandedSpoilers.add(comment.id) }) { Text("إظهار السبويْلر") }
-                            } else {
-                                Text(comment.text, color = MangaColors.OnSurfaceVariant)
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = { viewModel.setReply(comment) }) { Text("رد") }
-                                Button(onClick = { reportTarget = comment; reportReason = "" }) { Text("إبلاغ") }
-                                Button(onClick = { viewModel.muteUser(comment.authorUid) }) { Text("كتم") }
-                            }
-                        }
+    Scaffold(
+        containerColor = MangaColors.Background,
+        topBar = {
+            TopAppBar(
+                title = { Text(state.title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface)
                     }
-                }
-            }
-            state.replyTo?.let { reply ->
-                Text(
-                    text = "الرد على ${reply.authorName}",
-                    color = MangaColors.Cyan,
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                },
+                actions = {
+                    IconButton(onClick = onOpenChat) {
+                        Icon(Icons.Filled.Forum, "المحادثة", tint = MangaColors.Cyan)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            // Tab selector
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = state.tab == CommunityTab.COMMENTS,
+                    onClick = { viewModel.setTab(CommunityTab.COMMENTS) },
+                    label = { Text("التعليقات") },
+                    shape = RoundedCornerShape(10.dp)
+                )
+                // Reviews tab always visible (not just for manga-level)
+                FilterChip(
+                    selected = state.tab == CommunityTab.REVIEWS,
+                    onClick = { viewModel.setTab(CommunityTab.REVIEWS) },
+                    label = { Text("المراجعات") },
+                    shape = RoundedCornerShape(10.dp)
                 )
             }
-            if (suggestions.isNotEmpty()) {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(suggestions) { suggestion ->
-                        FilterChip(
-                            selected = false,
-                            onClick = {
-                                commentText = suggestion
-                                viewModel.onSuggestionSelected(suggestion)
-                            },
-                            label = { Text(suggestion) }
-                        )
-                    }
-                }
-            }
-            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Column(Modifier.weight(1f)) {
-                    OutlinedTextField(value = commentText, onValueChange = { commentText = it }, modifier = Modifier.fillMaxWidth(), label = { Text("أضف تعليقاً") })
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        androidx.compose.material3.Checkbox(checked = spoiler, onCheckedChange = { spoiler = it })
-                        Text("تعليق يحتوي على حرق", color = MangaColors.OnSurfaceVariant)
-                    }
-                }
-                Button(onClick = {
-                    viewModel.postComment(commentText, spoiler)
-                    commentText = ""
-                    spoiler = false
-                }, enabled = commentText.isNotBlank()) {
-                    Icon(Icons.Filled.Forum, null)
-                    Text("إرسال")
-                }
-            }
-        } else {
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = { reviewDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.Star, null)
-                    Text("إضافة/تحديث مراجعتك")
-                }
-                state.reviews.forEach { review ->
-                    Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = RoundedCornerShape(16.dp)) {
-                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                review.authorName,
-                                color = MangaColors.OnSurface,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.clickable { onOpenProfile(review.authorUid) }
+
+            when (state.tab) {
+                CommunityTab.COMMENTS -> {
+                    // Comments list
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (state.comments.isEmpty()) {
+                            item {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("لا توجد تعليقات بعد", color = MangaColors.Muted)
+                                }
+                            }
+                        }
+                        items(state.comments, key = { it.id }) { comment ->
+                            CommentCard(
+                                comment = comment,
+                                isFocused = state.focusCommentId == comment.id,
+                                isSpoilerRevealed = comment.id in expandedSpoilers,
+                                spoilerDefault = state.appSettings.spoilerCollapseDefault,
+                                onRevealSpoiler = { expandedSpoilers.add(comment.id) },
+                                onReply = { viewModel.setReply(comment) },
+                                onReport = { reportTarget = comment; reportReason = "" },
+                                onMute = { viewModel.muteUser(comment.authorUid) },
+                                onProfileClick = { onOpenProfile(comment.authorUid) }
                             )
-                            Text("${review.rating}/5 • ${review.authorBadge}", color = MangaColors.Cyan)
-                            if (review.title.isNotBlank()) Text(review.title, color = MangaColors.OnSurface)
-                            if (review.body.isNotBlank()) Text(review.body, color = MangaColors.OnSurfaceVariant)
+                        }
+                    }
+
+                    // Reply indicator
+                    state.replyTo?.let { reply ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = MangaColors.Cyan.copy(alpha = 0.1f))
+                        ) {
+                            Row(
+                                Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Filled.Reply, null, tint = MangaColors.Cyan, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("الرد على ${reply.authorName}", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall)
+                                Spacer(Modifier.weight(1f))
+                                IconButton(onClick = { viewModel.setReply(null) }, modifier = Modifier.size(20.dp)) {
+                                    Icon(Icons.Filled.Close, null, tint = MangaColors.Muted, modifier = Modifier.size(14.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    // Comment input
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            OutlinedTextField(
+                                value = commentText,
+                                onValueChange = { commentText = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("أضف تعليقاً...") },
+                                maxLines = 4,
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = MangaColors.Cyan,
+                                    unfocusedBorderColor = MangaColors.Muted.copy(alpha = 0.3f),
+                                    cursorColor = MangaColors.Cyan,
+                                    focusedTextColor = MangaColors.OnSurface,
+                                    unfocusedTextColor = MangaColors.OnSurface,
+                                    focusedContainerColor = MangaColors.Surface,
+                                    unfocusedContainerColor = MangaColors.Surface
+                                )
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(checked = spoiler, onCheckedChange = { spoiler = it })
+                                    Text("حرق", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
+                                }
+                                Button(
+                                    onClick = {
+                                        viewModel.postComment(commentText, spoiler)
+                                        commentText = ""
+                                        spoiler = false
+                                    },
+                                    enabled = commentText.isNotBlank(),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)
+                                ) {
+                                    Icon(Icons.Filled.Send, null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("إرسال", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                CommunityTab.REVIEWS -> {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Add review button
+                        item {
+                            Button(
+                                onClick = { reviewDialog = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)
+                            ) {
+                                Icon(Icons.Filled.Star, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("إضافة/تحديث مراجعتك")
+                            }
+                        }
+
+                        if (state.reviews.isEmpty()) {
+                            item {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("لا توجد مراجعات بعد", color = MangaColors.Muted)
+                                }
+                            }
+                        }
+
+                        items(state.reviews, key = { it.id }) { review ->
+                            ReviewCard(review = review, onProfileClick = { onOpenProfile(review.authorUid) })
                         }
                     }
                 }
             }
-        }
 
-        state.error?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            // Error message
+            state.error?.let {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = MangaColors.Error.copy(alpha = 0.1f))
+                ) {
+                    Text(it, color = MangaColors.Error, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+                }
+            }
         }
     }
 
+    // Review dialog
     if (reviewDialog) {
         AlertDialog(
             onDismissRequest = { reviewDialog = false },
-            title = { Text("مراجعتك") },
+            containerColor = MangaColors.Surface,
+            title = { Text("مراجعتك", color = MangaColors.OnSurface) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = reviewTitle, onValueChange = { reviewTitle = it }, label = { Text("العنوان") })
-                    OutlinedTextField(value = reviewBody, onValueChange = { reviewBody = it }, label = { Text("التفاصيل") }, minLines = 4)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = reviewTitle, onValueChange = { reviewTitle = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("عنوان المراجعة") },
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    OutlinedTextField(
+                        value = reviewBody, onValueChange = { reviewBody = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("تفاصيل المراجعة") },
+                        minLines = 4,
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    Text("التقييم", color = MangaColors.OnSurface, style = MaterialTheme.typography.labelMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         (1..5).forEach { star ->
-                            FilterChip(selected = reviewRating == star, onClick = { reviewRating = star }, label = { Text(star.toString()) })
+                            FilterChip(
+                                selected = reviewRating == star,
+                                onClick = { reviewRating = star },
+                                label = { Text("$star") },
+                                shape = RoundedCornerShape(8.dp)
+                            )
                         }
                     }
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    viewModel.upsertReview(reviewRating, reviewTitle, reviewBody)
-                    reviewDialog = false
-                }) { Text("حفظ") }
+                Button(
+                    onClick = {
+                        viewModel.upsertReview(reviewRating, reviewTitle, reviewBody)
+                        reviewDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)
+                ) { Text("حفظ") }
             },
             dismissButton = {
-                Button(onClick = { reviewDialog = false }) { Text("إلغاء") }
+                TextButton(onClick = { reviewDialog = false }) { Text("إلغاء", color = MangaColors.Muted) }
             }
         )
     }
 
+    // Report dialog
     reportTarget?.let { comment ->
         AlertDialog(
             onDismissRequest = { reportTarget = null },
-            title = { Text("الإبلاغ عن تعليق") },
+            containerColor = MangaColors.Surface,
+            title = { Text("الإبلاغ عن تعليق", color = MangaColors.OnSurface) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(comment.text, color = MangaColors.OnSurfaceVariant)
-                    OutlinedTextField(value = reportReason, onValueChange = { reportReason = it }, label = { Text("السبب") })
+                    Text(comment.text, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = reportReason, onValueChange = { reportReason = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("سبب الإبلاغ") },
+                        shape = RoundedCornerShape(10.dp)
+                    )
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    viewModel.reportComment(comment, reportReason)
-                    reportTarget = null
-                }, enabled = reportReason.isNotBlank()) { Text("إرسال") }
+                Button(
+                    onClick = { viewModel.reportComment(comment, reportReason); reportTarget = null },
+                    enabled = reportReason.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Error)
+                ) { Text("إرسال") }
             },
             dismissButton = {
-                Button(onClick = { reportTarget = null }) { Text("إلغاء") }
+                TextButton(onClick = { reportTarget = null }) { Text("إلغاء", color = MangaColors.Muted) }
             }
         )
+    }
+}
+
+@Composable
+private fun CommentCard(
+    comment: CommunityComment,
+    isFocused: Boolean,
+    isSpoilerRevealed: Boolean,
+    spoilerDefault: Boolean,
+    onRevealSpoiler: () -> Unit,
+    onReply: () -> Unit,
+    onReport: () -> Unit,
+    onMute: () -> Unit,
+    onProfileClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isFocused) MangaColors.GlowPurple else MangaColors.SurfaceContainer
+        )
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Header
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Avatar placeholder
+                    Box(
+                        Modifier.size(32.dp).clip(CircleShape).background(MangaColors.Primary.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(comment.authorName.take(1), color = MangaColors.Primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                    }
+                    Column {
+                        Text(comment.authorName, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.clickable(onClick = onProfileClick))
+                        Text(comment.authorBadge, color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                if (comment.replyCount > 0) {
+                    Text("${comment.replyCount} رد", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+
+            // Content
+            if (comment.spoiler && spoilerDefault && !isSpoilerRevealed) {
+                OutlinedButton(onClick = onRevealSpoiler, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.Visibility, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("إظهار السبويْلر")
+                }
+            } else {
+                Text(comment.text, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            }
+
+            // Actions
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onReply, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                    Icon(Icons.Filled.Reply, null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("رد", style = MaterialTheme.typography.labelSmall)
+                }
+                TextButton(onClick = onReport, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                    Icon(Icons.Filled.Flag, null, modifier = Modifier.size(14.dp), tint = MangaColors.Yellow)
+                    Spacer(Modifier.width(4.dp))
+                    Text("إبلاغ", style = MaterialTheme.typography.labelSmall, color = MangaColors.Yellow)
+                }
+                TextButton(onClick = onMute, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                    Icon(Icons.Filled.VolumeOff, null, modifier = Modifier.size(14.dp), tint = MangaColors.Muted)
+                    Spacer(Modifier.width(4.dp))
+                    Text("كتم", style = MaterialTheme.typography.labelSmall, color = MangaColors.Muted)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewCard(review: MangaReview, onProfileClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Header
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    Modifier.size(32.dp).clip(CircleShape).background(MangaColors.Yellow.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.Star, null, tint = MangaColors.Yellow, modifier = Modifier.size(16.dp))
+                }
+                Column {
+                    Text(review.authorName, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodyMedium, modifier = Modifier.clickable(onClick = onProfileClick))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("${review.rating}/5", color = MangaColors.Yellow, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text("•", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
+                        Text(review.authorBadge, color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            if (review.title.isNotBlank()) {
+                Text(review.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+            }
+            if (review.body.isNotBlank()) {
+                Text(review.body, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
     }
 }
