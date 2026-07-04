@@ -319,7 +319,7 @@ private fun DetailContent(
                 }
                 // Source comparison button
                 IconButton(
-                    onClick = { viewModel.showSourceComparison() },
+                    onClick = onShowComparison,
                     modifier = Modifier
                         .size(50.dp)
                         .background(MangaColors.SurfaceContainer, RoundedCornerShape(12.dp))
