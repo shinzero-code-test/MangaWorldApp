@@ -39,6 +39,7 @@ import com.exapps.mangaworld.presentation.localstorage.ImportMangaScreen
 import com.exapps.mangaworld.presentation.suggestions.SuggestionsScreen
 import com.exapps.mangaworld.presentation.auth.login.LoginScreen
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
@@ -361,22 +362,25 @@ fun MangaNavGraph(navController: NavHostController) {
                 },
                 onFacebookLoginClick = {
                     // Facebook login — use Facebook SDK LoginManager
-                    val callbackManager = com.facebook.CallbackManager.Factory.create()
-                    com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
-                        context as? androidx.fragment.app.FragmentActivity,
-                        listOf("email", "public_profile")
-                    )
-                    com.facebook.login.LoginManager.getInstance().registerCallback(callbackManager,
-                        object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
-                            override fun onSuccess(loginResult: com.facebook.login.LoginResult) {
-                                viewModel.signInWithFacebook(loginResult.accessToken.token)
+                    val activity = context as? android.app.Activity
+                    if (activity != null) {
+                        val callbackManager = com.facebook.CallbackManager.Factory.create()
+                        com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
+                            activity,
+                            listOf("email", "public_profile")
+                        )
+                        com.facebook.login.LoginManager.getInstance().registerCallback(callbackManager,
+                            object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+                                override fun onSuccess(loginResult: com.facebook.login.LoginResult) {
+                                    viewModel.signInWithFacebook(loginResult.accessToken.token)
+                                }
+                                override fun onCancel() {}
+                                override fun onError(error: com.facebook.FacebookException) {
+                                    viewModel.clearError()
+                                }
                             }
-                            override fun onCancel() {}
-                            override fun onError(error: com.facebook.FacebookException) {
-                                viewModel.clearError()
-                            }
-                        }
-                    )
+                        )
+                    }
                 },
                 onForgotPasswordClick = { navController.navigate(Screen.ForgotPassword.route) },
                 onSignUpClick = { navController.navigate(Screen.SignUp.route) }
