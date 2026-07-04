@@ -11,18 +11,10 @@ import androidx.compose.ui.text.font.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// ─── Brand Colors ─────────────────────────────────────────────────────────────
+// ─── Brand Colors (hardcoded accents — never change with theme) ──────────────
 
 object MangaColors {
-    // Backgrounds
-    val Background       = Color(0xFF0F0F17)
-    val Surface          = Color(0xFF13131B)
-    val SurfaceContainer = Color(0xFF1A1A26)
-    val SurfaceHigh      = Color(0xFF292932)
-    val SurfaceHighest   = Color(0xFF34343D)
-    val CardBg           = Color(0xFF1B1B23)
-
-    // Accents
+    // Accents — always the same regardless of dynamic colors
     val Primary          = Color(0xFF7C4DFF)   // Purple
     val PrimaryLight     = Color(0xFFCDBDFF)
     val PrimaryDim       = Color(0xFF4F00D0)
@@ -34,15 +26,10 @@ object MangaColors {
     val Orange           = Color(0xFFFF9800)
     val Error            = Color(0xFFCF6679)
 
-    // Text
-    val OnSurface        = Color(0xFFE4E1ED)
-    val OnSurfaceVariant = Color(0xFF9494B8)
-    val Muted            = Color(0xFF666680)
-    val MutedLight       = Color(0xFFAAAAACC)
-
-    // Borders
-    val OutlineVariant   = Color(0xFF494455)
-    val DividerColor     = Color(0xFF1A1A2E)
+    // Gradient helpers
+    val GradientPurpleCyan = listOf(Primary, Cyan)
+    val GlowPurple       = Color(0x4D7C4DFF)
+    val GlowCyan         = Color(0x4D00E5FF)
 
     // Semantic
     val NewBadge         = Pink
@@ -52,11 +39,73 @@ object MangaColors {
     val CompletedColor   = Color(0xFF8888AA)
     val HiatusColor      = Orange
 
-    // Gradient helpers
-    val GradientPurpleCyan = listOf(Primary, Cyan)
-    val GlowPurple       = Color(0x4D7C4DFF)
-    val GlowCyan         = Color(0x4D00E5FF)
+    // Backward-compatible aliases — these are now theme-aware via LocalThemeColors
+    // but kept here so existing code compiles. Prefer themeColors() in new code.
+    val Background       = DarkThemeColors.Background
+    val Surface          = DarkThemeColors.Surface
+    val SurfaceContainer = DarkThemeColors.SurfaceContainer
+    val SurfaceHigh      = DarkThemeColors.SurfaceHigh
+    val SurfaceHighest   = DarkThemeColors.SurfaceHighest
+    val CardBg           = DarkThemeColors.CardBg
+    val OnSurface        = DarkThemeColors.OnSurface
+    val OnSurfaceVariant = DarkThemeColors.OnSurfaceVariant
+    val Muted            = DarkThemeColors.Muted
+    val MutedLight       = DarkThemeColors.MutedLight
+    val OutlineVariant   = DarkThemeColors.OutlineVariant
+    val DividerColor     = DarkThemeColors.DividerColor
 }
+
+/**
+ * Theme-aware colors — these adapt to dynamic colors (Material You).
+ * Use these instead of hardcoded MangaColors for backgrounds, surfaces, and text.
+ */
+@Immutable
+data class ThemeColors(
+    val Background: Color,
+    val Surface: Color,
+    val SurfaceContainer: Color,
+    val SurfaceHigh: Color,
+    val SurfaceHighest: Color,
+    val CardBg: Color,
+    val OnSurface: Color,
+    val OnSurfaceVariant: Color,
+    val Muted: Color,
+    val MutedLight: Color,
+    val OutlineVariant: Color,
+    val DividerColor: Color
+)
+
+private val DarkThemeColors = ThemeColors(
+    Background       = Color(0xFF0F0F17),
+    Surface          = Color(0xFF13131B),
+    SurfaceContainer = Color(0xFF1A1A26),
+    SurfaceHigh      = Color(0xFF292932),
+    SurfaceHighest   = Color(0xFF34343D),
+    CardBg           = Color(0xFF1B1B23),
+    OnSurface        = Color(0xFFE4E1ED),
+    OnSurfaceVariant = Color(0xFF9494B8),
+    Muted            = Color(0xFF666680),
+    MutedLight       = Color(0xFFAAAAACC),
+    OutlineVariant   = Color(0xFF494455),
+    DividerColor     = Color(0xFF1A1A2E)
+)
+
+private val LightThemeColors = ThemeColors(
+    Background       = Color(0xFFFBF8FF),
+    Surface          = Color(0xFFFFFFFF),
+    SurfaceContainer = Color(0xFFF4F0FA),
+    SurfaceHigh      = Color(0xFFEAE5F0),
+    SurfaceHighest   = Color(0xFFDDD8E3),
+    CardBg           = Color(0xFFF8F5FC),
+    OnSurface        = Color(0xFF1C1B1F),
+    OnSurfaceVariant = Color(0xFF49454F),
+    Muted            = Color(0xFF8888AA),
+    MutedLight       = Color(0xFFAAAABC),
+    OutlineVariant   = Color(0xFFCAC4D0),
+    DividerColor     = Color(0xFFE0DCE8)
+)
+
+val LocalThemeColors = staticCompositionLocalOf { DarkThemeColors }
 
 // ─── Material3 Color Scheme ───────────────────────────────────────────────────
 
@@ -140,10 +189,41 @@ fun MangaWorldTheme(
         else -> LightColorScheme
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography  = MangaTypography,
-        shapes      = MangaShapes,
-        content     = content
-    )
+    val themeColors = when {
+        useDynamicColors && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && darkTheme ->
+            DarkThemeColors.copy(
+                Background = colorScheme.background,
+                Surface = colorScheme.surface,
+                SurfaceContainer = colorScheme.surfaceContainer,
+                SurfaceHigh = colorScheme.surfaceContainerHigh,
+                SurfaceHighest = colorScheme.surfaceContainerHighest,
+                OnSurface = colorScheme.onSurface,
+                OnSurfaceVariant = colorScheme.onSurfaceVariant
+            )
+        useDynamicColors && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !darkTheme ->
+            LightThemeColors.copy(
+                Background = colorScheme.background,
+                Surface = colorScheme.surface,
+                SurfaceContainer = colorScheme.surfaceContainer,
+                SurfaceHigh = colorScheme.surfaceContainerHigh,
+                SurfaceHighest = colorScheme.surfaceContainerHighest,
+                OnSurface = colorScheme.onSurface,
+                OnSurfaceVariant = colorScheme.onSurfaceVariant
+            )
+        darkTheme -> DarkThemeColors
+        else -> LightThemeColors
+    }
+
+    CompositionLocalProvider(LocalThemeColors provides themeColors) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography  = MangaTypography,
+            shapes      = MangaShapes,
+            content     = content
+        )
+    }
 }
+
+/** Access theme-aware colors from any composable */
+@Composable
+fun themeColors(): ThemeColors = LocalThemeColors.current
