@@ -4,68 +4,74 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Base64
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.functions.FirebaseFunctions
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.tasks.await
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Handles image uploads via the admin dashboard's Cloudinary API.
  * 
- * The Cloudinary API keys are stored in the dashboard's .env.local file,
- * NOT in the app code. This class calls the dashboard's API endpoint
- * which handles the actual Cloudinary upload.
+ * The Cloudinary API keys are stored in the dashboard's environment,
+ * NOT in the app code. This class uploads images to the dashboard's
+ * API endpoint which handles the actual Cloudinary upload.
  * 
- * Dashboard API: POST /api/cloudinary/upload
- *   Body: { "image": "data:image/jpeg;base64,...", "folder": "avatars" }
- *   Response: { "url": "https://res.cloudinary.com/...", "publicId": "..." }
+ * Dashboard API: POST https://mangaworld-admin.vercel.app/api/cloudinary/app-upload
  */
 @Singleton
 class CloudinaryUploader @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    companion object {
+        // Dashboard URL — the app calls this endpoint which proxies to Cloudinary
+        private const val DASHBOARD_URL = "https://mangaworld-admin.vercel.app"
+    }
+
     /**
      * Upload an image URI to Cloudinary via the dashboard API.
      * Returns the Cloudinary URL of the uploaded image.
      */
     suspend fun uploadImage(uri: Uri, folder: String = "uploads"): String? {
-        return try {
-            // Convert URI to base64
-            val base64 = uriToBase64(uri) ?: return null
-            val dataUrl = "data:image/jpeg;base64,$base64"
+        return withContext(Dispatchers.IO) {
+            try {
+                val base64 = uriToBase64(uri) ?: return@withContext null
+                val dataUrl = "data:image/jpeg;base64,$base64"
 
-            // Call dashboard API
-            val functions = FirebaseFunctions.getInstance()
-            val result = functions
-                .getHttpsCallable("cloudinaryUpload")
-                .call(hashMapOf("image" to dataUrl, "folder" to folder))
-                .await()
-                .data as? Map<*, *>
+                // Call dashboard API
+                val url = URL("$DASHBOARD_URL/api/cloudinary/app-upload")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                connection.doOutput = true
 
-            result?.get("url") as? String
-        } catch (e: Exception) {
-            // Fallback: use Firebase Storage directly
-            uploadToFirebaseStorage(uri, folder)
-        }
-    }
+                val payload = JSONObject().apply {
+                    put("image", dataUrl)
+                    put("folder", folder)
+                }
 
-    /**
-     * Fallback: upload to Firebase Storage if dashboard API fails.
-     */
-    private suspend fun uploadToFirebaseStorage(uri: Uri, folder: String): String? {
-        return try {
-            val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance()
-                .reference
-                .child("$folder/${System.currentTimeMillis()}.jpg")
-            storageRef.putFile(uri).await()
-            storageRef.downloadUrl.await().toString()
-        } catch (e: Exception) {
-            null
+                connection.outputStream.use { os ->
+                    os.write(payload.toString().toByteArray())
+                }
+
+                val responseCode = connection.responseCode
+                val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
+
+                if (responseCode == 200) {
+                    val json = JSONObject(responseBody)
+                    json.getString("url")
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                null
+            }
         }
     }
 

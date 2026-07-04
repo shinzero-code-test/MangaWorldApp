@@ -132,7 +132,8 @@ class CloudSyncViewModel @Inject constructor(
     fun saveProfile(username: String, bio: String, isPublic: Boolean) {
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = "Saving profile...")
-            runCatching { communityRepository.upsertProfile(username, bio, isPublic, profile?.avatarUrl) }
+            val currentProfile = profile.value
+            runCatching { communityRepository.upsertProfile(username, bio, isPublic, currentProfile?.avatarUrl) }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Profile saved") }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Profile save failed") }
         }
