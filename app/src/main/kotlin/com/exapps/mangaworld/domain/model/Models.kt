@@ -371,8 +371,12 @@ data class CustomUserList(
     val id: String,
     val name: String,
     val description: String = "",
+    val coverUrl: String = "",
+    val rating: Float = 0f,
+    val genres: List<String> = emptyList(),
     val isPublic: Boolean = false,
     val itemCount: Int = 0,
+    val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
 
@@ -382,6 +386,8 @@ data class CustomUserListItem(
     val slug: String,
     val title: String,
     val coverUrl: String = "",
+    val rating: Float = 0f,
+    val genres: List<String> = emptyList(),
     val addedAt: Long = System.currentTimeMillis()
 )
 

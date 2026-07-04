@@ -194,7 +194,7 @@ class FirebaseCommunityRepository @Inject constructor(
         return existing ?: defaultProfile(uid)
     }
 
-    override suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean) {
+    override suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String?) {
         val uid = sessionManager.ensureGuestSession() ?: return
         val normalized = username.trim().lowercase()
         require(normalized.isNotBlank()) { "اسم المستخدم مطلوب" }
@@ -211,6 +211,7 @@ class FirebaseCommunityRepository @Inject constructor(
             bio = bio.trim(),
             isPublic = isPublic,
             badgeLabel = newBadge,
+            avatarUrl = avatarUrl ?: existing.avatarUrl,
             updatedAt = System.currentTimeMillis()
         )
 
@@ -230,7 +231,7 @@ class FirebaseCommunityRepository @Inject constructor(
         firestore.collection("publicProfiles").document(uid).set(profile.toMap()).await()
     }
 
-    override suspend fun createOrUpdateList(listId: String?, name: String, description: String, isPublic: Boolean): String {
+    override suspend fun createOrUpdateList(listId: String?, name: String, description: String, coverUrl: String, rating: Float, genres: List<String>, isPublic: Boolean): String {
         val uid = sessionManager.ensureGuestSession() ?: error("No user")
         val id = listId ?: UUID.randomUUID().toString()
         val doc = firestore.collection("users").document(uid).collection("lists").document(id)
@@ -239,6 +240,9 @@ class FirebaseCommunityRepository @Inject constructor(
             id = id,
             name = name.trim(),
             description = description.trim(),
+            coverUrl = coverUrl,
+            rating = rating,
+            genres = genres,
             isPublic = isPublic,
             itemCount = existingCount,
             updatedAt = System.currentTimeMillis()
@@ -606,8 +610,12 @@ class FirebaseCommunityRepository @Inject constructor(
         "id" to id,
         "name" to name,
         "description" to description,
+        "coverUrl" to coverUrl,
+        "rating" to rating,
+        "genres" to genres,
         "isPublic" to isPublic,
         "itemCount" to itemCount,
+        "createdAt" to createdAt,
         "updatedAt" to updatedAt
     )
 
@@ -617,6 +625,8 @@ class FirebaseCommunityRepository @Inject constructor(
         "slug" to slug,
         "title" to title,
         "coverUrl" to coverUrl,
+        "rating" to rating,
+        "genres" to genres,
         "addedAt" to addedAt
     )
 
@@ -773,8 +783,12 @@ class FirebaseCommunityRepository @Inject constructor(
             id = getString("id") ?: id,
             name = getString("name") ?: return null,
             description = getString("description") ?: "",
+            coverUrl = getString("coverUrl") ?: "",
+            rating = (getDouble("rating") ?: 0.0).toFloat(),
+            genres = (get("genres") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList(),
             isPublic = getBoolean("isPublic") ?: false,
             itemCount = (getLong("itemCount") ?: 0L).toInt(),
+            createdAt = getLong("createdAt") ?: 0L,
             updatedAt = getLong("updatedAt") ?: 0L
         )
     }.getOrNull()
@@ -786,6 +800,8 @@ class FirebaseCommunityRepository @Inject constructor(
             slug = getString("slug") ?: return null,
             title = getString("title") ?: return null,
             coverUrl = getString("coverUrl") ?: "",
+            rating = (getDouble("rating") ?: 0.0).toFloat(),
+            genres = (get("genres") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList(),
             addedAt = getLong("addedAt") ?: 0L
         )
     }.getOrNull()

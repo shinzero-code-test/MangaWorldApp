@@ -75,7 +75,8 @@ import javax.inject.Inject
 @HiltViewModel
 class UserProfileViewModel @Inject constructor(
     private val communityRepository: CommunityRepository,
-    private val readingStatsStore: ReadingStatsStore
+    private val readingStatsStore: ReadingStatsStore,
+    private val cloudinaryUploader: com.exapps.mangaworld.core.firebase.CloudinaryUploader
 ) : ViewModel() {
     val profile = kotlinx.coroutines.flow.flow { emit(communityRepository.getCurrentProfile()) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -96,6 +97,22 @@ class UserProfileViewModel @Inject constructor(
 
     fun updateAvatarUri(uri: Uri) {
         avatarUri = uri
+    }
+
+    fun uploadAvatar(uri: Uri) {
+        viewModelScope.launch {
+            val url = cloudinaryUploader.uploadImage(uri, folder = "avatars")
+            if (url != null) {
+                val current = communityRepository.getCurrentProfile()
+                communityRepository.upsertProfile(
+                    username = current?.username ?: "",
+                    bio = current?.bio ?: "",
+                    isPublic = current?.isPublic ?: true,
+                    avatarUrl = url
+                )
+                avatarUri = null
+            }
+        }
     }
 
     fun markRead(id: String) {
