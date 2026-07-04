@@ -420,7 +420,7 @@ private fun ChapterDownloadCard(
                     "paused" -> "متوقف"
                     "completed" -> "✓"
                     "failed" -> "فشل"
-                    "cancelled" → "ملغي"
+                    "cancelled" -> "ملغي"
                     else -> task.status
                 },
                 style = MaterialTheme.typography.labelSmall,
