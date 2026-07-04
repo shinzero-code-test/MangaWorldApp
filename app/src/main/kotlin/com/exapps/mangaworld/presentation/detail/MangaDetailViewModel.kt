@@ -486,7 +486,22 @@ class MangaDetailViewModel @Inject constructor(
 
     /** Enqueue a list of chapters for download (e.g. all unread). */
     fun downloadChapters(chapters: List<Chapter>) {
-        chapters.forEach { downloadChapter(it) }
+        if (chapters.isEmpty()) return
+        // Batch: limit concurrent downloads to prevent WorkManager overflow and OOM
+        viewModelScope.launch {
+            val batchSize = 10
+            chapters.chunked(batchSize).forEach { batch ->
+                batch.forEach { chapter ->
+                    if (!_state.value.downloadingChapters.contains(chapter.number)) {
+                        downloadChapter(chapter)
+                    }
+                }
+                // Small delay between batches to avoid overwhelming the system
+                if (chapters.size > batchSize) {
+                    kotlinx.coroutines.delay(500)
+                }
+            }
+        }
     }
 
     /** Download every chapter that isn't already downloaded. */

@@ -147,7 +147,7 @@ interface DownloadTaskDao {
     @Query("SELECT * FROM download_tasks WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): DownloadTaskEntity?
 
-    @Query("SELECT * FROM download_tasks WHERE chapterUrl = :chapterUrl AND mangaId = :mangaId AND (status = 'queued' OR status = 'running') LIMIT 1")
+    @Query("SELECT * FROM download_tasks WHERE chapterUrl = :chapterUrl AND mangaId = :mangaId AND (status = 'queued' OR status = 'running' OR status = 'paused') LIMIT 1")
     suspend fun getPendingByChapter(chapterUrl: String, mangaId: String): DownloadTaskEntity?
 
     @Query("SELECT * FROM download_tasks WHERE chapterUrl = :chapterUrl AND mangaId = :mangaId ORDER BY updatedAt DESC LIMIT 1")

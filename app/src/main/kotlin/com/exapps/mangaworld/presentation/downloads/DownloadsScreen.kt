@@ -51,9 +51,11 @@ class DownloadsViewModel @Inject constructor(
     fun cancelTask(id: String) = viewModelScope.launch { manager.cancelTask(id) }
     fun retryTask(id: String) = viewModelScope.launch { manager.retryTask(id) }
     fun clearCompleted() = viewModelScope.launch { manager.clearCompleted() }
+    fun pauseTask(id: String) = viewModelScope.launch { manager.pauseTask(id) }
+    fun resumeTask(id: String) = viewModelScope.launch { manager.resumeTask(id) }
 
-    fun pauseAll() { /* TODO: Implement pause all via WorkManager */ }
-    fun resumeAll() { /* TODO: Implement resume all via WorkManager */ }
+    fun pauseAll() = viewModelScope.launch { manager.pauseAll() }
+    fun resumeAll() = viewModelScope.launch { manager.resumeAll() }
     fun cancelAll() {
         viewModelScope.launch {
             tasks.value.filter { it.status == "queued" || it.status == "running" }
@@ -70,7 +72,7 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
     val tasks by viewModel.tasks.collectAsStateWithLifecycle()
 
     val inProgress = remember(tasks) { tasks.filter { it.status == "running" } }
-    val queued = remember(tasks) { tasks.filter { it.status == "queued" } }
+    val queued = remember(tasks) { tasks.filter { it.status == "queued" || it.status == "paused" } }
     val completed = remember(tasks) { tasks.filter { it.status == "completed" } }
     val failed = remember(tasks) { tasks.filter { it.status == "failed" || it.status == "cancelled" } }
 
@@ -169,8 +171,8 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
                 items(inProgress, key = { it.id }) { task ->
                     DownloadTaskCard(
                         task = task,
-                        onPause = { /* TODO: implement */ },
-                        onResume = { /* TODO: implement */ },
+                        onPause = { viewModel.pauseTask(task.id) },
+                        onResume = null,
                         onSkip = null,
                         onCancel = { viewModel.cancelTask(task.id) },
                         onRetry = null,
@@ -187,7 +189,7 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
                     DownloadTaskCard(
                         task = task,
                         onPause = null,
-                        onResume = null,
+                        onResume = { viewModel.resumeTask(task.id) },
                         onSkip = null,
                         onCancel = { viewModel.cancelTask(task.id) },
                         onRetry = null,
@@ -327,6 +329,7 @@ private fun DownloadTaskCard(
 
     val statusColor = when (task.status) {
         "running" -> MangaColors.Cyan
+        "paused" -> MangaColors.Yellow
         "completed" -> MangaColors.Primary
         "failed", "cancelled" -> MangaColors.Error
         else -> MangaColors.Yellow
@@ -409,6 +412,7 @@ private fun DownloadTaskCard(
                             when (task.status) {
                                 "queued" -> "في الانتظار"
                                 "running" -> "جاري التنزيل"
+                                "paused" -> "متوقف مؤقتاً"
                                 "completed" -> "مكتمل"
                                 "failed" -> "فشل"
                                 "cancelled" -> "ملغي"
@@ -432,6 +436,11 @@ private fun DownloadTaskCard(
                     if (task.status == "running" && onPause != null) {
                         IconButton(onClick = onPause, modifier = Modifier.size(32.dp)) {
                             Icon(Icons.Filled.Pause, "إيقاف", modifier = Modifier.size(18.dp), tint = MangaColors.Yellow)
+                        }
+                    }
+                    if (task.status == "paused" && onResume != null) {
+                        IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Filled.PlayArrow, "استئناف", modifier = Modifier.size(18.dp), tint = MangaColors.Cyan)
                         }
                     }
                     if (task.status == "queued" && onResume != null) {

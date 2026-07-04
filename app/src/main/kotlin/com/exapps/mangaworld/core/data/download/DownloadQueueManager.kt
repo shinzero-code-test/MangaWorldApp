@@ -15,6 +15,7 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -164,6 +165,62 @@ class DownloadQueueManager @Inject constructor(
         )
         File(task.targetDir).deleteRecursively()
         WorkManager.getInstance(app).cancelAllWorkByTag(taskId)
+    }
+
+    suspend fun pauseTask(taskId: String) {
+        val task = downloadTaskDao.getById(taskId) ?: return
+        if (task.status != "running") return
+        downloadTaskDao.upsert(
+            task.copy(status = "paused", updatedAt = System.currentTimeMillis())
+        )
+        WorkManager.getInstance(app).cancelAllWorkByTag(taskId)
+    }
+
+    suspend fun resumeTask(taskId: String) {
+        val task = downloadTaskDao.getById(taskId) ?: return
+        if (task.status != "paused") return
+        downloadTaskDao.upsert(task.copy(status = "queued", updatedAt = System.currentTimeMillis()))
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+        WorkManager.getInstance(app).enqueue(
+            OneTimeWorkRequestBuilder<ChapterDownloadWorker>()
+                .setInputData(Data.Builder()
+                    .putString(ChapterDownloadWorker.KEY_TASK_ID, task.id)
+                    .putString(ChapterDownloadWorker.KEY_MANGA_ID, task.mangaId)
+                    .putString(ChapterDownloadWorker.KEY_CHAPTER_URL, task.chapterUrl)
+                    .putString(ChapterDownloadWorker.KEY_CHAPTER_TITLE, task.chapterTitle)
+                    .putString(ChapterDownloadWorker.KEY_REFERER, task.referer)
+                    .putString(ChapterDownloadWorker.KEY_TARGET_DIR, task.targetDir)
+                    .putStringArray(
+                        ChapterDownloadWorker.KEY_PAGES,
+                        runCatching {
+                            val arr = JSONArray(task.pagesJson)
+                            Array(arr.length()) { idx -> arr.getString(idx) }
+                        }.getOrDefault(emptyArray())
+                    )
+                    .build())
+                .setConstraints(constraints)
+                .addTag(taskId)
+                .addTag("manga_${task.mangaId}")
+                .build()
+        )
+    }
+
+    suspend fun pauseAll() {
+        downloadTaskDao.observeAll().first().forEach { task ->
+            if (task.status == "running" || task.status == "queued") {
+                pauseTask(task.id)
+            }
+        }
+    }
+
+    suspend fun resumeAll() {
+        downloadTaskDao.observeAll().first().forEach { task ->
+            if (task.status == "paused") {
+                resumeTask(task.id)
+            }
+        }
     }
 
     suspend fun retryTask(taskId: String) {
