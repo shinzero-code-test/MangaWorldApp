@@ -38,6 +38,13 @@ import com.exapps.mangaworld.presentation.localstorage.LocalMangaDetailScreen
 import com.exapps.mangaworld.presentation.localstorage.ImportMangaScreen
 import com.exapps.mangaworld.presentation.suggestions.SuggestionsScreen
 import com.exapps.mangaworld.presentation.auth.login.LoginScreen
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.activity.compose.rememberLauncherForActivityResult
 
 sealed class Screen(val route: String) {
     object Home        : Screen("home")
@@ -77,6 +84,8 @@ sealed class Screen(val route: String) {
     object ImportManga : Screen("import_manga")
     object Suggestions : Screen("suggestions")
     object Login : Screen("login")
+    object SignUp : Screen("signup")
+    object ForgotPassword : Screen("forgot_password")
     object Community : Screen("community/{sourceId}/{mangaId}/{slug}?chapterUrl={chapterUrl}&commentId={commentId}") {
         fun createRoute(sourceId: String, mangaId: String, slug: String, chapterUrl: String? = null, commentId: String? = null): String {
             val encoded = chapterUrl?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
@@ -303,12 +312,105 @@ fun MangaNavGraph(navController: NavHostController) {
             )
         }
         composable(Screen.Login.route) {
+            val viewModel: com.exapps.mangaworld.presentation.auth.LoginViewModel = hiltViewModel()
+            val state by viewModel.uiState.collectAsStateWithLifecycle()
+            val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+
+            // Google Sign-In launcher
+            val googleSignInClient = remember {
+                com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(
+                    context,
+                    com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
+                        .requestIdToken(context.resources.getString(context.resources.getIdentifier("default_web_client_id", "string", context.packageName)))
+                        .requestEmail()
+                        .build()
+                )
+            }
+            val googleLauncher = rememberLauncherForActivityResult(
+                contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                val idToken = task.result?.idToken
+                if (idToken != null) {
+                    viewModel.signInWithGoogleIdToken(idToken)
+                } else {
+                    viewModel.clearError() // user cancelled
+                }
+            }
+
+            // Auto-navigate on successful sign-in
+            LaunchedEffect(state.isSignedIn) {
+                if (state.isSignedIn) {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                }
+            }
+
             LoginScreen(
-                onLoginClick = { _, _ -> navController.navigate(Screen.Home.route) },
-                onGoogleSignInClick = { navController.navigate(Screen.Home.route) },
-                onFacebookLoginClick = { navController.navigate(Screen.Home.route) },
-                onForgotPasswordClick = { navController.popBackStack() },
-                onSignUpClick = { navController.popBackStack() }
+                email = state.email,
+                password = state.password,
+                isLoading = state.isLoading,
+                errorMessage = state.error,
+                onEmailChanged = viewModel::onEmailChanged,
+                onPasswordChanged = viewModel::onPasswordChanged,
+                onLoginClick = { _, _ -> viewModel.signInWithEmail() },
+                onGoogleSignInClick = {
+                    googleLauncher.launch(googleSignInClient.signInIntent)
+                },
+                onFacebookLoginClick = {
+                    // Facebook login — use Facebook SDK LoginManager
+                    val callbackManager = com.facebook.CallbackManager.Factory.create()
+                    com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
+                        context as? androidx.fragment.app.FragmentActivity,
+                        listOf("email", "public_profile")
+                    )
+                    com.facebook.login.LoginManager.getInstance().registerCallback(callbackManager,
+                        object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+                            override fun onSuccess(loginResult: com.facebook.login.LoginResult) {
+                                viewModel.signInWithFacebook(loginResult.accessToken.token)
+                            }
+                            override fun onCancel() {}
+                            override fun onError(error: com.facebook.FacebookException) {
+                                viewModel.clearError()
+                            }
+                        }
+                    )
+                },
+                onForgotPasswordClick = { navController.navigate(Screen.ForgotPassword.route) },
+                onSignUpClick = { navController.navigate(Screen.SignUp.route) }
+            )
+        }
+        composable(Screen.SignUp.route) {
+            val viewModel: com.exapps.mangaworld.presentation.auth.LoginViewModel = hiltViewModel()
+            val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+            LaunchedEffect(state.isSignedIn) {
+                if (state.isSignedIn) {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                }
+            }
+
+            com.exapps.mangaworld.presentation.auth.signup.SignUpScreen(
+                onBack = { navController.popBackStack() },
+                onSignUp = viewModel::signUpWithEmail,
+                isLoading = state.isLoading,
+                error = state.error
+            )
+        }
+        composable(Screen.ForgotPassword.route) {
+            val viewModel: com.exapps.mangaworld.presentation.auth.LoginViewModel = hiltViewModel()
+            val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+            com.exapps.mangaworld.presentation.auth.forgotpassword.ForgotPasswordScreen(
+                onBack = { navController.popBackStack() },
+                onResetSent = { navController.popBackStack() },
+                isLoading = state.isLoading,
+                error = state.error,
+                onSendReset = viewModel::sendPasswordReset
             )
         }
         composable(

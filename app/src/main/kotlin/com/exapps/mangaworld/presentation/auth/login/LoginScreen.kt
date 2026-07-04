@@ -48,6 +48,10 @@ import com.exapps.mangaworld.presentation.theme.MangaColors
 
 @Composable
 fun LoginScreen(
+    email: String = "",
+    password: String = "",
+    onEmailChanged: (String) -> Unit = {},
+    onPasswordChanged: (String) -> Unit = {},
     onLoginClick: (email: String, password: String) -> Unit,
     onGoogleSignInClick: () -> Unit,
     onFacebookLoginClick: () -> Unit = {},
@@ -57,8 +61,6 @@ fun LoginScreen(
     errorMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     val focusManager = LocalFocusManager.current
@@ -99,7 +101,7 @@ fun LoginScreen(
                 // Email field
                 MangaTextField(
                     value = email,
-                    onValueChange = { email = it },
+                    onValueChange = onEmailChanged,
                     placeholder = "البريد الإلكتروني أو اسم المستخدم",
                     leadingIcon = Icons.Filled.Email,
                     keyboardType = KeyboardType.Email,
@@ -111,7 +113,7 @@ fun LoginScreen(
                 // Password field
                 MangaTextField(
                     value = password,
-                    onValueChange = { password = it },
+                    onValueChange = onPasswordChanged,
                     placeholder = "كلمة المرور",
                     leadingIcon = Icons.Filled.Lock,
                     isPassword = true,
@@ -262,7 +264,7 @@ private fun MangaWorldLogo(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun MangaTextField(
+fun MangaTextField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
