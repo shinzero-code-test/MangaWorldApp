@@ -27,7 +27,8 @@ class FirebaseSyncManager @Inject constructor(
     private val readerAnnotationDao: ReaderAnnotationDao,
     private val settingsRepository: SettingsRepository,
     private val sessionManager: FirebaseSessionManager,
-    private val firebaseTelemetry: FirebaseTelemetry
+    private val firebaseTelemetry: FirebaseTelemetry,
+    private val achievementManager: com.exapps.mangaworld.core.data.AchievementManager
 ) {
     private val firestore = FirebaseFirestore.getInstance()
     private val syncMutex = Mutex()
@@ -87,6 +88,15 @@ class FirebaseSyncManager @Inject constructor(
             favorites.forEach { favorite -> writes += userRef.collection("favorites").document(favorite.mangaId) to favorite }
             history.forEach { item -> writes += userRef.collection("readingHistory").document(item.mangaId) to item }
             annotations.forEach { annotation -> writes += userRef.collection("readerAnnotations").document(annotationDocId(annotation)) to annotation }
+
+            // Sync achievements and goals
+            runCatching {
+                val achievementsData = achievementManager.syncToFirestoreMap()
+                if (achievementsData.isNotEmpty()) {
+                    writes += userRef.collection("preferences").document("achievements") to achievementsData
+                }
+            }
+
             commitChunked(writes)
         }
     }

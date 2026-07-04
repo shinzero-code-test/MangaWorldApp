@@ -247,6 +247,42 @@ class AchievementManager @Inject constructor(
         }
     }
 
+    /**
+     * Calculate badge based on reading progress and achievements.
+     * Used by FirebaseCommunityRepository to update the user's badge.
+     */
+    suspend fun calculateBadge(): String {
+        val prefs = dataStore.data.first()
+        val totalPages = prefs[totalPagesReadKey] ?: 0
+        val totalChapters = prefs[totalChaptersReadKey] ?: 0
+        val achievements = parseAchievements(prefs[achievementsKey] ?: "[]")
+        val unlockedCount = achievements.count { it.isUnlocked }
+
+        return when {
+            totalChapters >= 1000 || unlockedCount >= 6 -> "Pirate King"
+            totalChapters >= 400 || unlockedCount >= 5 -> "Avid Reader"
+            totalChapters >= 150 || unlockedCount >= 4 -> "Shonen Specialist"
+            totalChapters >= 50 || unlockedCount >= 3 -> "Manga Enthusiast"
+            totalChapters >= 10 || unlockedCount >= 2 -> "Chapter Hunter"
+            totalPages >= 50 -> "Page Turner"
+            else -> "Beginner"
+        }
+    }
+
+    /**
+     * Get achievements and goals as a Map for Firestore sync.
+     */
+    suspend fun syncToFirestoreMap(): Map<String, Any> {
+        val prefs = dataStore.data.first()
+        return mapOf(
+            "totalPagesRead" to (prefs[totalPagesReadKey] ?: 0),
+            "totalChaptersRead" to (prefs[totalChaptersReadKey] ?: 0),
+            "goals" to (prefs[goalsKey] ?: "[]"),
+            "achievements" to (prefs[achievementsKey] ?: "[]"),
+            "lastUpdated" to System.currentTimeMillis()
+        )
+    }
+
     private suspend fun syncToFirestore() {
         try {
             val uid = sessionManager.ensureGuestSession() ?: return

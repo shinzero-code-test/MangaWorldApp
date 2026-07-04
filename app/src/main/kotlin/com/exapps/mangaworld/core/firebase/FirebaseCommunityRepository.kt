@@ -33,7 +33,8 @@ import javax.inject.Singleton
 class FirebaseCommunityRepository @Inject constructor(
     private val sessionManager: FirebaseSessionManager,
     private val readChapterDao: ReadChapterDao,
-    private val remoteConfigManager: FirebaseRemoteConfigManager
+    private val remoteConfigManager: FirebaseRemoteConfigManager,
+    private val achievementManager: com.exapps.mangaworld.core.data.AchievementManager
 ) : CommunityRepository {
 
     private val firestore = FirebaseFirestore.getInstance()
@@ -203,10 +204,13 @@ class FirebaseCommunityRepository @Inject constructor(
         require(currentOwner == null || currentOwner == uid) { "اسم المستخدم مستخدم بالفعل" }
 
         val existing = getCurrentProfile() ?: defaultProfile(uid)
+        // Recalculate badge based on current achievements
+        val newBadge = try { achievementManager.calculateBadge() } catch (_: Exception) { existing.badgeLabel }
         val profile = existing.copy(
             username = username.trim(),
             bio = bio.trim(),
             isPublic = isPublic,
+            badgeLabel = newBadge,
             updatedAt = System.currentTimeMillis()
         )
 
@@ -532,12 +536,17 @@ class FirebaseCommunityRepository @Inject constructor(
 
     private suspend fun defaultProfile(uid: String): CommunityProfile {
         val firebaseUser = sessionManager.currentUser()
-        val readCount = readChapterDao.getTotalReadCount()
-        val badge = when {
-            readCount >= 1000 -> "Pirate King"
-            readCount >= 400 -> "Avid Reader"
-            readCount >= 150 -> "Shonen Specialist"
-            else -> "Beginner"
+        // Use AchievementManager for consistent badge calculation
+        val badge = try {
+            achievementManager.calculateBadge()
+        } catch (_: Exception) {
+            val readCount = readChapterDao.getTotalReadCount()
+            when {
+                readCount >= 1000 -> "Pirate King"
+                readCount >= 400 -> "Avid Reader"
+                readCount >= 150 -> "Shonen Specialist"
+                else -> "Beginner"
+            }
         }
         return CommunityProfile(
             uid = uid,

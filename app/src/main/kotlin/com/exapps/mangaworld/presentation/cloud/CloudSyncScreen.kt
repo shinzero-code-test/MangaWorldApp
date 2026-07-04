@@ -4,224 +4,36 @@ import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material.icons.filled.Login
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
-import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
-import com.exapps.mangaworld.domain.model.CloudRestorePreview
 import com.exapps.mangaworld.domain.model.CloudRestoreStrategy
-import com.exapps.mangaworld.domain.repository.CommunityRepository
-import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
-import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
-import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import com.google.android.gms.auth.api.signin.GoogleSignIn
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.Stable
-import javax.inject.Inject
 
-@Stable
-data class CloudSyncUiState(
-    val busy: Boolean = false,
-    val statusMessage: String? = null,
-    val errorMessage: String? = null,
-    val restorePreview: CloudRestorePreview? = null
-)
-
-@HiltViewModel
-class CloudSyncViewModel @Inject constructor(
-    private val sessionManager: FirebaseSessionManager,
-    private val syncManager: FirebaseSyncManager,
-    private val remoteConfigManager: FirebaseRemoteConfigManager,
-    private val communityRepository: CommunityRepository,
-    private val analyticsManager: FirebaseAnalyticsManager
-) : ViewModel() {
-    private val _state = MutableStateFlow(CloudSyncUiState())
-    val state: StateFlow<CloudSyncUiState> = _state.asStateFlow()
-    val currentUser = sessionManager.authState.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, sessionManager.currentUser())
-    val profile = kotlinx.coroutines.flow.flow { emit(communityRepository.getCurrentProfile()) }
-        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
-    val notifications = communityRepository.observeNotifications()
-        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
-
-    fun googleSignInIntent(): Intent = sessionManager.googleSignInClient().signInIntent
-    fun hasGoogleSignIn(): Boolean = sessionManager.hasGoogleClientId()
-
-    fun signInWithGoogleIdToken(idToken: String?) {
-        if (idToken.isNullOrBlank()) {
-            _state.value = CloudSyncUiState(errorMessage = "تعذر التقاط رمز Google")
-            return
-        }
-        viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ تسجيل الدخول...")
-            runCatching {
-                sessionManager.signInWithGoogleIdToken(idToken)
-                syncManager.pushLocalSnapshot()
-                remoteConfigManager.refresh()
-            }.onSuccess {
-                analyticsManager.logEvent("auth_google_success")
-                _state.value = CloudSyncUiState(statusMessage = "تم تسجيل الدخول والمزامنة")
-            }.onFailure { e ->
-                _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل تسجيل الدخول عبر Google")
-            }
-        }
-    }
-
-    fun signInWithEmail(email: String, password: String) {
-        viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ تسجيل الدخول...")
-            runCatching {
-                sessionManager.signInWithEmail(email, password)
-                syncManager.pushLocalSnapshot()
-            }.onSuccess {
-                analyticsManager.logEvent("auth_email_signin")
-                _state.value = CloudSyncUiState(statusMessage = "تم تسجيل الدخول بنجاح")
-            }.onFailure { e ->
-                _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل تسجيل الدخول")
-            }
-        }
-    }
-
-    fun signUpWithEmail(email: String, password: String) {
-        viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ إنشاء الحساب...")
-            runCatching {
-                sessionManager.signUpWithEmail(email, password)
-                syncManager.pushLocalSnapshot()
-            }.onSuccess {
-                analyticsManager.logEvent("auth_email_signup")
-                _state.value = CloudSyncUiState(statusMessage = "تم إنشاء الحساب والمزامنة")
-            }.onFailure { e ->
-                _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل إنشاء الحساب")
-            }
-        }
-    }
-
-    fun syncNow() {
-        viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ رفع البيانات...")
-            runCatching { syncManager.pushLocalSnapshot() }
-                .onSuccess {
-                    analyticsManager.logEvent("cloud_sync_push")
-                    _state.value = CloudSyncUiState(statusMessage = "تم رفع البيانات إلى السحابة")
-                }
-                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل رفع البيانات") }
-        }
-    }
-
-    fun restoreFromCloud() {
-        viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ استرجاع البيانات...")
-            runCatching { syncManager.previewRemoteSnapshot() }
-                .onSuccess { preview ->
-                    analyticsManager.logEvent("cloud_restore_preview")
-                    _state.value = CloudSyncUiState(restorePreview = preview, statusMessage = "راجع التعارضات قبل الاستعادة")
-                }
-                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل استرجاع البيانات") }
-        }
-    }
-
-    fun applyRestore(strategy: CloudRestoreStrategy) {
-        viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ تطبيق الاستعادة...")
-            runCatching { syncManager.applyRemoteRestore(strategy) }
-                .onSuccess {
-                    analyticsManager.logEvent("cloud_restore_apply", mapOf("strategy" to strategy.name))
-                    _state.value = CloudSyncUiState(statusMessage = "تم تطبيق الاستعادة بنجاح")
-                }
-                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل تطبيق الاستعادة") }
-        }
-    }
-
-    fun saveProfile(username: String, bio: String, isPublic: Boolean) {
-        viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ حفظ الملف الشخصي...")
-            runCatching { communityRepository.upsertProfile(username, bio, isPublic) }
-                .onSuccess {
-                    analyticsManager.logEvent("community_profile_save")
-                    _state.value = CloudSyncUiState(statusMessage = "تم حفظ الملف الشخصي")
-                }
-                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل حفظ الملف الشخصي") }
-        }
-    }
-
-    fun markNotificationRead(id: String) {
-        viewModelScope.launch {
-            runCatching { communityRepository.markNotificationRead(id) }
-        }
-    }
-
-    fun signOut() {
-        viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "جارٍ تسجيل الخروج...")
-            runCatching { sessionManager.signOut() }
-                .onSuccess {
-                    analyticsManager.logEvent("auth_signout")
-                    _state.value = CloudSyncUiState(statusMessage = "تم تسجيل الخروج")
-                }
-                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "فشل تسجيل الخروج") }
-        }
-    }
-
-    fun clearMessages() {
-        _state.value = CloudSyncUiState()
-    }
-
-    fun onScreenViewed() {
-        analyticsManager.logScreen("cloud_sync")
-    }
-}
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CloudSyncScreen(
     onBack: () -> Unit,
@@ -245,145 +57,411 @@ fun CloudSyncScreen(
         }
     }
 
-    androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.onScreenViewed() }
+    LaunchedEffect(Unit) { viewModel.onScreenViewed() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MangaColors.Background)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع", tint = MangaColors.OnSurface)
-            }
-            Text("السحابة والمزامنة", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
-            IconButton(onClick = viewModel::clearMessages) {
-                Icon(Icons.Filled.Refresh, contentDescription = "تحديث", tint = MangaColors.OnSurface)
-            }
-        }
-
-        Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("الحساب الحالي", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
-                Text(
-                    when {
-                        user == null -> "غير متصل"
-                        user?.isAnonymous == true -> "ضيف محلي (${user?.uid?.takeLast(6)})"
-                        else -> user?.email ?: user?.uid.orEmpty()
-                    },
-                    color = MangaColors.OnSurfaceVariant
-                )
-                state.statusMessage?.let { Text(it, color = MangaColors.Green) }
-                state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                if (state.busy) CircularProgressIndicator(color = MangaColors.Primary)
-            }
-        }
-
-        Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Filled.Person, null, tint = MangaColors.Cyan)
-                    Text("الملف الشخصي المجتمعي", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
-                }
-                OutlinedTextField(value = username, onValueChange = { username = it }, modifier = Modifier.fillMaxWidth(), label = { Text("اسم المستخدم") })
-                OutlinedTextField(value = bio, onValueChange = { bio = it }, modifier = Modifier.fillMaxWidth(), label = { Text("نبذة قصيرة") })
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = isPublic, onCheckedChange = { isPublic = it })
-                    Text("إتاحة الملف الشخصي والبادج للآخرين", color = MangaColors.OnSurfaceVariant)
-                }
-                Button(onClick = { viewModel.saveProfile(username, bio, isPublic) }, modifier = Modifier.fillMaxWidth(), enabled = username.isNotBlank() && !state.busy) {
-                    Text("حفظ الملف الشخصي")
-                }
-                profile?.let {
-                    Text("البادج الحالي: ${it.badgeLabel}", color = MangaColors.Cyan)
-                }
-            }
-        }
-
-        if (user?.isAnonymous != false) {
-            Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("تسجيل الدخول أو إنشاء حساب", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
-                    OutlinedTextField(value = email, onValueChange = { email = it }, modifier = Modifier.fillMaxWidth(), label = { Text("البريد الإلكتروني") })
-                    OutlinedTextField(value = password, onValueChange = { password = it }, modifier = Modifier.fillMaxWidth(), label = { Text("كلمة المرور") }, visualTransformation = PasswordVisualTransformation())
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { viewModel.signInWithEmail(email, password) }) { Icon(Icons.Filled.Login, null); Spacer(Modifier.height(0.dp)); Text("دخول") }
-                        Button(onClick = { viewModel.signUpWithEmail(email, password) }) { Text("إنشاء حساب") }
+    Scaffold(
+        containerColor = MangaColors.Background,
+        topBar = {
+            TopAppBar(
+                title = { Text("السحابة والمزامنة", color = MangaColors.OnSurface) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface)
                     }
-                    Button(
-                        onClick = { googleLauncher.launch(viewModel.googleSignInIntent()) },
-                        enabled = viewModel.hasGoogleSignIn(),
-                        modifier = Modifier.fillMaxWidth()
+                },
+                actions = {
+                    IconButton(onClick = viewModel::clearMessages) {
+                        Icon(Icons.Filled.Refresh, "تحديث", tint = MangaColors.OnSurface)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Spacer(Modifier.height(4.dp))
+
+            // Status banner
+            AnimatedVisibility(visible = state.statusMessage != null || state.errorMessage != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (state.errorMessage != null)
+                            MangaColors.Error.copy(alpha = 0.15f)
+                        else MangaColors.Green.copy(alpha = 0.15f)
+                    )
+                ) {
+                    Row(
+                        Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(if (viewModel.hasGoogleSignIn()) "متابعة باستخدام Google" else "Google غير مهيأ بعد")
-                    }
-                }
-            }
-        }
-
-        Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("المزامنة السحابية", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
-                Button(onClick = viewModel::syncNow, modifier = Modifier.fillMaxWidth(), enabled = user != null && !state.busy) {
-                    Icon(Icons.Filled.CloudSync, null)
-                    Text("رفع البيانات الآن")
-                }
-                Button(onClick = viewModel::restoreFromCloud, modifier = Modifier.fillMaxWidth(), enabled = user != null && !state.busy) {
-                    Icon(Icons.Filled.CloudDownload, null)
-                    Text("استرجاع البيانات من السحابة")
-                }
-                if (user?.isAnonymous == false) {
-                    Button(onClick = viewModel::signOut, modifier = Modifier.fillMaxWidth(), enabled = !state.busy) {
-                        Icon(Icons.Filled.Logout, null)
-                        Text("تسجيل الخروج")
-                    }
-                }
-            }
-        }
-
-        state.restorePreview?.let { preview ->
-            Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("معاينة تعارض الاستعادة", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
-                    Text("المفضلة: محلي ${preview.localFavorites} / سحابي ${preview.remoteFavorites}", color = MangaColors.OnSurfaceVariant)
-                    Text("السجل: محلي ${preview.localHistory} / سحابي ${preview.remoteHistory}", color = MangaColors.OnSurfaceVariant)
-                    Text("الإشارات والملاحظات: محلي ${preview.localAnnotations} / سحابي ${preview.remoteAnnotations}", color = MangaColors.OnSurfaceVariant)
-                    Text("الثيم: محلي ${preview.localTheme.label} / سحابي ${preview.remoteTheme?.label ?: "غير متوفر"}", color = MangaColors.OnSurfaceVariant)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CloudRestoreStrategy.entries.forEach { strategy ->
-                            FilterChip(
-                                selected = preview.suggestedStrategy == strategy,
-                                onClick = { viewModel.applyRestore(strategy) },
-                                label = { Text(strategy.name) }
+                        if (state.busy) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MangaColors.Primary
+                            )
+                        } else {
+                            Icon(
+                                if (state.errorMessage != null) Icons.Filled.ErrorOutline else Icons.Filled.CheckCircle,
+                                null,
+                                tint = if (state.errorMessage != null) MangaColors.Error else MangaColors.Green,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
+                        Text(
+                            state.errorMessage ?: state.statusMessage ?: "",
+                            color = if (state.errorMessage != null) MangaColors.Error else MangaColors.OnSurface,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+
+            // Account card
+            AccountCard(
+                user = user,
+                isSigningIn = state.busy,
+                email = email,
+                password = password,
+                onEmailChange = { email = it },
+                onPasswordChange = { password = it },
+                onEmailLogin = { viewModel.signInWithEmail(email, password) },
+                onGoogleLogin = { googleLauncher.launch(viewModel.googleSignInIntent()) },
+                hasGoogleSignIn = viewModel.hasGoogleSignIn(),
+                onSignOut = viewModel::signOut
+            )
+
+            // Profile card
+            ProfileCard(
+                username = username,
+                bio = bio,
+                isPublic = isPublic,
+                badgeLabel = profile?.badgeLabel,
+                isSaving = state.busy,
+                onUsernameChange = { username = it },
+                onBioChange = { bio = it },
+                onPublicChange = { isPublic = it },
+                onSave = { viewModel.saveProfile(username, bio, isPublic) }
+            )
+
+            // Sync actions
+            SyncActionsCard(
+                isSyncing = state.busy,
+                isSignedIn = user != null,
+                onPush = viewModel::syncNow,
+                onPull = viewModel::restoreFromCloud,
+                restorePreview = state.restorePreview,
+                onApplyRestore = viewModel::applyRestore
+            )
+
+            // Notifications
+            if (notifications.isNotEmpty()) {
+                NotificationsCard(
+                    notifications = notifications.take(5),
+                    onMarkRead = viewModel::markNotificationRead
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun AccountCard(
+    user: com.google.firebase.auth.FirebaseUser?,
+    isSigningIn: Boolean,
+    email: String,
+    password: String,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onEmailLogin: () -> Unit,
+    onGoogleLogin: () -> Unit,
+    hasGoogleSignIn: Boolean,
+    onSignOut: () -> Unit
+) {
+    val isSignedIn = user != null && !user.isAnonymous
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Header with status
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape).background(MangaColors.Primary.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.Person, null, tint = MangaColors.Primary, modifier = Modifier.size(24.dp))
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("الحساب", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
+                    Text(
+                        when {
+                            user == null -> "غير متصل"
+                            user.isAnonymous -> "ضيف محلي"
+                            else -> user.email ?: "متصل"
+                        },
+                        color = MangaColors.OnSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                // Status dot
+                Box(Modifier.size(10.dp).clip(CircleShape).background(
+                    if (isSignedIn) MangaColors.Green else MangaColors.Muted
+                ))
+            }
+
+            if (isSignedIn) {
+                // Signed in — show sign out
+                OutlinedButton(
+                    onClick = onSignOut,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isSigningIn,
+                    shape = RoundedCornerShape(10.dp),
+                    border = ButtonDefaults.outlinedButtonBorder(enabled = !isSigningIn)
+                ) {
+                    Icon(Icons.Filled.Logout, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("تسجيل الخروج")
+                }
+            } else {
+                // Not signed in — show login form
+                OutlinedTextField(
+                    value = email, onValueChange = onEmailChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("البريد الإلكتروني") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+                OutlinedTextField(
+                    value = password, onValueChange = onPasswordChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("كلمة المرور") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+                Button(
+                    onClick = onEmailLogin,
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    enabled = email.isNotBlank() && password.isNotBlank() && !isSigningIn
+                ) {
+                    Text("تسجيل الدخول")
+                }
+                if (hasGoogleSignIn) {
+                    OutlinedButton(
+                        onClick = onGoogleLogin,
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        enabled = !isSigningIn
+                    ) {
+                        Text("متابعة بـ Google")
                     }
                 }
             }
         }
+    }
+}
 
-        Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Filled.Notifications, null, tint = MangaColors.Cyan)
-                    Text("إشعارات المجتمع", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
+@Composable
+private fun ProfileCard(
+    username: String,
+    bio: String,
+    isPublic: Boolean,
+    badgeLabel: String?,
+    isSaving: Boolean,
+    onUsernameChange: (String) -> Unit,
+    onBioChange: (String) -> Unit,
+    onPublicChange: (Boolean) -> Unit,
+    onSave: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape).background(MangaColors.Cyan.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.Badge, null, tint = MangaColors.Cyan, modifier = Modifier.size(24.dp))
                 }
-                if (notifications.isEmpty()) {
-                    Text("لا توجد إشعارات حالياً", color = MangaColors.OnSurfaceVariant)
-                } else {
-                    notifications.take(8).forEach { item ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().clickable { viewModel.markNotificationRead(item.id) },
-                            colors = CardDefaults.cardColors(containerColor = if (item.read) MangaColors.Surface else MangaColors.GlowPurple)
-                        ) {
-                            Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                                Text(item.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
-                                Text(item.body, color = MangaColors.OnSurfaceVariant)
-                            }
-                        }
+                Column(Modifier.weight(1f)) {
+                    Text("الملف الشخصي", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
+                    if (!badgeLabel.isNullOrBlank()) {
+                        Text("البادج: $badgeLabel", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = username, onValueChange = onUsernameChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("اسم المستخدم") },
+                singleLine = true,
+                shape = RoundedCornerShape(10.dp)
+            )
+            OutlinedTextField(
+                value = bio, onValueChange = onBioChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("نبذة قصيرة") },
+                maxLines = 3,
+                shape = RoundedCornerShape(10.dp)
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(checked = isPublic, onCheckedChange = onPublicChange)
+                Spacer(Modifier.width(8.dp))
+                Text("public profile", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+            Button(
+                onClick = onSave,
+                modifier = Modifier.fillMaxWidth().height(44.dp),
+                shape = RoundedCornerShape(10.dp),
+                enabled = username.isNotBlank() && !isSaving
+            ) {
+                Text("حفظ الملف الشخصي")
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncActionsCard(
+    isSyncing: Boolean,
+    isSignedIn: Boolean,
+    onPush: () -> Unit,
+    onPull: () -> Unit,
+    restorePreview: com.exapps.mangaworld.domain.model.CloudRestorePreview?,
+    onApplyRestore: (CloudRestoreStrategy) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape).background(MangaColors.Primary.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.CloudSync, null, tint = MangaColors.Primary, modifier = Modifier.size(24.dp))
+                }
+                Text("المزامنة", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = onPush,
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    enabled = isSignedIn && !isSyncing
+                ) {
+                    Icon(Icons.Filled.CloudUpload, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("رفع")
+                }
+                OutlinedButton(
+                    onClick = onPull,
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    enabled = isSignedIn && !isSyncing
+                ) {
+                    Icon(Icons.Filled.CloudDownload, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("استرجاع")
+                }
+            }
+
+            if (!isSignedIn) {
+                Text("سجّل الدخول أولاً للمزامنة السحابية", color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall)
+            }
+
+            // Restore preview
+            restorePreview?.let { preview ->
+                HorizontalDivider(color = MangaColors.Muted.copy(alpha = 0.15f))
+                Text("معاينة الاستعادة", fontWeight = FontWeight.SemiBold, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SyncStat("محلي", preview.localFavorites, MangaColors.Cyan)
+                    SyncStat("سحابي", preview.remoteFavorites, MangaColors.Primary)
+                }
+                Text("المفضلة: ${preview.localFavorites} محلي / ${preview.remoteFavorites} سحابي", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Text("السجل: ${preview.localHistory} محلي / ${preview.remoteHistory} سحابي", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CloudRestoreStrategy.entries.forEach { strategy ->
+                        FilterChip(
+                            selected = preview.suggestedStrategy == strategy,
+                            onClick = { onApplyRestore(strategy) },
+                            label = { Text(when(strategy) {
+                                CloudRestoreStrategy.MERGE -> "دمج"
+                                CloudRestoreStrategy.REMOTE_OVERWRITE -> " الكتابة السحابية"
+                                CloudRestoreStrategy.KEEP_LOCAL -> "الاحتفاظ المحلي"
+                            }, fontSize = 11.sp) },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncStat(label: String, value: Int, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("$value", color = color, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Text(label, color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun NotificationsCard(
+    notifications: List<com.exapps.mangaworld.domain.model.CommunityNotification>,
+    onMarkRead: (String) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape).background(MangaColors.Yellow.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.NotificationsActive, null, tint = MangaColors.Yellow, modifier = Modifier.size(24.dp))
+                }
+                Text("إشعارات المجتمع", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
+            }
+
+            notifications.forEach { item ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { onMarkRead(item.id) },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (item.read) MangaColors.Surface else MangaColors.GlowPurple
+                    )
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(item.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+                        Text(item.body, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 2)
                     }
                 }
             }
