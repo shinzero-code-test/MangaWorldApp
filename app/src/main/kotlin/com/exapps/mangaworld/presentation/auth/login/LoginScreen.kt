@@ -258,8 +258,11 @@ private fun MangaWorldLogo(modifier: Modifier = Modifier) {
             ),
         contentAlignment = Alignment.Center
     ) {
-        // Use app icon if available, otherwise fallback to text
-        Text("M", color = MangaColors.Primary, fontSize = 52.sp, fontWeight = FontWeight.Black)
+        androidx.compose.foundation.Image(
+            painter = painterResource(id = R.drawable.mangaworld_logo),
+            contentDescription = "MangaWorld",
+            modifier = Modifier.size(72.dp)
+        )
     }
 }
 
