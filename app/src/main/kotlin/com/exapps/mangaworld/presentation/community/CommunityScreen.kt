@@ -20,10 +20,138 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
+import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
+import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
+import com.exapps.mangaworld.core.firebase.filterMutedComments
+import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.CommunityComment
+import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.MangaReview
+import com.exapps.mangaworld.domain.repository.CommunityRepository
+import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+enum class CommunityTab { COMMENTS, REVIEWS }
+
+@Stable
+data class CommunityUiState(
+    val title: String = "المجتمع",
+    val comments: List<CommunityComment> = emptyList(),
+    val reviews: List<MangaReview> = emptyList(),
+    val profile: CommunityProfile? = null,
+    val appSettings: AppSettings = AppSettings(),
+    val tab: CommunityTab = CommunityTab.COMMENTS,
+    val chapterMode: Boolean = false,
+    val focusCommentId: String? = null,
+    val replyTo: CommunityComment? = null,
+    val error: String? = null
+)
+
+@HiltViewModel
+class CommunityViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
+    private val communityRepository: CommunityRepository,
+    private val settingsRepository: SettingsRepository,
+    private val sessionManager: FirebaseSessionManager,
+    private val analyticsManager: FirebaseAnalyticsManager,
+    private val remoteConfigManager: FirebaseRemoteConfigManager,
+    private val mangaCacheDao: com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
+) : ViewModel() {
+    private val mangaId: String = checkNotNull(savedStateHandle["mangaId"])
+    private val slug: String = checkNotNull(savedStateHandle["slug"])
+    private val sourceId: String = checkNotNull(savedStateHandle["sourceId"])
+    private val chapterUrl: String? = savedStateHandle.get<String>("chapterUrl")?.takeIf { it.isNotBlank() }
+    private val focusCommentId: String? = savedStateHandle.get<String>("commentId")?.takeIf { it.isNotBlank() }
+
+    private val _tab = MutableStateFlow(if (chapterUrl == null) CommunityTab.REVIEWS else CommunityTab.COMMENTS)
+
+    private val mangaTitle: StateFlow<String> = flow {
+        val cached = mangaCacheDao.get(mangaId)
+        emit(cached?.title ?: slug)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, slug)
+
+    private val _replyTo = MutableStateFlow<CommunityComment?>(null)
+    private val _error = MutableStateFlow<String?>(null)
+    private val _suggestions = MutableStateFlow<List<String>>(emptyList())
+    private val commentsFlow = if (chapterUrl == null) communityRepository.observeMangaComments(mangaId) else communityRepository.observeChapterComments(mangaId, chapterUrl.orEmpty())
+    private val reviewsFlow = if (chapterUrl == null) communityRepository.observeReviews(mangaId) else flowOf(emptyList())
+    private val profileFlow: Flow<CommunityProfile?> = flow { emit(communityRepository.getCurrentProfile()) }
+    private val appSettingsFlow = settingsRepository.getAppSettings()
+
+    val state: StateFlow<CommunityUiState> = combine(
+        combine(commentsFlow, reviewsFlow, profileFlow, appSettingsFlow) { comments, reviews, profile, appSettings ->
+            Quadruple(comments, reviews, profile, appSettings)
+        },
+        _tab, _replyTo, _error, mangaTitle
+    ) { quadruple, tab, replyTo, error, title ->
+        CommunityUiState(
+            title = if (chapterUrl == null) "تعليقات $title" else "نقاش الفصل",
+            comments = filterMutedComments(quadruple.first, quadruple.fourth.mutedUserIds),
+            reviews = quadruple.second,
+            profile = quadruple.third,
+            appSettings = quadruple.fourth,
+            tab = tab,
+            chapterMode = chapterUrl != null,
+            focusCommentId = focusCommentId,
+            replyTo = replyTo,
+            error = error
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, CommunityUiState(
+        title = if (chapterUrl == null) "المجتمع" else "نقاش الفصل",
+        chapterMode = chapterUrl != null
+    ))
+
+    val suggestions: StateFlow<List<String>> = _suggestions.asStateFlow()
+
+    fun setTab(tab: CommunityTab) { _tab.value = tab }
+    fun setReply(comment: CommunityComment?) { _replyTo.value = comment }
+
+    fun postComment(text: String, spoiler: Boolean) {
+        viewModelScope.launch {
+            runCatching {
+                if (chapterUrl == null) communityRepository.postMangaComment(mangaId, slug, sourceId, text, spoiler, _replyTo.value?.id)
+                else communityRepository.postChapterComment(mangaId, slug, sourceId, chapterUrl, text, spoiler, _replyTo.value?.id)
+            }.onSuccess { _replyTo.value = null; _error.value = null }
+                .onFailure { e -> _error.value = e.message ?: "فشل إرسال التعليق" }
+        }
+    }
+
+    fun upsertReview(rating: Int, title: String, body: String) {
+        viewModelScope.launch {
+            runCatching { communityRepository.upsertReview(mangaId, slug, sourceId, rating, title, body) }
+                .onFailure { e -> _error.value = e.message ?: "فشل حفظ المراجعة" }
+        }
+    }
+
+    fun reportComment(comment: CommunityComment, reason: String) {
+        viewModelScope.launch {
+            runCatching { communityRepository.reportComment(comment, reason) }
+                .onFailure { e -> _error.value = e.message ?: "فشل الإبلاغ" }
+        }
+    }
+
+    fun muteUser(uid: String) {
+        viewModelScope.launch {
+            val current = settingsRepository.getAppSettings().first().mutedUserIds
+            settingsRepository.setMutedUserIds(current + uid)
+        }
+    }
+
+    fun onSuggestionSelected(reply: String) {
+        analyticsManager.logSmartReplySelected("community_comments", reply.length)
+    }
+}
+
+private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
