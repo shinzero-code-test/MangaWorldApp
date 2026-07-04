@@ -444,7 +444,7 @@ fun MangaNavGraph(navController: NavHostController) {
         ) { back ->
             val sourceId = back.arguments?.getString("sourceId") ?: return@composable
             val slug     = back.arguments?.getString("slug") ?: return@composable
-            val source = MangaSource.fromIdOrNull(sourceId) ?: return@composable
+            val source = MangaSource.fromIdOrNull(sourceId) ?: MangaSource.fromId(sourceId)
             MangaDetailScreen(
                 source = source, slug = slug,
                 rawSourceId = sourceId,
@@ -476,8 +476,7 @@ fun MangaNavGraph(navController: NavHostController) {
             val chapterUrl = java.net.URLDecoder.decode(
                 back.arguments?.getString("chapterUrl") ?: "", "UTF-8"
             )
-            // For imported manga (sourceId == "local"), use AZORA as fallback source
-            val source = MangaSource.fromIdOrNull(sourceId) ?: MangaSource.AZORA
+            val source = MangaSource.fromIdOrNull(sourceId) ?: MangaSource.fromId(sourceId)
             ReaderScreen(
                 source = source, mangaId = mangaId,
                 chapterUrl = chapterUrl,

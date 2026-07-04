@@ -11,10 +11,10 @@ import org.json.JSONObject
 import javax.inject.Inject
 
 /**
- * Scraper for azoramoon.com — Astro SSR framework.
+ * Scraper for azorafly.com — Astro SSR framework.
  *
  * ════════════════════════════════════════════════════════════
- *  IMPORTANT: azoramoon uses Astro Islands.  ALL data lives
+ *  IMPORTANT: azorafly uses Astro Islands.  ALL data lives
  *  inside <astro-island props="…"> attributes encoded as the
  *  Astro wire format [type, value]:
  *    [0, scalar]  → scalar value
@@ -402,15 +402,15 @@ class AzoraScraper @Inject constructor(
     // ─── Chapter pages ────────────────────────────────────────────────────────
     //
     // Images are SSR-rendered directly into the HTML — no astro-island needed.
-    // URL pattern: storage.azoramoon.com/WP-manga/data/manga_{hash}/{ch_hash}/N.jpg
+    // URL pattern: storage.azorafly.com/WP-manga/data/manga_{hash}/{ch_hash}/N.jpg
 
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
         val doc = fetchDocument(chapterUrl)
 
         // Primary: images inside .comic-images-wrapper (SSR-rendered)
-        var pages = doc.select("img[src*='WP-manga'], img[src*='storage.azoramoon.com']")
+        var pages = doc.select("img[src*='WP-manga'], img[src*='storage.azorafly.com']")
             .filter { it.attr("src").contains("WP-manga") || it.attr("src").matches(
-                Regex(".*storage\\.azoramoon\\.com/\\d{4}/.*")
+                Regex(".*storage\\.azorafly\\.com/\\d{4}/.*")
             )}
             .mapIndexed { idx, img ->
                 val readerIdx = img.attr("data-reader-index").toIntOrNull() ?: idx
@@ -420,9 +420,9 @@ class AzoraScraper @Inject constructor(
             }
             .sortedBy { it.index }
 
-        // Fallback: any img with storage.azoramoon.com
+        // Fallback: any img with storage.azorafly.com
         if (pages.isEmpty()) {
-            pages = doc.select("img[src*='storage.azoramoon.com']")
+            pages = doc.select("img[src*='storage.azorafly.com']")
                 .filter { !it.attr("src").contains("logo") && !it.attr("src").contains("avatar") }
                 .mapIndexed { idx, img ->
                     val src = img.attr("abs:src").encodeForUrl()
@@ -437,7 +437,7 @@ class AzoraScraper @Inject constructor(
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val enc   = java.net.URLEncoder.encode(query, "UTF-8")
-        val json  = apiGet("https://api.azoramoon.com/api/query?searchTerm=$enc&perPage=30")
+        val json  = apiGet("https://api.azorafly.com/api/query?searchTerm=$enc&perPage=30")
             ?: return@runCatching emptyList()
         val posts = json.optJSONArray("posts") ?: return@runCatching emptyList()
         val result = mutableListOf<MangaItem>()
@@ -480,7 +480,7 @@ class AzoraScraper @Inject constructor(
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
         // API gives rating-sorted results
-        val json  = apiGet("https://api.azoramoon.com/api/query?searchTerm=&perPage=30")
+        val json  = apiGet("https://api.azorafly.com/api/query?searchTerm=&perPage=30")
         val posts = json?.optJSONArray("posts")
         if (posts != null && posts.length() > 0) {
             val result = mutableListOf<MangaItem>()

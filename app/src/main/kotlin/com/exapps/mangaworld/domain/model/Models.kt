@@ -12,6 +12,9 @@ enum class MangaSource(
     val themeType: ThemeType = ThemeType.OTHER,
     val logoRes: Int = 0
 ) {
+    // ─── Local / Imported ─────────────────────────────────────────────────────
+    LOCAL("local", "محلي", "", false, ThemeType.OTHER, 0),
+
     // ─── Original Sources ─────────────────────────────────────────────────────
     OLYMPUS("olympus", "تيم اكس", "https://olympustaff.com", true, ThemeType.OTHER, R.drawable.olympustaff_com_logo),
     AZORA("azora", "ازورا مانجا", "https://azorafly.com", false, ThemeType.ASTRO, R.drawable.azoramoon_com_logo),
@@ -56,7 +59,7 @@ enum class MangaSource(
         fun fromIdOrNull(id: String): MangaSource? = entries.find { it.id == id }
 
         /** Check if the sourceId represents a local/imported manga (not an online source) */
-        fun isLocalSource(id: String): Boolean = id == "imported" || id == "local"
+        fun isLocalSource(id: String): Boolean = id == "imported" || id == "local" || id == LOCAL.id
 
         /** All sources added in v4.0.0 — these appear on the Sources screen grid */
         val NEW_SOURCES = setOf(
