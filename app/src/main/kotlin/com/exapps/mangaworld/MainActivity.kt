@@ -169,6 +169,44 @@ private fun MangaApp(
                         }
                     }
 
+                    // Google Sign-In launcher
+                    val googleSignInClient = remember {
+                        com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(
+                            context,
+                            com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
+                                .requestIdToken(context.resources.getString(context.resources.getIdentifier("default_web_client_id", "string", context.packageName)))
+                                .requestEmail()
+                                .build()
+                        )
+                    }
+                    val googleLauncher = rememberLauncherForActivityResult(
+                        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+                    ) { result ->
+                        val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                        val idToken = task.result?.idToken
+                        if (idToken != null) {
+                            loginViewModel.signInWithGoogleIdToken(idToken)
+                        } else {
+                            loginViewModel.clearError()
+                        }
+                    }
+
+                    // Facebook login callback
+                    val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
+                    LaunchedEffect(Unit) {
+                        com.facebook.login.LoginManager.getInstance().registerCallback(facebookCallbackManager,
+                            object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+                                override fun onSuccess(result: com.facebook.login.LoginResult) {
+                                    loginViewModel.signInWithFacebook(result.accessToken.token)
+                                }
+                                override fun onCancel() {}
+                                override fun onError(error: com.facebook.FacebookException) {
+                                    loginViewModel.clearError()
+                                }
+                            }
+                        )
+                    }
+
                     com.exapps.mangaworld.presentation.auth.login.LoginScreen(
                         email = loginState.email,
                         password = loginState.password,
@@ -177,10 +215,28 @@ private fun MangaApp(
                         onEmailChanged = loginViewModel::onEmailChanged,
                         onPasswordChanged = loginViewModel::onPasswordChanged,
                         onLoginClick = { _, _ -> loginViewModel.signInWithEmail() },
-                        onGoogleSignInClick = { /* TODO: wire Google launcher */ },
-                        onFacebookLoginClick = { /* TODO: wire Facebook login */ },
-                        onForgotPasswordClick = { navController.navigate(Screen.ForgotPassword.route) },
-                        onSignUpClick = { navController.navigate(Screen.SignUp.route) }
+                        onGoogleSignInClick = {
+                            googleLauncher.launch(googleSignInClient.signInIntent)
+                        },
+                        onFacebookLoginClick = {
+                            val activity = context as? android.app.Activity
+                            if (activity != null) {
+                                com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
+                                    activity, listOf("email", "public_profile")
+                                )
+                            }
+                        },
+                        onForgotPasswordClick = { loginViewModel.sendPasswordReset(loginState.email) },
+                        onSignUpClick = {
+                            // Navigate to signup by temporarily hiding login
+                            showPostOnboardingLogin = false
+                            // Use intent to go to signup
+                            val signupIntent = Intent(context, MainActivity::class.java).apply {
+                                action = "SIGNUP"
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(signupIntent)
+                        }
                     )
 
                     // Dismiss button — proceed without login
