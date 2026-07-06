@@ -94,7 +94,7 @@ class MangaRepositoryImpl @Inject constructor(
 ) : MangaRepository {
 
     private fun scraper(source: MangaSource): MangaScraper =
-        scrapers[source.id] ?: error("No scraper for ${source.id}")
+        scrapers[source.id] ?: error("No scraper for ${source.id}. This source does not support online operations.")
 
     override suspend fun getHomeData(source: MangaSource) =
         runCatching { firebaseTelemetry.traceSuspend("home_${source.id}") { scraper(source).getHomeData().getOrThrow() } }

@@ -23,6 +23,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
@@ -110,8 +112,22 @@ private fun MangaApp(
         AppTheme.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
     }
 
-    // After onboarding completes, show login screen once
+    // After onboarding completes, show login screen
     var showPostOnboardingLogin by rememberSaveable { mutableStateOf(false) }
+
+    // Check if user is logged in (not anonymous)
+    val sessionManager = remember { com.exapps.mangaworld.core.firebase.FirebaseSessionManager(context) }
+    val isLoggedIn by sessionManager.authState.collectAsStateWithLifecycle(
+        initialValue = sessionManager.currentUser()
+    )
+    val userIsLoggedIn = isLoggedIn != null && !(isLoggedIn?.isAnonymous ?: true)
+
+    // Show login screen on first launch if not logged in
+    LaunchedEffect(settings.onboardingCompleted) {
+        if (settings.onboardingCompleted && !userIsLoggedIn) {
+            showPostOnboardingLogin = true
+        }
+    }
 
     val biometricSupported = remember {
         BiometricManager.from(context).canAuthenticate(
@@ -143,19 +159,37 @@ private fun MangaApp(
         Box(Modifier.fillMaxSize()) {
             when {
                 showPostOnboardingLogin -> {
+                    val loginViewModel: com.exapps.mangaworld.presentation.auth.LoginViewModel = hiltViewModel()
+                    val loginState by loginViewModel.uiState.collectAsStateWithLifecycle()
+
+                    // Auto-dismiss when signed in
+                    LaunchedEffect(loginState.isSignedIn) {
+                        if (loginState.isSignedIn) {
+                            showPostOnboardingLogin = false
+                        }
+                    }
+
                     com.exapps.mangaworld.presentation.auth.login.LoginScreen(
-                        onLoginClick = { _, _ ->
-                            showPostOnboardingLogin = false
-                        },
-                        onGoogleSignInClick = {
-                            showPostOnboardingLogin = false
-                        },
-                        onFacebookLoginClick = {
-                            showPostOnboardingLogin = false
-                        },
-                        onForgotPasswordClick = { showPostOnboardingLogin = false },
-                        onSignUpClick = { showPostOnboardingLogin = false }
+                        email = loginState.email,
+                        password = loginState.password,
+                        isLoading = loginState.isLoading,
+                        errorMessage = loginState.error,
+                        onEmailChanged = loginViewModel::onEmailChanged,
+                        onPasswordChanged = loginViewModel::onPasswordChanged,
+                        onLoginClick = { _, _ -> loginViewModel.signInWithEmail() },
+                        onGoogleSignInClick = { /* TODO: wire Google launcher */ },
+                        onFacebookLoginClick = { /* TODO: wire Facebook login */ },
+                        onForgotPasswordClick = { navController.navigate(Screen.ForgotPassword.route) },
+                        onSignUpClick = { navController.navigate(Screen.SignUp.route) }
                     )
+
+                    // Dismiss button — proceed without login
+                    TextButton(
+                        onClick = { showPostOnboardingLogin = false },
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp)
+                    ) {
+                        Text("التخطي والدخول كضيف", color = MangaColors.Muted, fontSize = 14.sp)
+                    }
                 }
                 !settings.onboardingCompleted -> {
                     OnboardingScreen(

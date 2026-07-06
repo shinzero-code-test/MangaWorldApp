@@ -592,7 +592,8 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun resolveDetailForChapter(mangaId: String, source: MangaSource): MangaDetail? =
-        cacheDao.get(mangaId)?.toDetail(source) ?: mangaRepo.getMangaDetail(mangaId.substringAfter("_"), source).getOrNull()
+        if (source.id == "local") null
+        else cacheDao.get(mangaId)?.toDetail(source) ?: mangaRepo.getMangaDetail(mangaId.substringAfter("_"), source).getOrNull()
 
     private suspend fun resolveChapterMeta(mangaId: String, chapterUrl: String, source: MangaSource): Chapter? =
         resolveDetailForChapter(mangaId, source)?.chapters?.firstOrNull { it.url == chapterUrl }
