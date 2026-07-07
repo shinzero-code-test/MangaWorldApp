@@ -247,14 +247,7 @@ private fun MangaApp(
                         },
                         onForgotPasswordClick = { loginViewModel.sendPasswordReset(loginState.email) },
                         onSignUpClick = {
-                            // Navigate to signup by temporarily hiding login
                             showPostOnboardingLogin = false
-                            // Use intent to go to signup
-                            val signupIntent = Intent(context, MainActivity::class.java).apply {
-                                action = "SIGNUP"
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            context.startActivity(signupIntent)
                         }
                     )
 

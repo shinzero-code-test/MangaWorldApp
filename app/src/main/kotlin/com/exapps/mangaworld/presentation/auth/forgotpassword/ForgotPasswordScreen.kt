@@ -28,7 +28,8 @@ fun ForgotPasswordScreen(
     isLoading: Boolean = false,
     error: String? = null,
     onSendReset: (String) -> Unit,
-    passwordResetSent: Boolean = false
+    passwordResetSent: Boolean = false,
+    onDismissSuccess: () -> Unit = {}
 ) {
     var email by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -113,15 +114,23 @@ fun ForgotPasswordScreen(
                 Spacer(Modifier.height(24.dp))
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onDismissSuccess() }
                 ) {
-                    Text(
-                        "تحقق من بريدك الإلكتروني\nلقد أرسلنا رابطًا لإعادة تعيين كلمة المرور إلى \"$email\".\nيرجى فتح الرسالة والنقر على الرابط لإكمال العملية.\nاذا لم تجد الرسالة تحقق من صندوق spam.",
-                        modifier = Modifier.padding(16.dp),
-                        color = MangaColors.OnSurface,
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "تحقق من بريدك الإلكتروني\nلقد أرسلنا رابطًا لإعادة تعيين كلمة المرور إلى \"$email\".\nيرجى فتح الرسالة والنقر على الرابط لإكمال العملية.\nاذا لم تجد الرسالة تحقق من صندوق spam.",
+                            modifier = Modifier.weight(1f),
+                            color = MangaColors.OnSurface,
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
             }
         }

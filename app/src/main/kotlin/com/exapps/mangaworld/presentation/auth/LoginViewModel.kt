@@ -134,19 +134,25 @@ class LoginViewModel @Inject constructor(
             _uiState.update { it.copy(error = "أدخل البريد الإلكتروني") }
             return
         }
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
+            _uiState.update { it.copy(error = "البريد الإلكتروني غير صالح") }
+            return
+        }
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { it.copy(isLoading = true, error = null, passwordResetSent = false) }
             try {
                 FirebaseAuth.getInstance().sendPasswordResetEmail(email.trim()).await()
-                _uiState.update { it.copy(
-                    isLoading = false,
-                    passwordResetSent = true,
-                    error = null
-                ) }
+                _uiState.update { it.copy(isLoading = false, passwordResetSent = true, error = null) }
+                kotlinx.coroutines.delay(5000)
+                _uiState.update { it.copy(passwordResetSent = false) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
+                _uiState.update { it.copy(isLoading = false, error = mapAuthError(e), passwordResetSent = false) }
             }
         }
+    }
+
+    fun clearPasswordResetSent() {
+        _uiState.update { it.copy(passwordResetSent = false) }
     }
 
     fun clearError() {

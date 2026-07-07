@@ -448,7 +448,8 @@ fun MangaNavGraph(
                 isLoading = state.isLoading,
                 error = state.error,
                 onSendReset = viewModel::sendPasswordReset,
-                passwordResetSent = state.passwordResetSent
+                passwordResetSent = state.passwordResetSent,
+                onDismissSuccess = { viewModel.clearPasswordResetSent() }
             )
         }
         composable(
