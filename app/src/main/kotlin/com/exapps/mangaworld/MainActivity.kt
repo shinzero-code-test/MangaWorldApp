@@ -95,6 +95,12 @@ class MainActivity : FragmentActivity() {
         deepLinkIntents.tryEmit(intent)
     }
 
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        facebookCallbackManager?.onActivityResult(requestCode, resultCode, data)
+    }
+
     private fun requestStoragePermissionsIfNeeded() {
         val base = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             arrayOf(
@@ -241,9 +247,12 @@ private fun MangaApp(
                             googleLauncher.launch(googleSignInClient.signInIntent)
                         },
                         onFacebookLoginClick = {
-                            com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
-                                listOf("email", "public_profile")
-                            )
+                            val activity = context as? android.app.Activity
+                            if (activity != null) {
+                                com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
+                                    activity, listOf("email", "public_profile")
+                                )
+                            }
                         },
                         onForgotPasswordClick = { loginViewModel.sendPasswordReset(loginState.email) },
                         onSignUpClick = {

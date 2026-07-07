@@ -390,10 +390,6 @@ fun MangaNavGraph(
                     }
                 )
             }
-            // Store callbackManager for Activity.onActivityResult
-            LaunchedEffect(facebookCallbackManager) {
-                com.exapps.mangaworld.core.data.FacebookCallbackHolder.callbackManager = facebookCallbackManager
-            }
 
             LoginScreen(
                 email = state.email,
@@ -407,9 +403,12 @@ fun MangaNavGraph(
                     googleLauncher.launch(googleSignInClient.signInIntent)
                 },
                 onFacebookLoginClick = {
-                    com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
-                        listOf("email", "public_profile")
-                    )
+                    val activity = context as? android.app.Activity
+                    if (activity != null) {
+                        com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
+                            activity, listOf("email", "public_profile")
+                        )
+                    }
                 },
                 onForgotPasswordClick = { navController.navigate(Screen.ForgotPassword.route) },
                 onSignUpClick = { navController.navigate(Screen.SignUp.route) }
