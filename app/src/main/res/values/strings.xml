@@ -14,4 +14,5 @@
     <!-- Facebook SDK — replace with your actual Facebook App ID from developers.facebook.com -->
     <string name="facebook_app_id">3473309582835491</string>
     <string name="fb_login_protocol_scheme">fb3473309582835491</string>
+    <string name="facebook_client_token">2525ce71439f4fe642b842c84c83b4c9</string>
 </resources>

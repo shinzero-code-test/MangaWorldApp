@@ -370,7 +370,7 @@ fun MangaNavGraph(navController: NavHostController) {
                 }
             }
 
-            // Facebook login — register callback once
+            // Facebook login — register callback in LaunchedEffect, handle via Activity.onActivityResult
             val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
             LaunchedEffect(Unit) {
                 com.facebook.login.LoginManager.getInstance().registerCallback(facebookCallbackManager,
@@ -384,6 +384,10 @@ fun MangaNavGraph(navController: NavHostController) {
                         }
                     }
                 )
+            }
+            // Store callbackManager for Activity.onActivityResult
+            LaunchedEffect(facebookCallbackManager) {
+                com.exapps.mangaworld.core.data.FacebookCallbackHolder.callbackManager = facebookCallbackManager
             }
 
             LoginScreen(

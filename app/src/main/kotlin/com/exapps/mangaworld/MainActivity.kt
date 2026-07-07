@@ -77,6 +77,12 @@ class MainActivity : FragmentActivity() {
         deepLinkIntents.tryEmit(intent)
     }
 
+    @Deprecated("Needed for Facebook SDK")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        com.exapps.mangaworld.core.data.FacebookCallbackHolder.callbackManager?.onActivityResult(requestCode, resultCode, data)
+    }
+
     private fun requestStoragePermissionsIfNeeded() {
         val base = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             arrayOf(
