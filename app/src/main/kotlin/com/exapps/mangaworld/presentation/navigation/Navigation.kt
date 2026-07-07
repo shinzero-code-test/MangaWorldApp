@@ -366,6 +366,22 @@ fun MangaNavGraph(navController: NavHostController) {
                 }
             }
 
+            // Facebook login — register callback once
+            val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
+            LaunchedEffect(Unit) {
+                com.facebook.login.LoginManager.getInstance().registerCallback(facebookCallbackManager,
+                    object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+                        override fun onSuccess(loginResult: com.facebook.login.LoginResult) {
+                            viewModel.signInWithFacebook(loginResult.accessToken.token)
+                        }
+                        override fun onCancel() {}
+                        override fun onError(error: com.facebook.FacebookException) {
+                            viewModel.clearError()
+                        }
+                    }
+                )
+            }
+
             LoginScreen(
                 email = state.email,
                 password = state.password,
@@ -378,24 +394,11 @@ fun MangaNavGraph(navController: NavHostController) {
                     googleLauncher.launch(googleSignInClient.signInIntent)
                 },
                 onFacebookLoginClick = {
-                    // Facebook login — use Facebook SDK LoginManager
                     val activity = context as? android.app.Activity
                     if (activity != null) {
-                        val callbackManager = com.facebook.CallbackManager.Factory.create()
                         com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
                             activity,
                             listOf("email", "public_profile")
-                        )
-                        com.facebook.login.LoginManager.getInstance().registerCallback(callbackManager,
-                            object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
-                                override fun onSuccess(loginResult: com.facebook.login.LoginResult) {
-                                    viewModel.signInWithFacebook(loginResult.accessToken.token)
-                                }
-                                override fun onCancel() {}
-                                override fun onError(error: com.facebook.FacebookException) {
-                                    viewModel.clearError()
-                                }
-                            }
                         )
                     }
                 },
@@ -406,9 +409,14 @@ fun MangaNavGraph(navController: NavHostController) {
         composable(Screen.SignUp.route) {
             val viewModel: com.exapps.mangaworld.presentation.auth.LoginViewModel = hiltViewModel()
             val state by viewModel.uiState.collectAsStateWithLifecycle()
+            val sessionManager = remember { com.exapps.mangaworld.core.firebase.FirebaseSessionManager(context) }
+            val isLoggedIn by sessionManager.authState.collectAsStateWithLifecycle(
+                initialValue = sessionManager.currentUser()
+            )
+            val userIsLoggedIn = isLoggedIn != null && !(isLoggedIn?.isAnonymous ?: true)
 
-            LaunchedEffect(state.isSignedIn) {
-                if (state.isSignedIn) {
+            LaunchedEffect(userIsLoggedIn) {
+                if (userIsLoggedIn) {
                     navController.navigate(Screen.Home.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
@@ -428,10 +436,10 @@ fun MangaNavGraph(navController: NavHostController) {
 
             com.exapps.mangaworld.presentation.auth.forgotpassword.ForgotPasswordScreen(
                 onBack = { navController.popBackStack() },
-                onResetSent = { navController.popBackStack() },
                 isLoading = state.isLoading,
                 error = state.error,
-                onSendReset = viewModel::sendPasswordReset
+                onSendReset = viewModel::sendPasswordReset,
+                passwordResetSent = state.passwordResetSent
             )
         }
         composable(

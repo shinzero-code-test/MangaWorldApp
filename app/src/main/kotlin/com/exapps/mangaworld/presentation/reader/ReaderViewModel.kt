@@ -162,6 +162,31 @@ class ReaderViewModel @Inject constructor(
                 mangaId = mangaId
             )
         }
+
+        // For imported/local manga — read from disk only, no network
+        val isLocal = mangaId.startsWith("imported_") || source.id == "local" || source.id == "imported"
+        if (isLocal) {
+            viewModelScope.launch {
+                val localPages = downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
+                if (localPages.isNotEmpty()) {
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            pages = localPages,
+                            totalPages = localPages.size,
+                            currentPage = 0,
+                            chapterNumber = parseFallbackChapterNumber(chapterUrl),
+                            downloadMessage = "قراءة بدون إنترنت"
+                        )
+                    }
+                    beginSession(mangaId, chapterUrl)
+                } else {
+                    _state.update { it.copy(isLoading = false, error = "لا توجد صفحات محملة لهذا الفصل") }
+                }
+            }
+            return
+        }
+
         // Pull remote positions to get latest from other devices
         viewModelScope.launch {
             runCatching { positionSyncManager.pullRemotePositions() }

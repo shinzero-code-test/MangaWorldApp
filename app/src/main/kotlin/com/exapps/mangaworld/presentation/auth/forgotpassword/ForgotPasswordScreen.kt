@@ -25,13 +25,12 @@ import com.exapps.mangaworld.presentation.theme.MangaColors
 @Composable
 fun ForgotPasswordScreen(
     onBack: () -> Unit,
-    onResetSent: () -> Unit,
     isLoading: Boolean = false,
     error: String? = null,
-    onSendReset: (String) -> Unit
+    onSendReset: (String) -> Unit,
+    passwordResetSent: Boolean = false
 ) {
     var email by remember { mutableStateOf("") }
-    var sent by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
     Scaffold(
@@ -96,7 +95,6 @@ fun ForgotPasswordScreen(
                     keyboardController?.hide()
                     if (email.isNotBlank()) {
                         onSendReset(email.trim())
-                        sent = true
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -111,7 +109,7 @@ fun ForgotPasswordScreen(
                 }
             }
 
-            if (sent && error == null) {
+            if (passwordResetSent && error == null) {
                 Spacer(Modifier.height(24.dp))
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer),
