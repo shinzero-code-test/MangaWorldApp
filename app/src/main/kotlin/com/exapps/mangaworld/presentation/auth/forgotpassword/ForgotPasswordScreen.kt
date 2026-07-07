@@ -118,7 +118,7 @@ fun ForgotPasswordScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
-                        "تم إرسال رابط إعادة تعيين كلمة المرور إلى \"$email\".\nتحقق من صندوق الوارد.",
+                        "تحقق من بريدك الإلكتروني\nلقد أرسلنا رابطًا لإعادة تعيين كلمة المرور إلى \"$email\".\nيرجى فتح الرسالة والنقر على الرابط لإكمال العملية.\nاذا لم تجد الرسالة تحقق من صندوق spam.",
                         modifier = Modifier.padding(16.dp),
                         color = MangaColors.OnSurface,
                         textAlign = TextAlign.Center,

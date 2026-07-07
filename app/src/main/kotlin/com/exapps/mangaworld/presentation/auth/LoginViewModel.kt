@@ -23,7 +23,8 @@ data class AuthUiState(
     val error: String? = null,
     val isSignedIn: Boolean = false,
     val email: String = "",
-    val password: String = ""
+    val password: String = "",
+    val passwordResetSent: Boolean = false
 )
 
 @HiltViewModel
@@ -137,7 +138,11 @@ class LoginViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 FirebaseAuth.getInstance().sendPasswordResetEmail(email.trim()).await()
-                _uiState.update { it.copy(isLoading = false, error = null) }
+                _uiState.update { it.copy(
+                    isLoading = false,
+                    passwordResetSent = true,
+                    error = null
+                ) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
             }

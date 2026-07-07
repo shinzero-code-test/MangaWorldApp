@@ -12,9 +12,6 @@ enum class MangaSource(
     val themeType: ThemeType = ThemeType.OTHER,
     val logoRes: Int = 0
 ) {
-    // ─── Local / Imported ─────────────────────────────────────────────────────
-    LOCAL("local", "محلي", "", false, ThemeType.OTHER, 0),
-
     // ─── Original Sources ─────────────────────────────────────────────────────
     OLYMPUS("olympus", "تيم اكس", "https://olympustaff.com", true, ThemeType.OTHER, R.drawable.olympustaff_com_logo),
     AZORA("azora", "ازورا مانجا", "https://azorafly.com", false, ThemeType.ASTRO, R.drawable.azoramoon_com_logo),

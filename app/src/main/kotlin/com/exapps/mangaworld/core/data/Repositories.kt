@@ -97,7 +97,10 @@ class MangaRepositoryImpl @Inject constructor(
         scrapers[source.id] ?: error("No scraper for ${source.id}. This source does not support online operations.")
 
     override suspend fun getHomeData(source: MangaSource) =
-        runCatching { firebaseTelemetry.traceSuspend("home_${source.id}") { scraper(source).getHomeData().getOrThrow() } }
+        runCatching {
+            if (source.id == "local") return@runCatching com.exapps.mangaworld.domain.model.HomeData()
+            firebaseTelemetry.traceSuspend("home_${source.id}") { scraper(source).getHomeData().getOrThrow() }
+        }
 
     override fun searchManga(filters: SearchFilters): Flow<PagingData<MangaItem>> = Pager(
         config = PagingConfig(pageSize = 24, enablePlaceholders = false)
@@ -105,18 +108,24 @@ class MangaRepositoryImpl @Inject constructor(
         MangaPagingSource(scrapers, filters)
     }.flow
 
-    override suspend fun searchMangaDirect(query: String, source: MangaSource, page: Int): Result<List<MangaItem>> =
-        scraper(source).searchManga(query, page)
+    override suspend fun searchMangaDirect(query: String, source: MangaSource, page: Int): Result<List<MangaItem>> {
+        if (source.id == "local") return Result.success(emptyList())
+        return scraper(source).searchManga(query, page)
+    }
 
     override suspend fun browseMangaDirect(
         source: MangaSource, page: Int,
         genre: String?, status: MangaStatus?,
         type: MangaType?, sortBy: SortBy
-    ): Result<List<MangaItem>> =
-        scraper(source).browseManga(page, genre, status, type, sortBy)
+    ): Result<List<MangaItem>> {
+        if (source.id == "local") return Result.success(emptyList())
+        return scraper(source).browseManga(page, genre, status, type, sortBy)
+    }
 
-    override suspend fun getMangaByGenre(genre: String, source: MangaSource, page: Int) =
-        scraper(source).getMangaByGenre(genre, page)
+    override suspend fun getMangaByGenre(genre: String, source: MangaSource, page: Int): Result<List<MangaItem>> {
+        if (source.id == "local") return Result.success(emptyList())
+        return scraper(source).getMangaByGenre(genre, page)
+    }
 
     /**
      * Cache-first strategy:
@@ -125,6 +134,7 @@ class MangaRepositoryImpl @Inject constructor(
      *  3. If network returns empty chapters but cache had some, keep cached chapters.
      */
     override suspend fun getMangaDetail(slug: String, source: MangaSource): Result<MangaDetail> {
+        if (source.id == "local") return Result.failure(IllegalStateException("Cannot fetch detail for local manga"))
         val mangaId = "${source.id}_$slug"
 
         // Load cached version (with chapters) to return as immediate fallback
@@ -154,11 +164,15 @@ class MangaRepositoryImpl @Inject constructor(
             }
     }
 
-    override suspend fun getChapterPages(mangaSlug: String, chapterUrl: String, source: MangaSource) =
-        scraper(source).getChapterPages(chapterUrl)
+    override suspend fun getChapterPages(mangaSlug: String, chapterUrl: String, source: MangaSource): Result<List<ChapterPage>> {
+        if (source.id == "local") return Result.success(emptyList())
+        return scraper(source).getChapterPages(chapterUrl)
+    }
 
-    override suspend fun getPopularManga(source: MangaSource) =
-        scraper(source).getPopularManga()
+    override suspend fun getPopularManga(source: MangaSource): Result<List<MangaItem>> {
+        if (source.id == "local") return Result.success(emptyList())
+        return scraper(source).getPopularManga()
+    }
 
     override suspend fun getSuggestedManga(candidates: List<MangaItem>, limit: Int): List<MangaItem> {
         return recommendationEngine.getSmartRecommendations(candidates, limit)
