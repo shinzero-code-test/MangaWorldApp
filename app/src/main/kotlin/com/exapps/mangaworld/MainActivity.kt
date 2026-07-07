@@ -56,6 +56,18 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var settingsRepository: SettingsRepository
     private val deepLinkIntents = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
 
+    // Facebook login via modern Activity Result API
+    private var facebookCallbackManager: com.facebook.CallbackManager? = null
+    private val facebookLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        facebookCallbackManager?.onActivityResult(
+            com.facebook.login.LoginManager.getInstance().let { 0 },
+            result.resultCode,
+            result.data
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -66,7 +78,13 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                MangaApp(settingsRepository, intent, deepLinkIntents.asSharedFlow())
+                MangaApp(
+                    settingsRepository = settingsRepository,
+                    launchIntent = intent,
+                    deepLinkIntents = deepLinkIntents.asSharedFlow(),
+                    facebookLauncher = facebookLauncher,
+                    setFacebookCallbackManager = { facebookCallbackManager = it }
+                )
             }
         }
     }
@@ -75,12 +93,6 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         deepLinkIntents.tryEmit(intent)
-    }
-
-    @Deprecated("Needed for Facebook SDK")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        com.exapps.mangaworld.core.data.FacebookCallbackHolder.callbackManager?.onActivityResult(requestCode, resultCode, data)
     }
 
     private fun requestStoragePermissionsIfNeeded() {
@@ -107,7 +119,9 @@ class MainActivity : FragmentActivity() {
 private fun MangaApp(
     settingsRepo: SettingsRepository,
     launchIntent: Intent?,
-    deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>
+    deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>,
+    facebookLauncher: androidx.activity.result.ActivityResultLauncher<Intent>,
+    setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -227,12 +241,9 @@ private fun MangaApp(
                             googleLauncher.launch(googleSignInClient.signInIntent)
                         },
                         onFacebookLoginClick = {
-                            val activity = context as? android.app.Activity
-                            if (activity != null) {
-                                com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
-                                    activity, listOf("email", "public_profile")
-                                )
-                            }
+                            com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
+                                listOf("email", "public_profile")
+                            )
                         },
                         onForgotPasswordClick = { loginViewModel.sendPasswordReset(loginState.email) },
                         onSignUpClick = {
@@ -266,7 +277,12 @@ private fun MangaApp(
                     )
                 }
                 else -> {
-                    MangaWorldContent(launchIntent = launchIntent, deepLinkIntents = deepLinkIntents)
+                    MangaWorldContent(
+                        launchIntent = launchIntent,
+                        deepLinkIntents = deepLinkIntents,
+                        facebookLauncher = facebookLauncher,
+                        setFacebookCallbackManager = setFacebookCallbackManager
+                    )
                 }
             }
 
@@ -280,7 +296,9 @@ private fun MangaApp(
 @Composable
 private fun MangaWorldContent(
     launchIntent: Intent?,
-    deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>
+    deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>,
+    facebookLauncher: androidx.activity.result.ActivityResultLauncher<Intent>,
+    setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit
 ) {
     val navController = rememberNavController()
     val navBackStack by navController.currentBackStackEntryAsState()
@@ -334,7 +352,11 @@ private fun MangaWorldContent(
                 .padding(bottom = if (showBottomBar) paddingValues.calculateBottomPadding() else 0.dp)
                 .windowInsetsPadding(WindowInsets.statusBars)
         ) {
-            MangaNavGraph(navController = navController)
+            MangaNavGraph(
+                navController = navController,
+                facebookLauncher = facebookLauncher,
+                setFacebookCallbackManager = setFacebookCallbackManager
+            )
         }
     }
 }

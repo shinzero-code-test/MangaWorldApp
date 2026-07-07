@@ -68,6 +68,7 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
 
     override fun onCreate() {
         super.onCreate()
+        com.facebook.FacebookSdk.sdkInitialize(this)
         initializeAppCheck()
         createNotificationChannels()
         widgetRefreshScheduler.schedule()

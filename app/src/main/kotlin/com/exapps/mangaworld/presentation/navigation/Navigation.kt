@@ -117,7 +117,11 @@ val bottomNavItems: List<Triple<Screen, String, ImageVector>> = listOf(
 )
 
 @Composable
-fun MangaNavGraph(navController: NavHostController) {
+fun MangaNavGraph(
+    navController: NavHostController,
+    facebookLauncher: androidx.activity.result.ActivityResultLauncher<Intent>,
+    setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit
+) {
     NavHost(
         navController = navController,
         startDestination = Screen.Home.route,
@@ -402,13 +406,9 @@ fun MangaNavGraph(navController: NavHostController) {
                     googleLauncher.launch(googleSignInClient.signInIntent)
                 },
                 onFacebookLoginClick = {
-                    val activity = context as? android.app.Activity
-                    if (activity != null) {
-                        com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
-                            activity,
-                            listOf("email", "public_profile")
-                        )
-                    }
+                    com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
+                        listOf("email", "public_profile")
+                    )
                 },
                 onForgotPasswordClick = { navController.navigate(Screen.ForgotPassword.route) },
                 onSignUpClick = { navController.navigate(Screen.SignUp.route) }
