@@ -79,7 +79,7 @@ class MainActivity : FragmentActivity() {
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 MangaApp(
-                    settingsRepository = settingsRepository,
+                    settingsRepo = settingsRepository,
                     launchIntent = intent,
                     deepLinkIntents = deepLinkIntents.asSharedFlow(),
                     facebookLauncher = facebookLauncher,
