@@ -101,7 +101,7 @@ fun MangaDetailScreen(
                 onToggleOrder = viewModel::toggleChaptersOrder,
                 onDownloadChapter = viewModel::downloadChapter,
                 onShowDownloadDialog = viewModel::showDownloadDialog,
-                onOpenCommunity = if (source.id == "local" || slug.startsWith("imported_")) {{}} else { onOpenCommunity("${source.id}_$slug") },
+                onOpenCommunity = if (source.id == "local" || slug.startsWith("imported_")) { {} } else { { onOpenCommunity("${source.id}_$slug") } },
                 onOpenChapterCommunity = onOpenChapterCommunity,
                 onOpenOtherSource = onOpenOtherSource,
                 onShowAddToList = viewModel::showAddToListDialog,
