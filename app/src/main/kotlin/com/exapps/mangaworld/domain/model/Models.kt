@@ -56,7 +56,7 @@ enum class MangaSource(
         fun fromIdOrNull(id: String): MangaSource? = entries.find { it.id == id }
 
         /** Check if the sourceId represents a local/imported manga (not an online source) */
-        fun isLocalSource(id: String): Boolean = id == "imported" || id == "local" || id == LOCAL.id
+        fun isLocalSource(id: String): Boolean = id == "imported" || id == "local"
 
         /** All sources added in v4.0.0 — these appear on the Sources screen grid */
         val NEW_SOURCES = setOf(
