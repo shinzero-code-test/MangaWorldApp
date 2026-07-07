@@ -349,14 +349,15 @@ fun GradientButton(
                 else Brush.horizontalGradient(listOf(MangaColors.Muted, MangaColors.Muted))
             )
             .clickable(enabled = enabled) { onClick() }
-            .padding(horizontal = 24.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text,
             style = MaterialTheme.typography.titleMedium,
             color = Color.White,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            maxLines = 1
         )
     }
 }

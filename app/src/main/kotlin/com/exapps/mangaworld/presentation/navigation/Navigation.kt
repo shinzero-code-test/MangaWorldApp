@@ -494,12 +494,13 @@ fun MangaNavGraph(navController: NavHostController) {
                 back.arguments?.getString("chapterUrl") ?: "", "UTF-8"
             )
             val source = MangaSource.fromIdOrNull(sourceId) ?: MangaSource.fromId(sourceId)
+            val isImported = mangaId.startsWith("imported_") || sourceId == "local"
             ReaderScreen(
                 source = source, mangaId = mangaId,
                 chapterUrl = chapterUrl,
                 onBack = { navController.popBackStack() },
-                onOpenCommunity = {
-                    navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl))
+                onOpenCommunity = if (isImported) {{}} else {
+                    { navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl)) }
                 }
             )
         }
