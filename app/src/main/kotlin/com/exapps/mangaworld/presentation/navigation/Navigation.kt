@@ -413,7 +413,8 @@ fun MangaNavGraph(navController: NavHostController) {
         composable(Screen.SignUp.route) {
             val viewModel: com.exapps.mangaworld.presentation.auth.LoginViewModel = hiltViewModel()
             val state by viewModel.uiState.collectAsStateWithLifecycle()
-            val sessionManager = remember { com.exapps.mangaworld.core.firebase.FirebaseSessionManager(context) }
+            val signUpContext = LocalContext.current
+            val sessionManager = remember { com.exapps.mangaworld.core.firebase.FirebaseSessionManager(signUpContext) }
             val isLoggedIn by sessionManager.authState.collectAsStateWithLifecycle(
                 initialValue = sessionManager.currentUser()
             )
