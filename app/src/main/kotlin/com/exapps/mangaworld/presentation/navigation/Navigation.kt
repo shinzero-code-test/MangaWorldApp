@@ -348,12 +348,16 @@ fun MangaNavGraph(navController: NavHostController) {
             val googleLauncher = rememberLauncherForActivityResult(
                 contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
             ) { result ->
-                val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
-                val idToken = task.result?.idToken
-                if (idToken != null) {
-                    viewModel.signInWithGoogleIdToken(idToken)
-                } else {
-                    viewModel.clearError() // user cancelled
+                try {
+                    val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                    val idToken = task.result?.idToken
+                    if (idToken != null) {
+                        viewModel.signInWithGoogleIdToken(idToken)
+                    } else {
+                        viewModel.clearError()
+                    }
+                } catch (_: Exception) {
+                    viewModel.clearError() // user cancelled or error
                 }
             }
 

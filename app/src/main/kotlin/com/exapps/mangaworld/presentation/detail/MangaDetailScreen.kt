@@ -273,7 +273,7 @@ private fun DetailContent(
                     GradientButton(
                         text = "ابدأ القراءة",
                         onClick = { onChapterClick(firstUnread) },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).height(52.dp)
                     )
                 }
                 // Download All FAB
