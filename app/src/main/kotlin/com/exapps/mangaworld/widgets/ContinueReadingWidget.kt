@@ -122,7 +122,8 @@ private fun ContinueReadingContent(
                         modifier = GlanceModifier
                             .fillMaxSize()
                             .cornerRadius(3.dp)
-                    )
+                            .background(GlanceTheme.colors.primary)
+                    ) {}
                 }
                 Spacer(GlanceModifier.width(6.dp))
                 Text(
