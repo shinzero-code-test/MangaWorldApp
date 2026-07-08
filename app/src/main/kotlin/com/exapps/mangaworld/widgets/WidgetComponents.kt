@@ -14,7 +14,6 @@ import androidx.glance.ImageProvider
 import androidx.glance.background
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.cornerRadius
-import androidx.glance.border
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
@@ -22,7 +21,6 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
-import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -59,7 +57,6 @@ internal fun WidgetCard(
                 else GlanceModifier.background(GlanceTheme.colors.surface)
             )
             .cornerRadius(22.dp)
-            .border(width = 1.dp, color = GlanceTheme.colors.outline)
             .padding(14.dp)
     ) {
         if (showTitle) {
@@ -99,7 +96,7 @@ internal fun WidgetCover(provider: ImageProvider, description: String?, showCove
             .height(112.dp)
             .background(GlanceTheme.colors.surfaceVariant)
             .cornerRadius(16.dp)
-            .border(width = 1.dp, color = GlanceTheme.colors.outline),
+            ,
         contentAlignment = Alignment.Center
     ) {
         Image(
@@ -137,7 +134,7 @@ internal fun WidgetListItem(
             .clickable(actionStartActivity(intent))
             .background(GlanceTheme.colors.surfaceVariant)
             .cornerRadius(14.dp)
-            .border(width = 1.dp, color = GlanceTheme.colors.outline)
+            
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -145,7 +142,7 @@ internal fun WidgetListItem(
             WidgetStatusDot(active = leadingDotActive)
             Spacer(GlanceModifier.width(8.dp))
         }
-        Column(modifier = GlanceModifier.defaultWeight()) {
+        Column(modifier = GlanceModifier.fillMaxWidth()) {
             if (showTitle) {
                 Text(
                     text = title,
@@ -204,7 +201,7 @@ internal fun WidgetEmptyState(title: String, subtitle: String, intent: Intent? =
                 .size(56.dp)
                 .background(GlanceTheme.colors.surfaceVariant)
                 .cornerRadius(28.dp)
-                .border(width = 1.dp, color = GlanceTheme.colors.outline),
+                ,
             contentAlignment = Alignment.Center
         ) {
             Image(

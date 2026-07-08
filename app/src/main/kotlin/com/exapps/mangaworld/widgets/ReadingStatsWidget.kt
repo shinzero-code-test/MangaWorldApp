@@ -18,7 +18,6 @@ import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
-import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.width
@@ -110,7 +109,7 @@ private fun StatsRow(icon: String, label: String, value: String) {
                 color = GlanceTheme.colors.onSurfaceVariant,
                 fontSize = 13.sp
             ),
-            modifier = GlanceModifier.defaultWeight()
+            modifier = GlanceModifier.fillMaxWidth()
         )
         Spacer(GlanceModifier.width(8.dp))
         Text(

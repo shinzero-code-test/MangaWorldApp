@@ -112,7 +112,7 @@ private fun ContinueReadingContent(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = GlanceModifier
-                        .defaultWeight()
+                        .fillMaxWidth()
                         .height(6.dp)
                         .background(GlanceTheme.colors.surfaceVariant)
                         .cornerRadius(3.dp)
