@@ -1,6 +1,5 @@
 package com.exapps.mangaworld.presentation.navigation
 
-import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
@@ -120,7 +119,6 @@ val bottomNavItems: List<Triple<Screen, String, ImageVector>> = listOf(
 @Composable
 fun MangaNavGraph(
     navController: NavHostController,
-    facebookLauncher: androidx.activity.result.ActivityResultLauncher<Intent>,
     setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit
 ) {
     NavHost(
@@ -377,7 +375,8 @@ fun MangaNavGraph(
 
             // Facebook login — register callback in LaunchedEffect, handle via Activity.onActivityResult
             val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
-            LaunchedEffect(Unit) {
+            LaunchedEffect(facebookCallbackManager) {
+                setFacebookCallbackManager(facebookCallbackManager)
                 com.facebook.login.LoginManager.getInstance().registerCallback(facebookCallbackManager,
                     object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
                         override fun onSuccess(loginResult: com.facebook.login.LoginResult) {

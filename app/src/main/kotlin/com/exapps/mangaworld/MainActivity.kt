@@ -56,17 +56,8 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var settingsRepository: SettingsRepository
     private val deepLinkIntents = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
 
-    // Facebook login via modern Activity Result API
+    // Facebook login callback manager — set by the login composable
     private var facebookCallbackManager: com.facebook.CallbackManager? = null
-    private val facebookLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        facebookCallbackManager?.onActivityResult(
-            com.facebook.login.LoginManager.getInstance().let { 0 },
-            result.resultCode,
-            result.data
-        )
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
@@ -82,7 +73,6 @@ class MainActivity : FragmentActivity() {
                     settingsRepo = settingsRepository,
                     launchIntent = intent,
                     deepLinkIntents = deepLinkIntents.asSharedFlow(),
-                    facebookLauncher = facebookLauncher,
                     setFacebookCallbackManager = { facebookCallbackManager = it }
                 )
             }
@@ -126,7 +116,6 @@ private fun MangaApp(
     settingsRepo: SettingsRepository,
     launchIntent: Intent?,
     deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>,
-    facebookLauncher: androidx.activity.result.ActivityResultLauncher<Intent>,
     setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -190,6 +179,9 @@ private fun MangaApp(
                     val loginViewModel: com.exapps.mangaworld.presentation.auth.LoginViewModel = hiltViewModel()
                     val loginState by loginViewModel.uiState.collectAsStateWithLifecycle()
 
+                    // Sub-screen state: "login", "signup", "forgot"
+                    var postOnboardingScreen by rememberSaveable { mutableStateOf("login") }
+
                     // Auto-dismiss when signed in
                     LaunchedEffect(loginState.isSignedIn) {
                         if (loginState.isSignedIn) {
@@ -219,9 +211,10 @@ private fun MangaApp(
                         }
                     }
 
-                    // Facebook login callback
+                    // Facebook login callback — register and forward to Activity for onActivityResult
                     val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
-                    LaunchedEffect(Unit) {
+                    LaunchedEffect(facebookCallbackManager) {
+                        setFacebookCallbackManager(facebookCallbackManager)
                         com.facebook.login.LoginManager.getInstance().registerCallback(facebookCallbackManager,
                             object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
                                 override fun onSuccess(result: com.facebook.login.LoginResult) {
@@ -235,30 +228,50 @@ private fun MangaApp(
                         )
                     }
 
-                    com.exapps.mangaworld.presentation.auth.login.LoginScreen(
-                        email = loginState.email,
-                        password = loginState.password,
-                        isLoading = loginState.isLoading,
-                        errorMessage = loginState.error,
-                        onEmailChanged = loginViewModel::onEmailChanged,
-                        onPasswordChanged = loginViewModel::onPasswordChanged,
-                        onLoginClick = { _, _ -> loginViewModel.signInWithEmail() },
-                        onGoogleSignInClick = {
-                            googleLauncher.launch(googleSignInClient.signInIntent)
-                        },
-                        onFacebookLoginClick = {
-                            val activity = context as? android.app.Activity
-                            if (activity != null) {
-                                com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
-                                    activity, listOf("email", "public_profile")
-                                )
-                            }
-                        },
-                        onForgotPasswordClick = { loginViewModel.sendPasswordReset(loginState.email) },
-                        onSignUpClick = {
-                            showPostOnboardingLogin = false
+                    when (postOnboardingScreen) {
+                        "signup" -> {
+                            com.exapps.mangaworld.presentation.auth.signup.SignUpScreen(
+                                onBack = { postOnboardingScreen = "login" },
+                                onSignUp = loginViewModel::signUpWithEmail,
+                                isLoading = loginState.isLoading,
+                                error = loginState.error
+                            )
                         }
-                    )
+                        "forgot" -> {
+                            com.exapps.mangaworld.presentation.auth.forgotpassword.ForgotPasswordScreen(
+                                onBack = { postOnboardingScreen = "login" },
+                                isLoading = loginState.isLoading,
+                                error = loginState.error,
+                                onSendReset = loginViewModel::sendPasswordReset,
+                                passwordResetSent = loginState.passwordResetSent,
+                                onDismissSuccess = { loginViewModel.clearPasswordResetSent() }
+                            )
+                        }
+                        else -> {
+                            com.exapps.mangaworld.presentation.auth.login.LoginScreen(
+                                email = loginState.email,
+                                password = loginState.password,
+                                isLoading = loginState.isLoading,
+                                errorMessage = loginState.error,
+                                onEmailChanged = loginViewModel::onEmailChanged,
+                                onPasswordChanged = loginViewModel::onPasswordChanged,
+                                onLoginClick = { _, _ -> loginViewModel.signInWithEmail() },
+                                onGoogleSignInClick = {
+                                    googleLauncher.launch(googleSignInClient.signInIntent)
+                                },
+                                onFacebookLoginClick = {
+                                    val activity = context as? android.app.Activity
+                                    if (activity != null) {
+                                        com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
+                                            activity, listOf("email", "public_profile")
+                                        )
+                                    }
+                                },
+                                onForgotPasswordClick = { postOnboardingScreen = "forgot" },
+                                onSignUpClick = { postOnboardingScreen = "signup" }
+                            )
+                        }
+                    }
 
                     // Dismiss button — proceed without login
                     TextButton(
@@ -282,7 +295,6 @@ private fun MangaApp(
                     MangaWorldContent(
                         launchIntent = launchIntent,
                         deepLinkIntents = deepLinkIntents,
-                        facebookLauncher = facebookLauncher,
                         setFacebookCallbackManager = setFacebookCallbackManager
                     )
                 }
@@ -299,7 +311,6 @@ private fun MangaApp(
 private fun MangaWorldContent(
     launchIntent: Intent?,
     deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>,
-    facebookLauncher: androidx.activity.result.ActivityResultLauncher<Intent>,
     setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit
 ) {
     val navController = rememberNavController()
@@ -356,7 +367,6 @@ private fun MangaWorldContent(
         ) {
             MangaNavGraph(
                 navController = navController,
-                facebookLauncher = facebookLauncher,
                 setFacebookCallbackManager = setFacebookCallbackManager
             )
         }
