@@ -2,11 +2,8 @@ package com.exapps.mangaworld.widgets
 
 import android.content.Intent
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.glance.Button
-import androidx.glance.ButtonColors
+import androidx.glance.ButtonDefaults
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.Image
@@ -32,16 +29,6 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.exapps.mangaworld.R
 
-/**
- * Button colors — matches the primary "متابعة القراءة" / زر أساسي
- * pill from the preview mock.
- */
-private val mangaButtonColors
-    @Composable get() = ButtonDefaults.buttonColors(
-        backgroundColor = GlanceTheme.colors.primary,
-        contentColor = GlanceTheme.colors.onPrimary
-    )
-
 @Composable
 internal fun WidgetCard(
     title: String,
@@ -64,7 +51,6 @@ internal fun WidgetCard(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Small red accent tick, echoing the red section markers in the mock.
                 Box(
                     modifier = GlanceModifier
                         .size(4.dp)
@@ -95,8 +81,7 @@ internal fun WidgetCover(provider: ImageProvider, description: String?, showCove
             .fillMaxWidth()
             .height(112.dp)
             .background(GlanceTheme.colors.surfaceVariant)
-            .cornerRadius(16.dp)
-            ,
+            .cornerRadius(16.dp),
         contentAlignment = Alignment.Center
     ) {
         Image(
@@ -112,8 +97,7 @@ internal fun WidgetPrimaryButton(label: String, intent: Intent) {
     Button(
         text = label,
         onClick = actionStartActivity(intent),
-        modifier = GlanceModifier.fillMaxWidth().cornerRadius(14.dp),
-        colors = mangaButtonColors
+        modifier = GlanceModifier.fillMaxWidth().cornerRadius(14.dp)
     )
 }
 
@@ -134,7 +118,6 @@ internal fun WidgetListItem(
             .clickable(actionStartActivity(intent))
             .background(GlanceTheme.colors.surfaceVariant)
             .cornerRadius(14.dp)
-            
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -168,8 +151,6 @@ internal fun WidgetListItem(
         }
         if (showBadge && !trailing.isNullOrBlank()) {
             Spacer(GlanceModifier.width(8.dp))
-            // Pill badge on a faint primary-tinted background, matching the small
-            // red/gold status chips ("جديد" / "مكتمل") in the preview mock.
             Box(
                 modifier = GlanceModifier
                     .background(GlanceTheme.colors.primaryContainer)
@@ -200,8 +181,7 @@ internal fun WidgetEmptyState(title: String, subtitle: String, intent: Intent? =
             modifier = GlanceModifier
                 .size(56.dp)
                 .background(GlanceTheme.colors.surfaceVariant)
-                .cornerRadius(28.dp)
-                ,
+                .cornerRadius(28.dp),
             contentAlignment = Alignment.Center
         ) {
             Image(
@@ -247,10 +227,6 @@ internal fun WidgetSectionHeader(title: String) {
     )
 }
 
-/**
- * Small status dot badge (e.g. unread indicator on latest-updates rows),
- * matching the tiny red/gray dots seen next to "أحدث التحديثات" entries.
- */
 @Composable
 internal fun WidgetStatusDot(active: Boolean) {
     Box(
