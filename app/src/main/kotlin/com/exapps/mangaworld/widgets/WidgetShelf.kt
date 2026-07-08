@@ -2,26 +2,26 @@ package com.exapps.mangaworld.widgets
 
 import android.content.Context
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
-import androidx.glance.LocalContext
+import androidx.glance.GlanceTheme
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.action.clickable
-import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.width
@@ -39,7 +39,7 @@ class WidgetShelf : GlanceAppWidget() {
         val entryPoint = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
         val settings = entryPoint.widgetSettingsManager()
         provideContent {
-            MangaWidgetTheme(context) {
+            MangaWidgetTheme(context, settings.getWidgetTheme()) {
                 WidgetShelfContent(settings, context)
             }
         }
@@ -50,6 +50,8 @@ class WidgetShelfReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = WidgetShelf()
 }
 
+private data class ShelfAction(val icon: String, val label: String)
+
 @Composable
 private fun WidgetShelfContent(
     settings: WidgetSettingsManager,
@@ -58,62 +60,66 @@ private fun WidgetShelfContent(
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
+            .background(GlanceTheme.colors.background)
             .padding(12.dp)
     ) {
-        Text(
-            text = "الوصول السريع",
-            style = TextStyle(
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = GlanceModifier
+                    .width(4.dp)
+                    .height(14.dp)
+                    .background(GlanceTheme.colors.primary)
+                    .cornerRadius(2.dp)
+            ) {}
+            Spacer(GlanceModifier.width(6.dp))
+            Text(
+                text = "الوصول السريع",
+                style = TextStyle(
+                    color = GlanceTheme.colors.onBackground,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
             )
-        )
-        Spacer(GlanceModifier.height(8.dp))
+        }
+        Spacer(GlanceModifier.height(10.dp))
 
         Row(
-            modifier = GlanceModifier.fillMaxSize(),
+            modifier = GlanceModifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(
-                modifier = GlanceModifier
-                    .padding(4.dp)
-                    .background(ColorProvider(day = Color(0x1AFFFFFF), night = Color(0x33FFFFFF)))
-                    .clickable(actionStartActivity(AppLaunchIntents.home(context)))
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) { Text("🏠 الرئيسية", style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium)) }
-
+            ShelfButton(action = ShelfAction("🏠", "الرئيسية"), intent = AppLaunchIntents.home(context))
             Spacer(GlanceModifier.width(6.dp))
-
-            Box(
-                modifier = GlanceModifier
-                    .padding(4.dp)
-                    .background(ColorProvider(day = Color(0x1AFFFFFF), night = Color(0x33FFFFFF)))
-                    .clickable(actionStartActivity(AppLaunchIntents.search(context)))
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) { Text("🔍 البحث", style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium)) }
-
+            ShelfButton(action = ShelfAction("🔍", "البحث"), intent = AppLaunchIntents.search(context))
             Spacer(GlanceModifier.width(6.dp))
-
-            Box(
-                modifier = GlanceModifier
-                    .padding(4.dp)
-                    .background(ColorProvider(day = Color(0x1AFFFFFF), night = Color(0x33FFFFFF)))
-                    .clickable(actionStartActivity(AppLaunchIntents.library(context)))
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) { Text("📚 المكتبة", style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium)) }
-
+            ShelfButton(action = ShelfAction("📚", "المكتبة"), intent = AppLaunchIntents.library(context))
             Spacer(GlanceModifier.width(6.dp))
+            ShelfButton(action = ShelfAction("⬇️", "التنزيلات"), intent = AppLaunchIntents.downloads(context))
+        }
+    }
+}
 
-            Box(
-                modifier = GlanceModifier
-                    .padding(4.dp)
-                    .background(ColorProvider(day = Color(0x1AFFFFFF), night = Color(0x33FFFFFF)))
-                    .clickable(actionStartActivity(AppLaunchIntents.downloads(context)))
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) { Text("⬇️ التنزيلات", style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium)) }
+@Composable
+private fun ShelfButton(action: ShelfAction, intent: android.content.Intent) {
+    Box(
+        modifier = GlanceModifier
+            .defaultWeight()
+            .background(GlanceTheme.colors.surfaceVariant)
+            .cornerRadius(14.dp)
+            .clickable(actionStartActivity(intent))
+            .padding(horizontal = 6.dp, vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
+            Text(action.icon, style = TextStyle(fontSize = 16.sp))
+            Spacer(GlanceModifier.height(4.dp))
+            Text(
+                action.label,
+                style = TextStyle(
+                    color = GlanceTheme.colors.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            )
         }
     }
 }

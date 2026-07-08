@@ -6,7 +6,6 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
-import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
@@ -29,7 +28,7 @@ class LibraryWidget : GlanceAppWidget() {
         val settings = entryPoint.widgetSettingsManager()
         val entries = repo.getLibraryEntries(limit = 6)
         provideContent {
-            MangaWidgetTheme(context) {
+            MangaWidgetTheme(context, settings.getWidgetTheme()) {
                 LibraryWidgetContent(entries, settings, context)
             }
         }

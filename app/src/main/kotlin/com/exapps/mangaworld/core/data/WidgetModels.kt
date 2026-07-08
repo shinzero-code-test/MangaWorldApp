@@ -28,7 +28,8 @@ data class ContinueReadingWidgetData(
     val title: String,
     val coverUrl: String,
     val chapterLabel: String,
-    val chapterUrl: String
+    val chapterUrl: String,
+    val progressPercent: Int = 0
 )
 
 data class LibraryWidgetEntry(

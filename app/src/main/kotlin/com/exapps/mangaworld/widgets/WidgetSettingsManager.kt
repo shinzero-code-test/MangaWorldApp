@@ -13,7 +13,7 @@ enum class WidgetSize(val label: String, val widthDp: Int, val heightDp: Int) {
 }
 
 enum class WidgetTheme(val label: String) {
-    SYSTEM("تلقائي"),
+    SYSTEM("تلقائي (افتراضي)"),
     LIGHT("فاتح"),
     DARK("داكن"),
     MONOCHROME("أحادي اللون")

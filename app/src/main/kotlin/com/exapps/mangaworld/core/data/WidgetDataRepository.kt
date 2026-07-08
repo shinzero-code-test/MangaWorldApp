@@ -215,6 +215,12 @@ class WidgetDataRepository @Inject constructor(
             resolveChapter(this, source)?.url.orEmpty()
         }
         if (chapterUrl.isBlank()) return null
+
+        // Calculate reading progress percentage
+        val progressPercent = if (totalChapters > 0 && readChapters > 0) {
+            ((readChapters.toFloat() / totalChapters) * 100).toInt().coerceIn(0, 100)
+        } else 0
+
         return ContinueReadingWidgetData(
             mangaId = mangaId,
             sourceId = source.id,
@@ -222,7 +228,8 @@ class WidgetDataRepository @Inject constructor(
             title = title,
             coverUrl = coverUrl,
             chapterLabel = "الفصل ${formatChapterNumber(lastChapterNumber)}",
-            chapterUrl = chapterUrl
+            chapterUrl = chapterUrl,
+            progressPercent = progressPercent
         )
     }
 

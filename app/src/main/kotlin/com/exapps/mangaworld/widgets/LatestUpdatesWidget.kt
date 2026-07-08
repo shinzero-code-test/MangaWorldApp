@@ -6,7 +6,6 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
-import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
@@ -29,7 +28,7 @@ class LatestUpdatesWidget : GlanceAppWidget() {
         val settings = entryPoint.widgetSettingsManager()
         val snapshot = repo.getRemoteSnapshot()
         provideContent {
-            MangaWidgetTheme(context) {
+            MangaWidgetTheme(context, settings.getWidgetTheme()) {
                 LatestUpdatesContent(snapshot.latestUpdates, settings, context)
             }
         }
@@ -74,6 +73,9 @@ private fun LatestUpdatesContent(
                 trailing = if (showBadge) update.timeAgo else null,
                 showTitle = showTitles,
                 showBadge = showBadge,
+                // Only the newest entry (index 0) shows an active red status dot,
+                // matching the single lit dot next to the top row in the mock.
+                leadingDotActive = index == 0,
                 intent = AppLaunchIntents.reader(context, update.sourceId, update.mangaId, update.chapterUrl)
             )
             if (index < visibleCount - 1) {

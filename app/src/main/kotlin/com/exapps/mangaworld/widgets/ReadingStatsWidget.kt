@@ -8,14 +8,18 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
-import androidx.glance.LocalContext
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
+import androidx.glance.background
+import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.height
+import androidx.glance.layout.padding
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -36,7 +40,7 @@ class ReadingStatsWidget : GlanceAppWidget() {
         val settings = entryPoint.widgetSettingsManager()
         val stats = repo.getReadingStats()
         provideContent {
-            MangaWidgetTheme(context) {
+            MangaWidgetTheme(context, settings.getWidgetTheme()) {
                 ReadingStatsContent(stats, settings, context)
             }
         }
@@ -71,17 +75,34 @@ private fun ReadingStatsContent(
             return@WidgetCard
         }
 
-        StatsRow(label = "الفصول المقروءة", value = stats.totalChaptersRead.toString())
+        StatsRow(icon = "🔥", label = "سلسلة القراءة", value = "${stats.readingStreakDays} يوم")
         Spacer(GlanceModifier.height(8.dp))
-        StatsRow(label = "سلسلة القراءة", value = "${stats.readingStreakDays} يوم")
+        StatsRow(icon = "📖", label = "الفصول المقروءة", value = stats.totalChaptersRead.toString())
         Spacer(GlanceModifier.height(8.dp))
-        StatsRow(label = "وقت القراءة", value = formatMinutes(stats.totalReadingMinutes))
+        StatsRow(icon = "⏱️", label = "وقت القراءة", value = formatMinutes(stats.totalReadingMinutes))
     }
 }
 
 @Composable
-private fun StatsRow(label: String, value: String) {
-    Row {
+private fun StatsRow(icon: String, label: String, value: String) {
+    Row(
+        modifier = GlanceModifier
+            .background(GlanceTheme.colors.surfaceVariant)
+            .cornerRadius(12.dp)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Small red icon chip, echoing the circular flame/book/clock badges
+        // shown next to each stat row in the preview mock.
+        Box(
+            modifier = GlanceModifier
+                .background(GlanceTheme.colors.primaryContainer)
+                .cornerRadius(8.dp)
+                .padding(4.dp)
+        ) {
+            Text(text = icon, style = TextStyle(fontSize = 12.sp))
+        }
+        Spacer(GlanceModifier.width(8.dp))
         Text(
             text = label,
             style = TextStyle(
@@ -94,7 +115,7 @@ private fun StatsRow(label: String, value: String) {
         Text(
             text = value,
             style = TextStyle(
-                color = GlanceTheme.colors.onSurface,
+                color = GlanceTheme.colors.primary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
             )

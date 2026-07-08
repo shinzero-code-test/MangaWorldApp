@@ -6,12 +6,13 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceModifier
+import androidx.glance.GlanceTheme
 import androidx.glance.ImageProvider
-import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.height
@@ -35,7 +36,7 @@ class ContinueReadingWidget : GlanceAppWidget() {
         val data = repo.getContinueReading()
         val cover = repo.loadCoverBitmap(data?.coverUrl, width = 320, height = 440)
         provideContent {
-            MangaWidgetTheme(context) {
+            MangaWidgetTheme(context, settings.getWidgetTheme()) {
                 ContinueReadingContent(data = data, cover = cover, settings = settings, context = context)
             }
         }
@@ -83,7 +84,7 @@ private fun ContinueReadingContent(
                 text = data.title,
                 maxLines = if (size.width < 170.dp) 1 else 2,
                 style = TextStyle(
-                    color = androidx.glance.GlanceTheme.colors.onSurface,
+                    color = GlanceTheme.colors.onSurface,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -93,11 +94,43 @@ private fun ContinueReadingContent(
         Text(
             text = data.chapterLabel,
             style = TextStyle(
-                color = androidx.glance.GlanceTheme.colors.onSurfaceVariant,
+                color = GlanceTheme.colors.onSurfaceVariant,
                 fontSize = 12.sp
             )
         )
-        Spacer(GlanceModifier.height(12.dp))
+        Spacer(GlanceModifier.height(8.dp))
+
+        // Progress bar
+        if (data.progressPercent > 0) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = GlanceModifier
+                        .defaultWeight()
+                        .height(6.dp)
+                        .background(GlanceTheme.colors.surfaceVariant)
+                        .cornerRadius(3.dp)
+                ) {
+                    Box(
+                        modifier = GlanceModifier
+                            .fillMaxSize()
+                            .cornerRadius(3.dp)
+                    )
+                }
+                Spacer(GlanceModifier.width(6.dp))
+                Text(
+                    text = "${data.progressPercent}%",
+                    style = TextStyle(
+                        color = GlanceTheme.colors.primary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+            }
+            Spacer(GlanceModifier.height(10.dp))
+        } else {
+            Spacer(GlanceModifier.height(12.dp))
+        }
+
         WidgetPrimaryButton(
             label = "متابعة القراءة",
             intent = AppLaunchIntents.reader(context, data.sourceId, data.mangaId, data.chapterUrl)

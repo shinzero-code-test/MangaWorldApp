@@ -6,7 +6,6 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
-import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
@@ -30,7 +29,7 @@ class DailyRecommendationsWidget : GlanceAppWidget() {
         val settings = entryPoint.widgetSettingsManager()
         val snapshot = repo.getRemoteSnapshot()
         provideContent {
-            MangaWidgetTheme(context) {
+            MangaWidgetTheme(context, settings.getWidgetTheme()) {
                 DailyRecommendationsContent(snapshot, settings, context)
             }
         }
