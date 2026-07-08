@@ -3,8 +3,8 @@ package com.exapps.mangaworld.presentation.auth
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.firebase.CrossProviderCollisionException
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
-import com.exapps.mangaworld.core.firebase.pendingFacebookCredential
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,11 +22,16 @@ data class AuthUiState(
     val isSignedIn: Boolean = false,
     val email: String = "",
     val password: String = "",
-    val passwordResetSent: Boolean = false,
-    /** True when a Facebook collision was detected and the user should sign in with the
-     *  existing provider to complete account linking. */
-    val needsAccountLinking: Boolean = false
+    val passwordResetSent: Boolean = false
 )
+
+/** Map a Firebase/Auth provider ID to a human-readable Arabic name. */
+private fun String.toProviderDisplayName(): String = when (this) {
+    "google.com" -> "Google"
+    "facebook.com" -> "Facebook"
+    "password" -> "البريد الإلكتروني"
+    else -> "الأخرى"
+}
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(
@@ -37,7 +42,6 @@ class LoginViewModel @Inject constructor(
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     init {
-        // Check if already signed in
         viewModelScope.launch {
             sessionManager.authState.collect { user ->
                 _uiState.update { it.copy(isSignedIn = user != null && !user.isAnonymous) }
@@ -104,17 +108,17 @@ class LoginViewModel @Inject constructor(
             try {
                 val uid = sessionManager.signInWithGoogleIdToken(idToken)
                 if (uid != null) {
-                    _uiState.update { it.copy(isLoading = false, isSignedIn = true, needsAccountLinking = false) }
+                    _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول بـ Google.") }
                 }
-            } catch (e: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
+            } catch (e: CrossProviderCollisionException) {
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        error = "يوجد حساب مسجل بالبريد \"${
-                            e.email ?: ""
-                        }\" بطريقة أخرى. سجّل الدخول بالطريقة الأصلية أولاً."
+                        error = "البريد \"${e.email}\" مسجل بالفعل بـ ${
+                            e.existingProvider.toProviderDisplayName()
+                        }. سجّل الدخول باستخدام ${e.existingProvider.toProviderDisplayName()}."
                     )
                 }
             } catch (e: Exception) {
@@ -123,17 +127,9 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Sign in with Facebook.
-     *
-     * When `FirebaseAuthUserCollisionException` is thrown, it means the email is already
-     * linked to another provider (e.g. Google). The pending Facebook credential is stored
-     * in [pendingFacebookCredential] so that after the user signs in with the existing
-     * provider, [linkPendingFacebookCredential] can merge Facebook into that account.
-     */
     fun signInWithFacebook(accessToken: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null, needsAccountLinking = false) }
+            _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 val uid = sessionManager.signInWithFacebook(accessToken)
                 if (uid != null) {
@@ -141,17 +137,13 @@ class LoginViewModel @Inject constructor(
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول بـ Facebook.") }
                 }
-            } catch (e: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
-                // A pending Facebook credential is now stored — tell the user to sign in
-                // with the existing provider. After that succeeds, the credential will be
-                // automatically linked by [FirebaseSessionManager.signInWithGoogleIdToken].
+            } catch (e: CrossProviderCollisionException) {
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        needsAccountLinking = true,
-                        error = "يوجد حساب مسجل بالبريد \"${
-                            e.email ?: ""
-                        }\" بطريقة أخرى. سجّل الدخول بالطريقة الأصلية لدمج الحسابين."
+                        error = "البريد \"${e.email}\" مسجل بالفعل بـ ${
+                            e.existingProvider.toProviderDisplayName()
+                        }. سجّل الدخول باستخدام ${e.existingProvider.toProviderDisplayName()}."
                     )
                 }
             } catch (e: Exception) {

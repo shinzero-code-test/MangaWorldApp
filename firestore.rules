@@ -111,6 +111,11 @@ service cloud.firestore {
       allow read, write: if owner(uid);
     }
 
+    match /email_registry/{email} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
+
     match /public/{document=**} {
       allow read: if true;
       allow write: if false;

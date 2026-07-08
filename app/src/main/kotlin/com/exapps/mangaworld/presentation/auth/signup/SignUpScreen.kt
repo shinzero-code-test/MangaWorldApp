@@ -13,11 +13,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.exapps.mangaworld.R
 import com.exapps.mangaworld.presentation.auth.login.MangaTextField
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
@@ -26,6 +28,8 @@ import com.exapps.mangaworld.presentation.theme.MangaColors
 fun SignUpScreen(
     onBack: () -> Unit,
     onSignUp: (email: String, password: String) -> Unit,
+    onGoogleSignInClick: () -> Unit = {},
+    onFacebookLoginClick: () -> Unit = {},
     isLoading: Boolean = false,
     error: String? = null
 ) {
@@ -64,6 +68,50 @@ fun SignUpScreen(
                 color = MangaColors.OnSurfaceVariant
             )
             Spacer(Modifier.height(28.dp))
+
+            // ── Social Sign-Up Buttons ──────────────────────────────────────
+
+            OutlinedButton(
+                onClick = onGoogleSignInClick,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = MangaColors.Surface)
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_google),
+                    contentDescription = "Google",
+                    modifier = Modifier.size(18.dp),
+                    tint = Color.Unspecified
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("التسجيل باستخدام Google", color = MangaColors.OnSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = onFacebookLoginClick,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF1877F2))
+            ) {
+                Text("f", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("التسجيل باستخدام Facebook", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // ── Divider ─────────────────────────────────────────────────────
+
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = MangaColors.SurfaceContainer)
+                Text("  أو  ", color = MangaColors.OnSurfaceVariant, fontSize = 13.sp)
+                HorizontalDivider(modifier = Modifier.weight(1f), color = MangaColors.SurfaceContainer)
+            }
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // ── Email / Password Fields ─────────────────────────────────────
 
             MangaTextField(
                 value = email,

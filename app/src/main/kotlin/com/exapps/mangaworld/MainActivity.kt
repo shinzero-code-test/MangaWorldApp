@@ -237,6 +237,15 @@ private fun MangaApp(
                             com.exapps.mangaworld.presentation.auth.signup.SignUpScreen(
                                 onBack = { postOnboardingScreen = "login" },
                                 onSignUp = loginViewModel::signUpWithEmail,
+                                onGoogleSignInClick = { googleLauncher.launch(googleSignInClient.signInIntent) },
+                                onFacebookLoginClick = {
+                                    val activity = context as? android.app.Activity
+                                    if (activity != null) {
+                                        com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
+                                            activity, listOf("email", "public_profile")
+                                        )
+                                    }
+                                },
                                 isLoading = loginState.isLoading,
                                 error = loginState.error
                             )

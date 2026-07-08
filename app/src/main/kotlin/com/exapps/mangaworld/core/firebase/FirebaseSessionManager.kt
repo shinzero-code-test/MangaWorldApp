@@ -1,37 +1,50 @@
 package com.exapps.mangaworld.core.firebase
 
 import android.content.Context
+import android.util.Base64
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FacebookAuthProvider
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.resume
 
 /**
- * Stores a pending [com.google.firebase.auth.AuthCredential] when account linking is required.
- * Set by [signInWithFacebook] when collision is detected; consumed by [linkPendingFacebookCredential]
- * after the user signs in with the existing provider (e.g. Google).
+ * Maps emails to provider UIDs. Prevents cross-provider duplicate accounts.
+ *
+ * Collection: `email_registry/{email}` → `{ uid: String, provider: String, createdAt: Long }`
+ *
+ * Before Facebook/Google sign-in, the email is fetched from the provider's API and checked
+ * against this registry. If a different UID already owns the email, sign-in is blocked.
  */
-@Volatile
-var pendingFacebookCredential: com.google.firebase.auth.AuthCredential? = null
-    private set
-
 @Singleton
 class FirebaseSessionManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val emailRegistry get() = firestore.collection("email_registry")
+    private val httpClient = OkHttpClient()
 
     val authState: Flow<com.google.firebase.auth.FirebaseUser?> = callbackFlow {
-        val listener = FirebaseAuth.AuthStateListener { firebaseAuth -> trySend(firebaseAuth.currentUser).isSuccess }
+        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            trySend(firebaseAuth.currentUser).isSuccess
+        }
         auth.addAuthStateListener(listener)
         trySend(auth.currentUser)
         awaitClose { auth.removeAuthStateListener(listener) }
@@ -50,18 +63,69 @@ class FirebaseSessionManager @Inject constructor(
 
     fun hasGoogleClientId(): Boolean = googleWebClientId().isNotBlank()
 
+    // ─── Email Registry ──────────────────────────────────────────────────────
+
+    /**
+     * Check if an email is already registered by a DIFFERENT user.
+     * Returns the provider name (e.g. "google.com") if blocked, null if allowed.
+     */
+    private suspend fun checkEmailBlocked(email: String, currentUid: String?): String? {
+        return try {
+            val doc = emailRegistry.document(email.lowercase()).get().await()
+            val existingUid = doc.getString("uid")
+            if (existingUid != null && existingUid != currentUid) {
+                doc.getString("provider") ?: "another provider"
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null // Registry read failure — allow sign-in
+        }
+    }
+
+    /** Register an email in the registry after successful sign-in. */
+    private suspend fun registerEmail(email: String, uid: String, provider: String) {
+        runCatching {
+            emailRegistry.document(email.lowercase()).set(
+                mapOf(
+                    "uid" to uid,
+                    "provider" to provider,
+                    "createdAt" to System.currentTimeMillis()
+                )
+            ).await()
+        }
+    }
+
     // ─── Google ──────────────────────────────────────────────────────────────
 
+    /**
+     * Sign in with Google ID token.
+     *
+     * Before signing in, checks the `email_registry` to see if the email is already
+     * linked to a different account (e.g. Facebook). If so, throws
+     * [CrossProviderCollisionException] with a user-friendly message.
+     */
     suspend fun signInWithGoogleIdToken(idToken: String): String? {
+        val email = getEmailFromIdToken(idToken)
+
+        // Pre-check: is this email already registered with another provider?
+        if (email != null) {
+            val blocked = checkEmailBlocked(email, auth.currentUser?.uid)
+            if (blocked != null) {
+                throw CrossProviderCollisionException(email, blocked)
+            }
+        }
+
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         val current = auth.currentUser
 
-        // If anonymous user, try linking Google to the guest account first
+        // If anonymous, try linking
         if (current != null && current.isAnonymous) {
             try {
-                return current.linkWithCredential(credential).await().user?.uid
-            } catch (e: FirebaseAuthUserCollisionException) {
-                // Email exists with another provider — sign out anonymous, fall through
+                val result = current.linkWithCredential(credential).await()
+                if (email != null) registerEmail(email, result.user!!.uid, "google.com")
+                return result.user?.uid
+            } catch (_: FirebaseAuthUserCollisionException) {
                 auth.signOut()
             } catch (_: Exception) {
                 auth.signOut()
@@ -70,11 +134,23 @@ class FirebaseSessionManager @Inject constructor(
 
         return try {
             val result = auth.signInWithCredential(credential).await()
-            // After successful Google sign-in, check if there's a pending Facebook credential to link
-            linkPendingFacebookCredential()
-            result.user?.uid
+            val uid = result.user?.uid
+            if (email != null && uid != null) registerEmail(email, uid, "google.com")
+            uid
         } catch (e: FirebaseAuthUserCollisionException) {
             throw e
+        }
+    }
+
+    /** Decode email from a Google ID token JWT payload. */
+    private fun getEmailFromIdToken(idToken: String): String? {
+        return try {
+            val parts = idToken.split(".")
+            if (parts.size != 3) return null
+            val payload = String(Base64.decode(parts[1], Base64.URL_SAFE or Base64.NO_WRAP))
+            JSONObject(payload).optString("email").takeIf { it.isNotEmpty() }
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -107,6 +183,8 @@ class FirebaseSessionManager @Inject constructor(
             }
         }.getOrElse {
             auth.createUserWithEmailAndPassword(email, password).await().user?.uid
+        }.also { uid ->
+            if (uid != null) registerEmail(email, uid, "password")
         }
     }
 
@@ -115,63 +193,72 @@ class FirebaseSessionManager @Inject constructor(
     /**
      * Sign in with Facebook.
      *
-     * Follows the official Firebase account-linking pattern:
-     * 1. If user is anonymous → try `linkWithCredential` to upgrade the guest account
-     * 2. If collision → the email is already linked to another provider (e.g. Google).
-     *    Store the pending Facebook credential and throw so the UI can prompt the user
-     *    to sign in with the existing provider. After that sign-in succeeds,
-     *    [linkPendingFacebookCredential] is called to merge Facebook into the existing account.
-     * 3. If no current user → `signInWithCredential` directly. On collision, same as above.
+     * Before calling Firebase, fetches the user's email from the Facebook Graph API
+     * and checks `email_registry` to see if the email is already linked to another
+     * account (e.g. Google). If so, throws [CrossProviderCollisionException].
      */
     suspend fun signInWithFacebook(accessToken: String): String? {
-        val credential = FacebookAuthProvider.getCredential(accessToken)
-        val current = auth.currentUser
+        // Fetch email from Facebook Graph API before calling Firebase
+        val fbEmail = getFacebookEmail(accessToken)
 
-        // If anonymous user, try linking Facebook to the guest account
-        if (current != null && current.isAnonymous) {
-            try {
-                return current.linkWithCredential(credential).await().user?.uid
-            } catch (e: FirebaseAuthUserCollisionException) {
-                // Collision — email is already linked to another provider.
-                // Store the credential so it can be linked after the user signs in
-                // with the existing provider (Google, email, etc.).
-                pendingFacebookCredential = credential
-                throw e
+        // Pre-check: is this email already registered with another provider?
+        if (fbEmail != null) {
+            val blocked = checkEmailBlocked(fbEmail, auth.currentUser?.uid)
+            if (blocked != null) {
+                throw CrossProviderCollisionException(fbEmail, blocked)
             }
         }
 
-        // Non-anonymous or no current user — sign in directly
+        val credential = FacebookAuthProvider.getCredential(accessToken)
+        val current = auth.currentUser
+
+        // If anonymous, try linking
+        if (current != null && current.isAnonymous) {
+            try {
+                val result = current.linkWithCredential(credential).await()
+                if (fbEmail != null) registerEmail(fbEmail, result.user!!.uid, "facebook.com")
+                return result.user?.uid
+            } catch (_: FirebaseAuthUserCollisionException) {
+                auth.signOut()
+            } catch (_: Exception) {
+                auth.signOut()
+            }
+        }
+
         return try {
-            auth.signInWithCredential(credential).await().user?.uid
+            val result = auth.signInWithCredential(credential).await()
+            val uid = result.user?.uid
+            val email = fbEmail ?: result.user?.email
+            if (email != null && uid != null) registerEmail(email, uid, "facebook.com")
+            uid
         } catch (e: FirebaseAuthUserCollisionException) {
-            pendingFacebookCredential = credential
-            throw e
+            // Firebase detected the collision (verified email) — we know it's another provider
+            throw CrossProviderCollisionException(
+                e.email ?: fbEmail ?: "unknown",
+                "another provider"
+            )
         }
     }
 
-    /**
-     * Called after a successful sign-in with another provider (e.g. Google) to link
-     * the pending Facebook credential to the now-signed-in user's account.
-     *
-     * This completes the merge: the existing Google account now also has Facebook linked.
-     */
-    suspend fun linkPendingFacebookCredential(): Boolean {
-        val pending = pendingFacebookCredential ?: return false
-        val user = auth.currentUser ?: return false
-        return try {
-            user.linkWithCredential(pending).await()
-            true
-        } catch (_: Exception) {
-            false
-        } finally {
-            pendingFacebookCredential = null
+    /** Fetch user email from the Facebook Graph API using the access token. */
+    private suspend fun getFacebookEmail(accessToken: String): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("https://graph.facebook.com/me?fields=email&access_token=$accessToken")
+                    .build()
+                val response = httpClient.newCall(request).execute()
+                val body = response.body?.string() ?: return@withContext null
+                JSONObject(body).optString("email").takeIf { it.isNotEmpty() }
+            } catch (_: Exception) {
+                null
+            }
         }
     }
 
     // ─── Sign Out ────────────────────────────────────────────────────────────
 
     suspend fun signOut() {
-        pendingFacebookCredential = null
         googleSignInClient().signOut().await()
         auth.signOut()
     }
@@ -190,3 +277,15 @@ class FirebaseSessionManager @Inject constructor(
         return if (id == 0) "" else context.getString(id)
     }
 }
+
+/**
+ * Thrown when a user tries to sign in with a provider whose email is already registered
+ * with a different provider.
+ *
+ * @property email The conflicting email address.
+ * @property existingProvider The provider that already owns this email (e.g. "google.com").
+ */
+class CrossProviderCollisionException(
+    val email: String,
+    val existingProvider: String
+) : Exception("Email $email is already registered with $existingProvider")
