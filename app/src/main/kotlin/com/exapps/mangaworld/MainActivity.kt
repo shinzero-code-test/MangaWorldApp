@@ -202,12 +202,16 @@ private fun MangaApp(
                     val googleLauncher = rememberLauncherForActivityResult(
                         contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
                     ) { result ->
-                        val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
-                        val idToken = task.result?.idToken
-                        if (idToken != null) {
-                            loginViewModel.signInWithGoogleIdToken(idToken)
-                        } else {
-                            loginViewModel.clearError()
+                        try {
+                            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                            val idToken = task.result?.idToken
+                            if (idToken != null) {
+                                loginViewModel.signInWithGoogleIdToken(idToken)
+                            } else {
+                                loginViewModel.clearError()
+                            }
+                        } catch (_: Exception) {
+                            loginViewModel.clearError() // user cancelled or error
                         }
                     }
 

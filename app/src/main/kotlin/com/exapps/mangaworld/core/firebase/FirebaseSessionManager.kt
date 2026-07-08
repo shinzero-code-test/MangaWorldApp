@@ -83,14 +83,27 @@ class FirebaseSessionManager @Inject constructor(
     suspend fun signInWithFacebook(accessToken: String): String? {
         val credential = FacebookAuthProvider.getCredential(accessToken)
         val current = auth.currentUser
-        return runCatching {
-            when {
-                current == null -> auth.signInWithCredential(credential).await().user?.uid
-                current.isAnonymous -> current.linkWithCredential(credential).await().user?.uid
-                else -> auth.signInWithCredential(credential).await().user?.uid
+
+        // If anonymous user, try linking Facebook to the guest account first
+        if (current != null && current.isAnonymous) {
+            return try {
+                current.linkWithCredential(credential).await().user?.uid
+            } catch (linkError: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
+                // Email already exists with another provider — sign in with the existing account
+                auth.signInWithCredential(credential).await().user?.uid
+            } catch (e: Exception) {
+                // Other linking error — fall back to direct sign-in
+                runCatching { auth.signInWithCredential(credential).await().user?.uid }.getOrNull()
             }
-        }.getOrElse {
+        }
+
+        // Non-anonymous or no current user — sign in directly
+        return try {
             auth.signInWithCredential(credential).await().user?.uid
+        } catch (e: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
+            // Email already linked to a different provider (e.g., Google).
+            // Re-throw so the ViewModel can show a user-friendly message.
+            throw e
         }
     }
 

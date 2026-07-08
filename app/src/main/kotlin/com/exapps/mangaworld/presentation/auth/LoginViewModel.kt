@@ -1,8 +1,5 @@
 package com.exapps.mangaworld.presentation.auth
 
-import android.app.Activity
-import android.content.Intent
-import androidx.activity.result.ActivityResult
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -122,6 +119,15 @@ class LoginViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول بـ Facebook.") }
+                }
+            } catch (e: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = "يوجد حساب مسجل بالبريد \"${
+                            e.email ?: ""
+                        }\" بطريقة أخرى. سجّل الدخول بالطريقة الأصلية أولاً."
+                    )
                 }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
