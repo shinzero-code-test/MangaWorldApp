@@ -107,6 +107,10 @@ service cloud.firestore {
       allow read, update, delete: if canModerate();
     }
 
+    match /user_achievements/{uid} {
+      allow read, write: if owner(uid);
+    }
+
     match /public/{document=**} {
       allow read: if true;
       allow write: if false;

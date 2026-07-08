@@ -104,6 +104,15 @@ class LoginViewModel @Inject constructor(
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول بـ Google.") }
                 }
+            } catch (e: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = "يوجد حساب مسجل بالبريد \"${
+                            e.email ?: ""
+                        }\" بطريقة أخرى. سجّل الدخول بالطريقة الأصلية أولاً."
+                    )
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
             }

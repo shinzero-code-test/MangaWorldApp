@@ -43,14 +43,23 @@ class FirebaseSessionManager @Inject constructor(
     suspend fun signInWithGoogleIdToken(idToken: String): String? {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         val current = auth.currentUser
-        return runCatching {
-            when {
-                current == null -> auth.signInWithCredential(credential).await().user?.uid
-                current.isAnonymous -> current.linkWithCredential(credential).await().user?.uid
-                else -> auth.signInWithCredential(credential).await().user?.uid
+
+        // If anonymous user, try linking Google to the guest account first
+        if (current != null && current.isAnonymous) {
+            try {
+                return current.linkWithCredential(credential).await().user?.uid
+            } catch (e: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
+                // Email exists with another provider — sign out anonymous, fall through to direct sign-in
+                auth.signOut()
+            } catch (_: Exception) {
+                auth.signOut()
             }
-        }.getOrElse {
+        }
+
+        return try {
             auth.signInWithCredential(credential).await().user?.uid
+        } catch (e: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
+            throw e
         }
     }
 
@@ -86,25 +95,52 @@ class FirebaseSessionManager @Inject constructor(
 
         // If anonymous user, try linking Facebook to the guest account first
         if (current != null && current.isAnonymous) {
-            return try {
-                current.linkWithCredential(credential).await().user?.uid
+            try {
+                return current.linkWithCredential(credential).await().user?.uid
             } catch (linkError: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
-                // Email already exists with another provider — sign in with the existing account
-                auth.signInWithCredential(credential).await().user?.uid
-            } catch (e: Exception) {
-                // Other linking error — fall back to direct sign-in
-                runCatching { auth.signInWithCredential(credential).await().user?.uid }.getOrNull()
+                // Email exists with another provider — fall through to direct sign-in below,
+                // which will also detect the collision
+            } catch (_: Exception) {
+                // Other linking error — fall through to direct sign-in
+            }
+            // Sign out the anonymous user so signInWithCredential starts fresh
+            auth.signOut()
+        }
+
+        // Sign in with Facebook credential
+        val result = try {
+            auth.signInWithCredential(credential).await()
+        } catch (e: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
+            // Firebase directly detected the collision — email is already linked to another provider
+            throw e
+        }
+
+        val user = result.user ?: return null
+
+        // Post-sign-in duplicate detection: Facebook may succeed without throwing if the
+        // email is unverified. Check if the email is already linked to another provider.
+        val email = user.email
+        if (email != null) {
+            try {
+                val methods = auth.fetchSignInMethodsForEmail(email).await().signInMethods.orEmpty()
+                if (methods.any { it != "facebook.com" }) {
+                    // Duplicate detected — another provider (Google, email, etc.) owns this email.
+                    // Delete the freshly created duplicate and throw.
+                    user.delete().await()
+                    auth.signOut()
+                    throw com.google.firebase.auth.FirebaseAuthUserCollisionException(
+                        "auth/email-already-in-use",
+                        com.google.firebase.auth.EmailAuthProvider.getCredential(email, "")
+                    )
+                }
+            } catch (e: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
+                throw e // re-throw our own collision
+            } catch (_: Exception) {
+                // fetchSignInMethodsForEmail can fail (e.g., not enabled) — let the account stand
             }
         }
 
-        // Non-anonymous or no current user — sign in directly
-        return try {
-            auth.signInWithCredential(credential).await().user?.uid
-        } catch (e: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
-            // Email already linked to a different provider (e.g., Google).
-            // Re-throw so the ViewModel can show a user-friendly message.
-            throw e
-        }
+        return user.uid
     }
 
     suspend fun signOut() {
