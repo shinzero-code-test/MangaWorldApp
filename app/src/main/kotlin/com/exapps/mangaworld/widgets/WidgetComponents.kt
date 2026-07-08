@@ -13,8 +13,8 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.background
 import androidx.glance.action.clickable
-import androidx.glance.appwidget.border
 import androidx.glance.appwidget.cornerRadius
+import androidx.glance.border
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
@@ -22,6 +22,7 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -34,13 +35,11 @@ import androidx.glance.text.TextStyle
 import com.exapps.mangaworld.R
 
 /**
- * Solid blood-red button colors — matches the primary "متابعة القراءة" / زر أساسي
- * pill from the preview mock. We pin this explicitly rather than relying on
- * ButtonDefaults.buttonColors() so the button always renders brand-red instead
- * of whatever the platform's dynamic accent happens to be.
+ * Button colors — matches the primary "متابعة القراءة" / زر أساسي
+ * pill from the preview mock.
  */
-private val mangaButtonColors: ButtonColors
-    @Composable get() = ButtonColors(
+private val mangaButtonColors
+    @Composable get() = ButtonDefaults.buttonColors(
         backgroundColor = GlanceTheme.colors.primary,
         contentColor = GlanceTheme.colors.onPrimary
     )
