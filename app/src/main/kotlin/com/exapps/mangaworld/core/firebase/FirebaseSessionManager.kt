@@ -66,15 +66,18 @@ class FirebaseSessionManager @Inject constructor(
     // ─── Email Registry ──────────────────────────────────────────────────────
 
     /**
-     * Check if an email is already registered by a DIFFERENT user.
+     * Check if an email is already registered by a DIFFERENT provider.
      * Returns the provider name (e.g. "google.com") if blocked, null if allowed.
+     *
+     * Allows re-login with the same provider — only blocks cross-provider duplicates.
      */
-    private suspend fun checkEmailBlocked(email: String, currentUid: String?): String? {
+    private suspend fun checkEmailBlocked(email: String, thisProvider: String): String? {
         return try {
             val doc = emailRegistry.document(email.lowercase()).get().await()
+            val existingProvider = doc.getString("provider")
             val existingUid = doc.getString("uid")
-            if (existingUid != null && existingUid != currentUid) {
-                doc.getString("provider") ?: "another provider"
+            if (existingUid != null && existingProvider != null && existingProvider != thisProvider) {
+                existingProvider
             } else {
                 null
             }
@@ -110,7 +113,7 @@ class FirebaseSessionManager @Inject constructor(
 
         // Pre-check: is this email already registered with another provider?
         if (email != null) {
-            val blocked = checkEmailBlocked(email, auth.currentUser?.uid)
+            val blocked = checkEmailBlocked(email, "google.com")
             if (blocked != null) {
                 throw CrossProviderCollisionException(email, blocked)
             }
@@ -203,7 +206,7 @@ class FirebaseSessionManager @Inject constructor(
 
         // Pre-check: is this email already registered with another provider?
         if (fbEmail != null) {
-            val blocked = checkEmailBlocked(fbEmail, auth.currentUser?.uid)
+            val blocked = checkEmailBlocked(fbEmail, "facebook.com")
             if (blocked != null) {
                 throw CrossProviderCollisionException(fbEmail, blocked)
             }
