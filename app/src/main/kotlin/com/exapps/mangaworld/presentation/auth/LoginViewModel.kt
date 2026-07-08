@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
+import com.exapps.mangaworld.core.firebase.pendingFacebookCredential
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +22,10 @@ data class AuthUiState(
     val isSignedIn: Boolean = false,
     val email: String = "",
     val password: String = "",
-    val passwordResetSent: Boolean = false
+    val passwordResetSent: Boolean = false,
+    /** True when a Facebook collision was detected and the user should sign in with the
+     *  existing provider to complete account linking. */
+    val needsAccountLinking: Boolean = false
 )
 
 @HiltViewModel
@@ -100,7 +104,7 @@ class LoginViewModel @Inject constructor(
             try {
                 val uid = sessionManager.signInWithGoogleIdToken(idToken)
                 if (uid != null) {
-                    _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
+                    _uiState.update { it.copy(isLoading = false, isSignedIn = true, needsAccountLinking = false) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول بـ Google.") }
                 }
@@ -119,9 +123,17 @@ class LoginViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Sign in with Facebook.
+     *
+     * When `FirebaseAuthUserCollisionException` is thrown, it means the email is already
+     * linked to another provider (e.g. Google). The pending Facebook credential is stored
+     * in [pendingFacebookCredential] so that after the user signs in with the existing
+     * provider, [linkPendingFacebookCredential] can merge Facebook into that account.
+     */
     fun signInWithFacebook(accessToken: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { it.copy(isLoading = true, error = null, needsAccountLinking = false) }
             try {
                 val uid = sessionManager.signInWithFacebook(accessToken)
                 if (uid != null) {
@@ -130,12 +142,16 @@ class LoginViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول بـ Facebook.") }
                 }
             } catch (e: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
+                // A pending Facebook credential is now stored — tell the user to sign in
+                // with the existing provider. After that succeeds, the credential will be
+                // automatically linked by [FirebaseSessionManager.signInWithGoogleIdToken].
                 _uiState.update {
                     it.copy(
                         isLoading = false,
+                        needsAccountLinking = true,
                         error = "يوجد حساب مسجل بالبريد \"${
                             e.email ?: ""
-                        }\" بطريقة أخرى. سجّل الدخول بالطريقة الأصلية أولاً."
+                        }\" بطريقة أخرى. سجّل الدخول بالطريقة الأصلية لدمج الحسابين."
                     )
                 }
             } catch (e: Exception) {
