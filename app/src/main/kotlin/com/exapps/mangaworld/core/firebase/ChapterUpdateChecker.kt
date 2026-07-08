@@ -21,9 +21,12 @@ import javax.inject.Singleton
 
 /**
  * Local chapter update detector — checks sources for new chapters
- * for favorited manga and shows notifications without FCM.
+ * on favorited manga and shows notifications without FCM.
  *
- * Runs on app startup and periodically via WorkManager.
+ * Detection strategy: For each favorited manga, we look at the home page's
+ * `latestChapters` list and find the HIGHEST chapter number for that manga.
+ * We compare it against the previously stored max chapter number. If the
+ * current max is higher, a new chapter was published.
  */
 @Singleton
 class ChapterUpdateChecker @Inject constructor(
@@ -40,10 +43,15 @@ class ChapterUpdateChecker @Inject constructor(
         context.getSharedPreferences("chapter_update_prefs", Context.MODE_PRIVATE)
     }
 
-    /**
-     * Check all sources for new chapters on favorited manga.
-     * Should be called on app startup and periodically.
-     */
+    private data class NewChapterInfo(
+        val title: String,
+        val info: String,
+        val mangaId: String,
+        val sourceId: String,
+        val slug: String,
+        val coverUrl: String
+    )
+
     suspend fun checkForUpdates() = withContext(Dispatchers.IO) {
         val settings = settingsRepository.getAppSettings().first()
         if (!settings.enableNotifications) return@withContext
@@ -52,16 +60,13 @@ class ChapterUpdateChecker @Inject constructor(
         val lastCheck = prefs.getLong("last_update_check", 0L)
         val now = System.currentTimeMillis()
         if (now - lastCheck < 2 * 60 * 60 * 1000L) return@withContext
-        // commit() ensures the throttle timestamp is persisted before network calls begin;
-        // apply() could be lost on process death, causing repeated checks
         prefs.edit().putLong("last_update_check", now).commit()
 
         val favorites = favoriteDao.getFavoritesList()
         if (favorites.isEmpty()) return@withContext
 
-        // Group favorites by source for efficient checking
         val favoritesBySource = favorites.groupBy { it.sourceId }
-        val newChapters = mutableListOf<Pair<String, String>>() // (mangaTitle, chapterInfo)
+        val newChapters = mutableListOf<NewChapterInfo>()
 
         for ((sourceId, sourceFavorites) in favoritesBySource) {
             if (sourceId !in settings.enabledSources) continue
@@ -73,41 +78,39 @@ class ChapterUpdateChecker @Inject constructor(
                 )
 
                 for (favorite in sourceFavorites) {
-                    // Find chapters in home data that belong to this manga
-                    val latestChapters = homeData.latestChapters.filter {
+                    val mangaChapters = homeData.latestChapters.filter {
                         it.mangaId == favorite.mangaId || it.mangaSlug == favorite.slug
                     }
+                    if (mangaChapters.isEmpty()) continue
 
-                    if (latestChapters.isNotEmpty()) {
-                        // Compare the number of latest chapters fetched from the source
-                        // against the count stored from the previous check
-                        val fetchedCount = latestChapters.size
-                        val lastKnownCount = prefs.getInt("count_${favorite.mangaId}", -1)
-                        if (lastKnownCount == -1) {
-                            // First time seeing this manga — store baseline, don't notify
-                            prefs.edit().putInt("count_${favorite.mangaId}", fetchedCount).apply()
-                        } else if (fetchedCount > lastKnownCount) {
-                            val diff = fetchedCount - lastKnownCount
-                            newChapters.add(favorite.title to "$diff فصل${if (diff > 1) " جديدة" else " جديد"}")
-                            prefs.edit().putInt("count_${favorite.mangaId}", fetchedCount).apply()
-                        }
+                    val currentMaxChapter = mangaChapters.maxOf { it.chapterNumber }
+                    val lastKnownMax = prefs.getFloat("max_chapter_${favorite.mangaId}", -1f)
+
+                    if (lastKnownMax < 0f) {
+                        prefs.edit().putFloat("max_chapter_${favorite.mangaId}", currentMaxChapter).apply()
+                    } else if (currentMaxChapter > lastKnownMax) {
+                        val diff = (currentMaxChapter - lastKnownMax).toInt().coerceAtLeast(1)
+                        newChapters.add(
+                            NewChapterInfo(
+                                title = favorite.title,
+                                info = "$diff فصل${if (diff > 1) " جديدة" else " جديد"}",
+                                mangaId = favorite.mangaId,
+                                sourceId = favorite.sourceId,
+                                slug = favorite.slug,
+                                coverUrl = favorite.coverUrl
+                            )
+                        )
+                        prefs.edit().putFloat("max_chapter_${favorite.mangaId}", currentMaxChapter).apply()
                     }
                 }
-            } catch (_: Exception) {
-                // Skip failed sources silently
-            }
+            } catch (_: Exception) { }
         }
 
-        // Show notification if new chapters found
         if (newChapters.isNotEmpty()) {
             showNewChaptersNotification(newChapters)
         }
     }
 
-    /**
-     * Snapshot current chapter counts without showing notifications.
-     * Call this to initialize the baseline for future comparisons.
-     */
     suspend fun snapshotCurrentCounts() = withContext(Dispatchers.IO) {
         val favorites = favoriteDao.getFavoritesList()
         val favoritesBySource = favorites.groupBy { it.sourceId }
@@ -118,47 +121,78 @@ class ChapterUpdateChecker @Inject constructor(
                     com.exapps.mangaworld.domain.model.HomeData()
                 )
                 for (favorite in sourceFavorites) {
-                    val fetchedCount = homeData.latestChapters.filter {
-                        it.mangaId == favorite.mangaId || it.mangaSlug == favorite.slug
-                    }.size
-                    if (fetchedCount > 0) {
-                        prefs.edit().putInt("count_${favorite.mangaId}", fetchedCount).apply()
-                    }
+                    val maxChapter = homeData.latestChapters
+                        .filter { it.mangaId == favorite.mangaId || it.mangaSlug == favorite.slug }
+                        .maxOfOrNull { it.chapterNumber } ?: continue
+                    prefs.edit().putFloat("max_chapter_${favorite.mangaId}", maxChapter).apply()
                 }
             } catch (_: Exception) { }
         }
     }
 
-    private fun showNewChaptersNotification(chapters: List<Pair<String, String>>) {
-        val intent = AppLaunchIntents.latestUpdates(context)
-        val pendingIntent = PendingIntent.getActivity(
+    private fun showNewChaptersNotification(chapters: List<NewChapterInfo>) {
+        // Content intent — open latest updates
+        val contentIntent = AppLaunchIntents.latestUpdates(context)
+        val pendingContentIntent = PendingIntent.getActivity(
             context,
             NOTIFICATION_ID_NEW_CHAPTERS,
-            intent,
+            contentIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val title = if (chapters.size == 1) {
-            "فصل جديد: ${chapters[0].first}"
+            "فصل جديد: ${chapters[0].title}"
         } else {
             "${chapters.size} فصول جديدة في مفضلتك"
         }
 
-        val body = chapters.take(5).joinToString("\n") { (manga, info) ->
-            "• $manga — $info"
-        }
+        val body = chapters.take(5).joinToString("\n") { "• ${it.title} — ${it.info}" }
 
-        val notification = NotificationCompat.Builder(context, MangaWorldApp.CLOUD_CHANNEL_ID)
+        // "Read Now" action
+        val readAction = NotificationCompat.Action(
+            android.R.drawable.stat_notify_chat,
+            "اقرأ الآن",
+            pendingContentIntent
+        )
+
+        // "Add to Favourite" action — only for single-manga notifications
+        val favAction = if (chapters.size == 1) {
+            val ch = chapters[0]
+            val favIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+                action = NotificationActionReceiver.ACTION_ADD_FAVORITE
+                putExtra(NotificationActionReceiver.EXTRA_MANGA_ID, ch.mangaId)
+                putExtra(NotificationActionReceiver.EXTRA_TITLE, ch.title)
+                putExtra(NotificationActionReceiver.EXTRA_SOURCE_ID, ch.sourceId)
+                putExtra(NotificationActionReceiver.EXTRA_SLUG, ch.slug)
+                putExtra(NotificationActionReceiver.EXTRA_COVER_URL, ch.coverUrl)
+                putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, NOTIFICATION_ID_NEW_CHAPTERS)
+            }
+            val favPendingIntent = PendingIntent.getBroadcast(
+                context,
+                NOTIFICATION_ID_NEW_CHAPTERS + 1,
+                favIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            NotificationCompat.Action(
+                android.R.drawable.btn_star,
+                "إضافة للمفضلة",
+                favPendingIntent
+            )
+        } else null
+
+        val builder = NotificationCompat.Builder(context, MangaWorldApp.CLOUD_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setContentIntent(pendingIntent)
+            .setContentIntent(pendingContentIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .build()
+            .addAction(readAction)
 
-        notificationManager.notify(NOTIFICATION_ID_NEW_CHAPTERS, notification)
+        favAction?.let { builder.addAction(it) }
+
+        notificationManager.notify(NOTIFICATION_ID_NEW_CHAPTERS, builder.build())
     }
 
     companion object {

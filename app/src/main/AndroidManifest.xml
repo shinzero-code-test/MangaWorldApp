@@ -157,6 +157,11 @@
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="cloud_channel" />
 
+        <!-- Notification action receiver -->
+        <receiver
+            android:name=".core.firebase.NotificationActionReceiver"
+            android:exported="false" />
+
         <!-- Facebook SDK -->
         <meta-data
             android:name="com.facebook.sdk.ApplicationId"

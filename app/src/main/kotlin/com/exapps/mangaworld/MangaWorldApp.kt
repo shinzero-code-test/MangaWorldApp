@@ -20,6 +20,7 @@ import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderF
 import com.exapps.mangaworld.core.firebase.FirebaseStartupCoordinator
 import com.exapps.mangaworld.core.firebase.FirebaseSyncWorker
 import com.exapps.mangaworld.core.firebase.FavoriteDigestWorker
+import com.exapps.mangaworld.core.firebase.SuggestionNotificationWorker
 import com.exapps.mangaworld.core.widget.AppShortcutManager
 import com.exapps.mangaworld.core.widget.WidgetRefreshScheduler
 import dagger.hilt.android.HiltAndroidApp
@@ -107,6 +108,14 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
             "favorite_digest_periodic",
             ExistingPeriodicWorkPolicy.UPDATE,
             PeriodicWorkRequestBuilder<FavoriteDigestWorker>(6, TimeUnit.HOURS)
+                .setConstraints(constraints)
+                .build()
+        )
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "suggestion_notification_periodic",
+            ExistingPeriodicWorkPolicy.UPDATE,
+            PeriodicWorkRequestBuilder<SuggestionNotificationWorker>(12, TimeUnit.HOURS)
                 .setConstraints(constraints)
                 .build()
         )

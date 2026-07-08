@@ -14,6 +14,7 @@ data class MangaSuggestion(
     val title: String,
     val sourceId: String,
     val relevance: Float,
+    val coverUrl: String = "",
     val lastUpdated: Long = System.currentTimeMillis()
 )
 
@@ -36,6 +37,7 @@ class SuggestionsManager @Inject constructor(
                     title = obj.getString("title"),
                     sourceId = obj.getString("sourceId"),
                     relevance = obj.getDouble("relevance").toFloat(),
+                    coverUrl = obj.optString("coverUrl", ""),
                     lastUpdated = obj.optLong("lastUpdated", 0L)
                 )
             }.sortedByDescending { it.relevance }.take(limit)
@@ -52,6 +54,7 @@ class SuggestionsManager @Inject constructor(
                 put("title", s.title)
                 put("sourceId", s.sourceId)
                 put("relevance", s.relevance.toDouble())
+                put("coverUrl", s.coverUrl)
                 put("lastUpdated", s.lastUpdated)
             }
             arr.put(obj)
@@ -70,6 +73,15 @@ class SuggestionsManager @Inject constructor(
                 relevance = relevance
             )
         )
+        updateSuggestions(current.take(100))
+    }
+
+    fun addSuggestions(suggestions: List<MangaSuggestion>) {
+        val current = getSuggestions(100).toMutableList()
+        for (s in suggestions) {
+            current.removeAll { it.mangaId == s.mangaId }
+            current.add(s)
+        }
         updateSuggestions(current.take(100))
     }
 
