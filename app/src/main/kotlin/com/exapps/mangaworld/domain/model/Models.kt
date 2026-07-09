@@ -358,6 +358,7 @@ data class CommunityProfile(
     val uid: String,
     val username: String,
     val avatarUrl: String? = null,
+    val bannerUrl: String? = null,
     val badgeLabel: String = "Beginner",
     val role: String = "reader",
     val isPublic: Boolean = true,

@@ -169,10 +169,16 @@ fun MangaNavGraph(
             )
         }
         composable(Screen.UserLists.route) {
-            UserListsScreen(onBack = { navController.popBackStack() })
+            UserListsScreen(
+                onBack = { navController.popBackStack() },
+                onItemClick = { sourceId, slug -> navController.navigate(Screen.Detail.createRoute(sourceId, slug)) }
+            )
         }
         composable(Screen.PublicProfile.route, arguments = listOf(navArgument("userId") { type = NavType.StringType })) {
-            PublicProfileScreen(onBack = { navController.popBackStack() })
+            PublicProfileScreen(
+                onBack = { navController.popBackStack() },
+                onItemClick = { sourceId, slug -> navController.navigate(Screen.Detail.createRoute(sourceId, slug)) }
+            )
         }
         composable(Screen.Notifications.route) {
             NotificationCenterScreen(

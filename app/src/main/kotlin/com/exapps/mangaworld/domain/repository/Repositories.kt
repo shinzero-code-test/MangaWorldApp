@@ -120,12 +120,13 @@ interface CommunityRepository {
     fun observeChatMessages(roomId: String = "global"): Flow<List<CommunityChatMessage>>
     fun observeUserLists(): Flow<List<CustomUserList>>
     fun observeListItems(listId: String): Flow<List<CustomUserListItem>>
+    fun observePublicListItems(userId: String, listId: String): Flow<List<CustomUserListItem>>
     fun observePublicProfile(userId: String): Flow<CommunityProfile?>
     fun observePublicLists(userId: String): Flow<List<CustomUserList>>
     fun observePublicActivity(userId: String): Flow<List<CommunityComment>>
     fun observeModerationReports(): Flow<List<ModerationReport>>
     suspend fun getCurrentProfile(): CommunityProfile?
-    suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String? = null)
+    suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String? = null, bannerUrl: String? = null)
     suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean)
     suspend fun createOrUpdateList(listId: String?, name: String, description: String, coverUrl: String, rating: Float, genres: List<String>, isPublic: Boolean): String
     suspend fun deleteList(listId: String)

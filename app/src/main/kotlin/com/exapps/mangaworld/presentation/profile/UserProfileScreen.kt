@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -72,6 +73,10 @@ import com.exapps.mangaworld.domain.model.CommunityNotification
 import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.CustomUserList
 import com.exapps.mangaworld.domain.repository.CommunityRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -89,6 +94,9 @@ class UserProfileViewModel @Inject constructor(
     private val readingStatsStore: ReadingStatsStore,
     private val cloudinaryUploader: com.exapps.mangaworld.core.firebase.CloudinaryUploader
 ) : ViewModel() {
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
     val profile = kotlinx.coroutines.flow.flow { emit(communityRepository.getCurrentProfile()) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val notifications = communityRepository.observeNotifications(20)
@@ -105,23 +113,58 @@ class UserProfileViewModel @Inject constructor(
 
     var avatarUri by mutableStateOf<Uri?>(null)
         private set
+    var bannerUri by mutableStateOf<Uri?>(null)
+        private set
 
-    fun updateAvatarUri(uri: Uri) {
-        avatarUri = uri
+    init {
+        viewModelScope.launch {
+            // Wait for profile to load
+            profile.first { it != null }
+            _isLoading.value = false
+        }
     }
+
+    fun updateAvatarUri(uri: Uri) { avatarUri = uri }
+    fun updateBannerUri(uri: Uri) { bannerUri = uri }
 
     fun uploadAvatar(uri: Uri) {
         viewModelScope.launch {
-            val url = cloudinaryUploader.uploadImage(uri, folder = "avatars")
-            if (url != null) {
-                val current = communityRepository.getCurrentProfile()
+            val current = communityRepository.getCurrentProfile()
+            // Delete old avatar from Cloudinary
+            current?.avatarUrl?.let { oldUrl ->
+                cloudinaryUploader.extractPublicId(oldUrl)?.let { cloudinaryUploader.deleteImage(it) }
+            }
+            val result = cloudinaryUploader.uploadImage(uri, folder = "avatars")
+            if (result != null) {
                 communityRepository.upsertProfile(
                     username = current?.username ?: "",
                     bio = current?.bio ?: "",
                     isPublic = current?.isPublic ?: true,
-                    avatarUrl = url
+                    avatarUrl = result.url,
+                    bannerUrl = current?.bannerUrl
                 )
                 avatarUri = null
+            }
+        }
+    }
+
+    fun uploadBanner(uri: Uri) {
+        viewModelScope.launch {
+            val current = communityRepository.getCurrentProfile()
+            // Delete old banner from Cloudinary
+            current?.bannerUrl?.let { oldUrl ->
+                cloudinaryUploader.extractPublicId(oldUrl)?.let { cloudinaryUploader.deleteImage(it) }
+            }
+            val result = cloudinaryUploader.uploadImage(uri, folder = "banners")
+            if (result != null) {
+                communityRepository.upsertProfile(
+                    username = current?.username ?: "",
+                    bio = current?.bio ?: "",
+                    isPublic = current?.isPublic ?: true,
+                    avatarUrl = current?.avatarUrl,
+                    bannerUrl = result.url
+                )
+                bannerUri = null
             }
         }
     }
@@ -158,6 +201,7 @@ fun UserProfileScreen(
     onOpenReadingStats: () -> Unit,
     viewModel: UserProfileViewModel = hiltViewModel()
 ) {
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val profile by viewModel.profile.collectAsStateWithLifecycle()
     val lists by viewModel.lists.collectAsStateWithLifecycle()
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
@@ -165,6 +209,7 @@ fun UserProfileScreen(
     val totalMangaRead by viewModel.totalMangaRead.collectAsStateWithLifecycle()
     val currentStreak by viewModel.currentStreak.collectAsStateWithLifecycle()
     val avatarUri = viewModel.avatarUri
+    val bannerUri = viewModel.bannerUri
 
     var showListsPublic by remember(profile?.showListsPublic) { mutableStateOf(profile?.showListsPublic ?: true) }
     var showActivityPublic by remember(profile?.showActivityPublic) { mutableStateOf(profile?.showActivityPublic ?: true) }
@@ -173,6 +218,16 @@ fun UserProfileScreen(
 
     val avatarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { viewModel.uploadAvatar(it) }
+    }
+    val bannerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { viewModel.uploadBanner(it) }
+    }
+
+    if (isLoading) {
+        Box(modifier = Modifier.fillMaxSize().background(MangaColors.Background), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = MangaColors.Cyan)
+        }
+        return
     }
 
     Column(
@@ -185,7 +240,9 @@ fun UserProfileScreen(
         ProfileHeader(
             profile = profile,
             avatarUri = avatarUri,
-            onAvatarClick = { avatarLauncher.launch("image/*") }
+            bannerUri = bannerUri,
+            onAvatarClick = { avatarLauncher.launch("image/*") },
+            onBannerClick = { bannerLauncher.launch("image/*") }
         )
 
         StatsRow(
@@ -238,34 +295,78 @@ fun UserProfileScreen(
 // =====================================================================================
 
 @Composable
-private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, onAvatarClick: () -> Unit) {
+private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, bannerUri: Uri?, onAvatarClick: () -> Unit, onBannerClick: () -> Unit) {
     Box(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(HeroCoverHeight)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(MangaColors.PrimaryDim.copy(alpha = 0.45f), MangaColors.Background)
-                    )
+                .clickable(onClick = onBannerClick)
+        ) {
+            // Banner image or gradient fallback
+            val bannerModel: String? = bannerUri?.toString() ?: profile?.bannerUrl
+            if (!bannerModel.isNullOrBlank()) {
+                AsyncImage(
+                    model = bannerModel,
+                    contentDescription = "غلاف الملف الشخصي",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
-                .drawBehind {
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(MangaColors.Cyan.copy(alpha = 0.2f), Color.Transparent),
-                            center = Offset(size.width * 0.2f, size.height * 0.25f),
-                            radius = size.width * 0.7f
+                // Gradient overlay for readability
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, MangaColors.Background.copy(alpha = 0.7f))
+                            )
                         )
-                    )
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(MangaColors.PrimaryLight.copy(alpha = 0.16f), Color.Transparent),
-                            center = Offset(size.width * 0.85f, size.height * 1.0f),
-                            radius = size.width * 0.65f
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(MangaColors.PrimaryDim.copy(alpha = 0.45f), MangaColors.Background)
+                            )
                         )
-                    )
-                }
-        )
+                        .drawBehind {
+                            drawRect(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(MangaColors.Cyan.copy(alpha = 0.2f), Color.Transparent),
+                                    center = Offset(size.width * 0.2f, size.height * 0.25f),
+                                    radius = size.width * 0.7f
+                                )
+                            )
+                            drawRect(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(MangaColors.PrimaryLight.copy(alpha = 0.16f), Color.Transparent),
+                                    center = Offset(size.width * 0.85f, size.height * 1.0f),
+                                    radius = size.width * 0.65f
+                                )
+                            )
+                        }
+                )
+            }
+            // Banner edit badge
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.CameraAlt,
+                    contentDescription = "تغيير الغلاف",
+                    tint = Color.White,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
 
         Column(
             modifier = Modifier

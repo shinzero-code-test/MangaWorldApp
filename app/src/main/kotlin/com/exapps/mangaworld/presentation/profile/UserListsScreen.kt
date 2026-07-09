@@ -89,14 +89,30 @@ class UserListsViewModel @Inject constructor(
     fun selectList(id: String?) { _selectedListId.value = id }
     fun saveList(listId: String?, name: String, description: String, coverUrl: String, rating: Float, genres: List<String>, isPublic: Boolean) {
         viewModelScope.launch {
+            // If editing an existing list with a new cover, delete the old one
+            if (listId != null) {
+                val existing = lists.value.find { it.id == listId }
+                if (existing != null && existing.coverUrl != coverUrl && existing.coverUrl.isNotBlank()) {
+                    cloudinaryUploader.extractPublicId(existing.coverUrl)?.let { cloudinaryUploader.deleteImage(it) }
+                }
+            }
             runCatching { communityRepository.createOrUpdateList(listId, name, description, coverUrl, rating, genres, isPublic) }
                 .onSuccess { createdId -> _selectedListId.value = createdId }
         }
     }
-    fun deleteList(id: String) { viewModelScope.launch { runCatching { communityRepository.deleteList(id) } } }
+    fun deleteList(id: String) {
+        viewModelScope.launch {
+            // Delete cover image from Cloudinary
+            val list = lists.value.find { it.id == id }
+            list?.coverUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                cloudinaryUploader.extractPublicId(url)?.let { cloudinaryUploader.deleteImage(it) }
+            }
+            runCatching { communityRepository.deleteList(id) }
+        }
+    }
     fun removeManga(listId: String, mangaId: String) { viewModelScope.launch { runCatching { communityRepository.removeMangaFromList(listId, mangaId) } } }
 
-    suspend fun uploadCover(uri: Uri): String? {
+    suspend fun uploadCover(uri: Uri): CloudinaryUploader.UploadResult? {
         return cloudinaryUploader.uploadImage(uri, folder = "list_covers")
     }
 }
@@ -110,6 +126,7 @@ class UserListsViewModel @Inject constructor(
 fun UserListsScreen(
     onBack: () -> Unit,
     onListClick: (String) -> Unit = {},
+    onItemClick: (sourceId: String, slug: String) -> Unit = { _, _ -> },
     viewModel: UserListsViewModel = hiltViewModel()
 ) {
     val lists by viewModel.lists.collectAsStateWithLifecycle()
@@ -238,6 +255,7 @@ fun UserListsScreen(
                             showEditor = true
                         },
                         onDelete = { pendingDelete = list },
+                        onItemClick = { item -> onItemClick(item.sourceId, item.slug) },
                         onRemoveItem = { mangaId -> viewModel.removeManga(list.id, mangaId) },
                         onClick = { onListClick(list.id) }
                     )
@@ -285,6 +303,7 @@ private fun ListCard(
     onExpand: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onItemClick: (CustomUserListItem) -> Unit,
     onRemoveItem: (String) -> Unit,
     onClick: () -> Unit
 ) {
@@ -408,7 +427,7 @@ private fun ListCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(listItems, key = { it.mangaId }) { item ->
-                            ListItemCard(item = item, onRemove = { onRemoveItem(item.mangaId) })
+                            ListItemCard(item = item, onItemClick = { onItemClick(item) }, onRemove = { onRemoveItem(item.mangaId) })
                         }
                     }
                 } else {
@@ -425,13 +444,14 @@ private fun ListCard(
 }
 
 @Composable
-private fun ListItemCard(item: CustomUserListItem, onRemove: () -> Unit) {
+private fun ListItemCard(item: CustomUserListItem, onItemClick: () -> Unit, onRemove: () -> Unit) {
     val ctx = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MangaColors.SurfaceHigh)
+            .clickable(onClick = onItemClick)
     ) {
         Box(modifier = Modifier.fillMaxWidth().aspectRatio(0.72f)) {
             if (item.coverUrl.isNotBlank()) {
@@ -545,7 +565,7 @@ private fun ListEditorSheet(
     onNameChange: (String) -> Unit, onDescriptionChange: (String) -> Unit,
     onPublicChange: (Boolean) -> Unit, onCoverChange: (String) -> Unit,
     onRatingChange: (Float) -> Unit, onGenresChange: (String) -> Unit,
-    onUploadCover: suspend (Uri) -> String?,
+    onUploadCover: suspend (Uri) -> com.exapps.mangaworld.core.firebase.CloudinaryUploader.UploadResult?,
     onSave: () -> Unit, onDismiss: () -> Unit
 ) {
     var isUploading by remember { mutableStateOf(false) }
@@ -558,8 +578,8 @@ private fun ListEditorSheet(
             isUploading = true
             // Upload in background
             coroutineScope.launch {
-                val url = onUploadCover(it)
-                if (url != null) onCoverChange(url)
+                val result = onUploadCover(it)
+                if (result != null) onCoverChange(result.url)
                 isUploading = false
             }
         }

@@ -15,34 +15,31 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Handles image uploads via the admin dashboard's Cloudinary API.
- * 
- * The Cloudinary API keys are stored in the dashboard's environment,
- * NOT in the app code. This class uploads images to the dashboard's
- * API endpoint which handles the actual Cloudinary upload.
- * 
+ * Handles image uploads and deletions via the admin dashboard's Cloudinary API.
+ *
  * Dashboard API: POST https://mangaworld-admin.vercel.app/api/cloudinary/app-upload
+ * Dashboard API: POST https://mangaworld-admin.vercel.app/api/cloudinary/app-delete
  */
 @Singleton
 class CloudinaryUploader @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     companion object {
-        // Dashboard URL — the app calls this endpoint which proxies to Cloudinary
         private const val DASHBOARD_URL = "https://mangaworld-admin.vercel.app"
     }
 
+    data class UploadResult(val url: String, val publicId: String)
+
     /**
      * Upload an image URI to Cloudinary via the dashboard API.
-     * Returns the Cloudinary URL of the uploaded image.
+     * Returns [UploadResult] with the Cloudinary URL and publicId, or null on failure.
      */
-    suspend fun uploadImage(uri: Uri, folder: String = "uploads"): String? {
+    suspend fun uploadImage(uri: Uri, folder: String = "uploads"): UploadResult? {
         return withContext(Dispatchers.IO) {
             try {
                 val base64 = uriToBase64(uri) ?: return@withContext null
                 val dataUrl = "data:image/jpeg;base64,$base64"
 
-                // Call dashboard API
                 val url = URL("$DASHBOARD_URL/api/cloudinary/app-upload")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "POST"
@@ -65,7 +62,10 @@ class CloudinaryUploader @Inject constructor(
 
                 if (responseCode == 200) {
                     val json = JSONObject(responseBody)
-                    json.getString("url")
+                    UploadResult(
+                        url = json.getString("url"),
+                        publicId = json.optString("publicId", "")
+                    )
                 } else {
                     null
                 }
@@ -75,13 +75,66 @@ class CloudinaryUploader @Inject constructor(
         }
     }
 
+    /**
+     * Delete an image from Cloudinary by its publicId.
+     * Returns true if deletion succeeded.
+     */
+    suspend fun deleteImage(publicId: String): Boolean {
+        if (publicId.isBlank()) return false
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = URL("$DASHBOARD_URL/api/cloudinary/app-delete")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.connectTimeout = 10000
+                connection.readTimeout = 10000
+                connection.doOutput = true
+
+                val payload = JSONObject().apply {
+                    put("publicId", publicId)
+                }
+
+                connection.outputStream.use { os ->
+                    os.write(payload.toString().toByteArray())
+                }
+
+                val responseCode = connection.responseCode
+                responseCode == 200
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+
+    /**
+     * Extract the Cloudinary publicId from a full Cloudinary URL.
+     * E.g. "https://res.cloudinary.com/xxx/image/upload/v123/avatars/abc.jpg"
+     * → "avatars/abc"
+     */
+    fun extractPublicId(cloudinaryUrl: String): String? {
+        return try {
+            val path = URL(cloudinaryUrl).path
+            // Pattern: /<version>/<folder>/<filename>
+            val segments = path.split("/").filter { it.isNotEmpty() }
+            if (segments.size >= 3) {
+                // Skip version segment if present (starts with "v" + digits)
+                val start = if (segments[0].startsWith("v") && segments[0].drop(1).all { it.isDigit() }) 1 else 0
+                segments.drop(start).joinToString("/").substringBeforeLast(".")
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun uriToBase64(uri: Uri): String? {
         return try {
             val inputStream = context.contentResolver.openInputStream(uri) ?: return null
             val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
             inputStream.close()
 
-            // Resize if too large (max 800px)
             val maxSize = 800
             val scale = minOf(maxSize.toFloat() / bitmap.width, maxSize.toFloat() / bitmap.height, 1f)
             val resized = if (scale < 1f) {

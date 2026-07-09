@@ -188,13 +188,25 @@ class FirebaseCommunityRepository @Inject constructor(
         awaitClose { reg.remove() }
     }
 
+    override fun observePublicListItems(userId: String, listId: String): Flow<List<CustomUserListItem>> = callbackFlow {
+        val reg = firestore.collection("users").document(userId)
+            .collection("lists").document(listId)
+            .collection("items")
+            .orderBy("addedAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toCustomUserListItem() })
+            }
+        awaitClose { reg.remove() }
+    }
+
     override suspend fun getCurrentProfile(): CommunityProfile? {
         val uid = sessionManager.ensureGuestSession() ?: return null
         val existing = firestore.collection("publicProfiles").document(uid).get().await().toProfile()
         return existing ?: defaultProfile(uid)
     }
 
-    override suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String?) {
+    override suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String?, bannerUrl: String?) {
         val uid = sessionManager.ensureGuestSession() ?: return
         val normalized = username.trim().lowercase()
         require(normalized.isNotBlank()) { "اسم المستخدم مطلوب" }
@@ -212,6 +224,7 @@ class FirebaseCommunityRepository @Inject constructor(
             isPublic = isPublic,
             badgeLabel = newBadge,
             avatarUrl = avatarUrl ?: existing.avatarUrl,
+            bannerUrl = bannerUrl ?: existing.bannerUrl,
             updatedAt = System.currentTimeMillis()
         )
 
@@ -597,6 +610,7 @@ class FirebaseCommunityRepository @Inject constructor(
         "uid" to uid,
         "username" to username,
         "avatarUrl" to avatarUrl,
+        "bannerUrl" to bannerUrl,
         "badgeLabel" to badgeLabel,
         "role" to role,
         "isPublic" to isPublic,
@@ -702,6 +716,7 @@ class FirebaseCommunityRepository @Inject constructor(
             uid = getString("uid") ?: id,
             username = getString("username") ?: return null,
             avatarUrl = getString("avatarUrl"),
+            bannerUrl = getString("bannerUrl"),
             badgeLabel = getString("badgeLabel") ?: "Beginner",
             role = getString("role") ?: "reader",
             isPublic = getBoolean("isPublic") ?: true,

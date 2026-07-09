@@ -1,20 +1,26 @@
 package com.exapps.mangaworld.presentation.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -56,6 +62,7 @@ import coil.compose.AsyncImage
 import com.exapps.mangaworld.domain.model.CommunityComment
 import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.CustomUserList
+import com.exapps.mangaworld.domain.model.CustomUserListItem
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -64,6 +71,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import androidx.compose.runtime.Stable
 import javax.inject.Inject
@@ -76,13 +84,15 @@ import javax.inject.Inject
 data class PublicProfileUiState(
     val profile: CommunityProfile? = null,
     val lists: List<CustomUserList> = emptyList(),
-    val activity: List<CommunityComment> = emptyList()
+    val activity: List<CommunityComment> = emptyList(),
+    val selectedListId: String? = null,
+    val listItems: List<CustomUserListItem> = emptyList()
 )
 
 @HiltViewModel
 class PublicProfileViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    communityRepository: CommunityRepository,
+    private val communityRepository: CommunityRepository,
     sessionManager: com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 ) : ViewModel() {
     private val userId: String = savedStateHandle["userId"] ?: ""
@@ -92,17 +102,31 @@ class PublicProfileViewModel @Inject constructor(
     private val _isFollowing = MutableStateFlow(false)
     val isFollowing: StateFlow<Boolean> = _isFollowing.asStateFlow()
 
+    private val _selectedListId = MutableStateFlow<String?>(null)
+    private val _listItems = _selectedListId.flatMapLatest { id ->
+        if (id == null) kotlinx.coroutines.flow.flowOf(emptyList())
+        else communityRepository.observePublicListItems(userId, id)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     val state = combine(
         communityRepository.observePublicProfile(userId),
         communityRepository.observePublicLists(userId),
-        communityRepository.observePublicActivity(userId)
-    ) { profile, lists, activity ->
+        communityRepository.observePublicActivity(userId),
+        _selectedListId,
+        _listItems
+    ) { profile, lists, activity, selectedId, items ->
         PublicProfileUiState(
             profile = profile,
             lists = if (profile?.showListsPublic == true) lists else emptyList(),
-            activity = if (profile?.showActivityPublic == true) activity else emptyList()
+            activity = if (profile?.showActivityPublic == true) activity else emptyList(),
+            selectedListId = selectedId,
+            listItems = items
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, PublicProfileUiState())
+
+    fun toggleListExpand(listId: String) {
+        _selectedListId.value = if (_selectedListId.value == listId) null else listId
+    }
 
     fun toggleFollow() {
         _isFollowing.value = !_isFollowing.value
@@ -122,7 +146,7 @@ private val AvatarSize = 96.dp
 // =====================================================================================
 
 @Composable
-fun PublicProfileScreen(onBack: () -> Unit, viewModel: PublicProfileViewModel = hiltViewModel()) {
+fun PublicProfileScreen(onBack: () -> Unit, onItemClick: (sourceId: String, slug: String) -> Unit = { _, _ -> }, viewModel: PublicProfileViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isFollowing by viewModel.isFollowing.collectAsStateWithLifecycle()
     val profile = state.profile
@@ -146,7 +170,13 @@ fun PublicProfileScreen(onBack: () -> Unit, viewModel: PublicProfileViewModel = 
 
         if (state.lists.isNotEmpty()) {
             item {
-                PublicListsSection(lists = state.lists)
+                PublicListsSection(
+                    lists = state.lists,
+                    selectedListId = state.selectedListId,
+                    listItems = state.listItems,
+                    onToggleExpand = { viewModel.toggleListExpand(it) },
+                    onItemClick = onItemClick
+                )
             }
         }
 
@@ -383,23 +413,37 @@ private fun SectionHeader(title: String, subtitle: String) {
 }
 
 @Composable
-private fun PublicListsSection(lists: List<CustomUserList>) {
+private fun PublicListsSection(
+    lists: List<CustomUserList>,
+    selectedListId: String?,
+    listItems: List<CustomUserListItem>,
+    onToggleExpand: (String) -> Unit,
+    onItemClick: (sourceId: String, slug: String) -> Unit
+) {
     Column(Modifier.padding(top = 32.dp)) {
         SectionHeader(title = "القوائم العامة", subtitle = "${lists.size} قوائم منسقة")
         Spacer(Modifier.height(14.dp))
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(lists, key = { it.id }) { list ->
-                PublicListCard(list = list)
-            }
+        lists.forEach { list ->
+            PublicListCard(
+                list = list,
+                isExpanded = selectedListId == list.id,
+                listItems = if (selectedListId == list.id) listItems else emptyList(),
+                onToggleExpand = { onToggleExpand(list.id) },
+                onItemClick = onItemClick
+            )
+            Spacer(Modifier.height(12.dp))
         }
     }
 }
 
 @Composable
-private fun PublicListCard(list: CustomUserList) {
+private fun PublicListCard(
+    list: CustomUserList,
+    isExpanded: Boolean = false,
+    listItems: List<CustomUserListItem> = emptyList(),
+    onToggleExpand: () -> Unit = {},
+    onItemClick: (sourceId: String, slug: String) -> Unit = { _, _ -> }
+) {
     val fallbackColor = remember(list.id) {
         val colors = listOf(MangaColors.PrimaryDim, MangaColors.CyanDim, MangaColors.Pink.copy(alpha = 0.5f), MangaColors.Orange.copy(alpha = 0.5f), MangaColors.Green.copy(alpha = 0.4f))
         colors[list.hashCode().and(0x7FFFFFFF) % colors.size]
@@ -487,10 +531,86 @@ private fun PublicListCard(list: CustomUserList) {
                 )
             }
             Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onToggleExpand)
+                    .padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(Icons.Filled.BookmarkBorder, contentDescription = null, tint = MangaColors.Cyan, modifier = Modifier.size(12.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("${list.itemCount} عنصر", color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    if (isExpanded) "إخفاء العناصر" else "${list.itemCount} عنصر — اضغط للمشاهدة",
+                    color = MangaColors.Cyan,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+            if (isExpanded && listItems.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
+                    modifier = Modifier.heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(listItems, key = { it.mangaId }) { item ->
+                        PublicListItemCard(item = item, onItemClick = { onItemClick(item.sourceId, item.slug) })
+                    }
+                }
+            } else if (isExpanded && listItems.isEmpty()) {
+                Text(
+                    "القائمة فارغة",
+                    color = MangaColors.Muted,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+// =====================================================================================
+// Public List Item Card
+// =====================================================================================
+
+@Composable
+private fun PublicListItemCard(item: CustomUserListItem, onItemClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MangaColors.SurfaceHigh)
+            .clickable(onClick = onItemClick)
+    ) {
+        Box(modifier = Modifier.fillMaxWidth().aspectRatio(0.72f)) {
+            if (item.coverUrl.isNotBlank()) {
+                AsyncImage(
+                    model = item.coverUrl,
+                    contentDescription = item.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(MangaColors.SurfaceContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(item.title.take(2), color = MangaColors.Primary)
+                }
+            }
+        }
+        Column(Modifier.padding(8.dp)) {
+            Text(
+                item.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall
+            )
+            if (item.rating > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Star, contentDescription = null, tint = MangaColors.Yellow, modifier = Modifier.size(10.dp))
+                    Text(String.format("%.1f", item.rating), color = MangaColors.Yellow, style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
     }
