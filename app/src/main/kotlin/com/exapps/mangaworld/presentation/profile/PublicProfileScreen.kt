@@ -1,7 +1,6 @@
 package com.exapps.mangaworld.presentation.profile
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,14 +25,12 @@ import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PersonRemove
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,7 +38,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -68,6 +68,10 @@ import kotlinx.coroutines.flow.stateIn
 import androidx.compose.runtime.Stable
 import javax.inject.Inject
 
+// =====================================================================================
+// ViewModel & State — business logic is unchanged from the original implementation.
+// =====================================================================================
+
 @Stable
 data class PublicProfileUiState(
     val profile: CommunityProfile? = null,
@@ -81,7 +85,7 @@ class PublicProfileViewModel @Inject constructor(
     communityRepository: CommunityRepository,
     sessionManager: com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 ) : ViewModel() {
-    private val userId: String = checkNotNull(savedStateHandle["userId"])
+    private val userId: String = savedStateHandle["userId"] ?: ""
 
     val isOwnProfile: Boolean = userId == sessionManager.currentUserId()
 
@@ -105,6 +109,18 @@ class PublicProfileViewModel @Inject constructor(
     }
 }
 
+// =====================================================================================
+// Design constants — local to this screen (spacing / sizing tokens only, no new colors)
+// =====================================================================================
+
+private val HeroCoverHeight = 208.dp
+private val HeroOverlap = 56.dp
+private val AvatarSize = 96.dp
+
+// =====================================================================================
+// Screen
+// =====================================================================================
+
 @Composable
 fun PublicProfileScreen(onBack: () -> Unit, viewModel: PublicProfileViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -114,20 +130,18 @@ fun PublicProfileScreen(onBack: () -> Unit, viewModel: PublicProfileViewModel = 
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(MangaColors.Background),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(bottom = 32.dp)
     ) {
         item {
-            PublicProfileHeader(profile = profile, onBack = onBack)
-        }
-
-        // Only show follow button if NOT viewing own profile
-        if (!isOwnProfile) {
-            item {
-                FollowButton(
-                    isFollowing = isFollowing,
-                    onClick = { viewModel.toggleFollow() }
-                )
-            }
+            PublicProfileHero(
+                profile = profile,
+                listsCount = state.lists.size,
+                activityCount = state.activity.size,
+                isOwnProfile = isOwnProfile,
+                isFollowing = isFollowing,
+                onBack = onBack,
+                onToggleFollow = { viewModel.toggleFollow() }
+            )
         }
 
         if (state.lists.isNotEmpty()) {
@@ -138,101 +152,94 @@ fun PublicProfileScreen(onBack: () -> Unit, viewModel: PublicProfileViewModel = 
 
         if (state.activity.isNotEmpty()) {
             item {
-                Text(
-                    "النشاط الأخير",
-                    color = MangaColors.OnSurface,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
-                )
-            }
-            items(state.activity, key = { it.id }) { comment ->
-                ActivityCommentCard(comment = comment)
+                ActivitySection(activity = state.activity, username = profile?.username)
             }
         }
 
         if (state.lists.isEmpty() && state.activity.isEmpty()) {
             item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        Icons.Filled.FavoriteBorder,
-                        contentDescription = null,
-                        tint = MangaColors.Muted,
-                        modifier = Modifier.size(48.dp)
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "هذا الملف لا يحتوي على محتوى عام",
-                        color = MangaColors.OnSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center
-                    )
-                }
+                EmptyPublicContent()
             }
         }
     }
 }
 
+// =====================================================================================
+// Hero header — cover gradient + overlapping avatar + follow action + compact stats
+// =====================================================================================
+
 @Composable
-private fun PublicProfileHeader(
+private fun PublicProfileHero(
     profile: CommunityProfile?,
-    onBack: () -> Unit
+    listsCount: Int,
+    activityCount: Int,
+    isOwnProfile: Boolean,
+    isFollowing: Boolean,
+    onBack: () -> Unit,
+    onToggleFollow: () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(MangaColors.PrimaryDim.copy(alpha = 0.4f), MangaColors.Background)
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // Cover: base tint gradient (existing theme colors) + two soft radial glows for depth
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(HeroCoverHeight)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(MangaColors.PrimaryDim.copy(alpha = 0.45f), MangaColors.Background)
+                    )
                 )
-            )
-    ) {
-        Column(Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                .drawBehind {
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(MangaColors.Cyan.copy(alpha = 0.22f), Color.Transparent),
+                            center = Offset(size.width * 0.82f, size.height * 0.28f),
+                            radius = size.width * 0.7f
+                        )
+                    )
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(MangaColors.Pink.copy(alpha = 0.14f), Color.Transparent),
+                            center = Offset(size.width * 0.18f, size.height * 1.05f),
+                            radius = size.width * 0.65f
+                        )
+                    )
+                }
+        ) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .padding(12.dp)
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.36f))
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع", tint = MangaColors.OnSurface)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع", tint = Color.White)
+            }
+        }
+
+        // Info column — pulled up over the tail of the cover
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = HeroCoverHeight - HeroOverlap)
+                .padding(horizontal = 20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                ProfileAvatar(profile = profile)
+
+                if (!isOwnProfile) {
+                    FollowButton(isFollowing = isFollowing, onClick = onToggleFollow)
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(96.dp)
-                        .clip(CircleShape)
-                        .background(MangaColors.GlowPurple)
-                ) {
-                    if (!profile?.avatarUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model = profile.avatarUrl,
-                            contentDescription = "صورة الملف الشخصي",
-                            modifier = Modifier.fillMaxSize().clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Text(
-                            text = (profile?.username ?: "U").take(1).uppercase(),
-                            color = MangaColors.PrimaryLight,
-                            style = MaterialTheme.typography.headlineLarge,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxSize().padding(top = 12.dp)
-                        )
-                    }
-                }
+            Spacer(Modifier.height(16.dp))
 
-                Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = profile?.username ?: "مستخدم",
                     color = MangaColors.OnSurface,
@@ -240,79 +247,149 @@ private fun PublicProfileHeader(
                     style = MaterialTheme.typography.titleLarge
                 )
                 if (!profile?.badgeLabel.isNullOrBlank()) {
-                    Text(
-                        text = profile.badgeLabel,
-                        color = MangaColors.Cyan,
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier
-                            .padding(top = 4.dp)
-                            .background(MangaColors.GlowCyan, RoundedCornerShape(12.dp))
-                            .padding(horizontal = 10.dp, vertical = 3.dp)
-                    )
+                    Spacer(Modifier.width(8.dp))
+                    BadgePill(text = profile.badgeLabel, tint = MangaColors.PrimaryLight, tintBg = MangaColors.GlowPurple)
                 }
-                if (!profile?.bio.isNullOrBlank()) {
+            }
+
+            if (!profile?.bio.isNullOrBlank()) {
+                Text(
+                    text = profile.bio,
+                    color = MangaColors.OnSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp, end = 24.dp),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatChip(modifier = Modifier.weight(1f), value = listsCount.toString(), label = "قوائم عامة")
+                StatChip(modifier = Modifier.weight(1f), value = activityCount.toString(), label = "نشاط حديث")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileAvatar(profile: CommunityProfile?) {
+    Box(
+        modifier = Modifier
+            .size(AvatarSize)
+            .clip(CircleShape)
+            .background(MangaColors.PrimaryLight.copy(alpha = 0.4f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(AvatarSize - 6.dp)
+                .clip(CircleShape)
+                .background(MangaColors.Background),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(AvatarSize - 12.dp)
+                    .clip(CircleShape)
+                    .background(MangaColors.GlowPurple),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!profile?.avatarUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = profile.avatarUrl,
+                        contentDescription = "صورة الملف الشخصي",
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
                     Text(
-                        text = profile.bio,
-                        color = MangaColors.OnSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 8.dp, start = 24.dp, end = 24.dp),
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis
+                        text = (profile?.username ?: "U").take(1).uppercase(),
+                        color = MangaColors.PrimaryLight,
+                        style = MaterialTheme.typography.headlineMedium
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BadgePill(text: String, tint: Color, tintBg: Color) {
+    Text(
+        text = text,
+        color = tint,
+        fontWeight = FontWeight.Bold,
+        style = MaterialTheme.typography.labelSmall,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(tintBg)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    )
+}
+
+@Composable
+private fun StatChip(modifier: Modifier = Modifier, value: String, label: String) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MangaColors.SurfaceContainer)
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(value, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(2.dp))
+        Text(label, color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
     }
 }
 
 @Composable
 private fun FollowButton(isFollowing: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.Center
-    ) {
-        if (isFollowing) {
-            Button(
-                onClick = onClick,
-                colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Error),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)
-            ) {
-                Icon(Icons.Filled.PersonRemove, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("إلغاء المتابعة", fontWeight = FontWeight.SemiBold)
-            }
+    Button(
+        onClick = onClick,
+        shape = RoundedCornerShape(percent = 50),
+        colors = if (isFollowing) {
+            ButtonDefaults.buttonColors(containerColor = MangaColors.SurfaceHigh, contentColor = MangaColors.OnSurfaceVariant)
         } else {
-            OutlinedButton(
-                onClick = onClick,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MangaColors.Cyan),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)
-            ) {
-                Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("متابعة", fontWeight = FontWeight.SemiBold)
-            }
-        }
+            ButtonDefaults.buttonColors(containerColor = MangaColors.Pink, contentColor = Color.White)
+        },
+        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 11.dp)
+    ) {
+        Icon(
+            if (isFollowing) Icons.Filled.PersonRemove else Icons.Filled.PersonAdd,
+            contentDescription = null,
+            modifier = Modifier.size(17.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            if (isFollowing) "إلغاء المتابعة" else "متابعة",
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelLarge
+        )
+    }
+}
+
+// =====================================================================================
+// Public Lists
+// =====================================================================================
+
+@Composable
+private fun SectionHeader(title: String, subtitle: String) {
+    Column(Modifier.padding(horizontal = 20.dp)) {
+        Text(title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+        Text(subtitle, color = MangaColors.Muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 2.dp))
     }
 }
 
 @Composable
 private fun PublicListsSection(lists: List<CustomUserList>) {
-    Column(Modifier.padding(top = 12.dp)) {
-        Text(
-            "القوائم العامة",
-            color = MangaColors.OnSurface,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
-        )
+    Column(Modifier.padding(top = 32.dp)) {
+        SectionHeader(title = "القوائم العامة", subtitle = "${lists.size} قوائم منسقة")
+        Spacer(Modifier.height(14.dp))
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(lists, key = { it.id }) { list ->
                 PublicListCard(list = list)
@@ -323,53 +400,130 @@ private fun PublicListsSection(lists: List<CustomUserList>) {
 
 @Composable
 private fun PublicListCard(list: CustomUserList) {
-    val cardColor = remember(list.id) {
+    val fallbackColor = remember(list.id) {
         val colors = listOf(MangaColors.PrimaryDim, MangaColors.CyanDim, MangaColors.Pink.copy(alpha = 0.5f), MangaColors.Orange.copy(alpha = 0.5f), MangaColors.Green.copy(alpha = 0.4f))
         colors[list.hashCode().and(0x7FFFFFFF) % colors.size]
     }
-    Card(
-        modifier = Modifier.width(140.dp).height(170.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceHigh)
+    Column(
+        modifier = Modifier
+            .width(200.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MangaColors.SurfaceContainer)
     ) {
-        Box(Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxWidth().height(120.dp)) {
+            if (list.coverUrl.isNotBlank()) {
+                AsyncImage(
+                    model = list.coverUrl,
+                    contentDescription = list.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Brush.verticalGradient(colors = listOf(fallbackColor, MangaColors.SurfaceContainer)))
+                )
+            }
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(80.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(cardColor, MangaColors.SurfaceHigh)
-                        )
-                    )
-            )
-            Column(
-                modifier = Modifier
                     .fillMaxSize()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.Bottom
+                    .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f))))
+            )
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
             ) {
-                Text(
-                    text = list.name,
-                    color = MangaColors.OnSurface,
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.BookmarkBorder,
-                        contentDescription = null,
-                        tint = MangaColors.Cyan,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Spacer(Modifier.width(3.dp))
+                if (list.genres.isNotEmpty()) {
                     Text(
-                        "${list.itemCount} عنصر",
+                        text = list.genres.first().uppercase(),
                         color = MangaColors.Cyan,
-                        style = MaterialTheme.typography.labelSmall
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.5f))
+                            .padding(horizontal = 7.dp, vertical = 3.dp)
+                    )
+                } else {
+                    Spacer(Modifier.width(1.dp))
+                }
+                if (list.rating > 0) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.5f))
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    ) {
+                        Icon(Icons.Filled.Star, contentDescription = null, tint = MangaColors.Yellow, modifier = Modifier.size(10.dp))
+                        Spacer(Modifier.width(2.dp))
+                        Text(String.format("%.1f", list.rating), color = MangaColors.Yellow, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                text = list.name,
+                color = MangaColors.OnSurface,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (list.description.isNotBlank()) {
+                Text(
+                    text = list.description,
+                    color = MangaColors.Muted,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.BookmarkBorder, contentDescription = null, tint = MangaColors.Cyan, modifier = Modifier.size(12.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("${list.itemCount} عنصر", color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+// =====================================================================================
+// Recent Activity
+// =====================================================================================
+
+@Composable
+private fun ActivitySection(activity: List<CommunityComment>, username: String?) {
+    Column(Modifier.padding(top = 32.dp)) {
+        SectionHeader(
+            title = "النشاط الأخير",
+            subtitle = if (!username.isNullOrBlank()) "آخر تحديثات $username" else "آخر التحديثات"
+        )
+        Spacer(Modifier.height(14.dp))
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(MangaColors.SurfaceContainer)
+        ) {
+            activity.forEachIndexed { index, comment ->
+                ActivityRow(comment = comment)
+                if (index < activity.lastIndex) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .padding(horizontal = 14.dp)
+                            .background(MangaColors.OnSurface.copy(alpha = 0.05f))
                     )
                 }
             }
@@ -378,31 +532,37 @@ private fun PublicListCard(list: CustomUserList) {
 }
 
 @Composable
-private fun ActivityCommentCard(comment: CommunityComment) {
-    Card(
+private fun ActivityRow(comment: CommunityComment) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer),
-        shape = RoundedCornerShape(14.dp)
+            .padding(14.dp),
+        verticalAlignment = Alignment.Top
     ) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(MangaColors.SurfaceHigh),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Filled.ChatBubbleOutline, contentDescription = null, tint = MangaColors.Cyan, modifier = Modifier.size(15.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.ChatBubbleOutline, contentDescription = null, tint = MangaColors.Cyan, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    comment.authorBadge,
-                    color = MangaColors.Cyan,
-                    style = MaterialTheme.typography.labelSmall
-                )
-                Spacer(Modifier.weight(1f))
                 Text(
                     comment.authorName,
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.labelMedium
                 )
+                if (comment.authorBadge.isNotBlank()) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(comment.authorBadge, color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
+                }
             }
+            Spacer(Modifier.height(4.dp))
             Text(
                 text = comment.text,
                 color = MangaColors.OnSurfaceVariant,
@@ -411,5 +571,49 @@ private fun ActivityCommentCard(comment: CommunityComment) {
                 overflow = TextOverflow.Ellipsis
             )
         }
+    }
+}
+
+// =====================================================================================
+// Empty state
+// =====================================================================================
+
+@Composable
+private fun EmptyPublicContent() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp, vertical = 56.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(MangaColors.GlowCyan),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Filled.FavoriteBorder,
+                contentDescription = null,
+                tint = MangaColors.Cyan,
+                modifier = Modifier.size(30.dp)
+            )
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(
+            "هذا الملف لا يحتوي على محتوى عام",
+            color = MangaColors.OnSurface,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleSmall,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "لم يشارك هذا المستخدم أي قوائم أو نشاط بعد",
+            color = MangaColors.Muted,
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Center
+        )
     }
 }
