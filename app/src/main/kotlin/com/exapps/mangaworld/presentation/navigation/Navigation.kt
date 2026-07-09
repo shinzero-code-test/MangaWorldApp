@@ -161,7 +161,6 @@ fun MangaNavGraph(
             UserProfileScreen(
                 onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) },
                 onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
-                onOpenCommunityChat = { navController.navigate(Screen.CommunityChat.createRoute("global", "الدردشة العامة")) },
                 onOpenNotifications = { navController.navigate(Screen.Notifications.route) },
                 onOpenLists = { navController.navigate(Screen.UserLists.route) },
                 onOpenModeration = { navController.navigate(Screen.ModerationDashboard.route) },
@@ -282,7 +281,6 @@ fun MangaNavGraph(
                 onOpenDownloads = { navController.navigate(Screen.Downloads.route) },
                 onOpenLocalStorage = { navController.navigate(Screen.LocalStorage.route) },
                 onOpenReadingStats = { navController.navigate(Screen.ReadingStats.route) },
-                onOpenCollections = { navController.navigate(Screen.Collections.createRoute()) },
                 onOpenGoals = { navController.navigate(Screen.Goals.route) },
                 onOpenSources = { navController.navigate(Screen.Sources.route) },
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },

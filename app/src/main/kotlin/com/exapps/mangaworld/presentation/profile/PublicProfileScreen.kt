@@ -209,33 +209,56 @@ private fun PublicProfileHero(
     onToggleFollow: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
-        // Cover: base tint gradient (existing theme colors) + two soft radial glows for depth
+        // Cover: banner image or gradient fallback
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(HeroCoverHeight)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(MangaColors.PrimaryDim.copy(alpha = 0.45f), MangaColors.Background)
-                    )
-                )
-                .drawBehind {
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(MangaColors.Cyan.copy(alpha = 0.22f), Color.Transparent),
-                            center = Offset(size.width * 0.82f, size.height * 0.28f),
-                            radius = size.width * 0.7f
-                        )
-                    )
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(MangaColors.Pink.copy(alpha = 0.14f), Color.Transparent),
-                            center = Offset(size.width * 0.18f, size.height * 1.05f),
-                            radius = size.width * 0.65f
-                        )
-                    )
-                }
         ) {
+            if (!profile?.bannerUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = profile.bannerUrl,
+                    contentDescription = "غلاف الملف الشخصي",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+                // Gradient overlay for readability
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, MangaColors.Background.copy(alpha = 0.7f))
+                            )
+                        )
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(MangaColors.PrimaryDim.copy(alpha = 0.45f), MangaColors.Background)
+                            )
+                        )
+                        .drawBehind {
+                            drawRect(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(MangaColors.Cyan.copy(alpha = 0.22f), Color.Transparent),
+                                    center = Offset(size.width * 0.82f, size.height * 0.28f),
+                                    radius = size.width * 0.7f
+                                )
+                            )
+                            drawRect(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(MangaColors.Pink.copy(alpha = 0.14f), Color.Transparent),
+                                    center = Offset(size.width * 0.18f, size.height * 1.05f),
+                                    radius = size.width * 0.65f
+                                )
+                            )
+                        }
+                )
+            }
             IconButton(
                 onClick = onBack,
                 modifier = Modifier

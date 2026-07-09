@@ -194,7 +194,6 @@ private val AvatarSize = 96.dp
 fun UserProfileScreen(
     onOpenCloudSync: () -> Unit,
     onOpenDiagnostics: () -> Unit,
-    onOpenCommunityChat: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenLists: () -> Unit,
     onOpenModeration: () -> Unit,
@@ -255,7 +254,6 @@ fun UserProfileScreen(
             unreadNotifications = unreadNotifications,
             onOpenCloudSync = onOpenCloudSync,
             onOpenDiagnostics = onOpenDiagnostics,
-            onOpenCommunityChat = onOpenCommunityChat,
             onOpenNotifications = onOpenNotifications,
             onOpenReadingStats = onOpenReadingStats
         )
@@ -530,14 +528,12 @@ private fun QuickActionsGrid(
     unreadNotifications: Int,
     onOpenCloudSync: () -> Unit,
     onOpenDiagnostics: () -> Unit,
-    onOpenCommunityChat: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenReadingStats: () -> Unit
 ) {
     val actions = listOf(
         QuickAction(Icons.Filled.CloudSync, "السحابة", MangaColors.Cyan, 0, onOpenCloudSync),
         QuickAction(Icons.Filled.Tune, "التشخيص", MangaColors.Pink, 0, onOpenDiagnostics),
-        QuickAction(Icons.Filled.Chat, "الدردشة", MangaColors.Green, 0, onOpenCommunityChat),
         QuickAction(Icons.Filled.Notifications, "إشعارات", MangaColors.Yellow, unreadNotifications, onOpenNotifications),
         QuickAction(Icons.Filled.Speed, "إحصائيات", MangaColors.Orange, 0, onOpenReadingStats)
     )

@@ -111,19 +111,29 @@ class CloudinaryUploader @Inject constructor(
      * Extract the Cloudinary publicId from a full Cloudinary URL.
      * E.g. "https://res.cloudinary.com/xxx/image/upload/v123/avatars/abc.jpg"
      * → "avatars/abc"
+     *
+     * Cloudinary URLs follow: /<cloud_name>/<resource_type>/<action>/[v<version>/]<public_id>.<ext>
+     * The publicId starts after the version segment (or after "upload/" if no version).
      */
     fun extractPublicId(cloudinaryUrl: String): String? {
         return try {
             val path = URL(cloudinaryUrl).path
-            // Pattern: /<version>/<folder>/<filename>
             val segments = path.split("/").filter { it.isNotEmpty() }
-            if (segments.size >= 3) {
-                // Skip version segment if present (starts with "v" + digits)
-                val start = if (segments[0].startsWith("v") && segments[0].drop(1).all { it.isDigit() }) 1 else 0
-                segments.drop(start).joinToString("/").substringBeforeLast(".")
+            // Find the "upload" segment index
+            val uploadIdx = segments.indexOf("upload")
+            if (uploadIdx < 0 || uploadIdx + 1 >= segments.size) return null
+
+            // After "upload", there may be a version segment (v12345...)
+            val afterUpload = segments.drop(uploadIdx + 1)
+            val publicIdSegments = if (afterUpload.isNotEmpty() && afterUpload[0].startsWith("v") && afterUpload[0].drop(1).all { it.isDigit() }) {
+                afterUpload.drop(1)
             } else {
-                null
+                afterUpload
             }
+
+            if (publicIdSegments.isEmpty()) return null
+            // Join and strip extension
+            publicIdSegments.joinToString("/").substringBeforeLast(".")
         } catch (_: Exception) {
             null
         }
