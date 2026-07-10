@@ -473,4 +473,10 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override fun isSourceNotificationEnabled(sourceId: String) = prefs.isSourceNotificationEnabled(sourceId)
     override suspend fun setSourceNotification(sourceId: String, enabled: Boolean) { prefs.setSourceNotification(sourceId, enabled) }
+
+    override fun getFavoriteGenres(): Flow<List<String>> = prefs.appSettings.map { it.contentBlacklist.toList() }
+    override suspend fun setFavoriteGenres(genres: List<String>) { prefs.setContentBlacklist(genres.toSet()) }
+    override fun getMutedUserIds(): Flow<Set<String>> = prefs.appSettings.map { it.mutedUserIds }
+    override suspend fun addMutedUser(uid: String) { val current = prefs.appSettings.first().mutedUserIds; prefs.setMutedUsers(current + uid) }
+    override suspend fun removeMutedUser(uid: String) { val current = prefs.appSettings.first().mutedUserIds; prefs.setMutedUsers(current - uid) }
 }

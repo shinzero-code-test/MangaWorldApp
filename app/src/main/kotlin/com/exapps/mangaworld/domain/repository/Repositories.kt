@@ -108,6 +108,12 @@ interface SettingsRepository {
 
     fun isSourceNotificationEnabled(sourceId: String): Flow<Boolean>
     suspend fun setSourceNotification(sourceId: String, enabled: Boolean)
+
+    fun getFavoriteGenres(): Flow<List<String>>
+    suspend fun setFavoriteGenres(genres: List<String>)
+    fun getMutedUserIds(): Flow<Set<String>>
+    suspend fun addMutedUser(uid: String)
+    suspend fun removeMutedUser(uid: String)
 }
 
 interface CommunityRepository {
@@ -141,4 +147,17 @@ interface CommunityRepository {
     suspend fun resolveModerationReport(reportId: String, status: String)
     suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean)
     suspend fun markNotificationRead(notificationId: String)
+
+    // Following
+    suspend fun followUser(targetUid: String)
+    suspend fun unfollowUser(targetUid: String)
+    fun isFollowing(targetUid: String): Flow<Boolean>
+    fun observeFollowing(userId: String): Flow<List<UserFollow>>
+    fun observeFollowers(userId: String): Flow<List<UserFollow>>
+    suspend fun getFollowingCount(userId: String): Int
+    suspend fun getFollowersCount(userId: String): Int
+    // Block
+    suspend fun blockUser(uid: String)
+    suspend fun unblockUser(uid: String)
+    fun getBlockedUsers(): Flow<Set<String>>
 }

@@ -342,7 +342,9 @@ data class AppSettings(
     val imageCacheLimitMb: Int = 250,
     val contentBlacklist: Set<String> = emptySet(),
     val spoilerCollapseDefault: Boolean = true,
-    val mutedUserIds: Set<String> = emptySet()
+    val mutedUserIds: Set<String> = emptySet(),
+    val readingListStatus: String? = null,
+    val favoriteGenres: List<String> = emptyList()
 )
 
 enum class CommunityNotificationType {
@@ -471,6 +473,21 @@ data class CommunityChatMessage(
     val text: String,
     val createdAt: Long = System.currentTimeMillis()
 )
+
+data class UserFollow(
+    val uid: String,
+    val username: String = "",
+    val avatarUrl: String? = null,
+    val followedAt: Long = System.currentTimeMillis()
+)
+
+enum class ReadingListStatus(val label: String, val arabicLabel: String) {
+    READING("reading", "أقرأ الآن"),
+    PLAN_TO_READ("plan_to_read", "سأقرأ لاحقاً"),
+    COMPLETED("completed", "مكتملة"),
+    ON_HOLD("on_hold", "متوقفة"),
+    DROPPED("dropped", "تم إسقاطها")
+}
 
 data class CloudRestorePreview(
     val localFavorites: Int,

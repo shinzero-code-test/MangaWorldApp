@@ -11,6 +11,7 @@ import com.exapps.mangaworld.domain.model.CustomUserList
 import com.exapps.mangaworld.domain.model.CustomUserListItem
 import com.exapps.mangaworld.domain.model.MangaReview
 import com.exapps.mangaworld.domain.model.ReaderReaction
+import com.exapps.mangaworld.domain.model.UserFollow
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -23,6 +24,9 @@ import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.tasks.await
 import java.security.MessageDigest
 import java.util.UUID
@@ -34,7 +38,8 @@ class FirebaseCommunityRepository @Inject constructor(
     private val sessionManager: FirebaseSessionManager,
     private val readChapterDao: ReadChapterDao,
     private val remoteConfigManager: FirebaseRemoteConfigManager,
-    private val achievementManager: com.exapps.mangaworld.core.data.AchievementManager
+    private val achievementManager: com.exapps.mangaworld.core.data.AchievementManager,
+    private val settingsRepository: com.exapps.mangaworld.domain.repository.SettingsRepository
 ) : CommunityRepository {
 
     private val firestore = FirebaseFirestore.getInstance()
@@ -846,4 +851,78 @@ class FirebaseCommunityRepository @Inject constructor(
             createdAt = (this["createdAt"] as? Number)?.toLong() ?: 0L
         )
     }.getOrNull()
+
+    // ─── Following ──────────────────────────────────────────────────────
+    override suspend fun followUser(targetUid: String) {
+        val uid = sessionManager.currentUserId() ?: return
+        val myProfile = getCurrentProfile()
+        val data1 = hashMapOf<String, Any?>(
+            "uid" to targetUid, "username" to "", "followedAt" to System.currentTimeMillis()
+        )
+        val data2 = hashMapOf<String, Any?>(
+            "uid" to uid, "username" to (myProfile?.username ?: ""), "followedAt" to System.currentTimeMillis()
+        )
+        firestore.runBatch { batch ->
+            batch.set(firestore.collection("relationships").document(uid).collection("following").document(targetUid), data1)
+            batch.set(firestore.collection("relationships").document(targetUid).collection("followers").document(uid), data2)
+        }.await()
+    }
+
+    override suspend fun unfollowUser(targetUid: String) {
+        val uid = sessionManager.currentUserId() ?: return
+        firestore.runBatch { batch ->
+            batch.delete(firestore.collection("relationships").document(uid).collection("following").document(targetUid))
+            batch.delete(firestore.collection("relationships").document(targetUid).collection("followers").document(uid))
+        }.await()
+    }
+
+    override fun isFollowing(targetUid: String): Flow<Boolean> = callbackFlow {
+        val uid = sessionManager.currentUserId()
+        if (uid == null) { trySend(false); close(); return@callbackFlow }
+        val reg = firestore.collection("relationships").document(uid).collection("following").document(targetUid)
+            .addSnapshotListener { snapshot, _ -> trySend(snapshot?.exists() == true) }
+        awaitClose { reg.remove() }
+    }
+
+    override fun observeFollowing(userId: String): Flow<List<UserFollow>> = callbackFlow {
+        val reg = firestore.collection("relationships").document(userId).collection("following")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                trySend(snapshot?.documents.orEmpty().mapNotNull { doc ->
+                    UserFollow(uid = doc.getString("uid") ?: doc.id, username = doc.getString("username") ?: "", followedAt = doc.getLong("followedAt") ?: 0L)
+                })
+            }
+        awaitClose { reg.remove() }
+    }
+
+    override fun observeFollowers(userId: String): Flow<List<UserFollow>> = callbackFlow {
+        val reg = firestore.collection("relationships").document(userId).collection("followers")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                trySend(snapshot?.documents.orEmpty().mapNotNull { doc ->
+                    UserFollow(uid = doc.getString("uid") ?: doc.id, username = doc.getString("username") ?: "", followedAt = doc.getLong("followedAt") ?: 0L)
+                })
+            }
+        awaitClose { reg.remove() }
+    }
+
+    override suspend fun getFollowingCount(userId: String): Int = runCatching {
+        firestore.collection("relationships").document(userId).collection("following").get().await().size()
+    }.getOrDefault(0)
+
+    override suspend fun getFollowersCount(userId: String): Int = runCatching {
+        firestore.collection("relationships").document(userId).collection("followers").get().await().size()
+    }.getOrDefault(0)
+
+    override suspend fun blockUser(uid: String) {
+        val current = settingsRepository.getAppSettings().first().mutedUserIds
+        settingsRepository.setMutedUserIds(current + uid)
+    }
+
+    override suspend fun unblockUser(uid: String) {
+        val current = settingsRepository.getAppSettings().first().mutedUserIds
+        settingsRepository.setMutedUserIds(current - uid)
+    }
+
+    override fun getBlockedUsers(): Flow<Set<String>> = settingsRepository.getMutedUserIds()
 }

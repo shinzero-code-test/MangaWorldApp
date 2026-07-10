@@ -116,6 +116,21 @@ service cloud.firestore {
       allow write: if signedIn();
     }
 
+    match /relationships/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && uid == request.auth.uid;
+
+      match /following/{targetUid} {
+        allow read: if signedIn();
+        allow write: if signedIn() && uid == request.auth.uid;
+      }
+
+      match /followers/{followerUid} {
+        allow read: if signedIn();
+        allow write: if signedIn();
+      }
+    }
+
     match /public/{document=**} {
       allow read: if true;
       allow write: if false;
