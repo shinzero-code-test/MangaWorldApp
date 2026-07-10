@@ -54,6 +54,7 @@ sealed class Screen(val route: String) {
     object Search      : Screen("search")
     object Library     : Screen("library")
     object Settings    : Screen("settings")
+    object ProfileSettings : Screen("profile_settings")
     object Diagnostics : Screen("diagnostics")
     object CloudSync : Screen("cloud_sync")
     object Profile : Screen("profile")
@@ -164,7 +165,8 @@ fun MangaNavGraph(
                 onOpenNotifications = { navController.navigate(Screen.Notifications.route) },
                 onOpenLists = { navController.navigate(Screen.UserLists.route) },
                 onOpenModeration = { navController.navigate(Screen.ModerationDashboard.route) },
-                onOpenReadingStats = { navController.navigate(Screen.ReadingStats.route) }
+                onOpenReadingStats = { navController.navigate(Screen.ReadingStats.route) },
+                onOpenProfileSettings = { navController.navigate(Screen.ProfileSettings.route) }
             )
         }
         composable(Screen.UserLists.route) {
@@ -207,6 +209,15 @@ fun MangaNavGraph(
         }
         composable(Screen.Diagnostics.route) {
             DiagnosticsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.ProfileSettings.route) {
+            com.exapps.mangaworld.presentation.profile.ProfileSettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenReadingStats = { navController.navigate(Screen.ReadingStats.route) },
+                onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) },
+                onOpenSources = { navController.navigate(Screen.Sources.route) },
+                onOpenCollections = { navController.navigate(Screen.Collections.createRoute()) }
+            )
         }
         composable(Screen.CloudSync.route) {
             CloudSyncScreen(onBack = { navController.popBackStack() })

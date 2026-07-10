@@ -198,6 +198,7 @@ fun UserProfileScreen(
     onOpenLists: () -> Unit,
     onOpenModeration: () -> Unit,
     onOpenReadingStats: () -> Unit,
+    onOpenProfileSettings: () -> Unit = {},
     viewModel: UserProfileViewModel = hiltViewModel()
 ) {
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
@@ -255,7 +256,8 @@ fun UserProfileScreen(
             onOpenCloudSync = onOpenCloudSync,
             onOpenDiagnostics = onOpenDiagnostics,
             onOpenNotifications = onOpenNotifications,
-            onOpenReadingStats = onOpenReadingStats
+            onOpenReadingStats = onOpenReadingStats,
+            onOpenProfileSettings = onOpenProfileSettings
         )
 
         CustomListsSection(
@@ -529,13 +531,15 @@ private fun QuickActionsGrid(
     onOpenCloudSync: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenNotifications: () -> Unit,
-    onOpenReadingStats: () -> Unit
+    onOpenReadingStats: () -> Unit,
+    onOpenProfileSettings: () -> Unit
 ) {
     val actions = listOf(
         QuickAction(Icons.Filled.CloudSync, "السحابة", MangaColors.Cyan, 0, onOpenCloudSync),
         QuickAction(Icons.Filled.Tune, "التشخيص", MangaColors.Pink, 0, onOpenDiagnostics),
         QuickAction(Icons.Filled.Notifications, "إشعارات", MangaColors.Yellow, unreadNotifications, onOpenNotifications),
-        QuickAction(Icons.Filled.Speed, "إحصائيات", MangaColors.Orange, 0, onOpenReadingStats)
+        QuickAction(Icons.Filled.Speed, "إحصائيات", MangaColors.Orange, 0, onOpenReadingStats),
+        QuickAction(Icons.Filled.Tune, "الإعدادات", MangaColors.Muted, 0, onOpenProfileSettings)
     )
     val rows = actions.chunked(3)
 
