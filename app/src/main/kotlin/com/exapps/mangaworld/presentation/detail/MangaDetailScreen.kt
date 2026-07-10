@@ -264,14 +264,14 @@ private fun DetailContent(
         // ── Action buttons ───────────────────────────────────────────────────
         item {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (sortedChapters.isNotEmpty()) {
                     val firstUnread = sortedChapters.lastOrNull { !readChapters.contains(it.number) }
                         ?: sortedChapters.last()
                     GradientButton(
-                        text = "ابدأ القراءة",
+                        text = "اقرأ الآن",
                         onClick = { onChapterClick(firstUnread) },
                         modifier = Modifier.weight(1f).height(52.dp)
                     )
@@ -285,9 +285,9 @@ private fun DetailContent(
                 ) {
                     Icon(Icons.Filled.Download, "تنزيل", tint = MangaColors.Cyan)
                 }
-                // Favourite
+                // Library button — favourite + status
                 IconButton(
-                    onClick = onToggleFav,
+                    onClick = onShowAddToList,
                     modifier = Modifier
                         .size(50.dp)
                         .background(
@@ -296,8 +296,8 @@ private fun DetailContent(
                         )
                 ) {
                     Icon(
-                        if (isFavorite) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                        null,
+                        if (isFavorite) Icons.Filled.AutoStories else Icons.Filled.AutoStories,
+                        "المكتبة",
                         tint = if (isFavorite) Color.White else MangaColors.PrimaryLight
                     )
                 }

@@ -215,8 +215,7 @@ fun MangaNavGraph(
                 onBack = { navController.popBackStack() },
                 onOpenReadingStats = { navController.navigate(Screen.ReadingStats.route) },
                 onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) },
-                onOpenSources = { navController.navigate(Screen.Sources.route) },
-                onOpenCollections = { navController.navigate(Screen.Collections.createRoute()) }
+                onOpenSources = { navController.navigate(Screen.Sources.route) }
             )
         }
         composable(Screen.CloudSync.route) {
