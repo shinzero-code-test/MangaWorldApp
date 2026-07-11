@@ -14,7 +14,7 @@ service cloud.firestore {
     }
 
     function canModerate() {
-      return signedIn() && get(/databases/$(database)/documents/publicProfiles/$(request.auth.uid)).data.role in ['moderator', 'admin'];
+      return signedIn() && request.auth.token.role in ['moderator', 'super-admin'];
     }
 
     match /users/{userId} {
@@ -44,12 +44,22 @@ service cloud.firestore {
         allow read, write: if owner(userId);
       }
 
+      match /syncTombstones/{document=**} {
+        allow read, write: if owner(userId);
+      }
+
       match /lists/{listId} {
-        allow read: if owner(userId) || get(/databases/$(database)/documents/publicProfiles/$(userId)).data.showListsPublic == true;
+        allow read: if owner(userId) || (
+          get(/databases/$(database)/documents/publicProfiles/$(userId)).data.showListsPublic == true
+          && resource.data.isPublic == true
+        );
         allow write: if owner(userId);
 
         match /items/{document=**} {
-          allow read: if owner(userId) || get(/databases/$(database)/documents/publicProfiles/$(userId)).data.showListsPublic == true;
+          allow read: if owner(userId) || (
+            get(/databases/$(database)/documents/publicProfiles/$(userId)).data.showListsPublic == true
+            && get(/databases/$(database)/documents/users/$(userId)/lists/$(listId)).data.isPublic == true
+          );
           allow write: if owner(userId);
         }
       }
@@ -57,12 +67,20 @@ service cloud.firestore {
 
     match /publicProfiles/{userId} {
       allow read: if resource.data.isPublic == true || owner(userId);
-      allow write: if owner(userId);
+      allow create: if owner(userId)
+        && request.resource.data.keys().hasOnly(['username', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'bio', 'updatedAt']);
+      allow update: if owner(userId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'bio', 'updatedAt']);
+      allow delete: if owner(userId);
     }
 
     match /usernames/{username} {
       allow read: if signedIn();
-      allow write: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
     }
 
     match /community_manga/{mangaId} {
@@ -70,19 +88,25 @@ service cloud.firestore {
 
       match /comments/{commentId} {
         allow read: if true;
-        allow create, update: if canWriteCommunity(request.resource.data.authorUid);
+        allow create: if canWriteCommunity(request.resource.data.authorUid);
+        allow update: if canWriteCommunity(resource.data.authorUid)
+          && request.resource.data.authorUid == resource.data.authorUid;
         allow delete: if canWriteCommunity(resource.data.authorUid);
       }
 
       match /reviews/{reviewId} {
         allow read: if true;
-        allow create, update: if canWriteCommunity(request.resource.data.authorUid);
+        allow create: if canWriteCommunity(request.resource.data.authorUid);
+        allow update: if canWriteCommunity(resource.data.authorUid)
+          && request.resource.data.authorUid == resource.data.authorUid;
         allow delete: if canWriteCommunity(resource.data.authorUid);
       }
 
       match /chapters/{chapterKey}/comments/{commentId} {
         allow read: if true;
-        allow create, update: if canWriteCommunity(request.resource.data.authorUid);
+        allow create: if canWriteCommunity(request.resource.data.authorUid);
+        allow update: if canWriteCommunity(resource.data.authorUid)
+          && request.resource.data.authorUid == resource.data.authorUid;
         allow delete: if canWriteCommunity(resource.data.authorUid);
       }
     }
@@ -97,7 +121,9 @@ service cloud.firestore {
 
       match /reactions/{reactionId} {
         allow read: if true;
-        allow create, update: if canWriteCommunity(request.resource.data.authorUid);
+        allow create: if canWriteCommunity(request.resource.data.authorUid);
+        allow update: if canWriteCommunity(resource.data.authorUid)
+          && request.resource.data.authorUid == resource.data.authorUid;
         allow delete: if canWriteCommunity(resource.data.authorUid);
       }
     }
@@ -112,22 +138,30 @@ service cloud.firestore {
     }
 
     match /email_registry/{email} {
-      allow read: if true;
-      allow write: if signedIn();
+      allow read, write: if false;
     }
 
     match /relationships/{uid} {
       allow read: if signedIn();
-      allow write: if signedIn() && uid == request.auth.uid;
+      allow write: if false;
 
       match /following/{targetUid} {
         allow read: if signedIn();
-        allow write: if signedIn() && uid == request.auth.uid;
+        allow create: if owner(uid) && request.resource.data.uid == targetUid;
+        allow update: if owner(uid) && request.resource.data.uid == resource.data.uid;
+        allow delete: if owner(uid);
       }
 
       match /followers/{followerUid} {
         allow read: if signedIn();
-        allow write: if signedIn();
+        allow create: if signedIn()
+          && followerUid == request.auth.uid
+          && request.resource.data.uid == request.auth.uid;
+        allow update: if signedIn()
+          && followerUid == request.auth.uid
+          && resource.data.uid == request.auth.uid
+          && request.resource.data.uid == resource.data.uid;
+        allow delete: if signedIn() && followerUid == request.auth.uid && resource.data.uid == request.auth.uid;
       }
     }
 

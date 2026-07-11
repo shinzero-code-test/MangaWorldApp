@@ -89,31 +89,30 @@ class UserListsViewModel @Inject constructor(
     fun selectList(id: String?) { _selectedListId.value = id }
     fun saveList(listId: String?, name: String, description: String, coverUrl: String, rating: Float, genres: List<String>, isPublic: Boolean) {
         viewModelScope.launch {
-            // If editing an existing list with a new cover, delete the old one
-            if (listId != null) {
-                val existing = lists.value.find { it.id == listId }
-                if (existing != null && existing.coverUrl != coverUrl && existing.coverUrl.isNotBlank()) {
-                    cloudinaryUploader.extractPublicId(existing.coverUrl)?.let { cloudinaryUploader.deleteImage(it) }
-                }
+            val existing = listId?.let { id -> lists.value.find { it.id == id } }
+            val createdId = runCatching {
+                communityRepository.createOrUpdateList(listId, name, description, coverUrl, rating, genres, isPublic)
+            }.getOrNull() ?: return@launch
+            if (existing != null && existing.coverUrl != coverUrl && existing.coverUrl.isNotBlank()) {
+                cloudinaryUploader.extractPublicId(existing.coverUrl)?.let(cloudinaryUploader::deleteImage)
             }
-            runCatching { communityRepository.createOrUpdateList(listId, name, description, coverUrl, rating, genres, isPublic) }
-                .onSuccess { createdId -> _selectedListId.value = createdId }
+            _selectedListId.value = createdId
         }
     }
     fun deleteList(id: String) {
         viewModelScope.launch {
-            // Delete cover image from Cloudinary
             val list = lists.value.find { it.id == id }
-            list?.coverUrl?.takeIf { it.isNotBlank() }?.let { url ->
-                cloudinaryUploader.extractPublicId(url)?.let { cloudinaryUploader.deleteImage(it) }
+            if (runCatching { communityRepository.deleteList(id) }.isSuccess) {
+                list?.coverUrl?.takeIf { it.isNotBlank() }
+                    ?.let(cloudinaryUploader::extractPublicId)
+                    ?.let(cloudinaryUploader::deleteImage)
             }
-            runCatching { communityRepository.deleteList(id) }
         }
     }
     fun removeManga(listId: String, mangaId: String) { viewModelScope.launch { runCatching { communityRepository.removeMangaFromList(listId, mangaId) } } }
 
     suspend fun uploadCover(uri: Uri): CloudinaryUploader.UploadResult? {
-        return cloudinaryUploader.uploadImage(uri, folder = "list_covers")
+        return cloudinaryUploader.uploadImage(uri, assetType = "list-cover")
     }
 }
 

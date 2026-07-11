@@ -21,12 +21,12 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.tasks.await
 import java.security.MessageDigest
 import java.util.UUID
@@ -216,10 +216,6 @@ class FirebaseCommunityRepository @Inject constructor(
         val normalized = username.trim().lowercase()
         require(normalized.isNotBlank()) { "اسم المستخدم مطلوب" }
 
-        val usernameRef = firestore.collection("usernames").document(normalized)
-        val currentOwner = usernameRef.get().await().getString("uid")
-        require(currentOwner == null || currentOwner == uid) { "اسم المستخدم مستخدم بالفعل" }
-
         val existing = getCurrentProfile() ?: defaultProfile(uid)
         // Recalculate badge based on current achievements
         val newBadge = try { achievementManager.calculateBadge() } catch (_: Exception) { existing.badgeLabel }
@@ -233,20 +229,29 @@ class FirebaseCommunityRepository @Inject constructor(
             updatedAt = System.currentTimeMillis()
         )
 
-        firestore.runBatch { batch ->
-            batch.set(firestore.collection("publicProfiles").document(uid), profile.toMap())
-            batch.set(usernameRef, mapOf("uid" to uid, "username" to profile.username, "updatedAt" to profile.updatedAt))
+        val usernameRef = firestore.collection("usernames").document(normalized)
+        val profileRef = firestore.collection("publicProfiles").document(uid)
+        firestore.runTransaction { transaction ->
+            val currentOwner = transaction.get(usernameRef).getString("uid")
+            require(currentOwner == null || currentOwner == uid) { "اسم المستخدم مستخدم بالفعل" }
+            transaction.set(profileRef, profile.toEditableMap(), SetOptions.merge())
+            transaction.set(
+                usernameRef,
+                mapOf("uid" to uid, "username" to profile.username, "updatedAt" to profile.updatedAt)
+            )
         }.await()
     }
 
     override suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean) {
         val uid = sessionManager.ensureGuestSession() ?: return
-        val profile = (getCurrentProfile() ?: defaultProfile(uid)).copy(
-            showListsPublic = showListsPublic,
-            showActivityPublic = showActivityPublic,
-            updatedAt = System.currentTimeMillis()
-        )
-        firestore.collection("publicProfiles").document(uid).set(profile.toMap()).await()
+        firestore.collection("publicProfiles").document(uid).set(
+            mapOf(
+                "showListsPublic" to showListsPublic,
+                "showActivityPublic" to showActivityPublic,
+                "updatedAt" to System.currentTimeMillis()
+            ),
+            SetOptions.merge()
+        ).await()
     }
 
     override suspend fun createOrUpdateList(listId: String?, name: String, description: String, coverUrl: String, rating: Float, genres: List<String>, isPublic: Boolean): String {
@@ -390,10 +395,6 @@ class FirebaseCommunityRepository @Inject constructor(
                     "status" to "open"
                 )
             ).await()
-        commentsCollection(comment.mangaId, comment.chapterUrl)
-            .document(comment.id)
-            .update("reportedCount", FieldValue.increment(1))
-            .await()
     }
 
     override suspend fun resolveModerationReport(reportId: String, status: String) {
@@ -464,83 +465,28 @@ class FirebaseCommunityRepository @Inject constructor(
             createdAt = System.currentTimeMillis()
         )
         val collection = commentsCollection(mangaId, chapterUrl)
-        collection.document(comment.id).set(comment.toMap()).await()
-
-        if (parentId != null) {
-            runCatching {
-                val parent = collection.document(parentId).get().await().toComment()
-                if (parent != null && parent.authorUid != profile.uid) {
-                    createNotification(
-                        parent.authorUid,
-                        CommunityNotification(
-                            id = UUID.randomUUID().toString(),
-                            type = CommunityNotificationType.REPLY,
-                            title = "رد جديد على تعليقك",
-                            body = "${profile.username}: ${trimmed.take(80)}",
-                            mangaId = mangaId,
-                            slug = slug,
-                            sourceId = sourceId,
-                            chapterUrl = chapterUrl,
-                            commentId = comment.id
-                        )
-                    )
-                }
-                collection.document(parentId).update("replyCount", FieldValue.increment(1)).await()
-            }
-        }
-
-        resolveMentionTargets(comment.mentions).forEach { (uid, username) ->
-            if (uid != profile.uid) {
-                createNotification(
-                    uid,
-                    CommunityNotification(
-                        id = UUID.randomUUID().toString(),
-                        type = CommunityNotificationType.MENTION,
-                        title = "تمت الإشارة إليك",
-                        body = "${profile.username} ذكر ${username}",
-                        mangaId = mangaId,
-                        slug = slug,
-                        sourceId = sourceId,
-                        chapterUrl = chapterUrl,
-                        commentId = comment.id
-                    )
-                )
-            }
+        collection.document(comment.id).set(
+            comment.toMap() + mapOf("slug" to slug, "sourceId" to sourceId)
+        ).await()
+        if (parentId != null || comment.mentions.isNotEmpty()) {
+            sendPushNotification(mangaId, chapterUrl, comment.id)
         }
     }
 
-    private suspend fun resolveMentionTargets(mentions: List<String>): List<Pair<String, String>> =
-        mentions.distinct().mapNotNull { username ->
-            val doc = firestore.collection("usernames").document(username.lowercase()).get().await()
-            val uid = doc.getString("uid") ?: return@mapNotNull null
-            uid to (doc.getString("username") ?: username)
-        }
-
-    private suspend fun createNotification(targetUid: String, notification: CommunityNotification) {
-        firestore.collection("users").document(targetUid)
-            .collection("notifications").document(notification.id)
-            .set(notification.toMap())
-            .await()
-        // Also send a push notification via the dashboard API
-        sendPushNotification(targetUid, notification)
-    }
-
-    private suspend fun sendPushNotification(targetUid: String, notification: CommunityNotification) {
+    private suspend fun sendPushNotification(mangaId: String, chapterUrl: String?, commentId: String) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
+                val token = sessionManager.currentIdToken() ?: return@runCatching
                 val baseUrl = "https://mangaworld-admin.vercel.app"
                 val body = org.json.JSONObject().apply {
-                    put("targetUid", targetUid)
-                    put("title", notification.title)
-                    put("body", notification.body)
-                    put("mangaId", notification.mangaId)
-                    put("slug", notification.slug)
-                    put("sourceId", notification.sourceId)
-                    if (notification.chapterUrl != null) put("chapterUrl", notification.chapterUrl)
+                    put("mangaId", mangaId)
+                    put("commentId", commentId)
+                    if (chapterUrl != null) put("chapterUrl", chapterUrl)
                 }
                 val conn = java.net.URL("$baseUrl/api/notifications/push-reply").openConnection() as java.net.HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("Authorization", "Bearer $token")
                 conn.doOutput = true
                 conn.connectTimeout = 5000
                 conn.readTimeout = 5000
@@ -575,7 +521,7 @@ class FirebaseCommunityRepository @Inject constructor(
             username = firebaseUser?.displayName?.takeIf { it.isNotBlank() } ?: "reader_${uid.takeLast(6)}",
             avatarUrl = firebaseUser?.photoUrl?.toString(),
             badgeLabel = badge,
-            role = "reader",
+            role = "viewer",
             isPublic = true,
             showListsPublic = true,
             showActivityPublic = true,
@@ -611,13 +557,10 @@ class FirebaseCommunityRepository @Inject constructor(
         }
     }
 
-    private fun CommunityProfile.toMap() = mapOf(
-        "uid" to uid,
+    private fun CommunityProfile.toEditableMap() = mapOf(
         "username" to username,
         "avatarUrl" to avatarUrl,
         "bannerUrl" to bannerUrl,
-        "badgeLabel" to badgeLabel,
-        "role" to role,
         "isPublic" to isPublic,
         "showListsPublic" to showListsPublic,
         "showActivityPublic" to showActivityPublic,
@@ -723,7 +666,7 @@ class FirebaseCommunityRepository @Inject constructor(
             avatarUrl = getString("avatarUrl"),
             bannerUrl = getString("bannerUrl"),
             badgeLabel = getString("badgeLabel") ?: "Beginner",
-            role = getString("role") ?: "reader",
+            role = "viewer",
             isPublic = getBoolean("isPublic") ?: true,
             showListsPublic = getBoolean("showListsPublic") ?: true,
             showActivityPublic = getBoolean("showActivityPublic") ?: true,

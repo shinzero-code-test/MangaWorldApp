@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireRole } from "@/lib/auth";
+import { getDashboardRoleCounts, requireRole } from "@/lib/auth";
 import { getAdminDb } from "@/lib/firebase-admin";
 
 export const dynamic = 'force-dynamic';
@@ -17,13 +17,7 @@ export async function GET(request: NextRequest) {
       getAdminDb().collectionGroup("lists").count().get(),
     ]);
 
-    // Get role distribution
-    const roleCounts = { "super-admin": 0, moderator: 0, viewer: 0 };
-    const profiles = await getAdminDb().collection("publicProfiles").limit(100).get();
-    profiles.docs.forEach((doc: any) => {
-      const role = doc.data().role || "viewer";
-      if (role in roleCounts) roleCounts[role as keyof typeof roleCounts]++;
-    });
+    const roleCounts = await getDashboardRoleCounts();
 
     // Get recent sign-ups (last 7 days)
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;

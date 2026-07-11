@@ -1,5 +1,8 @@
 name: Build MangaWorld APK
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ main, master, develop ]
@@ -29,6 +32,70 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dashboard-quality:
+    name: Dashboard Quality Gates
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run typecheck
+        run: npm run typecheck
+
+      - name: Build dashboard
+        run: npm run build
+
+  deploy-dashboard:
+    name: Deploy Dashboard
+    runs-on: ubuntu-latest
+    needs: dashboard-quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: dashboard
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Deploy prebuilt dashboard
+        if: env.VERCEL_TOKEN != '' && env.VERCEL_ORG_ID != '' && env.VERCEL_PROJECT_ID != ''
+        run: |
+          npm ci
+          npx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          npx vercel build --prod --token="$VERCEL_TOKEN"
+          npx vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+
+      - name: Report skipped deployment
+        if: env.VERCEL_TOKEN == '' || env.VERCEL_ORG_ID == '' || env.VERCEL_PROJECT_ID == ''
+        run: |
+          echo "Vercel deployment skipped because VERCEL_TOKEN, VERCEL_ORG_ID, or VERCEL_PROJECT_ID is not configured."
+
   # ─── Lint & Unit Tests ──────────────────────────────────────────────────────
   lint-and-test:
     name: Lint & Unit Tests
@@ -103,7 +170,7 @@ jobs:
   build-debug:
     name: Build Debug APKs (All ABIs)
     runs-on: ubuntu-latest
-    needs: lint-and-test
+    needs: [lint-and-test, dashboard-quality]
     env:
       FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       FIREBASE_APP_DISTRIBUTION_GROUPS: ${{ secrets.FIREBASE_APP_DISTRIBUTION_GROUPS }}
@@ -240,9 +307,12 @@ jobs:
   build-release:
     name: Build Release APKs + AAB (All ABIs)
     runs-on: ubuntu-latest
-    needs: lint-and-test
+    needs: [lint-and-test, dashboard-quality]
+    outputs:
+      signed: ${{ steps.signing.outputs.signed }}
     env:
       KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      RELEASE_CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
       FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       FIREBASE_APP_DISTRIBUTION_GROUPS: ${{ secrets.FIREBASE_APP_DISTRIBUTION_GROUPS }}
       GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
@@ -297,7 +367,8 @@ jobs:
         run: chmod +x ./gradlew
 
       # ── Keystore setup ──────────────────────────────────────────────────────
-      - name: Build Release APKs (signed when keystore is provided)
+      - name: Determine release signing status
+        id: signing
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -305,13 +376,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -n "${KEYSTORE_BASE64:-}" ]]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > app/keystore.jks
-            export KEYSTORE_PATH="$GITHUB_WORKSPACE/app/keystore.jks"
+          if [[ -n "${KEYSTORE_BASE64:-}" && -n "${KEYSTORE_PASSWORD:-}" && -n "${KEY_ALIAS:-}" && -n "${KEY_PASSWORD:-}" ]]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
             echo "Using signed release build."
           else
-            echo "No keystore secret found; building unsigned release."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "Release artifacts will be unsigned and will not be distributed."
           fi
+
+      - name: Build Release APKs
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
           ./gradlew :app:assembleRelease --stacktrace
 
       - name: Build Release AAB
@@ -322,7 +401,7 @@ jobs:
         run: ./gradlew :app:bundleRelease --stacktrace
 
       - name: Resolve Firebase app id
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && steps.signing.outputs.signed == 'true'
         id: firebase-app
         shell: bash
         run: |
@@ -331,19 +410,20 @@ jobs:
           echo "app_id=$app_id" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js for Firebase CLI
-        if: github.event_name == 'push' && env.FIREBASE_SERVICE_ACCOUNT != ''
+        if: github.event_name == 'push' && steps.signing.outputs.signed == 'true' && env.FIREBASE_SERVICE_ACCOUNT != ''
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install Firebase CLI
-        if: github.event_name == 'push' && env.FIREBASE_SERVICE_ACCOUNT != ''
+        if: github.event_name == 'push' && steps.signing.outputs.signed == 'true' && env.FIREBASE_SERVICE_ACCOUNT != ''
         run: npm install -g firebase-tools
 
       - name: Distribute internal release build
-        if: github.event_name == 'push' && env.FIREBASE_SERVICE_ACCOUNT != ''
+        if: github.event_name == 'push' && steps.signing.outputs.signed == 'true' && env.FIREBASE_SERVICE_ACCOUNT != '' && env.RELEASE_CERT_SHA256 != ''
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+          RELEASE_CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
         shell: bash
         continue-on-error: true
         run: |
@@ -354,6 +434,13 @@ jobs:
           if [[ ${#apks[@]} -eq 0 ]]; then
             echo "No universal release APK found; skipping App Distribution."
             exit 0
+          fi
+          actual_fingerprint=$(keytool -printcert -jarfile "${apks[0]}" | awk -F': ' '/SHA256:/{print $2}')
+          expected_fingerprint=${RELEASE_CERT_SHA256//:/}
+          actual_fingerprint=${actual_fingerprint//:/}
+          if [[ -z "$actual_fingerprint" || "${actual_fingerprint^^}" != "${expected_fingerprint^^}" ]]; then
+            echo "Release certificate fingerprint verification failed." >&2
+            exit 1
           fi
           groups="${FIREBASE_APP_DISTRIBUTION_GROUPS:-internal-testers}"
           firebase appdistribution:distribute "${apks[0]}" \
@@ -422,7 +509,7 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: build-release
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') && needs.build-release.outputs.signed == 'true'
     permissions:
       contents: write
     steps:

@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import org.json.JSONArray
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -38,6 +40,9 @@ class AppPreferences @Inject constructor(
         val KEY_CONTENT_BLACKLIST = stringPreferencesKey("content_blacklist")
         val KEY_SPOILER_COLLAPSE_DEFAULT = booleanPreferencesKey("spoiler_collapse_default")
         val KEY_MUTED_USERS = stringPreferencesKey("muted_users")
+        val KEY_READING_LIST_STATUS = stringPreferencesKey("reading_list_status")
+        val KEY_FAVORITE_GENRES = stringPreferencesKey("favorite_genres")
+        val KEY_SYNC_TOMBSTONES = stringPreferencesKey("sync_tombstones")
 
         val KEY_READER_MODE = stringPreferencesKey("reader_mode")
         val KEY_BRIGHTNESS = floatPreferencesKey("brightness")
@@ -56,6 +61,9 @@ class AppPreferences @Inject constructor(
         val KEY_PAGE_SPACING = intPreferencesKey("reader_page_spacing")
         val KEY_VOLUME_BUTTON = booleanPreferencesKey("reader_volume_button")
         val KEY_DOUBLE_TAP_ZOOM = booleanPreferencesKey("reader_double_tap_zoom")
+        val KEY_TAP_LEFT_ACTION = stringPreferencesKey("reader_tap_left_action")
+        val KEY_TAP_RIGHT_ACTION = stringPreferencesKey("reader_tap_right_action")
+        val KEY_TAP_MIDDLE_ACTION = stringPreferencesKey("reader_tap_middle_action")
 
         fun cookieKey(domain: String) = stringPreferencesKey("cookie_$domain")
         fun sourceNotificationKey(sourceId: String) = booleanPreferencesKey("notif_source_$sourceId")
@@ -95,7 +103,13 @@ class AppPreferences @Inject constructor(
                     ?.map { it.trim() }
                     ?.filter { it.isNotBlank() }
                     ?.toSet()
-                    ?: emptySet()
+                    ?: emptySet(),
+                readingListStatus = prefs[KEY_READING_LIST_STATUS],
+                favoriteGenres = prefs[KEY_FAVORITE_GENRES]
+                    ?.split("\n")
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotBlank() }
+                    ?: emptyList()
             )
         }
 
@@ -122,7 +136,16 @@ class AppPreferences @Inject constructor(
                 webtoonAutoStitch = prefs[KEY_WEBTOON_STITCH] ?: true,
                 pageSpacing = prefs[KEY_PAGE_SPACING] ?: 0,
                 volumeButtonPageTurn = prefs[KEY_VOLUME_BUTTON] ?: false,
-                doubleTapZoom = prefs[KEY_DOUBLE_TAP_ZOOM] ?: true
+                doubleTapZoom = prefs[KEY_DOUBLE_TAP_ZOOM] ?: true,
+                tapLeftAction = prefs[KEY_TAP_LEFT_ACTION]
+                    ?.let { TapAction.entries.firstOrNull { action -> action.name == it } }
+                    ?: TapAction.PREV_PAGE,
+                tapRightAction = prefs[KEY_TAP_RIGHT_ACTION]
+                    ?.let { TapAction.entries.firstOrNull { action -> action.name == it } }
+                    ?: TapAction.NEXT_PAGE,
+                tapMiddleAction = prefs[KEY_TAP_MIDDLE_ACTION]
+                    ?.let { TapAction.entries.firstOrNull { action -> action.name == it } }
+                    ?: TapAction.TOGGLE_CONTROLS
             )
         }
 
@@ -170,6 +193,36 @@ class AppPreferences @Inject constructor(
 
     suspend fun setMutedUsers(values: Set<String>) =
         dataStore.edit { it[KEY_MUTED_USERS] = values.joinToString(",") }
+
+    suspend fun setReadingListStatus(value: String?) = dataStore.edit {
+        if (value.isNullOrBlank()) it.remove(KEY_READING_LIST_STATUS)
+        else it[KEY_READING_LIST_STATUS] = value
+    }
+
+    suspend fun setFavoriteGenres(values: List<String>) =
+        dataStore.edit { it[KEY_FAVORITE_GENRES] = values.joinToString("\n") }
+
+    suspend fun getSyncTombstones(): List<SyncTombstone> =
+        decodeSyncTombstones(dataStore.data.first()[KEY_SYNC_TOMBSTONES])
+
+    suspend fun markSyncTombstone(collection: String, documentId: String, deletedAt: Long = System.currentTimeMillis()) {
+        dataStore.edit { prefs ->
+            val tombstones = decodeSyncTombstones(prefs[KEY_SYNC_TOMBSTONES]).associateBy { it.key }.toMutableMap()
+            val tombstone = SyncTombstone(collection, documentId, deletedAt)
+            val existing = tombstones[tombstone.key]
+            if (existing == null || existing.deletedAt < deletedAt) tombstones[tombstone.key] = tombstone
+            prefs[KEY_SYNC_TOMBSTONES] = encodeSyncTombstones(tombstones.values)
+        }
+    }
+
+    suspend fun clearSyncTombstone(collection: String, documentId: String) {
+        dataStore.edit { prefs ->
+            val key = "$collection|$documentId"
+            val remaining = decodeSyncTombstones(prefs[KEY_SYNC_TOMBSTONES]).filterNot { it.key == key }
+            if (remaining.isEmpty()) prefs.remove(KEY_SYNC_TOMBSTONES)
+            else prefs[KEY_SYNC_TOMBSTONES] = encodeSyncTombstones(remaining)
+        }
+    }
 
     suspend fun toggleSource(sourceId: String, enabled: Boolean) = dataStore.edit { prefs ->
         val current = prefs[KEY_ENABLED_SOURCES]?.split(",")?.toMutableSet()
@@ -232,6 +285,37 @@ class AppPreferences @Inject constructor(
 
     suspend fun setDoubleTapZoom(v: Boolean) =
         dataStore.edit { it[KEY_DOUBLE_TAP_ZOOM] = v }
+
+    suspend fun setTapActions(left: TapAction, right: TapAction, middle: TapAction) =
+        dataStore.edit {
+            it[KEY_TAP_LEFT_ACTION] = left.name
+            it[KEY_TAP_RIGHT_ACTION] = right.name
+            it[KEY_TAP_MIDDLE_ACTION] = middle.name
+        }
+
+    private fun decodeSyncTombstones(serialized: String?): List<SyncTombstone> = runCatching {
+        val array = JSONArray(serialized ?: "[]")
+        (0 until array.length()).mapNotNull { index ->
+            array.optJSONObject(index)?.let { item ->
+                SyncTombstone(
+                    collection = item.optString("collection"),
+                    documentId = item.optString("documentId"),
+                    deletedAt = item.optLong("deletedAt")
+                ).takeIf { it.collection.isNotBlank() && it.documentId.isNotBlank() && it.deletedAt > 0L }
+            }
+        }
+    }.getOrDefault(emptyList())
+
+    private fun encodeSyncTombstones(tombstones: Collection<SyncTombstone>): String =
+        JSONArray().apply {
+            tombstones.forEach { tombstone ->
+                put(JSONObject().apply {
+                    put("collection", tombstone.collection)
+                    put("documentId", tombstone.documentId)
+                    put("deletedAt", tombstone.deletedAt)
+                })
+            }
+        }.toString()
 
     fun getCookies(domain: String): Flow<String?> = dataStore.data
         .catch { emit(emptyPreferences()) }

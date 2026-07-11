@@ -40,30 +40,6 @@ val resolvedKeystoreFile: File? by lazy {
 val canSign = resolvedKeystoreFile != null && keystorePassword.isNotBlank() &&
               releaseKeyAlias.isNotBlank() && releaseKeyPassword.isNotBlank()
 
-// Auto-generate a debug keystore so the release APK is always installable
-val debugKeystore: File by lazy {
-    val f = rootProject.file("debug.keystore")
-    if (!f.exists()) {
-        val cmd = arrayOf(
-            "keytool", "-genkey", "-v",
-            "-keystore", f.absolutePath,
-            "-alias", "androiddebugkey",
-            "-storepass", "android",
-            "-keypass", "android",
-            "-keyalg", "RSA",
-            "-keysize", "2048",
-            "-validity", "10000",
-            "-dname", "CN=Debug, OU=Dev, O=MangaWorld, L=Unknown, ST=Unknown, C=US"
-        )
-        val proc = ProcessBuilder(*cmd)
-            .directory(rootProject.projectDir)
-            .inheritIO()
-            .start()
-        proc.waitFor()
-    }
-    f
-}
-
 android {
     namespace  = "com.exapps.mangaworld"
     compileSdk = 35
@@ -72,8 +48,8 @@ android {
         applicationId = "com.exapps.mangaworld"
         minSdk        = 26
         targetSdk     = 35
-        versionCode   = 100
-        versionName   = "5.1.2"
+        versionCode   = 102
+        versionName   = "5.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -88,18 +64,11 @@ android {
                 keyPassword   = releaseKeyPassword
             }
         }
-        getByName("debug") {
-            storeFile     = debugKeystore
-            storePassword = "android"
-            keyAlias      = "androiddebugkey"
-            keyPassword   = "android"
-        }
     }
 
     buildTypes {
         debug {
             isDebuggable = true
-            signingConfig = signingConfigs.getByName("debug")
         }
         release {
             isMinifyEnabled   = true
@@ -110,8 +79,6 @@ android {
             )
             if (canSign) {
                 signingConfig = signingConfigs.getByName("release")
-            } else {
-                signingConfig = signingConfigs.getByName("debug")
             }
         }
     }

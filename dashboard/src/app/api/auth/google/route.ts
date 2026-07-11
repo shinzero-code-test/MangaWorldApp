@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clearMfaGrantCookie, DASHBOARD_ROLES, type DashboardRole } from "@/lib/auth";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 
 export const dynamic = 'force-dynamic';
@@ -11,25 +12,27 @@ export async function POST(request: NextRequest) {
     }
 
     const decoded = await getAdminAuth().verifyIdToken(idToken);
-    const isSuperAdmin = decoded.email === process.env.SUPER_ADMIN_EMAIL;
+    const adminAuth = getAdminAuth();
+    const configuredSuperAdmin = process.env.SUPER_ADMIN_EMAIL?.trim().lowercase();
+    if (configuredSuperAdmin && decoded.email?.trim().lowercase() === configuredSuperAdmin && decoded.role !== "super-admin") {
+      const user = await adminAuth.getUser(decoded.uid);
+      await adminAuth.setCustomUserClaims(decoded.uid, { ...user.customClaims, role: "super-admin" });
+      return NextResponse.json({ refreshRequired: true });
+    }
+    const role = DASHBOARD_ROLES.includes(decoded.role as DashboardRole)
+      ? decoded.role as DashboardRole
+      : "viewer";
 
     const profileDoc = await getAdminDb().collection("publicProfiles").doc(decoded.uid).get();
 
     if (!profileDoc.exists) {
       await getAdminDb().collection("publicProfiles").doc(decoded.uid).set({
-        uid: decoded.uid,
         username: decoded.name || decoded.email?.split("@")[0] || "user",
         avatarUrl: decoded.picture || "",
-        role: isSuperAdmin ? "super-admin" : "viewer",
         isPublic: false,
         showListsPublic: false,
         showActivityPublic: false,
         bio: "",
-        updatedAt: Date.now(),
-      });
-    } else if (isSuperAdmin && profileDoc.data()?.role !== "super-admin") {
-      await getAdminDb().collection("publicProfiles").doc(decoded.uid).update({
-        role: "super-admin",
         updatedAt: Date.now(),
       });
     }
@@ -39,21 +42,20 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({
       success: true,
-      role: profileDoc.data()?.role || "viewer",
+      role,
     });
     response.cookies.set("session", sessionCookie, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
       sameSite: "lax",
       maxAge: expiresIn / 1000,
       path: "/",
     });
-    // Clear 2FA verification so user must re-verify
-    response.cookies.set("2fa_verified", "", { httpOnly: true, maxAge: 0, path: "/" });
+    clearMfaGrantCookie(response);
 
     return response;
-  } catch (error: any) {
+  } catch (error) {
     console.error("Auth error:", error);
-    return NextResponse.json({ error: error.message || "خطأ في المصادقة" }, { status: 401 });
+    return NextResponse.json({ error: "خطأ في المصادقة" }, { status: 401 });
   }
 }

@@ -37,7 +37,7 @@ export default function LoginPage() {
     return fb.auth();
   };
 
-  const handleSession = async (idToken: string) => {
+  const handleSession = async (idToken: string, refreshToken: () => Promise<string>) => {
     const res = await fetch("/api/auth/google", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -45,6 +45,10 @@ export default function LoginPage() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "خطأ في تسجيل الدخول");
+    if (data.refreshRequired) {
+      await handleSession(await refreshToken(), refreshToken);
+      return;
+    }
     router.push("/2fa");
     router.refresh();
   };
@@ -57,7 +61,7 @@ export default function LoginPage() {
       if (!auth) { setError("جاري تحميل Firebase..."); return; }
       const provider = new (window as any).firebase.auth.GoogleAuthProvider();
       const result = await auth.signInWithPopup(provider);
-      await handleSession(await result.user.getIdToken());
+      await handleSession(await result.user.getIdToken(), () => result.user.getIdToken(true));
     } catch (e: any) {
       if (e.code === "auth/popup-closed-by-user") {
         setError("تم إغلاق نافذة تسجيل الدخول");
@@ -77,7 +81,7 @@ export default function LoginPage() {
       const auth = getAuth();
       if (!auth) { setError("جاري تحميل Firebase..."); return; }
       const result = await auth.signInWithEmailAndPassword(email, password);
-      await handleSession(await result.user.getIdToken());
+      await handleSession(await result.user.getIdToken(), () => result.user.getIdToken(true));
     } catch (e: any) {
       const msgs: Record<string, string> = {
         "auth/user-not-found": "البريد الإلكتروني غير مسجل",

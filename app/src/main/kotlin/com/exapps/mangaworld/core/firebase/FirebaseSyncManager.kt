@@ -3,6 +3,8 @@ package com.exapps.mangaworld.core.firebase
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
 import com.exapps.mangaworld.core.data.local.dao.ReaderAnnotationDao
+import com.exapps.mangaworld.core.data.local.AppPreferences
+import com.exapps.mangaworld.core.data.local.SyncTombstone
 import com.exapps.mangaworld.core.data.local.entity.FavoriteEntity
 import com.exapps.mangaworld.core.data.local.entity.ReadingHistoryEntity
 import com.exapps.mangaworld.core.data.local.entity.ReaderAnnotationEntity
@@ -27,6 +29,7 @@ class FirebaseSyncManager @Inject constructor(
     private val readerAnnotationDao: ReaderAnnotationDao,
     private val settingsRepository: SettingsRepository,
     private val sessionManager: FirebaseSessionManager,
+    private val prefs: AppPreferences,
     private val firebaseTelemetry: FirebaseTelemetry,
     private val achievementManager: com.exapps.mangaworld.core.data.AchievementManager
 ) {
@@ -38,6 +41,7 @@ class FirebaseSyncManager @Inject constructor(
         val favorites = favoriteDao.getFavoritesList()
         val history = historyDao.getAll()
         val annotations = readerAnnotationDao.getAll()
+        val tombstones = prefs.getSyncTombstones()
         val settings = settingsRepository.getAppSettings().first()
         val reader = settingsRepository.getReaderSettings().first()
 
@@ -88,6 +92,9 @@ class FirebaseSyncManager @Inject constructor(
             favorites.forEach { favorite -> writes += userRef.collection("favorites").document(favorite.mangaId) to favorite }
             history.forEach { item -> writes += userRef.collection("readingHistory").document(item.mangaId) to item }
             annotations.forEach { annotation -> writes += userRef.collection("readerAnnotations").document(annotationDocId(annotation)) to annotation }
+            tombstones.forEach { tombstone ->
+                writes += userRef.collection("syncTombstones").document(tombstoneDocumentId(tombstone)) to tombstone
+            }
 
             // Sync achievements and goals
             runCatching {
@@ -109,11 +116,22 @@ class FirebaseSyncManager @Inject constructor(
             val favorites = userRef.collection("favorites").get().await().documents
             val history = userRef.collection("readingHistory").get().await().documents
             val annotations = userRef.collection("readerAnnotations").get().await().documents
+            val remoteTombstones = userRef.collection("syncTombstones").get().await().documents
+                .mapNotNull { it.toObject(SyncTombstone::class.java) }
             val readerPrefs = userRef.collection("preferences").document("reader").get().await()
 
-            favorites.mapNotNull { it.toObject(FavoriteEntity::class.java) }.forEach { favoriteDao.insert(it) }
-            history.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }.forEach { historyDao.insertOrUpdate(it) }
-            annotations.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }.forEach { readerAnnotationDao.upsert(it) }
+            remoteTombstones.forEach { prefs.markSyncTombstone(it.collection, it.documentId, it.deletedAt) }
+            val tombstones = newestTombstones(prefs.getSyncTombstones())
+            applyTombstones(tombstones)
+            favorites.mapNotNull { it.toObject(FavoriteEntity::class.java) }
+                .filterNot { isTombstoned("favorites", it.mangaId, it.addedAt, tombstones) }
+                .forEach { favoriteDao.insert(it) }
+            history.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
+                .filterNot { isTombstoned("readingHistory", it.mangaId, it.lastReadAt, tombstones) }
+                .forEach { historyDao.insertOrUpdate(it) }
+            annotations.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
+                .filterNot { isTombstoned("readerAnnotations", annotationDocId(it), it.updatedAt, tombstones) }
+                .forEach { readerAnnotationDao.upsert(it) }
 
             profile.getString("theme")?.let { name ->
                 AppTheme.entries.firstOrNull { it.name == name }?.let { theme ->
@@ -222,21 +240,19 @@ class FirebaseSyncManager @Inject constructor(
             val remoteFavorites = userRef.collection("favorites").get().await().documents.mapNotNull { it.toObject(FavoriteEntity::class.java) }
             val remoteHistory = userRef.collection("readingHistory").get().await().documents.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
             val remoteAnnotations = userRef.collection("readerAnnotations").get().await().documents.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
-            val localFavorites = favoriteDao.getFavoritesList().associateBy { it.mangaId }
-            val localHistory = historyDao.getAll().associateBy { it.mangaId }
-            val localAnnotations = readerAnnotationDao.getAll().associateBy { annotationDocId(it) }
-
-            (localFavorites + remoteFavorites.associateBy { it.mangaId }).values.forEach { favoriteDao.insert(it) }
-            (localHistory + remoteHistory.associateBy { it.mangaId }).values
-                .groupBy { it.mangaId }
-                .values
-                .map { list -> list.maxByOrNull { it.lastReadAt } }
-                .filterNotNull()
+            val remoteTombstones = userRef.collection("syncTombstones").get().await().documents
+                .mapNotNull { it.toObject(SyncTombstone::class.java) }
+            remoteTombstones.forEach { prefs.markSyncTombstone(it.collection, it.documentId, it.deletedAt) }
+            val tombstones = newestTombstones(prefs.getSyncTombstones())
+            applyTombstones(tombstones)
+            FirebaseSyncMerge.favorites(favoriteDao.getFavoritesList(), remoteFavorites)
+                .filterNot { isTombstoned("favorites", it.mangaId, it.addedAt, tombstones) }
+                .forEach { favoriteDao.insert(it) }
+            FirebaseSyncMerge.history(historyDao.getAll(), remoteHistory)
+                .filterNot { isTombstoned("readingHistory", it.mangaId, it.lastReadAt, tombstones) }
                 .forEach { historyDao.insertOrUpdate(it) }
-            (localAnnotations + remoteAnnotations.associateBy { annotationDocId(it) }).values
-                .groupBy { annotationDocId(it) }
-                .values
-                .mapNotNull { items -> items.maxByOrNull { it.updatedAt } }
+            FirebaseSyncMerge.annotations(readerAnnotationDao.getAll(), remoteAnnotations)
+                .filterNot { isTombstoned("readerAnnotations", annotationDocId(it), it.updatedAt, tombstones) }
                 .forEach { readerAnnotationDao.upsert(it) }
 
             val profile = userRef.get().await()
@@ -247,7 +263,7 @@ class FirebaseSyncManager @Inject constructor(
     }
 
     private fun annotationDocId(entity: ReaderAnnotationEntity): String =
-        listOf(entity.mangaId, entity.chapterUrl.hashCode().toString(), entity.pageIndex.toString()).joinToString("_")
+        FirebaseSyncMerge.annotationDocId(entity)
 
     private suspend fun commitChunked(writes: List<Pair<com.google.firebase.firestore.DocumentReference, Any>>) {
         writes.chunked(400).forEach { chunk ->
@@ -256,4 +272,33 @@ class FirebaseSyncManager @Inject constructor(
             batch.commit().await()
         }
     }
+
+    private suspend fun applyTombstones(tombstones: Map<String, SyncTombstone>) {
+        tombstones.values.forEach { tombstone ->
+            when (tombstone.collection) {
+                "favorites" -> favoriteDao.getById(tombstone.documentId)
+                    ?.takeIf { it.addedAt <= tombstone.deletedAt }
+                    ?.let { favoriteDao.delete(it.mangaId) }
+                "readingHistory" -> historyDao.getByMangaId(tombstone.documentId)
+                    ?.takeIf { it.lastReadAt <= tombstone.deletedAt }
+                    ?.let { historyDao.delete(it.mangaId) }
+                "readerAnnotations" -> readerAnnotationDao.getAll()
+                    .firstOrNull { annotationDocId(it) == tombstone.documentId && it.updatedAt <= tombstone.deletedAt }
+                    ?.let { readerAnnotationDao.delete(it.mangaId, it.chapterUrl, it.pageIndex) }
+            }
+        }
+    }
+
+    private fun newestTombstones(tombstones: List<SyncTombstone>): Map<String, SyncTombstone> =
+        tombstones.groupBy { it.key }.mapValues { (_, candidates) -> candidates.maxBy { it.deletedAt } }
+
+    private fun isTombstoned(
+        collection: String,
+        documentId: String,
+        updatedAt: Long,
+        tombstones: Map<String, SyncTombstone>
+    ): Boolean = tombstones["$collection|$documentId"]?.deletedAt?.let { it >= updatedAt } == true
+
+    private fun tombstoneDocumentId(tombstone: SyncTombstone): String =
+        "${tombstone.collection}_${tombstone.documentId}".replace("/", "_")
 }

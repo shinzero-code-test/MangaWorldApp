@@ -130,11 +130,7 @@ class UserProfileViewModel @Inject constructor(
     fun uploadAvatar(uri: Uri) {
         viewModelScope.launch {
             val current = communityRepository.getCurrentProfile()
-            // Delete old avatar from Cloudinary
-            current?.avatarUrl?.let { oldUrl ->
-                cloudinaryUploader.extractPublicId(oldUrl)?.let { cloudinaryUploader.deleteImage(it) }
-            }
-            val result = cloudinaryUploader.uploadImage(uri, folder = "avatars")
+            val result = cloudinaryUploader.uploadImage(uri, assetType = "avatar")
             if (result != null) {
                 communityRepository.upsertProfile(
                     username = current?.username ?: "",
@@ -143,6 +139,7 @@ class UserProfileViewModel @Inject constructor(
                     avatarUrl = result.url,
                     bannerUrl = current?.bannerUrl
                 )
+                current?.avatarUrl?.let { cloudinaryUploader.extractPublicId(it)?.let(cloudinaryUploader::deleteImage) }
                 avatarUri = null
             }
         }
@@ -151,11 +148,7 @@ class UserProfileViewModel @Inject constructor(
     fun uploadBanner(uri: Uri) {
         viewModelScope.launch {
             val current = communityRepository.getCurrentProfile()
-            // Delete old banner from Cloudinary
-            current?.bannerUrl?.let { oldUrl ->
-                cloudinaryUploader.extractPublicId(oldUrl)?.let { cloudinaryUploader.deleteImage(it) }
-            }
-            val result = cloudinaryUploader.uploadImage(uri, folder = "banners")
+            val result = cloudinaryUploader.uploadImage(uri, assetType = "banner")
             if (result != null) {
                 communityRepository.upsertProfile(
                     username = current?.username ?: "",
@@ -164,6 +157,7 @@ class UserProfileViewModel @Inject constructor(
                     avatarUrl = current?.avatarUrl,
                     bannerUrl = result.url
                 )
+                current?.bannerUrl?.let { cloudinaryUploader.extractPublicId(it)?.let(cloudinaryUploader::deleteImage) }
                 bannerUri = null
             }
         }

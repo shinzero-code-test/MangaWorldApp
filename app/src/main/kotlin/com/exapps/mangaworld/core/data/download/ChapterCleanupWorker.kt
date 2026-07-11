@@ -16,15 +16,15 @@ class ChapterCleanupWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val mangaId = inputData.getString(KEY_MANGA_ID) ?: return Result.failure()
-        val targetDir = inputData.getString(KEY_TARGET_DIR) ?: return Result.failure()
+        val chapterUrl = inputData.getString(KEY_CHAPTER_URL) ?: return Result.failure()
         return runCatching {
-            downloadQueueManager.deleteDownloadedChapterDir(mangaId, targetDir)
+            downloadQueueManager.deleteDownloadedChapterDir(mangaId, chapterUrl)
             Result.success()
         }.getOrElse { Result.retry() }
     }
 
     companion object {
         const val KEY_MANGA_ID = "cleanup_manga_id"
-        const val KEY_TARGET_DIR = "cleanup_target_dir"
+        const val KEY_CHAPTER_URL = "cleanup_chapter_url"
     }
 }

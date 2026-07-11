@@ -298,14 +298,21 @@ class LibraryRepositoryImpl @Inject constructor(
     private val historyDao: ReadingHistoryDao,
     private val readChapterDao: ReadChapterDao,
     private val progressDao: ReadingProgressDao,
-    private val readerAnnotationDao: ReaderAnnotationDao
+    private val readerAnnotationDao: ReaderAnnotationDao,
+    private val prefs: AppPreferences
 ) : LibraryRepository {
 
     override fun getFavorites(): Flow<List<FavoriteManga>> =
         favoriteDao.getAllFavorites().map { list -> list.map { it.toDomain() } }
 
-    override suspend fun addFavorite(manga: FavoriteManga) = favoriteDao.insert(manga.toEntity())
-    override suspend fun removeFavorite(mangaId: String) = favoriteDao.delete(mangaId)
+    override suspend fun addFavorite(manga: FavoriteManga) {
+        favoriteDao.insert(manga.toEntity())
+        prefs.clearSyncTombstone("favorites", manga.mangaId)
+    }
+    override suspend fun removeFavorite(mangaId: String) {
+        favoriteDao.delete(mangaId)
+        prefs.markSyncTombstone("favorites", mangaId)
+    }
     override suspend fun isFavorite(mangaId: String) = favoriteDao.isFavorite(mangaId)
     override fun isFavoriteFlow(mangaId: String): Flow<Boolean> = favoriteDao.isFavoriteFlow(mangaId)
 
@@ -328,6 +335,7 @@ class LibraryRepositoryImpl @Inject constructor(
                 totalChapters = if (totalChapters > 0) totalChapters else existing?.totalChapters ?: 0
             )
         )
+        prefs.clearSyncTombstone("readingHistory", mangaId)
         favoriteDao.getById(mangaId)?.let { favorite ->
             favoriteDao.updateProgress(
                 mangaId = mangaId,
@@ -337,8 +345,14 @@ class LibraryRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun clearHistory() = historyDao.clearAll()
-    override suspend fun removeFromHistory(mangaId: String) = historyDao.delete(mangaId)
+    override suspend fun clearHistory() {
+        historyDao.getAll().forEach { prefs.markSyncTombstone("readingHistory", it.mangaId) }
+        historyDao.clearAll()
+    }
+    override suspend fun removeFromHistory(mangaId: String) {
+        historyDao.delete(mangaId)
+        prefs.markSyncTombstone("readingHistory", mangaId)
+    }
 
     override suspend fun markChapterRead(mangaId: String, chapterNumber: Float) {
         readChapterDao.markRead(ReadChapterEntity(mangaId, chapterNumber))
@@ -377,6 +391,7 @@ class LibraryRepositoryImpl @Inject constructor(
         val nextNote = current?.note.orEmpty()
         if (!nextBookmark && nextNote.isBlank()) {
             readerAnnotationDao.delete(mangaId, chapterUrl, pageIndex)
+            prefs.markSyncTombstone("readerAnnotations", annotationDocumentId(mangaId, chapterUrl, pageIndex))
         } else {
             readerAnnotationDao.upsert(
                 ReaderAnnotationEntity(
@@ -388,6 +403,7 @@ class LibraryRepositoryImpl @Inject constructor(
                     updatedAt = System.currentTimeMillis()
                 )
             )
+            prefs.clearSyncTombstone("readerAnnotations", annotationDocumentId(mangaId, chapterUrl, pageIndex))
         }
     }
 
@@ -397,6 +413,7 @@ class LibraryRepositoryImpl @Inject constructor(
         val keepBookmark = current?.isBookmarked ?: false
         if (normalized.isBlank() && !keepBookmark) {
             readerAnnotationDao.delete(mangaId, chapterUrl, pageIndex)
+            prefs.markSyncTombstone("readerAnnotations", annotationDocumentId(mangaId, chapterUrl, pageIndex))
         } else {
             readerAnnotationDao.upsert(
                 ReaderAnnotationEntity(
@@ -408,6 +425,7 @@ class LibraryRepositoryImpl @Inject constructor(
                     updatedAt = System.currentTimeMillis()
                 )
             )
+            prefs.clearSyncTombstone("readerAnnotations", annotationDocumentId(mangaId, chapterUrl, pageIndex))
         }
     }
 
@@ -420,6 +438,9 @@ class LibraryRepositoryImpl @Inject constructor(
         val total = historyDao.getByMangaId(mangaId)?.totalChapters?.takeIf { it > 0 } ?: favorite.totalChapters
         favoriteDao.updateProgress(mangaId, readCount, total)
     }
+
+    private fun annotationDocumentId(mangaId: String, chapterUrl: String, pageIndex: Int): String =
+        listOf(mangaId, chapterUrl.hashCode().toString(), pageIndex.toString()).joinToString("_")
 }
 
 // ─── SettingsRepository ───────────────────────────────────────────────────────
@@ -449,6 +470,7 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setContentBlacklist(values: Set<String>) { prefs.setContentBlacklist(values) }
     override suspend fun setSpoilerCollapseDefault(enabled: Boolean) { prefs.setSpoilerCollapseDefault(enabled) }
     override suspend fun setMutedUserIds(values: Set<String>) { prefs.setMutedUsers(values) }
+    override suspend fun setReadingListStatus(status: String?) { prefs.setReadingListStatus(status) }
     override fun getReaderSettings() = prefs.readerSettings
     override suspend fun updateReaderMode(mode: ReaderMode) { prefs.setReaderMode(mode) }
     override suspend fun updateBrightness(brightness: Float) { prefs.setBrightness(brightness) }
@@ -467,6 +489,9 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun updateVolumeButtonPageTurn(enabled: Boolean) { prefs.setVolumeButton(enabled) }
     override suspend fun updateDoubleTapZoom(enabled: Boolean) { prefs.setDoubleTapZoom(enabled) }
     override suspend fun updateShowPageNumber(enabled: Boolean) { prefs.setShowPageNum(enabled) }
+    override suspend fun updateTapActions(left: TapAction, right: TapAction, middle: TapAction) {
+        prefs.setTapActions(left, right, middle)
+    }
     override fun getCookies(domain: String) = prefs.getCookies(domain)
     override suspend fun saveCookies(domain: String, cookies: String) { prefs.saveCookies(domain, cookies) }
     override suspend fun clearCookies(domain: String) { prefs.clearCookies(domain) }
@@ -474,8 +499,8 @@ class SettingsRepositoryImpl @Inject constructor(
     override fun isSourceNotificationEnabled(sourceId: String) = prefs.isSourceNotificationEnabled(sourceId)
     override suspend fun setSourceNotification(sourceId: String, enabled: Boolean) { prefs.setSourceNotification(sourceId, enabled) }
 
-    override fun getFavoriteGenres(): Flow<List<String>> = prefs.appSettings.map { it.contentBlacklist.toList() }
-    override suspend fun setFavoriteGenres(genres: List<String>) { prefs.setContentBlacklist(genres.toSet()) }
+    override fun getFavoriteGenres(): Flow<List<String>> = prefs.appSettings.map { it.favoriteGenres }
+    override suspend fun setFavoriteGenres(genres: List<String>) { prefs.setFavoriteGenres(genres) }
     override fun getMutedUserIds(): Flow<Set<String>> = prefs.appSettings.map { it.mutedUserIds }
     override suspend fun addMutedUser(uid: String) { val current = prefs.appSettings.first().mutedUserIds; prefs.setMutedUsers(current + uid) }
     override suspend fun removeMutedUser(uid: String) { val current = prefs.appSettings.first().mutedUserIds; prefs.setMutedUsers(current - uid) }

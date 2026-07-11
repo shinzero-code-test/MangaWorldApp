@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const user = await getCurrentUser();
+    const user = await getCurrentUser({ requireMfa: false });
 
     // Check if already set up
     const doc = await getAdminDb().collection("admin2fa").doc(user.uid).get();

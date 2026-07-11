@@ -82,6 +82,7 @@ interface SettingsRepository {
     suspend fun setContentBlacklist(values: Set<String>)
     suspend fun setSpoilerCollapseDefault(enabled: Boolean)
     suspend fun setMutedUserIds(values: Set<String>)
+    suspend fun setReadingListStatus(status: String?)
 
     fun getReaderSettings(): Flow<ReaderSettings>
     suspend fun updateReaderMode(mode: ReaderMode)
@@ -101,6 +102,7 @@ interface SettingsRepository {
     suspend fun updateVolumeButtonPageTurn(enabled: Boolean)
     suspend fun updateDoubleTapZoom(enabled: Boolean)
     suspend fun updateShowPageNumber(enabled: Boolean)
+    suspend fun updateTapActions(left: TapAction, right: TapAction, middle: TapAction)
 
     fun getCookies(domain: String): Flow<String?>
     suspend fun saveCookies(domain: String, cookies: String)

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clearMfaGrantCookie } from "@/lib/auth";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 
 export const dynamic = 'force-dynamic';
@@ -27,11 +28,8 @@ export async function POST(request: NextRequest) {
 
     const profileDoc = await getAdminDb().collection("publicProfiles").doc(decoded.uid).get();
     if (!profileDoc.exists) {
-      const isSuperAdmin = email === process.env.SUPER_ADMIN_EMAIL;
       await getAdminDb().collection("publicProfiles").doc(decoded.uid).set({
-        uid: decoded.uid,
         username: email.split("@")[0],
-        role: isSuperAdmin ? "super-admin" : "viewer",
         isPublic: false,
         bio: "",
         updatedAt: Date.now(),
@@ -44,23 +42,23 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({ success: true });
     response.cookies.set("session", sessionCookie, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
       sameSite: "lax",
       maxAge: expiresIn / 1000,
       path: "/",
     });
-    // Clear any existing 2FA verification so user must re-verify
-    response.cookies.set("2fa_verified", "", { httpOnly: true, maxAge: 0, path: "/" });
+    clearMfaGrantCookie(response);
 
     return response;
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "خطأ في تسجيل الدخول" }, { status: 500 });
+  } catch (error) {
+    console.error("Dashboard password login error:", error);
+    return NextResponse.json({ error: "خطأ في تسجيل الدخول" }, { status: 500 });
   }
 }
 
 export async function DELETE() {
   const response = NextResponse.json({ success: true });
-  response.cookies.set("session", "", { httpOnly: true, maxAge: 0, path: "/" });
-  response.cookies.set("2fa_verified", "", { httpOnly: true, maxAge: 0, path: "/" });
+  response.cookies.set("session", "", { httpOnly: true, secure: true, maxAge: 0, path: "/" });
+  clearMfaGrantCookie(response);
   return response;
 }

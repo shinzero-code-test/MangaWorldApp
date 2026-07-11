@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
+import { verifyAppIdToken } from "@/lib/app-auth";
+import { allowAppMutation } from "@/lib/app-rate-limit";
+import { getAdminDb } from "@/lib/firebase-admin";
+import { cloudinaryAssetId } from "@/lib/cloudinary-assets";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -9,31 +13,27 @@ cloudinary.config({
 
 export const dynamic = "force-dynamic";
 
-/**
- * POST /api/cloudinary/app-delete
- *
- * Public delete endpoint for the Android app.
- * Accepts a Cloudinary publicId and deletes the image.
- *
- * Request body:
- *   { "publicId": "avatars/abc123" }
- *
- * Response:
- *   { "result": "ok" } or { "result": "not_found" }
- */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { publicId } = body;
-
-    if (!publicId) {
-      return NextResponse.json({ error: "publicId is required" }, { status: 400 });
+    const user = await verifyAppIdToken(request);
+    if (!allowAppMutation(`delete:${user.uid}`, 30, 60 * 60 * 1000)) {
+      return NextResponse.json({ error: "Too many delete requests" }, { status: 429 });
+    }
+    const { publicId } = await request.json();
+    if (typeof publicId !== "string" || publicId.length === 0 || publicId.length > 512) {
+      return NextResponse.json({ error: "A valid publicId is required" }, { status: 400 });
     }
 
+    const assetRef = getAdminDb().collection("cloudinaryAssets").doc(cloudinaryAssetId(publicId));
+    const asset = await assetRef.get();
+    if (!asset.exists || asset.data()?.uid !== user.uid || asset.data()?.publicId !== publicId) {
+      return NextResponse.json({ error: "Asset not found" }, { status: 404 });
+    }
     const result = await cloudinary.uploader.destroy(publicId);
+    await assetRef.delete();
     return NextResponse.json({ result: result.result });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Cloudinary app delete error:", error);
-    return NextResponse.json({ error: error.message || "Delete failed" }, { status: 500 });
+    return NextResponse.json({ error: "Delete failed" }, { status: 401 });
   }
 }

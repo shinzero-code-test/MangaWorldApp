@@ -48,13 +48,12 @@ class ChapterDownloadWorker @AssistedInject constructor(
         val chapterUrl = inputData.getString(KEY_CHAPTER_URL) ?: return@withContext Result.failure()
         val chapterTitle = inputData.getString(KEY_CHAPTER_TITLE)
         val referer = inputData.getString(KEY_REFERER).orEmpty()
-        val targetDirPath = inputData.getString(KEY_TARGET_DIR)
         val pages = inputData.getStringArray(KEY_PAGES)?.toList().orEmpty()
         if (pages.isEmpty()) return@withContext Result.failure()
 
-        val targetDir = targetDirPath?.let(::File)
-            ?: DownloadStorage.canonicalChapterDir(File(appContext.getExternalFilesDir(null), "downloads"), mangaId, chapterUrl)
-        val mangaDir = targetDir.parentFile ?: return@withContext Result.failure()
+        val downloadsRoot = File(appContext.getExternalFilesDir(null), "downloads")
+        val targetDir = DownloadStorage.canonicalChapterDir(downloadsRoot, mangaId, chapterUrl)
+        val mangaDir = DownloadStorage.canonicalMangaDir(downloadsRoot, mangaId)
         if (!targetDir.exists()) targetDir.mkdirs()
 
         val chapterKey = DownloadStorage.chapterKey(chapterUrl)
@@ -247,7 +246,6 @@ class ChapterDownloadWorker @AssistedInject constructor(
         const val KEY_CHAPTER_TITLE = "chapter_title"
         const val KEY_PAGES = "pages"
         const val KEY_REFERER = "referer"
-        const val KEY_TARGET_DIR = "target_dir"
         private const val NOTIF_ID_PROGRESS = 1001
         private const val NOTIF_ID_COMPLETE = 2000
         private const val NOTIF_ID_FAIL = 3000

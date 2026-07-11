@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
-import { requireRole } from "@/lib/auth";
+import { DASHBOARD_ROLES, requireRole } from "@/lib/auth";
 
 export const dynamic = 'force-dynamic';
 
@@ -90,10 +90,11 @@ export async function PATCH(request: NextRequest) {
     if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
 
     const updates: any = { updatedAt: Date.now() };
-    if (role && ["viewer", "moderator", "super-admin"].includes(role)) {
-      updates.role = role;
-      // Also set custom claim
-      await getAdminAuth().setCustomUserClaims(uid, { role });
+    if (role !== undefined) {
+      if (!DASHBOARD_ROLES.includes(role)) return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+      const authUser = await getAdminAuth().getUser(uid);
+      await getAdminAuth().setCustomUserClaims(uid, { ...authUser.customClaims, role });
+      await getAdminAuth().revokeRefreshTokens(uid);
     }
     if (username !== undefined) updates.username = username;
     if (bio !== undefined) updates.bio = bio;

@@ -629,13 +629,13 @@ class ReaderViewModel @Inject constructor(
     private suspend fun scheduleAutoCleanupIfNeeded(mangaId: String, chapterUrl: String) {
         val settings = settingsRepo.getAppSettings().first()
         if (!settings.autoCleanupReadDownloads) return
-        val targetDir = downloadQueueManager.getDownloadedChapterDir(mangaId, chapterUrl) ?: return
+        if (downloadQueueManager.getDownloadedChapterDir(mangaId, chapterUrl) == null) return
         val request = OneTimeWorkRequestBuilder<ChapterCleanupWorker>()
             .setInitialDelay(settings.cleanupAfterHours.toLong(), TimeUnit.HOURS)
             .setInputData(
                 Data.Builder()
                     .putString(ChapterCleanupWorker.KEY_MANGA_ID, mangaId)
-                    .putString(ChapterCleanupWorker.KEY_TARGET_DIR, targetDir)
+                    .putString(ChapterCleanupWorker.KEY_CHAPTER_URL, chapterUrl)
                     .build()
             )
             .build()

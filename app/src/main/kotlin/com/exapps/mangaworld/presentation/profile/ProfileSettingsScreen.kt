@@ -37,6 +37,7 @@ import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
 import com.exapps.mangaworld.core.firebase.CloudinaryUploader
+import com.exapps.mangaworld.core.firebase.AccountMergeRequiredException
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.CommunityProfile
@@ -119,6 +120,11 @@ class ProfileSettingsViewModel @Inject constructor(
 
     var avatarUri by mutableStateOf<Uri?>(null); private set
 
+    private val _linkedProviderIds = MutableStateFlow(sessionManager.linkedProviderIds())
+    val linkedProviderIds: StateFlow<Set<String>> = _linkedProviderIds.asStateFlow()
+    private val _providerLinkError = MutableStateFlow<String?>(null)
+    val providerLinkError: StateFlow<String?> = _providerLinkError.asStateFlow()
+
     init {
         viewModelScope.launch {
             profile.first { it != null }
@@ -144,6 +150,12 @@ class ProfileSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             communityRepository.getBlockedUsers().collect { _blockedUsers.value = it }
         }
+        viewModelScope.launch {
+            settingsRepository.getFavoriteGenres().collect { _favoriteGenres.value = it }
+        }
+        viewModelScope.launch {
+            sessionManager.authState.collect { _linkedProviderIds.value = sessionManager.linkedProviderIds() }
+        }
     }
 
     fun updateAvatarUri(uri: Uri) { avatarUri = uri }
@@ -151,10 +163,10 @@ class ProfileSettingsViewModel @Inject constructor(
     fun uploadAvatar(uri: Uri) {
         viewModelScope.launch {
             val current = communityRepository.getCurrentProfile()
-            current?.avatarUrl?.let { cloudinaryUploader.extractPublicId(it)?.let { id -> cloudinaryUploader.deleteImage(id) } }
-            val result = cloudinaryUploader.uploadImage(uri, folder = "avatars")
+            val result = cloudinaryUploader.uploadImage(uri, assetType = "avatar")
             if (result != null) {
                 communityRepository.upsertProfile(current?.username ?: "", current?.bio ?: "", current?.isPublic ?: true, result.url, current?.bannerUrl)
+                current?.avatarUrl?.let { cloudinaryUploader.extractPublicId(it)?.let(cloudinaryUploader::deleteImage) }
                 avatarUri = null
             }
         }
@@ -189,11 +201,37 @@ class ProfileSettingsViewModel @Inject constructor(
 
     fun setFavoriteGenres(genres: List<String>) {
         _favoriteGenres.value = genres
+        viewModelScope.launch { settingsRepository.setFavoriteGenres(genres) }
+    }
+
+    fun googleSignInIntent() = sessionManager.googleSignInClient().signInIntent
+
+    fun linkGoogle(idToken: String) {
+        viewModelScope.launch { linkProvider { sessionManager.linkGoogle(idToken) } }
+    }
+
+    fun linkFacebook(accessToken: String) {
+        viewModelScope.launch { linkProvider { sessionManager.linkFacebook(accessToken) } }
+    }
+
+    fun unlinkProvider(providerId: String) {
+        viewModelScope.launch { linkProvider { sessionManager.unlinkProvider(providerId) } }
     }
 
     fun exportAccountData() {
         viewModelScope.launch {
             // Trigger account data export
+        }
+    }
+
+    private suspend fun linkProvider(action: suspend () -> Unit) {
+        _providerLinkError.value = null
+        try {
+            action()
+        } catch (_: AccountMergeRequiredException) {
+            _providerLinkError.value = "هذا المزود مرتبط بحساب آخر. لا يمكن دمج الحسابات تلقائياً."
+        } catch (_: Exception) {
+            _providerLinkError.value = "تعذر تحديث مزود تسجيل الدخول. حاول مرة أخرى."
         }
     }
 }
@@ -217,6 +255,7 @@ fun ProfileSettingsScreen(
     onOpenReadingStats: () -> Unit,
     onOpenCloudSync: () -> Unit,
     onOpenSources: () -> Unit,
+    setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit,
     viewModel: ProfileSettingsViewModel = hiltViewModel()
 ) {
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
@@ -235,6 +274,8 @@ fun ProfileSettingsScreen(
     val blockedUsers by viewModel.blockedUsers.collectAsStateWithLifecycle()
     val commentsCount by viewModel.commentsCount.collectAsStateWithLifecycle()
     val reviewsCount by viewModel.reviewsCount.collectAsStateWithLifecycle()
+    val linkedProviderIds by viewModel.linkedProviderIds.collectAsStateWithLifecycle()
+    val providerLinkError by viewModel.providerLinkError.collectAsStateWithLifecycle()
     val avatarUri = viewModel.avatarUri
 
     var expandedSection by remember { mutableStateOf<String?>(null) }
@@ -248,6 +289,29 @@ fun ProfileSettingsScreen(
 
     val avatarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { viewModel.uploadAvatar(it) }
+    }
+    val googleLinkLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        runCatching {
+            com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                .result
+                ?.idToken
+                ?.let(viewModel::linkGoogle)
+        }
+    }
+    val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    DisposableEffect(facebookCallbackManager) {
+        val callback = object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+            override fun onSuccess(result: com.facebook.login.LoginResult) {
+                viewModel.linkFacebook(result.accessToken.token)
+            }
+            override fun onCancel() = Unit
+            override fun onError(error: com.facebook.FacebookException) = Unit
+        }
+        val loginManager = com.facebook.login.LoginManager.getInstance()
+        loginManager.registerCallback(facebookCallbackManager, callback)
+        setFacebookCallbackManager(facebookCallbackManager)
+        onDispose { loginManager.unregisterCallback(facebookCallbackManager) }
     }
 
     Scaffold(
@@ -295,7 +359,23 @@ fun ProfileSettingsScreen(
                 StatsSection(totalReadingTimeMs, totalMangaRead, currentStreak, onOpenReadingStats)
             }
             Section("المزامنة والنسخ الاحتياطي", Icons.Filled.CloudSync, MangaColors.Cyan, "sync", expandedSection, onToggle = { expandedSection = it }) {
-                SyncSection(favoriteCount + historyCount, onOpenCloudSync, viewModel::exportAccountData)
+                SyncSection(
+                    totalItems = favoriteCount + historyCount,
+                    linkedProviderIds = linkedProviderIds,
+                    providerLinkError = providerLinkError,
+                    onOpenCloudSync = onOpenCloudSync,
+                    onExport = viewModel::exportAccountData,
+                    onLinkGoogle = { googleLinkLauncher.launch(viewModel.googleSignInIntent()) },
+                    onUnlinkProvider = viewModel::unlinkProvider,
+                    onLinkFacebook = {
+                        (context as? android.app.Activity)?.let { activity ->
+                            com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
+                                activity,
+                                listOf("email", "public_profile")
+                            )
+                        }
+                    }
+                )
             }
             Section("المصادر والمحتوى", Icons.Filled.Tune, MangaColors.Green, "content", expandedSection, onToggle = { expandedSection = it }) {
                 ContentSection(appSettings.enabledSources.size, appSettings.contentBlacklist.size, onOpenSources)
@@ -442,12 +522,73 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     }
 }
 
-@Composable private fun SyncSection(totalItems: Int, onOpenCloudSync: () -> Unit, onExport: () -> Unit) {
+@Composable private fun SyncSection(
+    totalItems: Int,
+    linkedProviderIds: Set<String>,
+    providerLinkError: String?,
+    onOpenCloudSync: () -> Unit,
+    onExport: () -> Unit,
+    onLinkGoogle: () -> Unit,
+    onLinkFacebook: () -> Unit,
+    onUnlinkProvider: (String) -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().clickable(onClick = onOpenCloudSync).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Cloud, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("مزامنة الحساب مع السحابة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("فتح", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().clickable(onClick = onExport).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.ImportExport, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("استيراد/تصدير القوائم", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$totalItems عنصر", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Link, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("ربط الحساب بخدمات خارجية", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("Google ✓  |  Facebook ✓", color = MangaColors.Green, style = MaterialTheme.typography.bodySmall) }
+        ProviderLinkRow(
+            label = "Google",
+            providerId = "google.com",
+            linked = "google.com" in linkedProviderIds,
+            canUnlink = linkedProviderIds.size > 1,
+            onLink = onLinkGoogle,
+            onUnlink = onUnlinkProvider
+        )
+        ProviderLinkRow(
+            label = "Facebook",
+            providerId = "facebook.com",
+            linked = "facebook.com" in linkedProviderIds,
+            canUnlink = linkedProviderIds.size > 1,
+            onLink = onLinkFacebook,
+            onUnlink = onUnlinkProvider
+        )
+        if ("password" in linkedProviderIds) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Email, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(12.dp))
+                Text("البريد الإلكتروني", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Text("مرتبط ✓", color = MangaColors.Green, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        providerLinkError?.let { message ->
+            Text(message, color = MangaColors.Pink, style = MaterialTheme.typography.bodySmall)
+        }
     }
+}
+
+@Composable private fun ProviderLinkRow(
+    label: String,
+    providerId: String,
+    linked: Boolean,
+    canUnlink: Boolean,
+    onLink: () -> Unit,
+    onUnlink: (String) -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clickable(enabled = !linked, onClick = onLink)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+            Icon(Icons.Filled.Link, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(12.dp))
+            Text(label, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            if (linked && canUnlink) {
+                TextButton(onClick = { onUnlink(providerId) }) { Text("إزالة", color = MangaColors.Pink) }
+            } else {
+                Text(if (linked) "مرتبط ✓" else "ربط", color = if (linked) MangaColors.Green else MangaColors.Cyan, style = MaterialTheme.typography.bodySmall)
+            }
+    }
+}
 }
 
 @Composable private fun ContentSection(srcCount: Int, blacklistCount: Int, onOpenSources: () -> Unit) {

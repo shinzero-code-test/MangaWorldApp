@@ -3,7 +3,7 @@ package com.exapps.mangaworld.presentation.auth
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.exapps.mangaworld.core.firebase.CrossProviderCollisionException
+import com.exapps.mangaworld.core.firebase.AccountMergeRequiredException
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,14 +24,6 @@ data class AuthUiState(
     val password: String = "",
     val passwordResetSent: Boolean = false
 )
-
-/** Map a Firebase/Auth provider ID to a human-readable Arabic name. */
-private fun String.toProviderDisplayName(): String = when (this) {
-    "google.com" -> "Google"
-    "facebook.com" -> "Facebook"
-    "password" -> "البريد الإلكتروني"
-    else -> "الأخرى"
-}
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(
@@ -112,15 +104,8 @@ class LoginViewModel @Inject constructor(
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول بـ Google.") }
                 }
-            } catch (e: CrossProviderCollisionException) {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        error = "البريد \"${e.email}\" مسجل بالفعل بـ ${
-                            e.existingProvider.toProviderDisplayName()
-                        }. سجّل الدخول باستخدام ${e.existingProvider.toProviderDisplayName()}."
-                    )
-                }
+            } catch (_: AccountMergeRequiredException) {
+                _uiState.update { it.copy(isLoading = false, error = "هذا الحساب مرتبط بحساب آخر. سجّل الدخول بالحساب الأصلي ثم اربط مزود الدخول من الإعدادات.") }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
             }
@@ -137,15 +122,8 @@ class LoginViewModel @Inject constructor(
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول بـ Facebook.") }
                 }
-            } catch (e: CrossProviderCollisionException) {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        error = "البريد \"${e.email}\" مسجل بالفعل بـ ${
-                            e.existingProvider.toProviderDisplayName()
-                        }. سجّل الدخول باستخدام ${e.existingProvider.toProviderDisplayName()}."
-                    )
-                }
+            } catch (_: AccountMergeRequiredException) {
+                _uiState.update { it.copy(isLoading = false, error = "هذا الحساب مرتبط بحساب آخر. سجّل الدخول بالحساب الأصلي ثم اربط مزود الدخول من الإعدادات.") }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
             }

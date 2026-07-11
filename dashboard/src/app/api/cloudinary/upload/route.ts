@@ -25,7 +25,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
-    await requireRole("admin");
+    await requireRole("super-admin");
 
     const body = await request.json();
     const { image, folder = "uploads" } = body;
@@ -50,9 +50,9 @@ export async function POST(request: NextRequest) {
       width: result.width,
       height: result.height,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Cloudinary upload error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }
 
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    await requireRole("admin");
+    await requireRole("super-admin");
 
     const { searchParams } = new URL(request.url);
     const publicId = searchParams.get("publicId");
@@ -74,7 +74,8 @@ export async function DELETE(request: NextRequest) {
 
     const result = await cloudinary.uploader.destroy(publicId);
     return NextResponse.json({ result });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error("Cloudinary delete error:", error);
+    return NextResponse.json({ error: "Delete failed" }, { status: 500 });
   }
 }

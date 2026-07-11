@@ -38,10 +38,6 @@ class DownloadQueueManager @Inject constructor(
     private val downloadsRoot: File
         get() = File(app.getExternalFilesDir(null), "downloads")
 
-    /** Safe folder name: strip forbidden chars, limit length. */
-    private fun safeName(name: String): String =
-        name.replace(Regex("""[/\\\\:*?""<>|]"""), "_").trim().take(80).ifBlank { "manga" }
-
     private fun mangaDir(mangaId: String, title: String? = null): File =
         DownloadStorage.resolveExistingMangaDir(downloadsRoot, mangaId, title)
 
@@ -137,7 +133,6 @@ class DownloadQueueManager @Inject constructor(
             .putString(ChapterDownloadWorker.KEY_CHAPTER_URL, chapterUrl)
             .putString(ChapterDownloadWorker.KEY_CHAPTER_TITLE, chapterTitle)
             .putString(ChapterDownloadWorker.KEY_REFERER, referer)
-            .putString(ChapterDownloadWorker.KEY_TARGET_DIR, targetDir.absolutePath)
             .putStringArray(ChapterDownloadWorker.KEY_PAGES, pages.map { it.url }.toTypedArray())
             .build()
         val request = OneTimeWorkRequestBuilder<ChapterDownloadWorker>()
@@ -163,7 +158,7 @@ class DownloadQueueManager @Inject constructor(
             status = "cancelled",
             totalPages = runCatching { JSONArray(task.pagesJson).length() }.getOrDefault(0)
         )
-        File(task.targetDir).deleteRecursively()
+        deleteChapterDirectory(task.mangaId, task.chapterUrl, task.mangaTitle)
         WorkManager.getInstance(app).cancelAllWorkByTag(taskId)
     }
 
@@ -191,7 +186,6 @@ class DownloadQueueManager @Inject constructor(
                     .putString(ChapterDownloadWorker.KEY_CHAPTER_URL, task.chapterUrl)
                     .putString(ChapterDownloadWorker.KEY_CHAPTER_TITLE, task.chapterTitle)
                     .putString(ChapterDownloadWorker.KEY_REFERER, task.referer)
-                    .putString(ChapterDownloadWorker.KEY_TARGET_DIR, task.targetDir)
                     .putStringArray(
                         ChapterDownloadWorker.KEY_PAGES,
                         runCatching {
@@ -239,7 +233,6 @@ class DownloadQueueManager @Inject constructor(
                     .putString(ChapterDownloadWorker.KEY_CHAPTER_URL, task.chapterUrl)
                     .putString(ChapterDownloadWorker.KEY_CHAPTER_TITLE, task.chapterTitle)
                     .putString(ChapterDownloadWorker.KEY_REFERER, task.referer)
-                    .putString(ChapterDownloadWorker.KEY_TARGET_DIR, task.targetDir)
                     .putStringArray(
                         ChapterDownloadWorker.KEY_PAGES,
                         runCatching {
@@ -258,9 +251,9 @@ class DownloadQueueManager @Inject constructor(
     suspend fun clearCompleted() = downloadTaskDao.clearCompleted()
 
     suspend fun getDownloadedChapterDir(mangaId: String, chapterUrl: String): String? =
-        downloadTaskDao.getLatestByChapter(chapterUrl, mangaId)
-            ?.targetDir
-            ?.takeIf { File(it).exists() && File(it, ".completed").exists() }
+        DownloadStorage.canonicalChapterDir(downloadsRoot, mangaId, chapterUrl)
+            .takeIf { it.exists() && File(it, ".completed").exists() }
+            ?.absolutePath
 
     /**
      * Delete ALL downloaded content for a manga: files on disk, task records,
@@ -270,19 +263,31 @@ class DownloadQueueManager @Inject constructor(
         // Cancel any active work
         WorkManager.getInstance(app).cancelAllWorkByTag("manga_$mangaId")
         // Delete files
-        canonicalMangaDir(mangaId).deleteRecursively()
+        deleteMangaDirectory(canonicalMangaDir(mangaId))
         downloadedMangaDao.get(mangaId)?.title?.let { title ->
-            DownloadStorage.legacyMangaDir(downloadsRoot, title)?.deleteRecursively()
+            DownloadStorage.legacyMangaDir(downloadsRoot, title)?.let(::deleteMangaDirectory)
         }
         // Remove DB records
         downloadTaskDao.deleteByMangaId(mangaId)
         downloadedMangaDao.delete(mangaId)
     }
 
-    suspend fun deleteDownloadedChapterDir(mangaId: String, targetDir: String) {
-        val dir = File(targetDir)
-        if (dir.exists()) dir.deleteRecursively()
+    suspend fun deleteDownloadedChapterDir(mangaId: String, chapterUrl: String) {
+        deleteChapterDirectory(mangaId, chapterUrl)
         refreshDownloadedCount(mangaId)
+    }
+
+    private fun deleteChapterDirectory(mangaId: String, chapterUrl: String, title: String? = null) {
+        val directory = chapterDir(mangaId, chapterUrl, title)
+        if (DownloadStorage.isChapterDirectory(downloadsRoot, mangaId, directory)) {
+            directory.deleteRecursively()
+        }
+    }
+
+    private fun deleteMangaDirectory(directory: File) {
+        if (DownloadStorage.isMangaDirectory(downloadsRoot, directory)) {
+            directory.deleteRecursively()
+        }
     }
 
     /** Update the chapter count in the downloaded_manga table after a chapter completes. */

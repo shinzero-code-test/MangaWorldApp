@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
-import { requireRole } from "@/lib/auth";
+import { getDashboardRoleCounts, requireRole } from "@/lib/auth";
 
 export const dynamic = 'force-dynamic';
 
@@ -43,15 +43,7 @@ export async function GET() {
     const openReports  = openReportsSnap.data().count;
     const recentSignUps= weekAgoSnap.data().count;
 
-    // Role distribution
-    const roleCounts = { "super-admin": 0, moderator: 0, viewer: 0 };
-    try {
-      const profiles = await getAdminDb().collection("publicProfiles").limit(200).get();
-      profiles.docs.forEach((doc) => {
-        const role = doc.data().role || "viewer";
-        if (role in roleCounts) roleCounts[role as keyof typeof roleCounts]++;
-      });
-    } catch { /* */ }
+    const roleCounts = await getDashboardRoleCounts();
 
     return NextResponse.json({
       totalUsers,

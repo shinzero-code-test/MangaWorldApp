@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
-import { requireRole } from "@/lib/auth";
+import { DASHBOARD_ROLES, requireRole } from "@/lib/auth";
 
 export const dynamic = 'force-dynamic';
 
@@ -57,7 +57,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       // Profile info
       username: profile.username || "",
       avatarUrl: profile.avatarUrl || "",
-      role: profile.role || "viewer",
+      role: authUser?.customClaims?.role || "viewer",
       bio: profile.bio || "",
       isPublic: profile.isPublic || false,
 
@@ -85,7 +85,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     // Update profile
     const profileUpdates: any = { updatedAt: Date.now() };
-    if (body.role) profileUpdates.role = body.role;
+    if (body.role !== undefined && !DASHBOARD_ROLES.includes(body.role)) {
+      return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+    }
     if (body.username !== undefined) profileUpdates.username = body.username;
     if (body.bio !== undefined) profileUpdates.bio = body.bio;
     if (body.isPublic !== undefined) profileUpdates.isPublic = body.isPublic;
@@ -99,8 +101,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (body.email) {
       await getAdminAuth().updateUser(uid, { email: body.email });
     }
-    if (body.role) {
-      await getAdminAuth().setCustomUserClaims(uid, { role: body.role });
+    if (body.role !== undefined) {
+      const authUser = await getAdminAuth().getUser(uid);
+      await getAdminAuth().setCustomUserClaims(uid, { ...authUser.customClaims, role: body.role });
+      await getAdminAuth().revokeRefreshTokens(uid);
     }
 
     return NextResponse.json({ success: true });

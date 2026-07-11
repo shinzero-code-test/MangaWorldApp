@@ -37,7 +37,7 @@ class LocalBackupManager @Inject constructor(
 ) {
     suspend fun exportTo(uri: Uri) {
         val root = JSONObject().apply {
-            put("schemaVersion", 1)
+            put("schemaVersion", 2)
             put("exportedAt", System.currentTimeMillis())
             put("favorites", JSONArray(favoriteDao.getFavoritesList().map { it.toJson() }))
             put("history", JSONArray(historyDao.getAll().map { it.toJson() }))
@@ -78,12 +78,17 @@ class LocalBackupManager @Inject constructor(
         settingsRepository.setContentBlacklist(settings.contentBlacklist)
         settingsRepository.setSpoilerCollapseDefault(settings.spoilerCollapseDefault)
         settingsRepository.setMutedUserIds(settings.mutedUserIds)
+        settingsRepository.setOnboardingCompleted(settings.onboardingCompleted)
+        settingsRepository.setReadingListStatus(settings.readingListStatus)
+        settingsRepository.setFavoriteGenres(settings.favoriteGenres)
     }
 
     private suspend fun applyReaderSettings(settings: ReaderSettings) {
         settingsRepository.updateReaderMode(settings.mode)
         settingsRepository.updateBrightness(settings.brightness)
         settingsRepository.updateKeepScreenOn(settings.keepScreenOn)
+        settingsRepository.updatePageSpacing(settings.pageSpacing)
+        settingsRepository.updateShowPageNumber(settings.showPageNumber)
         settingsRepository.updateAutoWebtoon(settings.autoWebtoonDetection)
         settingsRepository.updateIncognitoMode(settings.incognitoMode)
         settingsRepository.updateSmartPrefetch(settings.smartPrefetchEnabled)
@@ -94,6 +99,13 @@ class LocalBackupManager @Inject constructor(
         settingsRepository.updateShowReactionOverlay(settings.showReactionOverlay)
         settingsRepository.updateDualPageLandscape(settings.dualPageLandscape)
         settingsRepository.updateWebtoonAutoStitch(settings.webtoonAutoStitch)
+        settingsRepository.updateVolumeButtonPageTurn(settings.volumeButtonPageTurn)
+        settingsRepository.updateDoubleTapZoom(settings.doubleTapZoom)
+        settingsRepository.updateTapActions(
+            settings.tapLeftAction,
+            settings.tapRightAction,
+            settings.tapMiddleAction
+        )
     }
 
     private fun FavoriteEntity.toJson() = JSONObject().apply {
@@ -121,6 +133,7 @@ class LocalBackupManager @Inject constructor(
         put("useDynamicColors", useDynamicColors); put("biometricLockEnabled", biometricLockEnabled); put("secureReaderEnabled", secureReaderEnabled)
         put("notificationDeliveryMode", notificationDeliveryMode.name); put("autoCleanupReadDownloads", autoCleanupReadDownloads); put("cleanupAfterHours", cleanupAfterHours)
         put("imageCacheLimitMb", imageCacheLimitMb); put("contentBlacklist", JSONArray(contentBlacklist.toList())); put("spoilerCollapseDefault", spoilerCollapseDefault); put("mutedUserIds", JSONArray(mutedUserIds.toList()))
+        put("readingListStatus", readingListStatus); put("favoriteGenres", JSONArray(favoriteGenres))
     }
     private fun ReaderSettings.toJson() = JSONObject().apply {
         put("mode", mode.name); put("brightness", brightness.toDouble()); put("pageSpacing", pageSpacing); put("keepScreenOn", keepScreenOn)
@@ -128,6 +141,8 @@ class LocalBackupManager @Inject constructor(
         put("smartPrefetchEnabled", smartPrefetchEnabled); put("hapticsEnabled", hapticsEnabled); put("imageFilter", imageFilter.name)
         put("autoOpenNextChapter", autoOpenNextChapter); put("showLiveReadersOverlay", showLiveReadersOverlay); put("showReactionOverlay", showReactionOverlay)
         put("dualPageLandscape", dualPageLandscape); put("webtoonAutoStitch", webtoonAutoStitch)
+        put("volumeButtonPageTurn", volumeButtonPageTurn); put("doubleTapZoom", doubleTapZoom)
+        put("tapLeftAction", tapLeftAction.name); put("tapRightAction", tapRightAction.name); put("tapMiddleAction", tapMiddleAction.name)
     }
 
     private fun JSONObject.toAppSettings(): AppSettings = AppSettings(
@@ -146,7 +161,9 @@ class LocalBackupManager @Inject constructor(
         imageCacheLimitMb = optInt("imageCacheLimitMb", 250),
         contentBlacklist = optJSONArray("contentBlacklist")?.toStringSet() ?: emptySet(),
         spoilerCollapseDefault = optBoolean("spoilerCollapseDefault", true),
-        mutedUserIds = optJSONArray("mutedUserIds")?.toStringSet() ?: emptySet()
+        mutedUserIds = optJSONArray("mutedUserIds")?.toStringSet() ?: emptySet(),
+        readingListStatus = optString("readingListStatus").takeIf { it.isNotBlank() },
+        favoriteGenres = optJSONArray("favoriteGenres")?.toStringList() ?: emptyList()
     )
 
     private fun JSONObject.toReaderSettings(): ReaderSettings = ReaderSettings(
@@ -164,11 +181,17 @@ class LocalBackupManager @Inject constructor(
         showLiveReadersOverlay = optBoolean("showLiveReadersOverlay", true),
         showReactionOverlay = optBoolean("showReactionOverlay", true),
         dualPageLandscape = optBoolean("dualPageLandscape", false),
-        webtoonAutoStitch = optBoolean("webtoonAutoStitch", true)
+        webtoonAutoStitch = optBoolean("webtoonAutoStitch", true),
+        volumeButtonPageTurn = optBoolean("volumeButtonPageTurn", false),
+        doubleTapZoom = optBoolean("doubleTapZoom", true),
+        tapLeftAction = enumValue(optString("tapLeftAction"), com.exapps.mangaworld.domain.model.TapAction.PREV_PAGE),
+        tapRightAction = enumValue(optString("tapRightAction"), com.exapps.mangaworld.domain.model.TapAction.NEXT_PAGE),
+        tapMiddleAction = enumValue(optString("tapMiddleAction"), com.exapps.mangaworld.domain.model.TapAction.TOGGLE_CONTROLS)
     )
 
     private inline fun <reified T : Enum<T>> enumValue(name: String, default: T): T = enumValues<T>().firstOrNull { it.name == name } ?: default
     private fun JSONArray.toStringSet(): Set<String> = (0 until length()).mapNotNull { idx -> optString(idx).takeIf { it.isNotBlank() } }.toSet()
+    private fun JSONArray.toStringList(): List<String> = (0 until length()).mapNotNull { idx -> optString(idx).takeIf { it.isNotBlank() } }
     private inline fun JSONArray.forEachObjects(block: (JSONObject) -> Unit) {
         for (i in 0 until length()) optJSONObject(i)?.let(block)
     }

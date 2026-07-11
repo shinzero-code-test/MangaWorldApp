@@ -22,10 +22,12 @@ import javax.inject.Singleton
  */
 @Singleton
 class CloudinaryUploader @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val sessionManager: FirebaseSessionManager
 ) {
     companion object {
         private const val DASHBOARD_URL = "https://mangaworld-admin.vercel.app"
+        private const val MAX_IMAGE_BYTES = 5 * 1024 * 1024
     }
 
     data class UploadResult(val url: String, val publicId: String)
@@ -34,23 +36,25 @@ class CloudinaryUploader @Inject constructor(
      * Upload an image URI to Cloudinary via the dashboard API.
      * Returns [UploadResult] with the Cloudinary URL and publicId, or null on failure.
      */
-    suspend fun uploadImage(uri: Uri, folder: String = "uploads"): UploadResult? {
+    suspend fun uploadImage(uri: Uri, assetType: String = "avatar"): UploadResult? {
         return withContext(Dispatchers.IO) {
             try {
                 val base64 = uriToBase64(uri) ?: return@withContext null
+                val token = sessionManager.currentIdToken() ?: return@withContext null
                 val dataUrl = "data:image/jpeg;base64,$base64"
 
                 val url = URL("$DASHBOARD_URL/api/cloudinary/app-upload")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "POST"
                 connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("Authorization", "Bearer $token")
                 connection.connectTimeout = 15000
                 connection.readTimeout = 15000
                 connection.doOutput = true
 
                 val payload = JSONObject().apply {
                     put("image", dataUrl)
-                    put("folder", folder)
+                    put("assetType", assetType)
                 }
 
                 connection.outputStream.use { os ->
@@ -58,7 +62,10 @@ class CloudinaryUploader @Inject constructor(
                 }
 
                 val responseCode = connection.responseCode
-                val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
+                val responseBody = (if (responseCode in 200..299) connection.inputStream else connection.errorStream)
+                    ?.bufferedReader()
+                    ?.use { it.readText() }
+                    .orEmpty()
 
                 if (responseCode == 200) {
                     val json = JSONObject(responseBody)
@@ -83,10 +90,12 @@ class CloudinaryUploader @Inject constructor(
         if (publicId.isBlank()) return false
         return withContext(Dispatchers.IO) {
             try {
+                val token = sessionManager.currentIdToken() ?: return@withContext false
                 val url = URL("$DASHBOARD_URL/api/cloudinary/app-delete")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "POST"
                 connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("Authorization", "Bearer $token")
                 connection.connectTimeout = 10000
                 connection.readTimeout = 10000
                 connection.doOutput = true
@@ -141,20 +150,28 @@ class CloudinaryUploader @Inject constructor(
 
     private fun uriToBase64(uri: Uri): String? {
         return try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-            val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
-            inputStream.close()
+            val bitmap = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                android.graphics.BitmapFactory.decodeStream(inputStream)
+            } ?: return null
 
             val maxSize = 800
             val scale = minOf(maxSize.toFloat() / bitmap.width, maxSize.toFloat() / bitmap.height, 1f)
-            val resized = if (scale < 1f) {
-                Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
-            } else bitmap
-
-            val outputStream = ByteArrayOutputStream()
-            resized.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
-            val bytes = outputStream.toByteArray()
-            Base64.encodeToString(bytes, Base64.NO_WRAP)
+            val resized = if (scale < 1f) Bitmap.createScaledBitmap(
+                bitmap,
+                (bitmap.width * scale).toInt(),
+                (bitmap.height * scale).toInt(),
+                true
+            ) else bitmap
+            try {
+                val bytes = ByteArrayOutputStream().use { outputStream ->
+                    resized.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+                    outputStream.toByteArray()
+                }
+                if (bytes.size > MAX_IMAGE_BYTES) null else Base64.encodeToString(bytes, Base64.NO_WRAP)
+            } finally {
+                if (resized !== bitmap) resized.recycle()
+                bitmap.recycle()
+            }
         } catch (e: Exception) {
             null
         }

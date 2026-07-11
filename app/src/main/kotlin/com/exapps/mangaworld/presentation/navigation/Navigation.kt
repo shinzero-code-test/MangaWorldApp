@@ -215,7 +215,8 @@ fun MangaNavGraph(
                 onBack = { navController.popBackStack() },
                 onOpenReadingStats = { navController.navigate(Screen.ReadingStats.route) },
                 onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) },
-                onOpenSources = { navController.navigate(Screen.Sources.route) }
+                onOpenSources = { navController.navigate(Screen.Sources.route) },
+                setFacebookCallbackManager = setFacebookCallbackManager
             )
         }
         composable(Screen.CloudSync.route) {

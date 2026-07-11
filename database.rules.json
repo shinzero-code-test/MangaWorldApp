@@ -5,7 +5,7 @@
         ".read": "auth != null",
         "messages": {
           "$messageId": {
-            ".write": "auth != null"
+            ".write": "auth != null && !data.exists() && newData.child('authorUid').val() == auth.uid"
           }
         }
       }
