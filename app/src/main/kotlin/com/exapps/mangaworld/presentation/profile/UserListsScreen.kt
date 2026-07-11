@@ -94,7 +94,7 @@ class UserListsViewModel @Inject constructor(
                 communityRepository.createOrUpdateList(listId, name, description, coverUrl, rating, genres, isPublic)
             }.getOrNull() ?: return@launch
             if (existing != null && existing.coverUrl != coverUrl && existing.coverUrl.isNotBlank()) {
-                cloudinaryUploader.extractPublicId(existing.coverUrl)?.let(cloudinaryUploader::deleteImage)
+                cloudinaryUploader.extractPublicId(existing.coverUrl)?.let { id -> cloudinaryUploader.deleteImage(id) }
             }
             _selectedListId.value = createdId
         }
@@ -104,8 +104,8 @@ class UserListsViewModel @Inject constructor(
             val list = lists.value.find { it.id == id }
             if (runCatching { communityRepository.deleteList(id) }.isSuccess) {
                 list?.coverUrl?.takeIf { it.isNotBlank() }
-                    ?.let(cloudinaryUploader::extractPublicId)
-                    ?.let(cloudinaryUploader::deleteImage)
+                    ?.let { url -> cloudinaryUploader.extractPublicId(url) }
+                    ?.let { id -> cloudinaryUploader.deleteImage(id) }
             }
         }
     }

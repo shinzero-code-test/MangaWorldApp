@@ -166,7 +166,11 @@ class ProfileSettingsViewModel @Inject constructor(
             val result = cloudinaryUploader.uploadImage(uri, assetType = "avatar")
             if (result != null) {
                 communityRepository.upsertProfile(current?.username ?: "", current?.bio ?: "", current?.isPublic ?: true, result.url, current?.bannerUrl)
-                current?.avatarUrl?.let { cloudinaryUploader.extractPublicId(it)?.let(cloudinaryUploader::deleteImage) }
+                val oldUrl = current?.avatarUrl
+                if (oldUrl != null) {
+                    val oldId = cloudinaryUploader.extractPublicId(oldUrl)
+                    if (oldId != null) cloudinaryUploader.deleteImage(oldId)
+                }
                 avatarUri = null
             }
         }

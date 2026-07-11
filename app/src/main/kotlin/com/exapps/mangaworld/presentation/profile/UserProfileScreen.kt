@@ -139,7 +139,9 @@ class UserProfileViewModel @Inject constructor(
                     avatarUrl = result.url,
                     bannerUrl = current?.bannerUrl
                 )
-                current?.avatarUrl?.let { cloudinaryUploader.extractPublicId(it)?.let(cloudinaryUploader::deleteImage) }
+                current?.avatarUrl?.let { url ->
+                    cloudinaryUploader.extractPublicId(url)?.let { id -> launch { cloudinaryUploader.deleteImage(id) } }
+                }
                 avatarUri = null
             }
         }
@@ -157,7 +159,9 @@ class UserProfileViewModel @Inject constructor(
                     avatarUrl = current?.avatarUrl,
                     bannerUrl = result.url
                 )
-                current?.bannerUrl?.let { cloudinaryUploader.extractPublicId(it)?.let(cloudinaryUploader::deleteImage) }
+                current?.bannerUrl?.let { url ->
+                    cloudinaryUploader.extractPublicId(url)?.let { id -> launch { cloudinaryUploader.deleteImage(id) } }
+                }
                 bannerUri = null
             }
         }
