@@ -13,8 +13,8 @@ export async function POST(request: NextRequest) {
 
     const decoded = await getAdminAuth().verifyIdToken(idToken);
     const adminAuth = getAdminAuth();
-    const configuredSuperAdmin = process.env.SUPER_ADMIN_EMAIL?.trim().lowercase();
-    if (configuredSuperAdmin && decoded.email?.trim().lowercase() === configuredSuperAdmin && decoded.role !== "super-admin") {
+    const configuredSuperAdmin = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+    if (configuredSuperAdmin && decoded.email?.trim().toLowerCase() === configuredSuperAdmin && decoded.role !== "super-admin") {
       const user = await adminAuth.getUser(decoded.uid);
       await adminAuth.setCustomUserClaims(decoded.uid, { ...user.customClaims, role: "super-admin" });
       return NextResponse.json({ refreshRequired: true });
