@@ -589,7 +589,6 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
             }
     }
 }
-}
 
 @Composable private fun ContentSection(srcCount: Int, blacklistCount: Int, onOpenSources: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

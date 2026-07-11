@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       disabled: authUser.disabled,
       lastSignIn: authUser.metadata.lastSignInTime,
       createdAt: authUser.metadata.creationTime,
-      providers: authUser.providerData.map(p => p.providerId),
+      providers: authUser.providerData.map((p: { providerId: string }) => p.providerId),
       phoneNumber: authUser.phoneNumber || null,
     }));
 
