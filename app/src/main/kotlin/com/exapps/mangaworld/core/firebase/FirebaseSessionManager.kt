@@ -58,7 +58,8 @@ class FirebaseSessionManager @Inject constructor(
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         val current = auth.currentUser
         if (current != null && current.isAnonymous) {
-            return linkCredential(current, credential)
+            // Try linking first; if collision, the credential belongs to an existing account — sign in directly
+            return linkOrSignIn(current, credential)
         }
         return auth.signInWithCredential(credential).await().user?.uid
     }
@@ -71,14 +72,14 @@ class FirebaseSessionManager @Inject constructor(
     suspend fun signInWithEmail(email: String, password: String): String? {
         val current = auth.currentUser
         val credential = EmailAuthProvider.getCredential(email, password)
-        return if (current != null && current.isAnonymous) linkCredential(current, credential)
+        return if (current != null && current.isAnonymous) linkOrSignIn(current, credential)
         else auth.signInWithEmailAndPassword(email, password).await().user?.uid
     }
 
     suspend fun signUpWithEmail(email: String, password: String): String? {
         val current = auth.currentUser
         val credential = EmailAuthProvider.getCredential(email, password)
-        return if (current != null && current.isAnonymous) linkCredential(current, credential)
+        return if (current != null && current.isAnonymous) linkOrSignIn(current, credential)
         else auth.createUserWithEmailAndPassword(email, password).await().user?.uid
     }
 
@@ -91,7 +92,8 @@ class FirebaseSessionManager @Inject constructor(
         val credential = FacebookAuthProvider.getCredential(accessToken)
         val current = auth.currentUser
         if (current != null && current.isAnonymous) {
-            return linkCredential(current, credential)
+            // Try linking first; if collision, the credential belongs to an existing account — sign in directly
+            return linkOrSignIn(current, credential)
         }
         return auth.signInWithCredential(credential).await().user?.uid
     }
@@ -136,6 +138,22 @@ class FirebaseSessionManager @Inject constructor(
         requireNotNull(user.linkWithCredential(credential).await().user).uid
     } catch (error: FirebaseAuthUserCollisionException) {
         throw AccountMergeRequiredException(error.errorCode)
+    }
+
+    /**
+     * Try to link the credential to the anonymous user. If the credential is already
+     * attached to another account (collision), sign in as that existing account instead.
+     * This handles the common case where a user has a multi-provider account and tries
+     * to sign in from a fresh/guest session.
+     */
+    private suspend fun linkOrSignIn(
+        user: com.google.firebase.auth.FirebaseUser,
+        credential: com.google.firebase.auth.AuthCredential
+    ): String? = try {
+        requireNotNull(user.linkWithCredential(credential).await().user).uid
+    } catch (_: FirebaseAuthUserCollisionException) {
+        // Credential is already linked to another UID — sign in as that account
+        auth.signInWithCredential(credential).await().user?.uid
     }
 }
 
