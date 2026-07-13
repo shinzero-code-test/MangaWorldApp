@@ -234,7 +234,8 @@ data class FavoriteManga(
     val source: MangaSource,
     val addedAt: Long = System.currentTimeMillis(),
     val readChapters: Int = 0,
-    val totalChapters: Int = 0
+    val totalChapters: Int = 0,
+    val readingStatus: String? = null
 ) {
     val progressPercent: Float
         get() = if (totalChapters > 0) (readChapters.toFloat() / totalChapters).coerceIn(0f, 1f)
@@ -344,7 +345,8 @@ data class AppSettings(
     val spoilerCollapseDefault: Boolean = true,
     val mutedUserIds: Set<String> = emptySet(),
     val readingListStatus: String? = null,
-    val favoriteGenres: List<String> = emptyList()
+    val favoriteGenres: List<String> = emptyList(),
+    val showLibraryPublic: Boolean = true
 )
 
 enum class CommunityNotificationType {

@@ -18,7 +18,7 @@ import com.exapps.mangaworld.core.data.local.entity.*
         DownloadTaskEntity::class,
         DownloadedMangaEntity::class,
     ],
-    version = 10,         // v10: stable schema after drift cleanup
+    version = 11,         // v11: add readingStatus to favorites
     exportSchema = false
 )
 abstract class MangaDatabase : RoomDatabase() {
@@ -58,6 +58,12 @@ abstract class MangaDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 // Verify and add any missing indices
                 addAllIndices(db)
+            }
+        }
+
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE favorites ADD COLUMN readingStatus TEXT DEFAULT NULL")
             }
         }
 

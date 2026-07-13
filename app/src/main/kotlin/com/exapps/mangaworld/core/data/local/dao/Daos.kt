@@ -27,6 +27,12 @@ interface FavoriteDao {
     @Query("UPDATE favorites SET readChapters = :read, totalChapters = :total WHERE mangaId = :mangaId")
     suspend fun updateProgress(mangaId: String, read: Int, total: Int)
 
+    @Query("UPDATE favorites SET readingStatus = :status WHERE mangaId = :mangaId")
+    suspend fun updateReadingStatus(mangaId: String, status: String?)
+
+    @Query("SELECT * FROM favorites WHERE readingStatus = :status ORDER BY addedAt DESC")
+    suspend fun getByStatus(status: String): List<FavoriteEntity>
+
     @Query("SELECT * FROM favorites ORDER BY addedAt DESC")
     suspend fun getFavoritesList(): List<FavoriteEntity>
 }

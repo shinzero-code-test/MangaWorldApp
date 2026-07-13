@@ -72,7 +72,10 @@ import com.exapps.mangaworld.core.data.ReadingStatsStore
 import com.exapps.mangaworld.domain.model.CommunityNotification
 import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.CustomUserList
+import com.exapps.mangaworld.domain.model.FavoriteManga
+import com.exapps.mangaworld.domain.model.ReadingListStatus
 import com.exapps.mangaworld.domain.repository.CommunityRepository
+import com.exapps.mangaworld.domain.repository.LibraryRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -91,6 +94,7 @@ import javax.inject.Inject
 @HiltViewModel
 class UserProfileViewModel @Inject constructor(
     private val communityRepository: CommunityRepository,
+    private val libraryRepository: LibraryRepository,
     private val readingStatsStore: ReadingStatsStore,
     private val cloudinaryUploader: com.exapps.mangaworld.core.firebase.CloudinaryUploader
 ) : ViewModel() {
@@ -103,6 +107,9 @@ class UserProfileViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val lists = communityRepository.observeUserLists()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    private val _readingLists = MutableStateFlow<Map<String, List<FavoriteManga>>>(emptyMap())
+    val readingLists: StateFlow<Map<String, List<FavoriteManga>>> = _readingLists.asStateFlow()
 
     val totalReadingTimeMs = readingStatsStore.totalReadingTimeMs
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
@@ -121,6 +128,13 @@ class UserProfileViewModel @Inject constructor(
             // Wait for profile to load
             profile.first { it != null }
             _isLoading.value = false
+            // Load favourites by status
+            val statuses = listOf("reading", "completed", "plan_to_read", "on_hold", "dropped")
+            val map = mutableMapOf<String, List<FavoriteManga>>()
+            for (status in statuses) {
+                map[status] = libraryRepository.getFavoritesByStatus(status)
+            }
+            _readingLists.value = map
         }
     }
 
@@ -197,20 +211,19 @@ fun UserProfileScreen(
     onOpenModeration: () -> Unit,
     onOpenReadingStats: () -> Unit,
     onOpenProfileSettings: () -> Unit = {},
+    onMangaClick: (sourceId: String, slug: String) -> Unit = { _, _ -> },
     viewModel: UserProfileViewModel = hiltViewModel()
 ) {
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val profile by viewModel.profile.collectAsStateWithLifecycle()
     val lists by viewModel.lists.collectAsStateWithLifecycle()
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
+    val readingLists by viewModel.readingLists.collectAsStateWithLifecycle()
     val totalReadingTimeMs by viewModel.totalReadingTimeMs.collectAsStateWithLifecycle()
     val totalMangaRead by viewModel.totalMangaRead.collectAsStateWithLifecycle()
     val currentStreak by viewModel.currentStreak.collectAsStateWithLifecycle()
     val avatarUri = viewModel.avatarUri
     val bannerUri = viewModel.bannerUri
-
-    var showListsPublic by remember(profile?.showListsPublic) { mutableStateOf(profile?.showListsPublic ?: true) }
-    var showActivityPublic by remember(profile?.showActivityPublic) { mutableStateOf(profile?.showActivityPublic ?: true) }
 
     val unreadNotifications = notifications.count { !it.read }
 
@@ -263,17 +276,9 @@ fun UserProfileScreen(
             onOpenLists = onOpenLists
         )
 
-        PrivacySettingsSection(
-            showListsPublic = showListsPublic,
-            showActivityPublic = showActivityPublic,
-            onToggleLists = {
-                showListsPublic = it
-                viewModel.updatePrivacy(showListsPublic, showActivityPublic)
-            },
-            onToggleActivity = {
-                showActivityPublic = it
-                viewModel.updatePrivacy(showListsPublic, showActivityPublic)
-            }
+        LibraryReadingListsSection(
+            readingLists = readingLists,
+            onMangaClick = onMangaClick
         )
 
         NotificationsSection(
@@ -725,16 +730,25 @@ private fun ListCardItem(list: CustomUserList, onClick: () -> Unit) {
 }
 
 // =====================================================================================
-// Privacy
+// Library Reading Lists
 // =====================================================================================
 
 @Composable
-private fun PrivacySettingsSection(
-    showListsPublic: Boolean,
-    showActivityPublic: Boolean,
-    onToggleLists: (Boolean) -> Unit,
-    onToggleActivity: (Boolean) -> Unit
+private fun LibraryReadingListsSection(
+    readingLists: Map<String, List<FavoriteManga>>,
+    onMangaClick: (sourceId: String, slug: String) -> Unit
 ) {
+    val statusLabels = mapOf(
+        "reading" to "أقرأها الآن",
+        "completed" to "تم قراءتها",
+        "plan_to_read" to "أرغب بقراءتها",
+        "on_hold" to "أكملها لاحقاً",
+        "dropped" to "لا أرغب بقراءتها"
+    )
+
+    val hasAnyItems = readingLists.values.any { it.isNotEmpty() }
+    if (!hasAnyItems) return
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -743,24 +757,79 @@ private fun PrivacySettingsSection(
             .background(MangaColors.SurfaceContainer)
             .padding(16.dp)
     ) {
-        Text("الخصوصية", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-        Spacer(Modifier.height(4.dp))
-        PrivacyRow(
-            icon = Icons.Filled.Public,
-            label = "إظهار القوائم للآخرين",
-            description = "يمكن لأي شخص رؤية قوائمك العامة",
-            checked = showListsPublic,
-            onCheckedChange = onToggleLists
-        )
-        PrivacyRow(
-            icon = Icons.Filled.History,
-            label = "إظهار النشاط للآخرين",
-            description = "يظهر نشاطك الأخير في ملفك العام",
-            checked = showActivityPublic,
-            onCheckedChange = onToggleActivity
-        )
+        Text("المكتبة", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(12.dp))
+
+        statusLabels.forEach { (status, label) ->
+            val items = readingLists[status] ?: emptyList()
+            if (items.isNotEmpty()) {
+                Text(label, color = MangaColors.PrimaryLight, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(items.size) { index ->
+                        val manga = items[index]
+                        LibraryMangaCard(
+                            manga = manga,
+                            onClick = { onMangaClick(manga.source.id, manga.slug) }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+            }
+        }
     }
 }
+
+@Composable
+private fun LibraryMangaCard(manga: FavoriteManga, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .width(110.dp)
+            .height(160.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MangaColors.SurfaceHigh)
+            .clickable(onClick = onClick)
+    ) {
+        Column {
+            Box(modifier = Modifier.fillMaxWidth().height(110.dp)) {
+                if (manga.coverUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = manga.coverUrl,
+                        contentDescription = manga.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(MangaColors.PrimaryDim)
+                    )
+                }
+                Box(
+                    modifier = Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(listOf(Color.Transparent, MangaColors.SurfaceHigh))
+                    )
+                )
+            }
+            Column(modifier = Modifier.padding(8.dp)) {
+                Text(
+                    manga.title,
+                    color = MangaColors.OnSurface,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+// =====================================================================================
+// Privacy
+// =====================================================================================
 
 @Composable
 private fun PrivacyRow(

@@ -39,6 +39,8 @@ interface LibraryRepository {
     suspend fun removeFavorite(mangaId: String)
     suspend fun isFavorite(mangaId: String): Boolean
     fun isFavoriteFlow(mangaId: String): Flow<Boolean>
+    suspend fun getFavoritesByStatus(status: String): List<FavoriteManga>
+    suspend fun updateReadingStatus(mangaId: String, status: String?)
 
     // Reading History
     fun getReadingHistory(): Flow<List<ReadingHistoryItem>>
@@ -83,6 +85,7 @@ interface SettingsRepository {
     suspend fun setSpoilerCollapseDefault(enabled: Boolean)
     suspend fun setMutedUserIds(values: Set<String>)
     suspend fun setReadingListStatus(status: String?)
+    suspend fun setShowLibraryPublic(enabled: Boolean)
 
     fun getReaderSettings(): Flow<ReaderSettings>
     suspend fun updateReaderMode(mode: ReaderMode)

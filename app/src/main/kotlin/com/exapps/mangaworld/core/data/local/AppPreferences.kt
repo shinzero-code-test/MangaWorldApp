@@ -43,6 +43,7 @@ class AppPreferences @Inject constructor(
         val KEY_READING_LIST_STATUS = stringPreferencesKey("reading_list_status")
         val KEY_FAVORITE_GENRES = stringPreferencesKey("favorite_genres")
         val KEY_SYNC_TOMBSTONES = stringPreferencesKey("sync_tombstones")
+        val KEY_SHOW_LIBRARY_PUBLIC = booleanPreferencesKey("show_library_public")
 
         val KEY_READER_MODE = stringPreferencesKey("reader_mode")
         val KEY_BRIGHTNESS = floatPreferencesKey("brightness")
@@ -109,7 +110,8 @@ class AppPreferences @Inject constructor(
                     ?.split("\n")
                     ?.map { it.trim() }
                     ?.filter { it.isNotBlank() }
-                    ?: emptyList()
+                    ?: emptyList(),
+                showLibraryPublic = prefs[KEY_SHOW_LIBRARY_PUBLIC] ?: true
             )
         }
 
@@ -201,6 +203,9 @@ class AppPreferences @Inject constructor(
 
     suspend fun setFavoriteGenres(values: List<String>) =
         dataStore.edit { it[KEY_FAVORITE_GENRES] = values.joinToString("\n") }
+
+    suspend fun setShowLibraryPublic(enabled: Boolean) =
+        dataStore.edit { it[KEY_SHOW_LIBRARY_PUBLIC] = enabled }
 
     suspend fun getSyncTombstones(): List<SyncTombstone> =
         decodeSyncTombstones(dataStore.data.first()[KEY_SYNC_TOMBSTONES])

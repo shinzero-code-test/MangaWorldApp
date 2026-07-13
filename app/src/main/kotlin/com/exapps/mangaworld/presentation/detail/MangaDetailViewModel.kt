@@ -31,6 +31,7 @@ data class DetailUiState(
     val sourceComparisons: List<SourceComparison> = emptyList(),
     val showSourceComparison: Boolean = false,
     val isFavorite: Boolean = false,
+    val readingStatus: String? = null,
     val readChapters: Set<Float> = emptySet(),
     val downloadedChapters: Set<String> = emptySet(),
     val readingProgress: Map<Float, Pair<Int, Int>> = emptyMap(),
@@ -130,6 +131,11 @@ class MangaDetailViewModel @Inject constructor(
                         launch {
                             libraryRepo.isFavoriteFlow(mangaId)
                                 .collect { fav -> _state.update { it.copy(isFavorite = fav) } }
+                        }
+                        launch {
+                            // Load initial reading status from favorite entity
+                            val favorite = libraryRepo.getFavorites().first().find { it.mangaId == mangaId }
+                            _state.update { it.copy(readingStatus = favorite?.readingStatus) }
                         }
                         launch {
                             libraryRepo.getReadChapters(mangaId)
@@ -282,6 +288,7 @@ class MangaDetailViewModel @Inject constructor(
         viewModelScope.launch {
             if (_state.value.isFavorite) {
                 libraryRepo.removeFavorite(currentMangaId)
+                _state.update { it.copy(readingStatus = null) }
                 runCatching { firebaseTopicManager.unsubscribeFromManga(currentMangaId) }
             } else {
                 libraryRepo.addFavorite(
@@ -293,6 +300,28 @@ class MangaDetailViewModel @Inject constructor(
                 )
                 runCatching { firebaseTopicManager.subscribeToManga(currentMangaId) }
             }
+            runCatching { firebaseSyncManager.pushLocalSnapshot() }
+            widgetShortcutCoordinator.refreshWidgets()
+        }
+    }
+
+    fun setReadingStatus(status: String?) {
+        val manga = _state.value.manga ?: return
+        viewModelScope.launch {
+            // Ensure manga is in favourites first
+            if (!_state.value.isFavorite) {
+                libraryRepo.addFavorite(
+                    FavoriteManga(
+                        mangaId = currentMangaId, slug = manga.slug,
+                        title = manga.title, coverUrl = manga.coverUrl,
+                        source = manga.source, totalChapters = manga.totalChapters
+                    )
+                )
+                runCatching { firebaseTopicManager.subscribeToManga(currentMangaId) }
+            }
+            // Update status
+            libraryRepo.updateReadingStatus(currentMangaId, status)
+            _state.update { it.copy(readingStatus = status, isFavorite = true) }
             runCatching { firebaseSyncManager.pushLocalSnapshot() }
             widgetShortcutCoordinator.refreshWidgets()
         }

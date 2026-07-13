@@ -90,6 +90,7 @@ fun MangaDetailScreen(
             state.manga != null -> DetailContent(
                 manga = state.manga!!,
                 isFavorite = state.isFavorite,
+                readingStatus = state.readingStatus,
                 otherSourceMatches = state.otherSourceMatches,
                 readChapters = state.readChapters,
                 chaptersReversed = state.chaptersReversed,
@@ -98,6 +99,7 @@ fun MangaDetailScreen(
                 chapterSearchQuery = state.chapterSearchQuery,
                 downloadingChapters = state.downloadingChapters,
                 onToggleFav = viewModel::toggleFavorite,
+                onSetReadingStatus = viewModel::setReadingStatus,
                 onToggleOrder = viewModel::toggleChaptersOrder,
                 onDownloadChapter = viewModel::downloadChapter,
                 onShowDownloadDialog = viewModel::showDownloadDialog,
@@ -176,6 +178,7 @@ fun MangaDetailScreen(
 private fun DetailContent(
     manga: MangaDetail,
     isFavorite: Boolean,
+    readingStatus: String?,
     otherSourceMatches: List<MangaItem>,
     readChapters: Set<Float>,
     chaptersReversed: Boolean,
@@ -184,6 +187,7 @@ private fun DetailContent(
     chapterSearchQuery: String,
     downloadingChapters: Set<Float>,
     onToggleFav: () -> Unit,
+    onSetReadingStatus: (String?) -> Unit,
     onToggleOrder: () -> Unit,
     onDownloadChapter: (Chapter) -> Unit,
     onShowDownloadDialog: () -> Unit,
@@ -200,6 +204,7 @@ private fun DetailContent(
 ) {
     val ctx = LocalContext.current
     var descExpanded by remember { mutableStateOf(false) }
+    var showLibrarySheet by remember { mutableStateOf(false) }
     val dominantColor = rememberDominantColor(manga.coverUrl)
 
     LazyColumn(Modifier.fillMaxSize()) {
@@ -285,9 +290,9 @@ private fun DetailContent(
                 ) {
                     Icon(Icons.Filled.Download, "تنزيل", tint = MangaColors.Cyan)
                 }
-                // Library button — favourite + status
+                // Library button — opens library bottom sheet
                 IconButton(
-                    onClick = onShowAddToList,
+                    onClick = { showLibrarySheet = true },
                     modifier = Modifier
                         .size(50.dp)
                         .background(
@@ -296,7 +301,7 @@ private fun DetailContent(
                         )
                 ) {
                     Icon(
-                        if (isFavorite) Icons.Filled.AutoStories else Icons.Filled.AutoStories,
+                        Icons.Filled.AutoStories,
                         "المكتبة",
                         tint = if (isFavorite) Color.White else MangaColors.PrimaryLight
                     )
@@ -308,14 +313,6 @@ private fun DetailContent(
                         .background(MangaColors.SurfaceContainer, RoundedCornerShape(12.dp))
                 ) {
                     Icon(Icons.Filled.Forum, "المجتمع", tint = MangaColors.Cyan)
-                }
-                IconButton(
-                    onClick = onShowAddToList,
-                    modifier = Modifier
-                        .size(50.dp)
-                        .background(MangaColors.SurfaceContainer, RoundedCornerShape(12.dp))
-                ) {
-                    Icon(Icons.Filled.PlaylistAdd, "إضافة لقائمة", tint = MangaColors.Cyan)
                 }
                 // Source comparison button
                 IconButton(
@@ -540,6 +537,17 @@ private fun DetailContent(
             )
         }
         item { Spacer(Modifier.height(80.dp)) }
+    }
+
+    // Library bottom sheet
+    if (showLibrarySheet) {
+        LibraryBottomSheet(
+            isFavourite = isFavorite,
+            currentStatus = readingStatus,
+            onToggleFavourite = onToggleFav,
+            onSetStatus = onSetReadingStatus,
+            onDismiss = { showLibrarySheet = false }
+        )
     }
 }
 

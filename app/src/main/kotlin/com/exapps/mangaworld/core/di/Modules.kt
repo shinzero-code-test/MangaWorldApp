@@ -166,7 +166,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): MangaDatabase =
         Room.databaseBuilder(ctx, MangaDatabase::class.java, "mangaworld.db")
-            .addMigrations(MangaDatabase.MIGRATION_8_9, MangaDatabase.MIGRATION_9_10)
+            .addMigrations(MangaDatabase.MIGRATION_8_9, MangaDatabase.MIGRATION_9_10, MangaDatabase.MIGRATION_10_11)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 

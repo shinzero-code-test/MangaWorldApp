@@ -315,6 +315,12 @@ class LibraryRepositoryImpl @Inject constructor(
     }
     override suspend fun isFavorite(mangaId: String) = favoriteDao.isFavorite(mangaId)
     override fun isFavoriteFlow(mangaId: String): Flow<Boolean> = favoriteDao.isFavoriteFlow(mangaId)
+    override suspend fun getFavoritesByStatus(status: String): List<FavoriteManga> =
+        favoriteDao.getByStatus(status).map { it.toDomain() }
+    override suspend fun updateReadingStatus(mangaId: String, status: String?) {
+        favoriteDao.updateReadingStatus(mangaId, status)
+        prefs.clearSyncTombstone("favorites", mangaId)
+    }
 
     override fun getReadingHistory(): Flow<List<ReadingHistoryItem>> =
         historyDao.getAllHistory().map { list -> list.map { it.toDomain() } }
@@ -471,6 +477,7 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setSpoilerCollapseDefault(enabled: Boolean) { prefs.setSpoilerCollapseDefault(enabled) }
     override suspend fun setMutedUserIds(values: Set<String>) { prefs.setMutedUsers(values) }
     override suspend fun setReadingListStatus(status: String?) { prefs.setReadingListStatus(status) }
+    override suspend fun setShowLibraryPublic(enabled: Boolean) { prefs.setShowLibraryPublic(enabled) }
     override fun getReaderSettings() = prefs.readerSettings
     override suspend fun updateReaderMode(mode: ReaderMode) { prefs.setReaderMode(mode) }
     override suspend fun updateBrightness(brightness: Float) { prefs.setBrightness(brightness) }

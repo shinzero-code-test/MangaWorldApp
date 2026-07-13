@@ -193,6 +193,7 @@ class ProfileSettingsViewModel @Inject constructor(
 
     fun toggleNotifications(enabled: Boolean) { viewModelScope.launch { settingsRepository.setNotificationsEnabled(enabled) } }
     fun toggleBiometric(enabled: Boolean) { viewModelScope.launch { settingsRepository.setBiometricLock(enabled) } }
+    fun toggleShowLibraryPublic(enabled: Boolean) { viewModelScope.launch { settingsRepository.setShowLibraryPublic(enabled) } }
     fun signOut() { viewModelScope.launch { sessionManager.signOut(); _userEmail.value = null } }
 
     fun blockUser(uid: String) {
@@ -347,10 +348,11 @@ fun ProfileSettingsScreen(
                 SecuritySection(appSettings.biometricLockEnabled, viewModel::toggleBiometric)
             }
             Section("الخصوصية", Icons.Filled.Visibility, MangaColors.Yellow, "privacy", expandedSection, onToggle = { expandedSection = it }) {
-                PrivacySection(profile?.isPublic ?: true, profile?.showListsPublic ?: true, profile?.showActivityPublic ?: true, blockedUsers.size,
+                PrivacySection(profile?.isPublic ?: true, profile?.showListsPublic ?: true, profile?.showActivityPublic ?: true, appSettings.showLibraryPublic, blockedUsers.size,
                     onTogglePublic = { p -> viewModel.updatePrivacy(profile?.showListsPublic ?: true, profile?.showActivityPublic ?: true, p) },
                     onToggleLists = { l -> viewModel.updatePrivacy(l, profile?.showActivityPublic ?: true, profile?.isPublic ?: true) },
                     onToggleActivity = { a -> viewModel.updatePrivacy(profile?.showListsPublic ?: true, a, profile?.isPublic ?: true) },
+                    onToggleShowLibraryPublic = { enabled -> viewModel.toggleShowLibraryPublic(enabled) },
                     onShowBlockedUsers = { showBlockedUsers = true })
             }
             Section("المكتبة الشخصية", Icons.Filled.LibraryBooks, MangaColors.Orange, "library", expandedSection, onToggle = { expandedSection = it }) {
@@ -487,11 +489,12 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     }
 }
 
-@Composable private fun PrivacySection(isPublic: Boolean, showLists: Boolean, showActivity: Boolean, blockedCount: Int, onTogglePublic: (Boolean) -> Unit, onToggleLists: (Boolean) -> Unit, onToggleActivity: (Boolean) -> Unit, onShowBlockedUsers: () -> Unit) {
+@Composable private fun PrivacySection(isPublic: Boolean, showLists: Boolean, showActivity: Boolean, showLibraryPublic: Boolean, blockedCount: Int, onTogglePublic: (Boolean) -> Unit, onToggleLists: (Boolean) -> Unit, onToggleActivity: (Boolean) -> Unit, onToggleShowLibraryPublic: (Boolean) -> Unit, onShowBlockedUsers: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Public, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الحساب العام", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = isPublic, onCheckedChange = onTogglePublic, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.List, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("إظهار قائمة القراءة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = showLists, onCheckedChange = onToggleLists, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.History, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("إظهار النشاط الأخير", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = showActivity, onCheckedChange = onToggleActivity, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LibraryBooks, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("إظهار المكتبة الشخصية", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = showLibraryPublic, onCheckedChange = onToggleShowLibraryPublic, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
         Row(Modifier.fillMaxWidth().clickable(onClick = onShowBlockedUsers).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Block, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("حظر المستخدمين", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$blockedCount مستخدم", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
     }
 }
