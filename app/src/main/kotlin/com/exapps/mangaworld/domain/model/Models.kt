@@ -368,6 +368,7 @@ data class CommunityProfile(
     val isPublic: Boolean = true,
     val showListsPublic: Boolean = true,
     val showActivityPublic: Boolean = true,
+    val showLibraryPublic: Boolean = true,
     val bio: String = "",
     val updatedAt: Long = System.currentTimeMillis()
 )

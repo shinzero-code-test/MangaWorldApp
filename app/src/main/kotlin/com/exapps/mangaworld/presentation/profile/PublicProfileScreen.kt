@@ -63,7 +63,9 @@ import com.exapps.mangaworld.domain.model.CommunityComment
 import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.CustomUserList
 import com.exapps.mangaworld.domain.model.CustomUserListItem
+import com.exapps.mangaworld.domain.model.FavoriteManga
 import com.exapps.mangaworld.domain.repository.CommunityRepository
+import com.exapps.mangaworld.domain.repository.LibraryRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -72,8 +74,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import androidx.compose.runtime.Stable
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 // =====================================================================================
@@ -86,13 +90,15 @@ data class PublicProfileUiState(
     val lists: List<CustomUserList> = emptyList(),
     val activity: List<CommunityComment> = emptyList(),
     val selectedListId: String? = null,
-    val listItems: List<CustomUserListItem> = emptyList()
+    val listItems: List<CustomUserListItem> = emptyList(),
+    val readingLists: Map<String, List<FavoriteManga>> = emptyMap()
 )
 
 @HiltViewModel
 class PublicProfileViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val communityRepository: CommunityRepository,
+    private val libraryRepository: LibraryRepository,
     sessionManager: com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 ) : ViewModel() {
     private val userId: String = savedStateHandle["userId"] ?: ""
@@ -108,21 +114,42 @@ class PublicProfileViewModel @Inject constructor(
         else communityRepository.observePublicListItems(userId, id)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    private val _readingLists = MutableStateFlow<Map<String, List<FavoriteManga>>>(emptyMap())
+
     val state = combine(
-        communityRepository.observePublicProfile(userId),
-        communityRepository.observePublicLists(userId),
-        communityRepository.observePublicActivity(userId),
-        _selectedListId,
-        _listItems
-    ) { profile, lists, activity, selectedId, items ->
+        combine(
+            communityRepository.observePublicProfile(userId),
+            communityRepository.observePublicLists(userId),
+            communityRepository.observePublicActivity(userId)
+        ) { profile, lists, activity -> Triple(profile, lists, activity) },
+        combine(
+            _selectedListId,
+            _listItems,
+            _readingLists
+        ) { selectedId, items, readingLists -> Triple(selectedId, items, readingLists) }
+    ) { (profile, lists, activity), (selectedId, items, readingLists) ->
         PublicProfileUiState(
             profile = profile,
             lists = if (profile?.showListsPublic == true) lists else emptyList(),
             activity = if (profile?.showActivityPublic == true) activity else emptyList(),
             selectedListId = selectedId,
-            listItems = items
+            listItems = items,
+            readingLists = if (profile?.showLibraryPublic == true) readingLists else emptyMap()
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, PublicProfileUiState())
+
+    init {
+        if (isOwnProfile) {
+            viewModelScope.launch {
+                val statuses = listOf("reading", "completed", "plan_to_read", "on_hold", "dropped")
+                val map = mutableMapOf<String, List<FavoriteManga>>()
+                for (status in statuses) {
+                    map[status] = libraryRepository.getFavoritesByStatus(status)
+                }
+                _readingLists.value = map
+            }
+        }
+    }
 
     fun toggleListExpand(listId: String) {
         _selectedListId.value = if (_selectedListId.value == listId) null else listId
@@ -180,13 +207,24 @@ fun PublicProfileScreen(onBack: () -> Unit, onItemClick: (sourceId: String, slug
             }
         }
 
+        if (state.profile?.showLibraryPublic == true) {
+            item {
+                PublicLibrarySection(
+                    readingLists = state.readingLists,
+                    isOwnProfile = viewModel.isOwnProfile,
+                    onItemClick = onItemClick
+                )
+            }
+        }
+
         if (state.activity.isNotEmpty()) {
             item {
                 ActivitySection(activity = state.activity, username = profile?.username)
             }
         }
 
-        if (state.lists.isEmpty() && state.activity.isEmpty()) {
+        val hasLibrary = state.profile?.showLibraryPublic == true && state.readingLists.values.any { it.isNotEmpty() }
+        if (state.lists.isEmpty() && state.activity.isEmpty() && !hasLibrary) {
             item {
                 EmptyPublicContent()
             }
@@ -598,6 +636,139 @@ private fun PublicListCard(
 // =====================================================================================
 // Public List Item Card
 // =====================================================================================
+
+@Composable
+private fun PublicLibrarySection(
+    readingLists: Map<String, List<FavoriteManga>>,
+    isOwnProfile: Boolean,
+    onItemClick: (sourceId: String, slug: String) -> Unit
+) {
+    val statusLabels = mapOf(
+        "reading" to "أقرأها الآن",
+        "completed" to "تم قراءتها",
+        "plan_to_read" to "أرغب بقراءتها",
+        "on_hold" to "أكملها لاحقاً",
+        "dropped" to "لا أرغب بقراءتها"
+    )
+
+    val hasAnyItems = readingLists.values.any { it.isNotEmpty() }
+
+    Column(Modifier.padding(top = 32.dp)) {
+        SectionHeader(
+            title = "المكتبة",
+            subtitle = if (hasAnyItems) "قوائم القراءة" else "المكتبة متاح للعرض العام"
+        )
+        Spacer(Modifier.height(14.dp))
+
+        if (isOwnProfile && hasAnyItems) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MangaColors.SurfaceContainer)
+                    .padding(16.dp)
+            ) {
+                statusLabels.forEach { (status, label) ->
+                    val items = readingLists[status] ?: emptyList()
+                    if (items.isNotEmpty()) {
+                        Text(label, color = MangaColors.PrimaryLight, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(8.dp))
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(items.size) { index ->
+                                val manga = items[index]
+                                PublicLibraryMangaCard(
+                                    manga = manga,
+                                    onClick = { onItemClick(manga.source.id, manga.slug) }
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(14.dp))
+                    }
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MangaColors.SurfaceContainer)
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Filled.BookmarkBorder,
+                    contentDescription = null,
+                    tint = MangaColors.Muted,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "المكتبة متاح للعرض العام",
+                    color = MangaColors.OnSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PublicLibraryMangaCard(manga: FavoriteManga, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .width(110.dp)
+            .height(160.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MangaColors.SurfaceHigh)
+            .clickable(onClick = onClick)
+    ) {
+        Column {
+            Box(modifier = Modifier.fillMaxWidth().height(110.dp)) {
+                if (manga.coverUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = manga.coverUrl,
+                        contentDescription = manga.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(MangaColors.PrimaryDim)
+                    )
+                }
+                Box(
+                    modifier = Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(listOf(Color.Transparent, MangaColors.SurfaceHigh))
+                    )
+                )
+            }
+            Column(modifier = Modifier.padding(8.dp)) {
+                Text(
+                    manga.title,
+                    color = MangaColors.OnSurface,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    manga.source.displayName,
+                    color = MangaColors.Muted,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun PublicListItemCard(item: CustomUserListItem, onItemClick: () -> Unit) {

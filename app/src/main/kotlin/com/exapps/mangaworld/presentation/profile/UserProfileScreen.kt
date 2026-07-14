@@ -822,6 +822,14 @@ private fun LibraryMangaCard(manga: FavoriteManga, onClick: () -> Unit) {
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    manga.source.displayName,
+                    color = MangaColors.Muted,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }

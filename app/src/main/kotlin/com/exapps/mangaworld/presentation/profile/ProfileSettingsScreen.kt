@@ -193,7 +193,17 @@ class ProfileSettingsViewModel @Inject constructor(
 
     fun toggleNotifications(enabled: Boolean) { viewModelScope.launch { settingsRepository.setNotificationsEnabled(enabled) } }
     fun toggleBiometric(enabled: Boolean) { viewModelScope.launch { settingsRepository.setBiometricLock(enabled) } }
-    fun toggleShowLibraryPublic(enabled: Boolean) { viewModelScope.launch { settingsRepository.setShowLibraryPublic(enabled) } }
+    fun toggleShowLibraryPublic(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setShowLibraryPublic(enabled)
+            val c = communityRepository.getCurrentProfile()
+            communityRepository.updateProfilePrivacy(
+                c?.showListsPublic ?: true,
+                c?.showActivityPublic ?: true,
+                enabled
+            )
+        }
+    }
     fun signOut() { viewModelScope.launch { sessionManager.signOut(); _userEmail.value = null } }
 
     fun blockUser(uid: String) {

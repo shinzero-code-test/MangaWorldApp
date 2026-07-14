@@ -91,7 +91,6 @@ fun MangaDetailScreen(
                 manga = state.manga!!,
                 isFavorite = state.isFavorite,
                 readingStatus = state.readingStatus,
-                otherSourceMatches = state.otherSourceMatches,
                 readChapters = state.readChapters,
                 chaptersReversed = state.chaptersReversed,
                 sortedChapters = sortedChapters,
@@ -142,22 +141,65 @@ fun MangaDetailScreen(
     if (state.showAddToListDialog) {
         AlertDialog(
             onDismissRequest = viewModel::hideAddToListDialog,
-            title = { Text("إضافة إلى قائمة") },
+            title = { Text("إضافة إلى قائمة", color = MangaColors.OnSurface) },
+            containerColor = MangaColors.Surface,
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (state.userLists.isEmpty()) {
-                        Text("أنشئ قائمة مخصصة أولاً من صفحة الملف الشخصي.")
+                        Text(
+                            "أنشئ قائمة مخصصة أولاً من صفحة الملف الشخصي.",
+                            color = MangaColors.OnSurfaceVariant
+                        )
                     } else {
                         state.userLists.forEach { list ->
-                            OutlinedButton(onClick = { viewModel.addCurrentMangaToList(list.id) }, modifier = Modifier.fillMaxWidth()) {
-                                Text(list.name)
+                            OutlinedButton(
+                                onClick = { viewModel.addCurrentMangaToList(list.id) },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors(containerColor = MangaColors.SurfaceContainer),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                if (list.coverUrl.isNotBlank()) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(list.coverUrl)
+                                            .crossfade(true)
+                                            .build(),
+                                        imageLoader = LocalContext.current.imageLoader,
+                                        contentDescription = list.name,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        list.name,
+                                        color = MangaColors.OnSurface,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    if (list.description.isNotBlank()) {
+                                        Text(
+                                            list.description,
+                                            color = MangaColors.OnSurfaceVariant,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = viewModel::hideAddToListDialog) { Text("إغلاق") }
+                TextButton(onClick = viewModel::hideAddToListDialog) {
+                    Text("إغلاق", color = MangaColors.Cyan)
+                }
             },
             dismissButton = {}
         )
@@ -179,7 +221,6 @@ private fun DetailContent(
     manga: MangaDetail,
     isFavorite: Boolean,
     readingStatus: String?,
-    otherSourceMatches: List<MangaItem>,
     readChapters: Set<Float>,
     chaptersReversed: Boolean,
     sortedChapters: List<Chapter>,
@@ -260,6 +301,27 @@ private fun DetailContent(
                             StatItem(Icons.Filled.MenuBook, "${manga.totalChapters}", "فصل")
                             if (manga.views != null)
                                 StatItem(Icons.Filled.Visibility, manga.views, "مشاهدة")
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onShowAddToList() }
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.PlaylistAdd,
+                                contentDescription = null,
+                                tint = MangaColors.PrimaryLight,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                "إضافة إلى قائمة",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MangaColors.PrimaryLight
+                            )
                         }
                     }
                 }
@@ -385,29 +447,7 @@ private fun DetailContent(
             }
         }
 
-        if (otherSourceMatches.isNotEmpty()) {
-            item {
-                GradientDivider(Modifier.padding(horizontal = 16.dp))
-                Spacer(Modifier.height(12.dp))
-                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("اقرأ من مصادر أخرى", style = MaterialTheme.typography.titleSmall, color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold)
-                    otherSourceMatches.forEach { item ->
-                        Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
-                            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(item.source.displayName, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
-                                    Text(item.title, color = MangaColors.OnSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                }
-                                OutlinedButton(onClick = { onOpenOtherSource(item.source.id, item.slug) }) {
-                                    Text("فتح")
-                                }
-                            }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-            }
-        }
+
 
         if (manga.relatedManga.isNotEmpty()) {
             item {

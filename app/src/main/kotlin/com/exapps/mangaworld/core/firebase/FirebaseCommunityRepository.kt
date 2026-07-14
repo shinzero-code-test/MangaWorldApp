@@ -242,12 +242,13 @@ class FirebaseCommunityRepository @Inject constructor(
         }.await()
     }
 
-    override suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean) {
+    override suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean, showLibraryPublic: Boolean) {
         val uid = sessionManager.ensureGuestSession() ?: return
         firestore.collection("publicProfiles").document(uid).set(
             mapOf(
                 "showListsPublic" to showListsPublic,
                 "showActivityPublic" to showActivityPublic,
+                "showLibraryPublic" to showLibraryPublic,
                 "updatedAt" to System.currentTimeMillis()
             ),
             SetOptions.merge()
@@ -525,6 +526,7 @@ class FirebaseCommunityRepository @Inject constructor(
             isPublic = true,
             showListsPublic = true,
             showActivityPublic = true,
+            showLibraryPublic = true,
             bio = ""
         )
     }
@@ -564,6 +566,7 @@ class FirebaseCommunityRepository @Inject constructor(
         "isPublic" to isPublic,
         "showListsPublic" to showListsPublic,
         "showActivityPublic" to showActivityPublic,
+        "showLibraryPublic" to showLibraryPublic,
         "bio" to bio,
         "updatedAt" to updatedAt
     )
@@ -670,6 +673,7 @@ class FirebaseCommunityRepository @Inject constructor(
             isPublic = getBoolean("isPublic") ?: true,
             showListsPublic = getBoolean("showListsPublic") ?: true,
             showActivityPublic = getBoolean("showActivityPublic") ?: true,
+            showLibraryPublic = getBoolean("showLibraryPublic") ?: true,
             bio = getString("bio") ?: "",
             updatedAt = getLong("updatedAt") ?: 0L
         )

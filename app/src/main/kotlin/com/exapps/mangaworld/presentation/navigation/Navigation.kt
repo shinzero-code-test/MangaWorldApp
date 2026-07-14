@@ -166,7 +166,8 @@ fun MangaNavGraph(
                 onOpenLists = { navController.navigate(Screen.UserLists.route) },
                 onOpenModeration = { navController.navigate(Screen.ModerationDashboard.route) },
                 onOpenReadingStats = { navController.navigate(Screen.ReadingStats.route) },
-                onOpenProfileSettings = { navController.navigate(Screen.ProfileSettings.route) }
+                onOpenProfileSettings = { navController.navigate(Screen.ProfileSettings.route) },
+                onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) }
             )
         }
         composable(Screen.UserLists.route) {
