@@ -149,6 +149,8 @@ interface CommunityRepository {
     suspend fun sendPageReaction(mangaId: String, chapterUrl: String, pageIndex: Int, emoji: String, normalizedX: Float, normalizedY: Float)
     suspend fun sendChatMessage(roomId: String = "global", text: String)
     suspend fun reportComment(comment: CommunityComment, reason: String)
+    suspend fun likeComment(commentId: String)
+    suspend fun dislikeComment(commentId: String)
     suspend fun resolveModerationReport(reportId: String, status: String)
     suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean)
     suspend fun markNotificationRead(notificationId: String)

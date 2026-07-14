@@ -411,7 +411,9 @@ data class CommunityComment(
     val spoiler: Boolean = false,
     val reportedCount: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
-    val replyCount: Int = 0
+    val replyCount: Int = 0,
+    val likes: Int = 0,
+    val dislikes: Int = 0
 )
 
 data class MangaReview(

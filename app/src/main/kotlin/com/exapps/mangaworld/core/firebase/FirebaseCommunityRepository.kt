@@ -398,6 +398,24 @@ class FirebaseCommunityRepository @Inject constructor(
             ).await()
     }
 
+    override suspend fun likeComment(commentId: String) {
+        val docs = firestore.collectionGroup("comments").whereEqualTo("id", commentId).get().await().documents
+        firestore.runBatch { batch ->
+            docs.forEach { doc ->
+                batch.update(doc.reference, "likes", com.google.firebase.firestore.FieldValue.increment(1))
+            }
+        }.await()
+    }
+
+    override suspend fun dislikeComment(commentId: String) {
+        val docs = firestore.collectionGroup("comments").whereEqualTo("id", commentId).get().await().documents
+        firestore.runBatch { batch ->
+            docs.forEach { doc ->
+                batch.update(doc.reference, "dislikes", com.google.firebase.firestore.FieldValue.increment(1))
+            }
+        }.await()
+    }
+
     override suspend fun resolveModerationReport(reportId: String, status: String) {
         firestore.collection("moderationReports").document(reportId)
             .update("status", status)
@@ -694,7 +712,9 @@ class FirebaseCommunityRepository @Inject constructor(
             spoiler = getBoolean("spoiler") ?: false,
             reportedCount = (getLong("reportedCount") ?: 0L).toInt(),
             createdAt = getLong("createdAt") ?: 0L,
-            replyCount = (getLong("replyCount") ?: 0L).toInt()
+            replyCount = (getLong("replyCount") ?: 0L).toInt(),
+            likes = (getLong("likes") ?: 0L).toInt(),
+            dislikes = (getLong("dislikes") ?: 0L).toInt()
         )
     }.getOrNull()
 

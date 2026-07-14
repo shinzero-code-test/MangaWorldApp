@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       });
     } catch { /* ignore if collection doesn't exist */ }
     
-    const sourceUsage = Object.entries(sourceCounts)
+    const sourceUsage = (Object.entries(sourceCounts) || [])
       .map(([name, value], i) => {
         const colors = ["#6366f1", "#22c55e", "#f59e0b", "#a855f7", "#ef4444"];
         return { name, value, color: colors[i % colors.length] };
