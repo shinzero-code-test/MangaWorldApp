@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.more
 
 import androidx.compose.foundation.background
@@ -68,26 +71,26 @@ fun MoreScreen(
     val canModerate = role in setOf("moderator", "super-admin")
 
     val gridItems = buildList {
-        add(MoreGridItem(Icons.Filled.Download, "التنزيلات", "الفصول المنزّلة", MangaColors.Cyan, onOpenDownloads))
-        add(MoreGridItem(Icons.Filled.FolderOpen, "المحلي", "المانجا المحفوظة", MangaColors.GlowPurple, onOpenLocalStorage))
-        add(MoreGridItem(Icons.Filled.AutoAwesome, "اقتراحات", "مانجا قد تعجبك", MangaColors.Yellow, onOpenSuggestions))
-        add(MoreGridItem(Icons.Filled.BarChart, "الإحصائيات", "وقت القراءة", MangaColors.Pink, onOpenReadingStats))
-        add(MoreGridItem(Icons.Filled.EmojiEvents, "الإنجازات", "تتبع التقدم", MangaColors.Yellow, onOpenGoals))
-        add(MoreGridItem(Icons.Filled.Cloud, "المزامنة", "البيانات السحابية", MangaColors.Cyan, onOpenCloudSync))
-        add(MoreGridItem(Icons.Filled.Tune, "المصادر", "إدارة مصادر المانجا", MangaColors.Green, onOpenSources))
+        add(MoreGridItem(Icons.Filled.Download, stringResource(R.string.more_downloads), "الفصول المنزّلة", MangaColors.Cyan, onOpenDownloads))
+        add(MoreGridItem(Icons.Filled.FolderOpen, stringResource(R.string.more_local), "المانجا المحفوظة", MangaColors.GlowPurple, onOpenLocalStorage))
+        add(MoreGridItem(Icons.Filled.AutoAwesome, stringResource(R.string.more_suggestions), "مانجا قد تعجبك", MangaColors.Yellow, onOpenSuggestions))
+        add(MoreGridItem(Icons.Filled.BarChart, stringResource(R.string.more_stats), "وقت القراءة", MangaColors.Pink, onOpenReadingStats))
+        add(MoreGridItem(Icons.Filled.EmojiEvents, stringResource(R.string.more_goals), "تتبع التقدم", MangaColors.Yellow, onOpenGoals))
+        add(MoreGridItem(Icons.Filled.Cloud, stringResource(R.string.more_sync), "البيانات السحابية", MangaColors.Cyan, onOpenCloudSync))
+        add(MoreGridItem(Icons.Filled.Tune, stringResource(R.string.more_sources), "إدارة مصادر المانجا", MangaColors.Green, onOpenSources))
         if (canModerate) {
-            add(MoreGridItem(Icons.Filled.Shield, "لوحة الإشراف", "إدارة المحتوى", MangaColors.Yellow, onOpenModeration))
+            add(MoreGridItem(Icons.Filled.Shield, stringResource(R.string.moderation_title), "إدارة المحتوى", MangaColors.Yellow, onOpenModeration))
         }
-        add(MoreGridItem(Icons.Filled.Person, "الملف الشخصي", "حسابك وبياناتك", MangaColors.Cyan, onOpenProfile))
-        add(MoreGridItem(Icons.Filled.Settings, "الإعدادات", "تخصيص التطبيق", MangaColors.Muted, onOpenSettings))
-        add(MoreGridItem(Icons.Filled.BugReport, "التشخيص", "معلومات تقنية", MangaColors.Orange, onOpenDiagnostics))
+        add(MoreGridItem(Icons.Filled.Person, stringResource(R.string.more_profile), "حسابك وبياناتك", MangaColors.Cyan, onOpenProfile))
+        add(MoreGridItem(Icons.Filled.Settings, stringResource(R.string.more_settings), "تخصيص التطبيق", MangaColors.Muted, onOpenSettings))
+        add(MoreGridItem(Icons.Filled.BugReport, stringResource(R.string.more_diagnostics), "معلومات تقنية", MangaColors.Orange, onOpenDiagnostics))
     }
 
     Scaffold(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("المزيد", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.more_title), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
             )
         }

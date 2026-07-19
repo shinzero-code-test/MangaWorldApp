@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.components
 
 import android.graphics.Bitmap
@@ -230,7 +233,7 @@ fun SectionHeader(
         if (onSeeAll != null) {
             TextButton(onClick = onSeeAll) {
                 Text(
-                    "عرض الكل",
+                    stringResource(R.string.see_all),
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.Cyan
                 )

@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.detail
 
 import android.app.Activity
@@ -123,7 +126,7 @@ fun MangaDetailScreen(
                 .align(Alignment.TopStart)
                 .background(Color(0x99000000), CircleShape)
         ) {
-            Icon(Icons.Filled.ArrowBack, "رجوع", tint = Color.White)
+            Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = Color.White)
         }
     }
 
@@ -198,7 +201,7 @@ fun MangaDetailScreen(
             },
             confirmButton = {
                 TextButton(onClick = viewModel::hideAddToListDialog) {
-                    Text("إغلاق", color = MangaColors.Cyan)
+                    Text(stringResource(R.string.close), color = MangaColors.Cyan)
                 }
             },
             dismissButton = {}
@@ -374,7 +377,7 @@ private fun DetailContent(
                         .size(50.dp)
                         .background(MangaColors.SurfaceContainer, RoundedCornerShape(12.dp))
                 ) {
-                    Icon(Icons.Filled.Forum, "المجتمع", tint = MangaColors.Cyan)
+                    Icon(Icons.Filled.Forum, stringResource(R.string.community_title), tint = MangaColors.Cyan)
                 }
                 // Source comparison button
                 IconButton(
@@ -422,7 +425,7 @@ private fun DetailContent(
                     if (manga.description.length > 150) {
                         TextButton(onClick = { descExpanded = !descExpanded }) {
                             Text(
-                                if (descExpanded) "عرض أقل" else "عرض المزيد",
+                                if (descExpanded) "عرض أقل" else stringResource(R.string.view_more),
                                 color = MangaColors.Cyan,
                                 style = MaterialTheme.typography.bodySmall
                             )
@@ -751,7 +754,7 @@ private fun DownloadOptionsDialog(
                     }
                 }
                 TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                    Text("إلغاء", color = MangaColors.Muted)
+                    Text(stringResource(R.string.cancel), color = MangaColors.Muted)
                 }
             }
         },
@@ -833,9 +836,9 @@ private fun CloudflareRequired(onSolve: () -> Unit) {
 private fun DetailError(message: String, onRetry: () -> Unit) {
     EmptyState(
         icon = Icons.Filled.ErrorOutline,
-        title = "حدث خطأ",
+        title = stringResource(R.string.error_generic),
         subtitle = message,
-        action = { GradientButton("إعادة المحاولة", onRetry) },
+        action = { GradientButton(stringResource(R.string.retry), onRetry) },
         modifier = Modifier.fillMaxSize()
     )
 }

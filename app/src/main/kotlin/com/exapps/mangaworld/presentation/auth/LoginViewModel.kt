@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.auth
 
 import androidx.compose.runtime.Immutable
@@ -89,7 +92,7 @@ class LoginViewModel @Inject constructor(
             return
         }
         if (displayName.isBlank()) {
-            _uiState.update { it.copy(error = "أدخل الاسم المعروض") }
+            _uiState.update { it.copy(error = stringResource(R.string.auth_error_display_name_required)) }
             return
         }
         if (username.isBlank()) {

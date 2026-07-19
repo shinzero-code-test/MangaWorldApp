@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.browse
 
 import androidx.compose.foundation.*
@@ -93,7 +96,7 @@ fun BrowseScreen(
                 FilterChip(
                     selected = uiState.selectedSource == null,
                     onClick = { viewModel.setSource(null) },
-                    label = { Text("كل المصادر") }
+                    label = { Text(stringResource(R.string.search_all_sources)) }
                 )
             }
             items(MangaSource.entries.size, key = { MangaSource.entries[it].id }) { index ->

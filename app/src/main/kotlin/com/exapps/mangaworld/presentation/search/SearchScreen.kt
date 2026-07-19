@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.search
 
 import android.app.Activity
@@ -68,7 +71,7 @@ fun SearchScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
                 .focusRequester(focusRequester),
-            placeholder = { Text("ابحث عن مانجا، مؤلف...", color = MangaColors.Muted) },
+            placeholder = { Text(stringResource(R.string.search_hint), color = MangaColors.Muted) },
             leadingIcon = { Icon(Icons.Filled.Search, null, tint = MangaColors.Primary) },
             trailingIcon = {
                 if (query.isNotEmpty())
@@ -97,12 +100,12 @@ fun SearchScreen(
         ) {
             var expanded by remember { mutableStateOf(false) }
             TextButton(onClick = { expanded = true }) {
-                Text(source?.displayName ?: "كل المصادر", color = MangaColors.Cyan)
+                Text(source?.displayName ?: stringResource(R.string.search_all_sources), color = MangaColors.Cyan)
                 Icon(Icons.Filled.ArrowDropDown, null, tint = MangaColors.Cyan)
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 DropdownMenuItem(
-                    text = { Text("كل المصادر") },
+                    text = { Text(stringResource(R.string.search_all_sources)) },
                     onClick = { viewModel.setSource(null); expanded = false }
                 )
                 enabledSources.forEach { src ->
@@ -182,7 +185,7 @@ private fun SearchHints(onSuggestionClick: (String) -> Unit) {
         "One Piece", "Black Clover", "Naruto", "مانهوا أكشن", "رومانسي"
     )
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
-        Text("بحث مقترح", style = MaterialTheme.typography.titleSmall,
+        Text(stringResource(R.string.search_suggested), style = MaterialTheme.typography.titleSmall,
             color = MangaColors.Muted, modifier = Modifier.padding(bottom = 12.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(suggestions) { s -> SuggestionChip(label = s, onClick = { onSuggestionClick(s) }) }

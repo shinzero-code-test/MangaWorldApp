@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.profile
 
 import android.net.Uri
@@ -388,7 +391,7 @@ fun ProfileSettingsScreen(
         topBar = {
             TopAppBar(
                 title = { Text("إعدادات الحساب", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface) } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
             )
         }
@@ -402,16 +405,16 @@ fun ProfileSettingsScreen(
             ProfileHeroSection(profile, avatarUri) { avatarLauncher.launch("image/*") }
             Spacer(Modifier.height(20.dp))
 
-            Section("الملف الشخصي", Icons.Filled.Person, MangaColors.Cyan, "profile", expandedSection, onToggle = { expandedSection = it }) {
+            Section(stringResource(R.string.more_profile), Icons.Filled.Person, MangaColors.Cyan, "profile", expandedSection, onToggle = { expandedSection = it }) {
                 ProfileInfoSection(profile, formatJoinDate(profile?.updatedAt ?: 0L)) { showEditProfile = true }
             }
-            Section("معلومات الحساب", Icons.Filled.AccountCircle, MangaColors.PrimaryLight, "account", expandedSection, onToggle = { expandedSection = it }) {
+            Section(stringResource(R.string.settings_account), Icons.Filled.AccountCircle, MangaColors.PrimaryLight, "account", expandedSection, onToggle = { expandedSection = it }) {
                 AccountInfoSection(userEmail, { showSignOutConfirm = true }, { showDeleteConfirm = true })
             }
-            Section("الأمان", Icons.Filled.Security, MangaColors.Green, "security", expandedSection, onToggle = { expandedSection = it }) {
+            Section(stringResource(R.string.settings_security), Icons.Filled.Security, MangaColors.Green, "security", expandedSection, onToggle = { expandedSection = it }) {
                 SecuritySection(appSettings.biometricLockEnabled, viewModel::toggleBiometric)
             }
-            Section("الخصوصية", Icons.Filled.Visibility, MangaColors.Yellow, "privacy", expandedSection, onToggle = { expandedSection = it }) {
+            Section(stringResource(R.string.settings_privacy), Icons.Filled.Visibility, MangaColors.Yellow, "privacy", expandedSection, onToggle = { expandedSection = it }) {
                 PrivacySection(profile?.isPublic ?: true, profile?.showListsPublic ?: true, profile?.showActivityPublic ?: true, appSettings.showLibraryPublic, blockedUsers.size,
                     onTogglePublic = { p -> viewModel.updatePrivacy(profile?.showListsPublic ?: true, profile?.showActivityPublic ?: true, p) },
                     onToggleLists = { l -> viewModel.updatePrivacy(l, profile?.showActivityPublic ?: true, profile?.isPublic ?: true) },
@@ -419,16 +422,16 @@ fun ProfileSettingsScreen(
                     onToggleShowLibraryPublic = { enabled -> viewModel.toggleShowLibraryPublic(enabled) },
                     onShowBlockedUsers = { showBlockedUsers = true })
             }
-            Section("المكتبة الشخصية", Icons.Filled.LibraryBooks, MangaColors.Orange, "library", expandedSection, onToggle = { expandedSection = it }) {
+            Section(stringResource(R.string.settings_library), Icons.Filled.LibraryBooks, MangaColors.Orange, "library", expandedSection, onToggle = { expandedSection = it }) {
                 LibrarySection(favoriteCount, historyCount, readCount)
             }
-            Section("الإشعارات", Icons.Filled.Notifications, MangaColors.Pink, "notif", expandedSection, onToggle = { expandedSection = it }) {
+            Section(stringResource(R.string.settings_notifications), Icons.Filled.Notifications, MangaColors.Pink, "notif", expandedSection, onToggle = { expandedSection = it }) {
                 NotificationSection(appSettings.enableNotifications, viewModel::toggleNotifications)
             }
             Section("الإنجازات والإحصائيات", Icons.Filled.BarChart, MangaColors.Cyan, "stats", expandedSection, onToggle = { expandedSection = it }) {
                 StatsSection(totalReadingTimeMs, totalMangaRead, currentStreak, onOpenReadingStats)
             }
-            Section("المزامنة والنسخ الاحتياطي", Icons.Filled.CloudSync, MangaColors.Cyan, "sync", expandedSection, onToggle = { expandedSection = it }) {
+            Section(stringResource(R.string.settings_sync), Icons.Filled.CloudSync, MangaColors.Cyan, "sync", expandedSection, onToggle = { expandedSection = it }) {
                 SyncSection(
                     totalItems = favoriteCount + historyCount,
                     linkedProviderIds = linkedProviderIds,
@@ -465,8 +468,8 @@ fun ProfileSettingsScreen(
     }
 
     if (showEditProfile) EditProfileDialog(profile, { showEditProfile = false }) { u, d, b -> viewModel.updateProfile(u, b, d); showEditProfile = false }
-    if (showDeleteConfirm) ConfirmDialog("حذف الحساب", "هل أنت متأكد من حذف حسابك؟ هذا الإجراء لا يمكن التراجع عنه.", "حذف", { viewModel.deleteAccount(); showDeleteConfirm = false }, { showDeleteConfirm = false })
-    if (showSignOutConfirm) ConfirmDialog("تسجيل الخروج", "هل تريد تسجيل الخروج من حسابك؟", "خروج", { viewModel.signOut(); showSignOutConfirm = false }, { showSignOutConfirm = false })
+    if (showDeleteConfirm) ConfirmDialog(stringResource(R.string.settings_delete_account), "هل أنت متأكد من حذف حسابك؟ هذا الإجراء لا يمكن التراجع عنه.", stringResource(R.string.delete), { viewModel.deleteAccount(); showDeleteConfirm = false }, { showDeleteConfirm = false })
+    if (showSignOutConfirm) ConfirmDialog(stringResource(R.string.settings_sign_out), "هل تريد تسجيل الخروج من حسابك؟", "خروج", { viewModel.signOut(); showSignOutConfirm = false }, { showSignOutConfirm = false })
     if (showBlockedUsers) BlockedUsersDialog(blockedUsers, onDismiss = { showBlockedUsers = false }, onUnblock = { uid -> viewModel.unblockUser(uid) })
     if (showFavoriteGenres) FavoriteGenresDialog(favoriteGenres, onDismiss = { showFavoriteGenres = false }, onSave = { genres -> viewModel.setFavoriteGenres(genres) })
     if (showFollowingList) UserListDialog("المتابَعون", emptyList(), onDismiss = { showFollowingList = false })
@@ -533,28 +536,28 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     val roleText = profile?.role?.let { when(it) { "super-admin" -> "مدير عام"; "moderator" -> "مشرف"; else -> "مشاهد" } } ?: "مشاهد"
     val displayNameText = profile?.displayName?.takeIf { it.isNotBlank() } ?: profile?.username ?: "ضيف"
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Badge, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الاسم المعروض", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(displayNameText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AlternateEmail, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("اسم المستخدم", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.username ?: "غير محدد", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Info, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("النبذة الشخصية", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.bio?.ifBlank { "لا توجد نبذة" } ?: "لا توجد نبذة", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.CalendarToday, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("تاريخ الانضمام", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(joinDateText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Badge, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_display_name), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(displayNameText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AlternateEmail, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_username), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.username ?: "غير محدد", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Info, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_bio), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.bio?.ifBlank { "لا توجد نبذة" } ?: "لا توجد نبذة", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.CalendarToday, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_join_date), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(joinDateText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الرتبة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(roleText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         if (!profile?.badgeLabel.isNullOrBlank()) Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Star, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الشارة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile.badgeLabel, color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
-        OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(42.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = MangaColors.Cyan)) { Text("تعديل الملف الشخصي", fontWeight = FontWeight.SemiBold) }
+        OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(42.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = MangaColors.Cyan)) { Text(stringResource(R.string.profile_edit), fontWeight = FontWeight.SemiBold) }
     }
 }
 
 @Composable private fun AccountInfoSection(userEmail: String?, onSignOut: () -> Unit, onDeleteAccount: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Email, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("البريد الإلكتروني", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(userEmail ?: "غير متوفر", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Phone, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("رقم الهاتف", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("غير مضاف", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().clickable(onClick = onDeleteAccount).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Delete, null, tint = MangaColors.Error, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("حذف الحساب", color = MangaColors.Error, style = MaterialTheme.typography.bodyMedium) }
-        Row(Modifier.fillMaxWidth().clickable(onClick = onSignOut).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Logout, null, tint = MangaColors.Error, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("تسجيل الخروج", color = MangaColors.Error, style = MaterialTheme.typography.bodyMedium) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Phone, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_phone), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_phone_unavailable), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onDeleteAccount).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Delete, null, tint = MangaColors.Error, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_delete_account), color = MangaColors.Error, style = MaterialTheme.typography.bodyMedium) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onSignOut).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Logout, null, tint = MangaColors.Error, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_sign_out), color = MangaColors.Error, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 
 @Composable private fun SecuritySection(biometricEnabled: Boolean, onToggleBiometric: (Boolean) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Fingerprint, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("القفل البيومتري", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = biometricEnabled, onCheckedChange = onToggleBiometric, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Fingerprint, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_biometric), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = biometricEnabled, onCheckedChange = onToggleBiometric, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.History, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("سجل تسجيل الدخول", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("لا يوجد سجل متاح حالياً", color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Devices, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الأجهزة المتصلة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("يتم تتبع الأجهزة تلقائياً", color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Security, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("إدارة الجلسات", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("الجلسات مُدارة عبر Firebase", color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
@@ -597,7 +600,7 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AccessTime, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("وقت القراءة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(if (h > 0) "${h}س ${m}د" else "${m}د", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Whatshot, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الأيام المتتالية", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$streak يوم", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("ترتيب المستخدم", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("مبني على النشاط", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenStats).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الإنجازات", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("فتح", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenStats).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.more_goals), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("فتح", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
@@ -612,7 +615,7 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().clickable(onClick = onOpenCloudSync).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Cloud, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("مزامنة الحساب مع السحابة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("فتح", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.ImportExport, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("استيراد/تصدير القوائم", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("قريباً", color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.ImportExport, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("استيراد/تصدير القوائم", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.coming_soon), color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
         ProviderLinkRow(
             label = "Google",
             providerId = "google.com",
@@ -710,7 +713,7 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
 
     val normalizedUsername = username.trim().lowercase()
     val usernameError = when {
-        normalizedUsername.isEmpty() -> "اسم المستخدم مطلوب"
+        normalizedUsername.isEmpty() -> stringResource(R.string.auth_error_username_required)
         normalizedUsername.length < 3 -> "اسم المستخدم قصير جداً (3 أحرف على الأقل)"
         normalizedUsername.length > 20 -> "اسم المستخدم طويل جداً (20 حرف كحد أقصى)"
         !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$")) -> "أحرف وأرقام وشرطات سفلية فقط"
@@ -718,18 +721,18 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     }
 
     AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
-        title = { Text("تعديل الملف الشخصي", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+        title = { Text(stringResource(R.string.profile_edit), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(
                 value = displayName, onValueChange = { displayName = it },
-                label = { Text("الاسم المعروض") },
+                label = { Text(stringResource(R.string.profile_display_name)) },
                 placeholder = { Text("اسمك كما يظهر للآخرين") },
                 modifier = Modifier.fillMaxWidth(), singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
             )
             OutlinedTextField(
                 value = username, onValueChange = { username = it },
-                label = { Text("اسم المستخدم") },
+                label = { Text(stringResource(R.string.profile_username)) },
                 placeholder = { Text("3-20 حرف، أرقام وشرطات سفلية") },
                 modifier = Modifier.fillMaxWidth(), singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
@@ -739,7 +742,7 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
             }
             OutlinedTextField(
                 value = bio, onValueChange = { bio = it },
-                label = { Text("النبذة الشخصية") },
+                label = { Text(stringResource(R.string.profile_bio)) },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp), maxLines = 4,
                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
             )
@@ -749,9 +752,9 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
                 onClick = { onSave(normalizedUsername, displayName.trim(), bio.trim()) },
                 colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan),
                 enabled = usernameError == null && normalizedUsername.isNotBlank()
-            ) { Text("حفظ") }
+            ) { Text(stringResource(R.string.save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء", color = MangaColors.Muted) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) } }
     )
 }
 
@@ -760,7 +763,7 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
         title = { Text(title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
         text = { Text(message, color = MangaColors.OnSurfaceVariant) },
         confirmButton = { Button(onClick = onConfirm, colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Error)) { Text(confirmText, color = Color.White) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء", color = MangaColors.Muted) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) } }
     )
 }
 
@@ -784,7 +787,7 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إغلاق", color = MangaColors.Muted) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close), color = MangaColors.Muted) } }
     )
 }
 
@@ -823,8 +826,8 @@ private val AVAILABLE_GENRES = listOf(
                 }
             }
         },
-        confirmButton = { Button(onClick = { onSave(selectedGenres.toList()); onDismiss() }, colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)) { Text("حفظ") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء", color = MangaColors.Muted) } }
+        confirmButton = { Button(onClick = { onSave(selectedGenres.toList()); onDismiss() }, colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) } }
     )
 }
 
@@ -850,6 +853,6 @@ private val AVAILABLE_GENRES = listOf(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إغلاق", color = MangaColors.Muted) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close), color = MangaColors.Muted) } }
     )
 }

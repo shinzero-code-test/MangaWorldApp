@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.home
 
 import androidx.compose.animation.core.*
@@ -90,7 +93,7 @@ fun HomeScreen(
                 if (trendingFirst && state.trending.isNotEmpty()) {
                     item {
                         SectionHeader(
-                            title = "الأكثر قراءة",
+                            title = stringResource(R.string.home_trending),
                             onSeeAll = { onSeeAllLatest() },
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
@@ -106,7 +109,7 @@ fun HomeScreen(
                 // Latest chapters header
                 item {
                     SectionHeader(
-                        title = "أحدث الفصول",
+                        title = stringResource(R.string.home_latest),
                         onSeeAll = onSeeAllLatest,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
@@ -115,7 +118,7 @@ fun HomeScreen(
                 if (useLatestGrid) {
                     if (state.latestChapters.isEmpty()) {
                         item {
-                            Text("لا توجد فصول جديدة حالياً", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                            Text(stringResource(R.string.home_empty_chapters), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
                         }
                     } else {
                         item {
@@ -128,7 +131,7 @@ fun HomeScreen(
                 } else {
                     if (state.latestChapters.isEmpty()) {
                         item {
-                            Text("لا توجد فصول جديدة حالياً", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                            Text(stringResource(R.string.home_empty_chapters), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
                         }
                     } else {
                         items(state.latestChapters.take(15), key = { "${it.source.id}_${it.chapterUrl}" }) { item ->
@@ -144,7 +147,7 @@ fun HomeScreen(
                     item {
                         Spacer(Modifier.height(8.dp))
                         SectionHeader(
-                            title = "مقترح لك",
+                            title = stringResource(R.string.home_suggested),
                             onSeeAll = { onSeeAllLatest() },
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
@@ -162,7 +165,7 @@ fun HomeScreen(
                     item {
                         Spacer(Modifier.height(8.dp))
                         SectionHeader(
-                            title = "الأكثر قراءة",
+                            title = stringResource(R.string.home_trending),
                             onSeeAll = { onSeeAllLatest() },
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
@@ -183,7 +186,7 @@ fun HomeScreen(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 action = {
                     TextButton(onClick = viewModel::refresh) {
-                        Text("إعادة المحاولة", color = MangaColors.Cyan)
+                        Text(stringResource(R.string.retry), color = MangaColors.Cyan)
                     }
                 }
             ) { Text(err) }

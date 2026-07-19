@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.settings
 
 import android.app.Activity
@@ -64,7 +67,7 @@ fun SettingsScreen(
     ) {
         // Header
         Text(
-            "الإعدادات", style = MaterialTheme.typography.headlineMedium,
+            stringResource(R.string.more_settings), style = MaterialTheme.typography.headlineMedium,
             color = MangaColors.OnSurface, fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
         )
@@ -99,7 +102,7 @@ fun SettingsScreen(
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
                 icon = Icons.Filled.ColorLens,
-                title = "ألوان ديناميكية (Material You)",
+                title = stringResource(R.string.settings_dynamic_colors),
                 subtitle = "مطابقة ألوان النظام على Android 12+",
                 checked = app.useDynamicColors,
                 onCheckedChange = viewModel::setDynamicColors
@@ -256,7 +259,7 @@ fun SettingsScreen(
         }
 
         // ── Sources ───────────────────────────────────────────────────────────
-        SettingsSection("المصادر") {
+        SettingsSection(stringResource(R.string.more_sources)) {
             MangaSource.entries.forEachIndexed { i, source ->
                 val enabled = app.enabledSources.contains(source.id)
                 SwitchItem(
@@ -299,7 +302,7 @@ fun SettingsScreen(
         }
 
         // ── Downloads ─────────────────────────────────────────────────────────
-        SettingsSection("التنزيلات") {
+        SettingsSection(stringResource(R.string.more_downloads)) {
             SwitchItem(icon = Icons.Filled.Wifi,
                 title = "التنزيل عبر Wi-Fi فقط",
                 subtitle = "توفير البيانات الخلوية",
@@ -381,7 +384,7 @@ fun SettingsScreen(
             }
         }
 
-        SettingsSection("الإشعارات") {
+        SettingsSection(stringResource(R.string.settings_notifications)) {
             SettingsItem(
                 icon = Icons.Filled.Notifications,
                 title = "وضع التنبيهات",
@@ -431,7 +434,7 @@ fun SettingsScreen(
         }
 
         // ── Notifications ─────────────────────────────────────────────────────
-        SettingsSection("الإشعارات") {
+        SettingsSection(stringResource(R.string.settings_notifications)) {
             SwitchItem(icon = Icons.Filled.Notifications,
                 title = "إشعارات الفصول الجديدة",
                 subtitle = "عند صدور فصل جديد من قائمة متابعتك",
@@ -481,10 +484,10 @@ fun SettingsScreen(
                     TextButton(onClick = {
                     viewModel.setContentBlacklist(normalizeBlacklistInput(blacklistText))
                     blacklistDialog = false
-                }) { Text("حفظ") }
+                }) { Text(stringResource(R.string.save)) }
             },
             dismissButton = {
-                TextButton(onClick = { blacklistDialog = false }) { Text("إلغاء") }
+                TextButton(onClick = { blacklistDialog = false }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }

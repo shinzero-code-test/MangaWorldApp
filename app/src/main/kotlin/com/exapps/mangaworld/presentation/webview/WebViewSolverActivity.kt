@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.webview
 
 import android.annotation.SuppressLint
@@ -98,7 +101,7 @@ private fun CloudflareWebView(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, "إغلاق", tint = Color.White)
+                Icon(Icons.Filled.Close, stringResource(R.string.close), tint = Color.White)
             }
             Text("تحقق من الهوية — $domain",
                 style = MaterialTheme.typography.bodyMedium,

@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.sources
 
 import android.content.Context
@@ -148,7 +151,7 @@ fun SourceSettingsSheet(
             },
             dismissButton = {
                 TextButton(onClick = { showClearConfirm = false }) {
-                    Text("إلغاء", color = MangaColors.Muted)
+                    Text(stringResource(R.string.cancel), color = MangaColors.Muted)
                 }
             }
         )

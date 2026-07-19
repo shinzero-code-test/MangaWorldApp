@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.cloud
 
 import android.app.Activity
@@ -187,7 +190,7 @@ fun CloudSyncScreen(
                 title = { Text("السحابة والمزامنة", color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 actions = {
@@ -247,7 +250,7 @@ fun CloudSyncScreen(
                         )
                         if (state.errorMessage != null && !state.busy) {
                             TextButton(onClick = { viewModel.clearMessages() }) {
-                                Text("إغلاق", color = MangaColors.Error, style = MaterialTheme.typography.labelMedium)
+                                Text(stringResource(R.string.close), color = MangaColors.Error, style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
@@ -362,7 +365,7 @@ private fun AccountCard(
                 ) {
                     Icon(Icons.Filled.Logout, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("تسجيل الخروج")
+                    Text(stringResource(R.string.settings_sign_out))
                 }
             } else {
                 // Not signed in — show login form
@@ -376,7 +379,7 @@ private fun AccountCard(
                 OutlinedTextField(
                     value = password, onValueChange = onPasswordChange,
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("كلمة المرور") },
+                    placeholder = { Text(stringResource(R.string.auth_password_hint)) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp)
                 )
@@ -386,7 +389,7 @@ private fun AccountCard(
                     shape = RoundedCornerShape(10.dp),
                     enabled = email.isNotBlank() && password.isNotBlank() && !isSigningIn
                 ) {
-                    Text("تسجيل الدخول")
+                    Text(stringResource(R.string.auth_login))
                 }
                 if (hasGoogleSignIn) {
                     OutlinedButton(
@@ -429,7 +432,7 @@ private fun ProfileCard(
                     Icon(Icons.Filled.Badge, null, tint = MangaColors.Cyan, modifier = Modifier.size(24.dp))
                 }
                 Column(Modifier.weight(1f)) {
-                    Text("الملف الشخصي", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
+                    Text(stringResource(R.string.more_profile), fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
                     if (!badgeLabel.isNullOrBlank()) {
                         Text("البادج: $badgeLabel", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall)
                     }
@@ -439,7 +442,7 @@ private fun ProfileCard(
             OutlinedTextField(
                 value = username, onValueChange = onUsernameChange,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("اسم المستخدم") },
+                placeholder = { Text(stringResource(R.string.profile_username)) },
                 singleLine = true,
                 shape = RoundedCornerShape(10.dp)
             )
@@ -461,7 +464,7 @@ private fun ProfileCard(
                 shape = RoundedCornerShape(10.dp),
                 enabled = username.isNotBlank() && !isSaving
             ) {
-                Text("حفظ الملف الشخصي")
+                Text(stringResource(R.string.profile_save))
             }
         }
     }
@@ -489,7 +492,7 @@ private fun SyncActionsCard(
                 ) {
                     Icon(Icons.Filled.CloudSync, null, tint = MangaColors.Primary, modifier = Modifier.size(24.dp))
                 }
-                Text("المزامنة", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
+                Text(stringResource(R.string.more_sync), fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

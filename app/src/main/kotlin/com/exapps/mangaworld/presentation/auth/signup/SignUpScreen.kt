@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.presentation.auth.login.MangaTextField
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
@@ -57,10 +58,10 @@ fun SignUpScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("إنشاء حساب", color = MangaColors.OnSurface) },
+                title = { Text(stringResource(R.string.auth_signup), color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface)
+                        Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
@@ -77,7 +78,7 @@ fun SignUpScreen(
             Spacer(Modifier.height(24.dp))
 
             Text(
-                "أنشئ حسابك وابدأ القراءة",
+                stringResource(R.string.auth_welcome),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MangaColors.OnSurfaceVariant
             )
@@ -98,7 +99,7 @@ fun SignUpScreen(
                     tint = Color.Unspecified
                 )
                 Spacer(modifier = Modifier.width(10.dp))
-                Text("التسجيل باستخدام Google", color = MangaColors.OnSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(stringResource(R.string.auth_google), color = MangaColors.OnSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -111,7 +112,7 @@ fun SignUpScreen(
             ) {
                 Text("f", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                 Spacer(modifier = Modifier.width(10.dp))
-                Text("التسجيل باستخدام Facebook", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(stringResource(R.string.auth_facebook), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -130,7 +131,7 @@ fun SignUpScreen(
             MangaTextField(
                 value = displayName,
                 onValueChange = { displayName = it },
-                placeholder = "الاسم المعروض",
+                placeholder = stringResource(R.string.profile_display_name),
                 leadingIcon = Icons.Filled.Person,
                 keyboardType = KeyboardType.Text,
                 imeAction = ImeAction.Next
@@ -142,7 +143,7 @@ fun SignUpScreen(
             MangaTextField(
                 value = username,
                 onValueChange = { username = it },
-                placeholder = "اسم المستخدم",
+                placeholder = stringResource(R.string.profile_username),
                 leadingIcon = Icons.Filled.Badge,
                 keyboardType = KeyboardType.Ascii,
                 imeAction = ImeAction.Next
@@ -168,7 +169,7 @@ fun SignUpScreen(
             MangaTextField(
                 value = password,
                 onValueChange = { password = it },
-                placeholder = "كلمة المرور",
+                placeholder = stringResource(R.string.auth_password_hint),
                 leadingIcon = Icons.Filled.Lock,
                 isPassword = true,
                 passwordVisible = passwordVisible,
@@ -181,7 +182,7 @@ fun SignUpScreen(
             MangaTextField(
                 value = confirmPassword,
                 onValueChange = { confirmPassword = it },
-                placeholder = "تأكيد كلمة المرور",
+                placeholder = stringResource(R.string.auth_confirm_password),
                 leadingIcon = Icons.Filled.Lock,
                 isPassword = true,
                 passwordVisible = passwordVisible,
@@ -219,7 +220,7 @@ fun SignUpScreen(
                 if (isLoading) {
                     CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
                 } else {
-                    Text("إنشاء حساب", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.auth_signup), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.library
 
 import androidx.compose.foundation.*
@@ -37,7 +40,7 @@ fun LibraryScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("مكتبتي", style = MaterialTheme.typography.headlineMedium,
+            Text(stringResource(R.string.library_title), style = MaterialTheme.typography.headlineMedium,
                 color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
             if (state.activeTab == LibraryTab.HISTORY && state.history.isNotEmpty()) {
                 IconButton(onClick = viewModel::clearHistory) {
@@ -104,7 +107,7 @@ private fun FavoritesContent(
     if (favorites.isEmpty()) {
         EmptyState(
             icon = Icons.Filled.BookmarkBorder,
-            title = "قائمة المفضلة فارغة",
+            title = stringResource(R.string.library_empty_favorites),
             subtitle = "أضف مانجا إلى مفضلتك لتجدها هنا",
             action = { GradientButton("تصفح المانجا", onBrowse) },
             modifier = Modifier.fillMaxSize()
@@ -192,7 +195,7 @@ private fun HistoryContent(
     if (history.isEmpty()) {
         EmptyState(
             icon = Icons.Filled.History,
-            title = "سجل القراءة فارغ",
+            title = stringResource(R.string.library_empty_history),
             subtitle = "ابدأ القراءة لتظهر هنا",
             action = { GradientButton("تصفح المانجا", onBrowse) },
             modifier = Modifier.fillMaxSize()

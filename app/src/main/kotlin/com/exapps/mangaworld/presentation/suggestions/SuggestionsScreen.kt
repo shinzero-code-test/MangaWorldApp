@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.suggestions
 
 import androidx.compose.foundation.background
@@ -132,7 +135,7 @@ fun SuggestionsScreen(
                 title = { Text("اقتراحات لك", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface)
+                        Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 actions = {
@@ -170,7 +173,7 @@ fun SuggestionsScreen(
                             onClick = { viewModel.loadSuggestions() },
                             colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Primary)
                         ) {
-                            Text("إعادة المحاولة")
+                            Text(stringResource(R.string.retry))
                         }
                     }
                 }

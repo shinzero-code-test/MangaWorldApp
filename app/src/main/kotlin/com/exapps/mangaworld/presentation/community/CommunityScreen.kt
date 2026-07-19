@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.community
 
 import androidx.compose.foundation.background
@@ -52,7 +55,7 @@ data class CommentThread(
 
 @Stable
 data class CommunityUiState(
-    val title: String = "المجتمع",
+    val title: String = stringResource(R.string.community_title),
     val comments: List<CommunityComment> = emptyList(),
     val reviews: List<MangaReview> = emptyList(),
     val profile: CommunityProfile? = null,
@@ -110,7 +113,7 @@ class CommunityViewModel @Inject constructor(
             error = error
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, CommunityUiState(
-        title = if (chapterUrl == null) "المجتمع" else "نقاش الفصل",
+        title = if (chapterUrl == null) stringResource(R.string.community_title) else "نقاش الفصل",
         chapterMode = chapterUrl != null
     ))
 
@@ -209,7 +212,7 @@ fun CommunityScreen(
                 title = { Text(state.title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
@@ -233,7 +236,7 @@ fun CommunityScreen(
                 FilterChip(
                     selected = state.tab == CommunityTab.REVIEWS,
                     onClick = { viewModel.setTab(CommunityTab.REVIEWS) },
-                    label = { Text("المراجعات") },
+                    label = { Text(stringResource(R.string.community_reviews)) },
                     shape = RoundedCornerShape(10.dp)
                 )
             }
@@ -249,7 +252,7 @@ fun CommunityScreen(
 
                     LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (flat.isEmpty()) {
-                            item { Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) { Text("لا توجد تعليقات بعد", color = MangaColors.Muted) } }
+                            item { Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.community_no_comments), color = MangaColors.Muted) } }
                         }
                         items(flat.size, key = { flat[it].first.comment.id }) { idx ->
                             val (thread, depth) = flat[idx]
@@ -296,7 +299,7 @@ fun CommunityScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 OutlinedTextField(
                                     value = commentText, onValueChange = { commentText = it },
-                                    modifier = Modifier.weight(1f), placeholder = { Text("أضف تعليقاً...") },
+                                    modifier = Modifier.weight(1f), placeholder = { Text(stringResource(R.string.community_add_comment)) },
                                     shape = RoundedCornerShape(10.dp), maxLines = 3
                                 )
                                 Spacer(Modifier.width(8.dp))
@@ -322,7 +325,7 @@ fun CommunityScreen(
                             }
                         }
                         if (state.reviews.isEmpty()) {
-                            item { Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) { Text("لا توجد مراجعات بعد", color = MangaColors.Muted) } }
+                            item { Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.community_no_reviews), color = MangaColors.Muted) } }
                         }
                         items(state.reviews, key = { it.id }) { review ->
                             ReviewCard(review = review, onProfileClick = { onOpenProfile(review.authorUid) })
@@ -348,8 +351,8 @@ fun CommunityScreen(
                 Text("التقييم", color = MangaColors.OnSurface, style = MaterialTheme.typography.labelMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { (1..5).forEach { star -> FilterChip(selected = reviewRating == star, onClick = { reviewRating = star }, label = { Text("$star") }, shape = RoundedCornerShape(8.dp)) } }
             }},
-            confirmButton = { Button(onClick = { viewModel.upsertReview(reviewRating, reviewTitle, reviewBody); reviewDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)) { Text("حفظ") } },
-            dismissButton = { TextButton(onClick = { reviewDialog = false }) { Text("إلغاء", color = MangaColors.Muted) } }
+            confirmButton = { Button(onClick = { viewModel.upsertReview(reviewRating, reviewTitle, reviewBody); reviewDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)) { Text(stringResource(R.string.save)) } },
+            dismissButton = { TextButton(onClick = { reviewDialog = false }) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) } }
         )
     }
 
@@ -360,8 +363,8 @@ fun CommunityScreen(
                 Text(comment.text, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(value = reportReason, onValueChange = { reportReason = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("سبب الإبلاغ") }, shape = RoundedCornerShape(10.dp))
             }},
-            confirmButton = { Button(onClick = { viewModel.reportComment(comment, reportReason); reportTarget = null }, enabled = reportReason.isNotBlank(), colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Error)) { Text("إرسال") } },
-            dismissButton = { TextButton(onClick = { reportTarget = null }) { Text("إلغاء", color = MangaColors.Muted) } }
+            confirmButton = { Button(onClick = { viewModel.reportComment(comment, reportReason); reportTarget = null }, enabled = reportReason.isNotBlank(), colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Error)) { Text(stringResource(R.string.community_send)) } },
+            dismissButton = { TextButton(onClick = { reportTarget = null }) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) } }
         )
     }
 }
@@ -404,9 +407,9 @@ private fun CommentCard(
                         Icon(Icons.Filled.MoreVert, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp))
                     }
                     DropdownMenu(expanded = showOverflow, onDismissRequest = { showOverflow = false }) {
-                        Text("رد", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable { onReply(); showOverflow = false })
-                        Text("إبلاغ", color = MangaColors.Yellow, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable { onReport(); showOverflow = false })
-                        Text("كتم المستخدم", color = MangaColors.Muted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable { onMute(); showOverflow = false })
+                        Text(stringResource(R.string.community_reply), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable { onReply(); showOverflow = false })
+                        Text(stringResource(R.string.community_report), color = MangaColors.Yellow, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable { onReport(); showOverflow = false })
+                        Text(stringResource(R.string.community_mute), color = MangaColors.Muted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable { onMute(); showOverflow = false })
                     }
                 }
             }

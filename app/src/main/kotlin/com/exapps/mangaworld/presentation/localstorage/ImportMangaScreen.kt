@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.localstorage
 
 import android.content.Context
@@ -105,7 +108,7 @@ fun ImportMangaScreen(
                 title = { Text("استيراد مانجا خارجية", color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface)
+                        Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
@@ -278,7 +281,7 @@ fun ImportMangaScreen(
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text("تم")
+                                    Text(stringResource(R.string.ok))
                                 }
                             } else {
                                 LinearProgressIndicator(

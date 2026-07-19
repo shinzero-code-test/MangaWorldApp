@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.navigation
 
 import androidx.compose.animation.*
@@ -112,9 +115,9 @@ sealed class Screen(val route: String) {
 val bottomNavItems: List<Triple<Screen, String, ImageVector>> = listOf(
     Triple(Screen.Home,         "الرئيسية",     Icons.Filled.Home),
     Triple(Screen.Browse,       "تصفح",         Icons.Filled.GridView),
-    Triple(Screen.Search,       "بحث",          Icons.Filled.Search),
+    Triple(Screen.Search,       stringResource(R.string.search),          Icons.Filled.Search),
     Triple(Screen.Library,      "المكتبة",      Icons.Filled.BookmarkBorder),
-    Triple(Screen.More,         "المزيد",       Icons.Filled.MoreHoriz),
+    Triple(Screen.More,         stringResource(R.string.more_title),       Icons.Filled.MoreHoriz),
 )
 
 @Composable

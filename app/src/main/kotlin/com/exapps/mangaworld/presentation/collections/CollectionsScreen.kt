@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.collections
 
 import androidx.compose.foundation.background
@@ -68,7 +71,7 @@ fun CollectionsScreen(
                 title = { Text("قوائمي", color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface)
+                        Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 actions = {
@@ -173,7 +176,7 @@ private fun CollectionCard(
                 )
             }
             IconButton(onClick = { showDeleteConfirm = true }) {
-                Icon(Icons.Filled.Delete, "حذف", tint = MangaColors.Error)
+                Icon(Icons.Filled.Delete, stringResource(R.string.delete), tint = MangaColors.Error)
             }
         }
     }
@@ -188,12 +191,12 @@ private fun CollectionCard(
                     onDelete()
                     showDeleteConfirm = false
                 }) {
-                    Text("حذف", color = MangaColors.Error)
+                    Text(stringResource(R.string.delete), color = MangaColors.Error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("إلغاء")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -238,7 +241,7 @@ private fun CreateCollectionDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("إلغاء")
+                Text(stringResource(R.string.cancel))
             }
         }
     )

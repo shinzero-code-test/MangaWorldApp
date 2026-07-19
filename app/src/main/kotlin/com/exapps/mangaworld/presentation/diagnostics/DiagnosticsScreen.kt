@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.diagnostics
 
 import androidx.compose.foundation.background
@@ -173,7 +176,7 @@ fun DiagnosticsScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع", tint = MangaColors.Cyan)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = MangaColors.Cyan)
             }
             Text(
                 "التشخيص والصحة",
@@ -280,7 +283,7 @@ private fun GeneralStatusCard(
             Triple(Icons.Filled.Block, MangaColors.Pink, "الكلمات المحجوبة") to appSettings.contentBlacklist.size.toString(),
             Triple(Icons.Filled.Image, MangaColors.Orange, "حجم كاش الصور") to formatDiagnosticBytes(imageCacheSizeBytes),
             Triple(Icons.Filled.AccessTime, MangaColors.PrimaryLight, "آخر تحديث لودجت") to lastUpdatedLabel(widgetSnapshotUpdatedAt),
-            Triple(Icons.Filled.Fingerprint, MangaColors.Green, "القفل البيومتري") to if (appSettings.biometricLockEnabled) "مفعل" else "معطل"
+            Triple(Icons.Filled.Fingerprint, MangaColors.Green, stringResource(R.string.settings_biometric)) to if (appSettings.biometricLockEnabled) "مفعل" else "معطل"
         )
 
         rows.forEachIndexed { index, (meta, value) ->

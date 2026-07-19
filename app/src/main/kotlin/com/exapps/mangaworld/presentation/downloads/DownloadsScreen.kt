@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.downloads
 
 import androidx.compose.animation.core.animateFloatAsState
@@ -102,7 +105,7 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
                     IconButton(onClick = { /* handled by nav */ }) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "رجوع",
+                            contentDescription = stringResource(R.string.back),
                             tint = MangaColors.OnSurface
                         )
                     }
@@ -252,7 +255,7 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
                 TextButton(
                     onClick = { showCancelAllDialog = false },
                     colors = ButtonDefaults.textButtonColors(contentColor = MangaColors.Muted)
-                ) { Text("رجوع") }
+                ) { Text(stringResource(R.string.back)) }
             }
         )
     }
@@ -274,7 +277,7 @@ private fun EmptyState(modifier: Modifier = Modifier) {
                 tint = MangaColors.Muted.copy(alpha = 0.5f)
             )
             Text(
-                "لا توجد تنزيلات",
+                stringResource(R.string.library_empty_downloads),
                 color = MangaColors.Muted,
                 style = MaterialTheme.typography.titleMedium
             )
@@ -447,7 +450,7 @@ private fun ChapterDownloadCard(
             }
             if (onCancel != null) {
                 IconButton(onClick = onCancel, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Filled.Close, "إلغاء", modifier = Modifier.size(16.dp), tint = MangaColors.Muted)
+                    Icon(Icons.Filled.Close, stringResource(R.string.cancel), modifier = Modifier.size(16.dp), tint = MangaColors.Muted)
                 }
             }
         }

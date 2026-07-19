@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.profile
 
 import androidx.compose.foundation.background
@@ -305,7 +308,7 @@ private fun PublicProfileHero(
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.36f))
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع", tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = Color.White)
             }
         }
 

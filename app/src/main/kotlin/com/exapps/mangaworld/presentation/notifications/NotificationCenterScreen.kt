@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.notifications
 
 import androidx.compose.foundation.background
@@ -85,7 +88,7 @@ fun NotificationCenterScreen(
                 title = { Text("مركز الإشعارات", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 actions = {
@@ -202,7 +205,7 @@ private fun NotificationCard(
     }
 
     val typeLabel = when (notification.type) {
-        CommunityNotificationType.REPLY -> "رد"
+        CommunityNotificationType.REPLY -> stringResource(R.string.community_reply)
         CommunityNotificationType.MENTION -> "إشارة"
         CommunityNotificationType.REVIEW_REACTION -> "تفاعل"
         CommunityNotificationType.COMMENT_THREAD -> "مناقشة"

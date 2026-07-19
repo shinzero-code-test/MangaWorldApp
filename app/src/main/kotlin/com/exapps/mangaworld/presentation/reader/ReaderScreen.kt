@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.reader
 
 import android.app.Activity
@@ -288,10 +291,10 @@ fun ReaderScreen(
                     TextButton(onClick = {
                         viewModel.saveCurrentPageNote(noteText)
                         noteDialog = false
-                    }) { Text("حفظ") }
+                    }) { Text(stringResource(R.string.save)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { noteDialog = false }) { Text("إلغاء") }
+                    TextButton(onClick = { noteDialog = false }) { Text(stringResource(R.string.cancel)) }
                 }
             )
         }
@@ -305,10 +308,10 @@ fun ReaderScreen(
                     TextButton(onClick = {
                         viewModel.saveCurrentPage()
                         showSavePageDialog = false
-                    }) { Text("حفظ") }
+                    }) { Text(stringResource(R.string.save)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showSavePageDialog = false }) { Text("إلغاء") }
+                    TextButton(onClick = { showSavePageDialog = false }) { Text(stringResource(R.string.cancel)) }
                 }
             )
         }
@@ -755,7 +758,7 @@ private fun ReaderTopBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, "رجوع", tint = Color.White)
+                Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = Color.White)
             }
             androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -840,7 +843,7 @@ private fun ReaderSettingsSheet(
                     ActionButton(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Filled.Close,
-                        label = "إلغاء",
+                        label = stringResource(R.string.cancel),
                         onClick = onCancelDownload,
                         tint = MangaColors.Error
                     )
@@ -1050,7 +1053,7 @@ private fun ReaderCommentsSheet(
                 Checkbox(checked = spoiler, onCheckedChange = onSpoilerChange)
                 Text("سبويْلر")
             }
-            Button(onClick = onSend, enabled = commentText.isNotBlank()) { Text("إرسال") }
+            Button(onClick = onSend, enabled = commentText.isNotBlank()) { Text(stringResource(R.string.community_send)) }
         }
     }
 }
@@ -1153,7 +1156,7 @@ private fun ReaderError(message: String, onBack: () -> Unit) {
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) {
                 Icon(Icons.Filled.ArrowBack, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("رجوع")
+                Text(stringResource(R.string.back))
             }
         }
     }
@@ -1171,7 +1174,7 @@ private fun ReaderCloudflareError(domain: String, onBack: () -> Unit, onSolve: (
             Spacer(Modifier.height(18.dp))
             Button(onClick = onSolve) { Text("فتح أداة التحقق") }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onBack) { Text("رجوع") }
+            OutlinedButton(onClick = onBack) { Text(stringResource(R.string.back)) }
         }
     }
 }

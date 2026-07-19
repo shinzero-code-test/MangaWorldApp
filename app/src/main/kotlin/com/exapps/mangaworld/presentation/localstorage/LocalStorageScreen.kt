@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.localstorage
 
 import androidx.compose.foundation.background
@@ -195,10 +198,10 @@ fun LocalStorageScreen(
                 confirmButton = {
                     Button(onClick = viewModel::confirmDeleteManga,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) { Text("حذف") }
+                    ) { Text(stringResource(R.string.delete)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = viewModel::dismissDelete) { Text("إلغاء", color = MangaColors.Muted) }
+                    TextButton(onClick = viewModel::dismissDelete) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) }
                 }
             )
         }
@@ -283,7 +286,7 @@ private fun LocalMangaCard(
                 modifier = Modifier.size(36.dp)
                     .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
             ) {
-                Icon(Icons.Filled.Delete, "حذف", modifier = Modifier.size(18.dp),
+                Icon(Icons.Filled.Delete, stringResource(R.string.delete), modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.error)
             }
         }

@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.community
 
 import androidx.compose.foundation.background
@@ -54,12 +57,12 @@ fun ModerationDashboardScreen(onBack: () -> Unit, onOpenDashboard: () -> Unit = 
     Column(Modifier.fillMaxSize().background(MangaColors.Background)) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MangaColors.OnSurface) }
-            Text("لوحة الإشراف", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.moderation_title), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.padding(0.dp))
         }
 
         if (!canModerate) {
-            Text("هذه الشاشة مخصصة للمشرفين فقط.", color = MangaColors.OnSurfaceVariant, modifier = Modifier.padding(16.dp))
+            Text(stringResource(R.string.moderation_moderators_only), color = MangaColors.OnSurfaceVariant, modifier = Modifier.padding(16.dp))
             return
         }
 

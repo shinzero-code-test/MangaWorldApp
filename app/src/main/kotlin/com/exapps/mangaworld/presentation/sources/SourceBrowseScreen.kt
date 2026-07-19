@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.sources
 
 import android.content.Intent
@@ -93,7 +96,7 @@ fun SourceBrowseScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface)
+                        Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 actions = {
@@ -228,7 +231,7 @@ fun SourceBrowseScreen(
                         Icon(Icons.Filled.Search, null, tint = MangaColors.Muted, modifier = Modifier.size(48.dp))
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            if (uiState.query.isNotBlank()) "لا توجد نتائج" else "اضغط للبحث أو انتظر التحميل",
+                            if (uiState.query.isNotBlank()) stringResource(R.string.search_empty) else "اضغط للبحث أو انتظر التحميل",
                             color = MangaColors.OnSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium
                         )

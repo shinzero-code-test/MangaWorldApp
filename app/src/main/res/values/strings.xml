@@ -2,6 +2,8 @@
 <resources>
     <string name="app_name">MangaWorld</string>
     <string name="splash_tagline">اقرأ المانجا العربية</string>
+
+    <!-- ─── App Shortcuts ─────────────────────────────────────────────────── -->
     <string name="shortcut_search_short">بحث</string>
     <string name="shortcut_search_long">ابحث عن مانجا</string>
     <string name="shortcut_downloads_short">التنزيلات</string>
@@ -11,8 +13,265 @@
     <string name="shortcut_random_short">مانجا عشوائية</string>
     <string name="shortcut_random_long">افتح مانجا عشوائية</string>
 
-    <!-- Facebook SDK — replace with your actual Facebook App ID from developers.facebook.com -->
+    <!-- Facebook SDK -->
     <string name="facebook_app_id">3473309582835491</string>
     <string name="fb_login_protocol_scheme">fb3473309582835491</string>
     <string name="facebook_client_token">2525ce71439f4fe642b842c84c83b4c9</string>
+
+    <!-- ─── Common ─────────────────────────────────────────────────────────── -->
+    <string name="ok">تم</string>
+    <string name="cancel">إلغاء</string>
+    <string name="save">حفظ</string>
+    <string name="delete">حذف</string>
+    <string name="close">إغلاق</string>
+    <string name="retry">إعادة المحاولة</string>
+    <string name="loading">جاري التحميل…</string>
+    <string name="error_generic">حدث خطأ</string>
+    <string name="error_network">تأكد من الاتصال بالإنترنت وحاول مجدداً</string>
+    <string name="no_data">لا توجد بيانات</string>
+    <string name="search">بحث</string>
+    <string name="back">رجوع</string>
+    <string name="edit">تعديل</string>
+    <string name="confirm">تأكيد</string>
+    <string name="apply">تطبيق</string>
+    <string name="filter">تصفية</string>
+    <string name="see_all">عرض الكل</string>
+    <string name="view_more">عرض المزيد</string>
+    <string name="load_more">حمّل المزيد</string>
+    <string name="coming_soon">قريباً</string>
+    <string name="none">لا شيء</string>
+
+    <!-- ─── Auth ───────────────────────────────────────────────────────────── -->
+    <string name="auth_welcome">أنشئ حسابك وابدأ القراءة</string>
+    <string name="auth_tagline">عالمك. مانغاك.</string>
+    <string name="auth_email_hint">البريد الإلكتروني أو اسم المستخدم</string>
+    <string name="auth_password_hint">كلمة المرور</string>
+    <string name="auth_confirm_password">تأكيد كلمة المرور</string>
+    <string name="auth_forgot_password">نسيت كلمة المرور؟</string>
+    <string name="auth_login">تسجيل الدخول</string>
+    <string name="auth_signup">إنشاء حساب</string>
+    <string name="auth_or">أو</string>
+    <string name="auth_google">التسجيل باستخدام Google</string>
+    <string name="auth_facebook">التسجيل باستخدام Facebook</string>
+    <string name="auth_no_account">ليس لديك حساب؟</string>
+    <string name="auth_register_now">سجل الآن</string>
+    <string name="auth_reset_email_sent">تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك</string>
+    <string name="auth_display_name_hint">الاسم المعروض</string>
+    <string name="auth_username_hint">اسم المستخدم</string>
+    <string name="auth_username_rules">3-20 حرف، أرقام وشرطات سفلية</string>
+    <string name="auth_error_empty_fields">أدخل البريد الإلكتروني وكلمة المرور</string>
+    <string name="auth_error_login_failed">فشل تسجيل الدخول. تحقق من البيانات.</string>
+    <string name="auth_error_signup_failed">فشل إنشاء الحساب.</string>
+    <string name="auth_error_passwords_mismatch">كلمتا المرور غير متطابقتين</string>
+    <string name="auth_error_username_short">اسم المستخدم قصير جداً (3 أحرف على الأقل)</string>
+    <string name="auth_error_username_long">اسم المستخدم طويل جداً (20 حرف كحد أقصى)</string>
+    <string name="auth_error_username_invalid">اسم المستخدم يجب أن يحتوي على أحرف وأرقام وشرطات سفلية فقط</string>
+    <string name="auth_error_username_required">اسم المستخدم مطلوب</string>
+    <string name="auth_error_display_name_required">أدخل الاسم المعروض</string>
+    <string name="auth_error_email_used">هذا البريد الإلكتروني مستخدم بالفعل في حساب آخر</string>
+    <string name="auth_error_provider_linked">هذا المزوّد مرتبط بحساب آخر. لا يمكن دمج الحسابات تلقائياً.</string>
+    <string name="auth_error_password_weak">كلمة المرور لا تفي بمتطلبات الأمان</string>
+
+    <!-- ─── Home ───────────────────────────────────────────────────────────── -->
+    <string name="home_trending">الأكثر قراءة</string>
+    <string name="home_latest">أحدث الفصول</string>
+    <string name="home_suggested">مقترح لك</string>
+    <string name="home_alert_prefix">تنبيه:</string>
+    <string name="home_empty_chapters">لا توجد فصول جديدة حالياً</string>
+
+    <!-- ─── Search / Browse ────────────────────────────────────────────────── -->
+    <string name="search_hint">ابحث عن مانجا، مؤلف…</string>
+    <string name="search_all_sources">كل المصادر</string>
+    <string name="search_suggested">بحث مقترح</string>
+    <string name="search_empty">لا توجد نتائج</string>
+    <string name="search_cloudflare_required">تحقق Cloudflare مطلوب</string>
+    <string name="search_cloudflare_button">تحقق الآن</string>
+    <string name="browse_results_count">%d نتيجة</string>
+    <string name="browse_filter">تصفية</string>
+    <string name="browse_all">الكل</string>
+    <string name="browse_filter_apply">تطبيق الفلتر</string>
+    <string name="browse_filter_reset">إعادة تعيين</string>
+    <string name="browse_filter_status">الحالة</string>
+    <string name="browse_filter_type">النوع</string>
+    <string name="browse_sort">ترتيب حسب</string>
+
+    <!-- ─── Library ────────────────────────────────────────────────────────── -->
+    <string name="library_title">مكتبتي</string>
+    <string name="library_empty_favorites">قائمة المفضلة فارغة</string>
+    <string name="library_empty_favorites_hint">أضف مانجا إلى مفضلتك لتجدها هنا</string>
+    <string name="library_empty_history">سجل القراءة فارغ</string>
+    <string name="library_empty_downloads">لا توجد تنزيلات</string>
+    <string name="library_remove_favorite">إزالة من المفضلة</string>
+    <string name="library_chapters_read">%1$d/%2$d فصل</string>
+
+    <!-- ─── Profile ────────────────────────────────────────────────────────── -->
+    <string name="profile_title">الملف الشخصي</string>
+    <string name="profile_edit">تعديل الملف الشخصي</string>
+    <string name="profile_display_name">الاسم المعروض</string>
+    <string name="profile_username">اسم المستخدم</string>
+    <string name="profile_username_display_name_hint">اسمك كما يظهر للآخرين</string>
+    <string name="profile_bio">النبذة الشخصية</string>
+    <string name="profile_join_date">تاريخ الانضمام</string>
+    <string name="profile_role">الرتبة</string>
+    <string name="profile_badge">الشارة</string>
+    <string name="profile_role_viewer">مشاهد</string>
+    <string name="profile_role_moderator">مشرف</string>
+    <string name="profile_role_admin">مدير عام</string>
+    <string name="profile_save">حفظ الملف الشخصي</string>
+
+    <!-- ─── Settings ───────────────────────────────────────────────────────── -->
+    <string name="settings_title">الإعدادات</string>
+    <string name="settings_account">معلومات الحساب</string>
+    <string name="settings_security">الأمان</string>
+    <string name="settings_privacy">الخصوصية</string>
+    <string name="settings_notifications">الإشعارات</string>
+    <string name="settings_library">المكتبة الشخصية</string>
+    <string name="settings_sync">المزامنة والنسخ الاحتياطي</string>
+    <string name="settings_sources">المصادر والمحتوى</string>
+    <string name="settings_social">التفاعل الاجتماعي</string>
+    <string name="settings_biometric">القفل البيومتري</string>
+    <string name="settings_dynamic_colors">ألوان ديناميكية (Material You)</string>
+    <string name="settings_spoiler_default">إخفاء الحرق افتراضياً</string>
+    <string name="settings_reader">القارئ</string>
+    <string name="settings_notifications_new_chapters">إشعارات الفصول الجديدة</string>
+    <string name="settings_notifications_comments">إشعارات التعليقات</string>
+    <string name="settings_notifications_likes">إشعارات الإعجابات</string>
+    <string name="settings_notifications_followers">إشعارات المتابعين</string>
+    <string name="settings_delete_account">حذف الحساب</string>
+    <string name="settings_delete_account_confirm">هل أنت متأكد من حذف حسابك؟ هذا الإجراء لا يمكن التراجع عنه.</string>
+    <string name="settings_sign_out">تسجيل الخروج</string>
+    <string name="settings_sign_out_confirm">هل تريد تسجيل الخروج من حسابك؟</string>
+    <string name="settings_email">البريد الإلكتروني</string>
+    <string name="settings_phone">رقم الهاتف</string>
+    <string name="settings_phone_unavailable">غير مضاف</string>
+    <string name="settings_unavailable">غير متوفر</string>
+    <string name="settings_show_library_public">إظهار المكتبة الشخصية</string>
+    <string name="settings_show_lists_public">إظهار قائمة القراءة</string>
+    <string name="settings_show_activity_public">إظهار النشاط الأخير</string>
+    <string name="settings_block_users">حظر المستخدمين</string>
+    <string name="settings_blocked_users_title">المستخدمون المحظورون</string>
+    <string name="settings_blocked_empty">لا يوجد مستخدمون محظورون</string>
+    <string name="settings_unblock">إلغاء الحظر</string>
+    <string name="settings_favorite_genres">الأنواع المفضلة</string>
+    <string name="settings_following">المتابَعون</string>
+    <string name="settings_followers">المتابعون</string>
+    <string name="settings_comments_count">التعليقات المكتوبة</string>
+    <string name="settings_reviews_count">مراجعات المانجا</string>
+    <string name="settings_cloud_sync">مزامنة الحساب مع السحابة</string>
+    <string name="settings_export">استيراد/تصدير القوائم</string>
+    <string name="settings_provider_link_google">ربط Google</string>
+    <string name="settings_provider_link_facebook">ربط Facebook</string>
+    <string name="settings_provider_linked">مرتبط ✓</string>
+    <string name="settings_provider_link_error">تعذر تحديث مزود تسجيل الدخول. حاول مرة أخرى.</string>
+    <string name="settings_provider_guest_error">أنشئ حساباً دائماً قبل إدارة مزوّدي تسجيل الدخول.</string>
+    <string name="settings_provider_sign_in_error">سجّل الدخول أولاً قبل إدارة مزوّدي تسجيل الدخول.</string>
+    <string name="settings_sources_moderation">إدارة البلاغات والمحتوى</string>
+    <string name="settings_version">الإصدار</string>
+    <string name="settings_login_history">سجل تسجيل الدخول</string>
+    <string name="settings_login_history_empty">لا يوجد سجل متاح حالياً</string>
+    <string name="settings_devices">الأجهزة المتصلة</string>
+    <string name="settings_sessions">الجلسات مُدارة عبر Firebase</string>
+    <string name="settings_delete_account_empty">حذف التنزيلات</string>
+
+    <!-- ─── Community ──────────────────────────────────────────────────────── -->
+    <string name="community_title">المجتمع</string>
+    <string name="community_comments_count">تعليقات %s</string>
+    <string name="community_discussion">نقاش الفصل</string>
+    <string name="community_no_comments">لا توجد تعليقات بعد</string>
+    <string name="community_no_reviews">لا توجد مراجعات بعد</string>
+    <string name="community_add_comment">أضف تعليقاً…</string>
+    <string name="community_send">إرسال</string>
+    <string name="community_add_review">إضافة/تحديث مراجعتك</string>
+    <string name="community_reply_to">الرد على @%s</string>
+    <string name="community_reply">رد</string>
+    <string name="community_report">إبلاغ</string>
+    <string name="community_mute">كتم المستخدم</string>
+    <string name="community_show_spoiler">إظهار السبويْلر</string>
+    <string name="community_replies_count">%d رد</string>
+    <string name="community_error_post">فشل إرسال التعليق</string>
+    <string name="community_error_report">فشل الإبلاغ</string>
+    <string name="community_report_title">الإبلاغ عن تعليق</string>
+    <string name="community_report_reason">سبب الإبلاغ</string>
+    <string name="community_spoiler">سبويْلر</string>
+    <string name="community_reviews">المراجعات</string>
+    <string name="community_review_title_hint">عنوان المراجعة</string>
+    <string name="community_review_body_hint">مراجعتك</string>
+
+    <!-- ─── Moderation ─────────────────────────────────────────────────────── -->
+    <string name="moderation_title">لوحة الإشراف</string>
+    <string name="moderation_moderators_only">هذه الشاشة مخصصة للمشرفين فقط.</string>
+    <string name="moderation_use_dashboard">لحل البلاغات أو اتخاذ إجراء، استخدم لوحة التحكم على الويب.</string>
+    <string name="moderation_report_prefix">بلاغ #%s</string>
+    <string name="moderation_status">الحالة: %s</string>
+
+    <!-- ─── Downloads ──────────────────────────────────────────────────────── -->
+    <string name="downloads_title">التنزيلات</string>
+    <string name="downloads_empty">لا توجد فصول محملة</string>
+    <string name="downloads_empty_hint">نزّل فصولاً من صفحة التفاصيل لتظهر هنا</string>
+    <string name="downloads_chapters_available">%d فصل متاح</string>
+
+    <!-- ─── Profile — Library Section ──────────────────────────────────────── -->
+    <string name="library_section_title">المكتبة</string>
+    <string name="library_reading">أقرأها الآن</string>
+    <string name="library_read">تم قراءتها</string>
+    <string name="library_plan_to_read">أرغب بقراءتها</string>
+    <string name="library_on_hold">أكملها لاحقاً</string>
+    <string name="library_dropped">لا أرغب بقراءتها</string>
+    <string name="library_custom_lists">قوائمي</string>
+    <string name="library_empty_lists">لا توجد قوائم بعد</string>
+    <string name="library_create_first_list">أنشئ قائمتك الأولى لتنظيم المانجا المفضلة لديك</string>
+    <string name="library_items_count">%d عنصر</string>
+    <string name="library_manga_count">%d مانجا</string>
+    <string name="library_chapters">%d فصل</string>
+
+    <!-- ─── Profile — Following ────────────────────────────────────────────── -->
+    <string name="following_title">المتابَعون</string>
+    <string name="followers_title">المتابعون</string>
+    <string name="follow">متابعة</string>
+    <string name="unfollow">إلغاء المتابعة</string>
+    <string name="profile_community_notifications">إشعارات المجتمع</string>
+
+    <!-- ─── Reader ─────────────────────────────────────────────────────────── -->
+    <string name="reader_settings">إعدادات القارئ</string>
+    <string name="reader_previous">الفصل السابق</string>
+    <string name="reader_next">الفصل التالي</string>
+    <string name="reader_page_counter">%1$s / %2$s</string>
+    <string name="reader_live_readers">%d قارئ</string>
+    <string name="reader_chapter">الفصل %s</string>
+    <string name="reader_save_page">حفظ الصفحة</string>
+    <string name="reader_page_saved">تم حفظ الصفحة</string>
+    <string name="reader_image_saved">تم حفظ الصورة في المعرض</string>
+    <string name="reader_screenshot_blocked">حماية القارئ من اللقطات</string>
+    <string name="reader_spoiler_collapse">طيّ تعليقات السبويْلر حتى تكشفها يدوياً</string>
+
+    <!-- ─── Onboarding ─────────────────────────────────────────────────────── -->
+    <string name="onboarding_read_title">اقرأ المانجا بلا حدود</string>
+    <string name="onboarding_sources_title">مصادر متعددة</string>
+    <string name="onboarding_offline_title">حمّل واقرأ بلا إنترنت</string>
+    <string name="onboarding_custom_title">تجربة قراءة مخصصة</string>
+    <string name="onboarding_start">ابدأ الآن</string>
+    <string name="onboarding_skip">تخطي</string>
+
+    <!-- ─── More Screen ────────────────────────────────────────────────────── -->
+    <string name="more_title">المزيد</string>
+    <string name="more_downloads">التنزيلات</string>
+    <string name="more_local">المحلي</string>
+    <string name="more_local_subtitle">المانجا المحفوظة</string>
+    <string name="more_suggestions">اقتراحات</string>
+    <string name="more_stats">الإحصائيات</string>
+    <string name="more_goals">الإنجازات</string>
+    <string name="more_sync">المزامنة</string>
+    <string name="more_sources">المصادر</string>
+    <string name="more_profile">الملف الشخصي</string>
+    <string name="more_settings">الإعدادات</string>
+    <string name="more_diagnostics">التشخيص</string>
+    <string name="more_moderation">لوحة الإشراف</string>
+    <string name="more_moderation_subtitle">إدارة المحتوى</string>
+
+    <!-- ─── Version ────────────────────────────────────────────────────────── -->
+    <string name="version_label">MangaWorld v%s</string>
+
+    <!-- ─── User List Dialog ───────────────────────────────────────────────── -->
+    <string name="dialog_no_users">لا يوجد مستخدمون حالياً</string>
+    <string name="dialog_close">إغلاق</string>
 </resources>

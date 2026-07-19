@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
 @Composable
@@ -94,14 +95,14 @@ fun LoginScreen(
                 Text("World", color = MangaColors.Primary, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
             }
             Spacer(modifier = Modifier.height(6.dp))
-            Text("عالمك. مانغاك.", color = MangaColors.OnSurfaceVariant, fontSize = 15.sp)
+            Text(stringResource(R.string.auth_tagline), color = MangaColors.OnSurfaceVariant, fontSize = 15.sp)
             Spacer(modifier = Modifier.height(36.dp))
 
             // Email field
             MangaTextField(
                 value = email,
                 onValueChange = onEmailChanged,
-                placeholder = "البريد الإلكتروني أو اسم المستخدم",
+                placeholder = stringResource(R.string.auth_email_hint),
                 leadingIcon = Icons.Filled.Email,
                 keyboardType = KeyboardType.Email,
                 imeAction = ImeAction.Next,
@@ -113,7 +114,7 @@ fun LoginScreen(
             MangaTextField(
                 value = password,
                 onValueChange = onPasswordChanged,
-                placeholder = "كلمة المرور",
+                placeholder = stringResource(R.string.auth_password_hint),
                 leadingIcon = Icons.Filled.Lock,
                 isPassword = true,
                 passwordVisible = passwordVisible,
@@ -134,7 +135,7 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Text(
-                    "نسيت كلمة المرور؟",
+                    stringResource(R.string.auth_forgot_password),
                     color = MangaColors.Primary,
                     fontSize = 13.sp,
                     modifier = Modifier.clickable { onForgotPasswordClick() }
@@ -158,7 +159,7 @@ fun LoginScreen(
                 if (isLoading) {
                     CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
                 } else {
-                    Text("تسجيل الدخول", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.auth_login), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -209,9 +210,9 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(28.dp))
                 Row {
-                    Text("ليس لديك حساب؟ ", color = MangaColors.OnSurfaceVariant, fontSize = 13.sp)
+                    Text(stringResource(R.string.auth_no_account), color = MangaColors.OnSurfaceVariant, fontSize = 13.sp)
                     Text(
-                        "سجل الآن",
+                        stringResource(R.string.auth_register_now),
                         color = MangaColors.Primary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,

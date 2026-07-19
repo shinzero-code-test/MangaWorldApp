@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.detail
 
 import androidx.compose.foundation.background
@@ -54,7 +57,7 @@ fun LibraryBottomSheet(
                     fontWeight = FontWeight.Bold
                 )
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Filled.Close, "إغلاق", tint = MangaColors.Muted)
+                    Icon(Icons.Filled.Close, stringResource(R.string.close), tint = MangaColors.Muted)
                 }
             }
 

@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.goals
 
 import androidx.compose.foundation.background
@@ -79,7 +82,7 @@ fun GoalsScreen(
                 title = { Text("الأهداف والإنجازات", color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface)
+                        Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
@@ -161,7 +164,7 @@ fun GoalsScreen(
             item {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "الإنجازات",
+                    stringResource(R.string.more_goals),
                     style = MaterialTheme.typography.titleMedium,
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold
@@ -251,7 +254,7 @@ private fun GoalCard(
                     )
                 }
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Filled.Delete, "حذف", tint = MangaColors.Error)
+                    Icon(Icons.Filled.Delete, stringResource(R.string.delete), tint = MangaColors.Error)
                 }
             }
 
@@ -385,7 +388,7 @@ private fun CreateGoalDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("إلغاء")
+                Text(stringResource(R.string.cancel))
             }
         }
     )

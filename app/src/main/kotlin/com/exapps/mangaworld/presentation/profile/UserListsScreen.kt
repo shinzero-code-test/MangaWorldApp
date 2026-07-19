@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.profile
 
 import android.net.Uri
@@ -155,7 +158,7 @@ fun UserListsScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع", tint = MangaColors.OnSurface)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = MangaColors.OnSurface)
                         }
                         Text(
                             "قوائمي المخصصة",
@@ -386,7 +389,7 @@ private fun ListCard(
                     Icon(Icons.Filled.Edit, contentDescription = "تعديل", modifier = Modifier.size(18.dp), tint = MangaColors.Cyan)
                 }
                 IconButton(onClick = onDelete, modifier = Modifier.size(34.dp)) {
-                    Icon(Icons.Filled.Delete, contentDescription = "حذف", modifier = Modifier.size(18.dp), tint = MangaColors.Error)
+                    Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.delete), modifier = Modifier.size(18.dp), tint = MangaColors.Error)
                 }
             }
         }
@@ -537,7 +540,7 @@ private fun DeleteConfirmDialog(list: CustomUserList, onConfirm: () -> Unit, onD
             Spacer(Modifier.height(20.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), shape = RoundedCornerShape(percent = 50)) {
-                    Text("إلغاء")
+                    Text(stringResource(R.string.cancel))
                 }
                 Button(
                     onClick = onConfirm,
@@ -545,7 +548,7 @@ private fun DeleteConfirmDialog(list: CustomUserList, onConfirm: () -> Unit, onD
                     shape = RoundedCornerShape(percent = 50),
                     colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Error, contentColor = Color.White)
                 ) {
-                    Text("حذف")
+                    Text(stringResource(R.string.delete))
                 }
             }
         }
@@ -624,7 +627,7 @@ private fun ListEditorSheet(
                         style = MaterialTheme.typography.titleMedium
                     )
                     IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Filled.Close, contentDescription = "إغلاق", tint = MangaColors.Muted)
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close), tint = MangaColors.Muted)
                     }
                 }
 
@@ -670,7 +673,7 @@ private fun ListEditorSheet(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(percent = 50)
                     ) {
-                        Text("إلغاء")
+                        Text(stringResource(R.string.cancel))
                     }
                     Button(
                         onClick = onSave,
@@ -689,7 +692,7 @@ private fun ListEditorSheet(
 
 @Composable
 private fun EditorTabRow(selectedTab: Int, onTabSelected: (Int) -> Unit) {
-    val tabs = listOf("معلومات", "الغلاف", "التفاصيل", "الخصوصية")
+    val tabs = listOf("معلومات", "الغلاف", "التفاصيل", stringResource(R.string.settings_privacy))
     Row(
         modifier = Modifier
             .fillMaxWidth()

@@ -31,6 +31,7 @@ import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.core.data.CollectionManager
 import com.exapps.mangaworld.core.data.MangaCollection
 import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
@@ -91,7 +92,7 @@ fun CollectionDetailScreen(
                 title = { Text(collection?.name ?: "قائمة", color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "رجوع", tint = MangaColors.OnSurface)
+                        Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
@@ -208,7 +209,7 @@ private fun CollectionMangaCard(
                 ) { Text("إزالة") }
             },
             dismissButton = {
-                TextButton(onClick = { showRemoveConfirm = false }) { Text("إلغاء", color = MangaColors.Muted) }
+                TextButton(onClick = { showRemoveConfirm = false }) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) }
             }
         )
     }

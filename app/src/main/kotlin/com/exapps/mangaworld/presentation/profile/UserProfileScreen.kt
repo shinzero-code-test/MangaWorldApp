@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.profile
 
 import android.net.Uri
@@ -541,10 +544,10 @@ private fun QuickActionsGrid(
 ) {
     val actions = listOf(
         QuickAction(Icons.Filled.CloudSync, "السحابة", MangaColors.Cyan, 0, onOpenCloudSync),
-        QuickAction(Icons.Filled.Tune, "التشخيص", MangaColors.Pink, 0, onOpenDiagnostics),
+        QuickAction(Icons.Filled.Tune, stringResource(R.string.more_diagnostics), MangaColors.Pink, 0, onOpenDiagnostics),
         QuickAction(Icons.Filled.Notifications, "إشعارات", MangaColors.Yellow, unreadNotifications, onOpenNotifications),
         QuickAction(Icons.Filled.Speed, "إحصائيات", MangaColors.Orange, 0, onOpenReadingStats),
-        QuickAction(Icons.Filled.Tune, "الإعدادات", MangaColors.Muted, 0, onOpenProfileSettings)
+        QuickAction(Icons.Filled.Tune, stringResource(R.string.more_settings), MangaColors.Muted, 0, onOpenProfileSettings)
     )
     val rows = actions.chunked(3)
 
@@ -637,7 +640,7 @@ private fun CustomListsSection(lists: List<CustomUserList>, onOpenLists: () -> U
                 modifier = Modifier.clickable(onClick = onOpenLists),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("عرض الكل", color = MangaColors.Cyan, style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.see_all), color = MangaColors.Cyan, style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.width(4.dp))
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowForward,
@@ -988,7 +991,7 @@ private fun ModerationEntryCard(onClick: () -> Unit) {
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text("لوحة الإشراف", color = MangaColors.Yellow, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.moderation_title), color = MangaColors.Yellow, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
             Text("إدارة البلاغات والمحتوى", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
         }
         Icon(
