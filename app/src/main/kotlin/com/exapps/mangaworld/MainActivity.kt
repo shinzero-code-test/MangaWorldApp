@@ -231,6 +231,10 @@ private fun MangaApp(
 
                     when (postOnboardingScreen) {
                         "signup" -> {
+                            // System back from signup → go back to login
+                            androidx.activity.compose.BackHandler {
+                                postOnboardingScreen = "login"
+                            }
                             com.exapps.mangaworld.presentation.auth.signup.SignUpScreen(
                                 onBack = { postOnboardingScreen = "login" },
                                 onSignUp = loginViewModel::signUpWithEmail,
@@ -248,6 +252,10 @@ private fun MangaApp(
                             )
                         }
                         "forgot" -> {
+                            // System back from forgot → go back to login
+                            androidx.activity.compose.BackHandler {
+                                postOnboardingScreen = "login"
+                            }
                             com.exapps.mangaworld.presentation.auth.forgotpassword.ForgotPasswordScreen(
                                 onBack = { postOnboardingScreen = "login" },
                                 isLoading = loginState.isLoading,
@@ -258,6 +266,10 @@ private fun MangaApp(
                             )
                         }
                         else -> {
+                            // System back from login → dismiss overlay, proceed as guest
+                            androidx.activity.compose.BackHandler {
+                                showPostOnboardingLogin = false
+                            }
                             com.exapps.mangaworld.presentation.auth.login.LoginScreen(
                                 email = loginState.email,
                                 password = loginState.password,
