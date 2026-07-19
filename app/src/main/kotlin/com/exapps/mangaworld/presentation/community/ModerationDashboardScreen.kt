@@ -56,7 +56,7 @@ fun ModerationDashboardScreen(onBack: () -> Unit, onOpenDashboard: () -> Unit = 
 
     Column(Modifier.fillMaxSize().background(MangaColors.Background)) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MangaColors.OnSurface) }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_back), tint = MangaColors.OnSurface) }
             Text(stringResource(R.string.moderation_title), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.padding(0.dp))
         }

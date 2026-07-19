@@ -694,7 +694,7 @@ private fun MangaPageImage(page: ChapterPage, imageFilter: ReaderImageFilter, mo
                 .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
                 .build(),
             imageLoader = ctx.imageLoader,
-            contentDescription = "Page ${page.index + 1}",
+            contentDescription = stringResource(R.string.accessibility_page, page.index + 1),
             contentScale = ContentScale.FillWidth,
             modifier = Modifier.fillMaxWidth(),
             colorFilter = imageFilter.toColorFilter(),

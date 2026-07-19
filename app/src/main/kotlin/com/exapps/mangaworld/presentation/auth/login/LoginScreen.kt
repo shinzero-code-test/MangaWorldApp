@@ -184,7 +184,7 @@ fun LoginScreen(
                 ) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_google),
-                        contentDescription = "Google",
+                        contentDescription = stringResource(R.string.accessibility_google),
                         modifier = Modifier.size(18.dp),
                         tint = Color.Unspecified
                     )

@@ -271,6 +271,12 @@
     <!-- ─── Version ────────────────────────────────────────────────────────── -->
     <string name="version_label">MangaWorld v%s</string>
 
+    <!-- ─── Accessibility ──────────────────────────────────────────────────── -->
+    <string name="accessibility_google">جوجل</string>
+    <string name="accessibility_page">صفحة %d</string>
+    <string name="accessibility_back">رجوع</string>
+    <string name="accessibility_send">إرسال</string>
+
     <!-- ─── User List Dialog ───────────────────────────────────────────────── -->
     <string name="dialog_no_users">لا يوجد مستخدمون حالياً</string>
     <string name="dialog_close">إغلاق</string>
