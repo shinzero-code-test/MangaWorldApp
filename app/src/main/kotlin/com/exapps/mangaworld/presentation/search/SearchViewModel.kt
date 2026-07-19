@@ -33,10 +33,11 @@ class SearchViewModel @Inject constructor(
     private val repo: MangaRepository,
     private val settingsRepo: SettingsRepository,
     private val analyticsManager: FirebaseAnalyticsManager,
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val savedStateHandle: androidx.lifecycle.SavedStateHandle
 ) : ViewModel() {
 
-    private val _query = MutableStateFlow("")
+    private val _query = savedStateHandle.getStateFlow("search_query", "")
     private val _source = MutableStateFlow<MangaSource?>(null)
     private val _reloadToken = MutableStateFlow(0)
     private val _filters = MutableStateFlow(AdvancedSearchFilters())
