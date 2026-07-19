@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
@@ -14,6 +15,8 @@ import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val TAG = "MessagingRegistrar"
+
 @Singleton
 class FirebaseMessagingRegistrar @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -22,18 +25,40 @@ class FirebaseMessagingRegistrar @Inject constructor(
     private val firestore = FirebaseFirestore.getInstance()
     private val messaging = FirebaseMessaging.getInstance()
 
+    /** Last persisted token — skips Firestore write if unchanged. */
+    @Volatile private var lastPersistedToken: String? = null
+
     suspend fun syncCurrentToken() {
         val token = runCatching { messaging.token.await() }.getOrNull() ?: return
+        if (token == lastPersistedToken) return  // Skip if token hasn't changed
         persistToken(token)
     }
 
     suspend fun onTokenRefreshed(token: String) {
+        lastPersistedToken = null  // Force re-persist on refresh
         persistToken(token)
     }
 
     private suspend fun persistToken(token: String) {
         val uid = sessionManager.ensureFirebaseSession() ?: return
         val deviceDocId = token.sha256().take(32)
+
+        // Clean up old tokens — delete any device docs that have a different token hash
+        try {
+            val devices = firestore.collection("users").document(uid)
+                .collection("devices").get().await()
+            val oldDocs = devices.documents.filter { doc ->
+                val docHash = doc.id
+                docHash != deviceDocId && doc.getString("token") != token
+            }
+            for (old in oldDocs) {
+                old.reference.delete().await()
+                Log.d(TAG, "Cleaned up stale device token: ${old.id}")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to clean old tokens: ${e.message}")
+        }
+
         firestore.collection("users")
             .document(uid)
             .collection("devices")
@@ -49,6 +74,8 @@ class FirebaseMessagingRegistrar @Inject constructor(
                 SetOptions.merge()
             )
             .await()
+
+        lastPersistedToken = token
     }
 
     private fun notificationsGranted(): Boolean =
