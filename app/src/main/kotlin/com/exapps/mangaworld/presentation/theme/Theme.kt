@@ -121,6 +121,11 @@ val LocalThemeColors = staticCompositionLocalOf { DarkThemeColors }
 
 // ─── Material3 Color Scheme ───────────────────────────────────────────────────
 
+/**
+ * Material3 ColorScheme — used by MaterialTheme(colorScheme = ...).
+ * References DarkThemeColors/LightThemeColors directly (not the deprecated MangaColors static vals).
+ * For custom composables, prefer themeColors() or mangaColors() which read from LocalThemeColors.
+ */
 private val DarkColorScheme = darkColorScheme(
     primary           = MangaColors.PrimaryLight,
     onPrimary         = Color(0xFF370096),
@@ -134,17 +139,17 @@ private val DarkColorScheme = darkColorScheme(
     onTertiary        = Color(0xFF66002A),
     tertiaryContainer = MangaColors.Pink,
     error             = Color(0xFFFFB4AB),
-    background        = MangaColors.Background,
-    onBackground      = MangaColors.OnSurface,
-    surface           = MangaColors.Surface,
-    onSurface         = MangaColors.OnSurface,
-    surfaceVariant    = MangaColors.SurfaceHighest,
-    onSurfaceVariant  = MangaColors.OnSurfaceVariant,
+    background        = DarkThemeColors.Background,
+    onBackground      = DarkThemeColors.OnSurface,
+    surface           = DarkThemeColors.Surface,
+    onSurface         = DarkThemeColors.OnSurface,
+    surfaceVariant    = DarkThemeColors.SurfaceHighest,
+    onSurfaceVariant  = DarkThemeColors.OnSurfaceVariant,
     outline           = Color(0xFF948EA1),
-    outlineVariant    = MangaColors.OutlineVariant,
-    surfaceContainer  = MangaColors.SurfaceContainer,
-    surfaceContainerHigh = MangaColors.SurfaceHigh,
-    surfaceContainerHighest = MangaColors.SurfaceHighest,
+    outlineVariant    = DarkThemeColors.OutlineVariant,
+    surfaceContainer  = DarkThemeColors.SurfaceContainer,
+    surfaceContainerHigh = DarkThemeColors.SurfaceHigh,
+    surfaceContainerHighest = DarkThemeColors.SurfaceHighest,
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -161,31 +166,36 @@ private val LightColorScheme = lightColorScheme(
     tertiaryContainer = Color(0xFFFFD9E3),
     error             = Color(0xFFBA1A1A),
     onError           = Color(0xFFFFFFFF),
-    background        = Color(0xFFFBF8FF),
-    onBackground      = Color(0xFF1C1B1F),
-    surface           = Color(0xFFFBF8FF),
-    onSurface         = Color(0xFF1C1B1F),
-    surfaceVariant    = Color(0xFFE7E0EC),
-    onSurfaceVariant  = Color(0xFF49454F),
+    background        = LightThemeColors.Background,
+    onBackground      = LightThemeColors.OnSurface,
+    surface           = LightThemeColors.Surface,
+    onSurface         = LightThemeColors.OnSurface,
+    surfaceVariant    = LightThemeColors.SurfaceHighest,
+    onSurfaceVariant  = LightThemeColors.OnSurfaceVariant,
     outline           = Color(0xFF7A7581),
-    outlineVariant    = Color(0xFFCAC4D0),
-    surfaceContainer  = Color(0xFFF4F0FA),
-    surfaceContainerHigh = Color(0xFFEAE5F0),
-    surfaceContainerHighest = Color(0xFFDDD8E3),
+    outlineVariant    = LightThemeColors.OutlineVariant,
+    surfaceContainer  = LightThemeColors.SurfaceContainer,
+    surfaceContainerHigh = LightThemeColors.SurfaceHigh,
+    surfaceContainerHighest = LightThemeColors.SurfaceHighest,
 )
 
 // ─── Typography ───────────────────────────────────────────────────────────────
 
 val MangaTypography = Typography(
     displayLarge  = TextStyle(fontSize = 48.sp, fontWeight = FontWeight.Bold, lineHeight = 56.sp, letterSpacing = (-0.02).sp),
+    displayMedium = TextStyle(fontSize = 36.sp, fontWeight = FontWeight.Bold, lineHeight = 44.sp, letterSpacing = 0.sp),
+    displaySmall  = TextStyle(fontSize = 30.sp, fontWeight = FontWeight.Bold, lineHeight = 38.sp, letterSpacing = 0.sp),
     headlineLarge = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold, lineHeight = 40.sp),
     headlineMedium= TextStyle(fontSize = 24.sp, fontWeight = FontWeight.SemiBold, lineHeight = 32.sp),
+    headlineSmall = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, lineHeight = 28.sp),
     titleLarge    = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, lineHeight = 28.sp),
     titleMedium   = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, lineHeight = 24.sp),
+    titleSmall    = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 20.sp),
     bodyLarge     = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Normal, lineHeight = 24.sp),
     bodyMedium    = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, lineHeight = 20.sp),
     bodySmall     = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Normal, lineHeight = 16.sp),
     labelLarge    = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, lineHeight = 16.sp, letterSpacing = 0.5.sp),
+    labelMedium   = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, lineHeight = 16.sp, letterSpacing = 0.5.sp),
     labelSmall    = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium, lineHeight = 14.sp, letterSpacing = 0.5.sp),
 )
 
