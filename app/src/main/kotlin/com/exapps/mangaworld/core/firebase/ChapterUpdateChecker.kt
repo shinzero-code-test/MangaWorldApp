@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.core.firebase
 
 import android.app.NotificationManager
+import android.util.Log
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -15,6 +16,8 @@ import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -39,6 +42,8 @@ class ChapterUpdateChecker @Inject constructor(
     private val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+    private val checkMutex = Mutex()
+
     private val prefs by lazy {
         context.getSharedPreferences("chapter_update_prefs", Context.MODE_PRIVATE)
     }
@@ -53,8 +58,9 @@ class ChapterUpdateChecker @Inject constructor(
     )
 
     suspend fun checkForUpdates() = withContext(Dispatchers.IO) {
-        val settings = settingsRepository.getAppSettings().first()
-        if (!settings.enableNotifications) return@withContext
+        checkMutex.withLock {
+            val settings = settingsRepository.getAppSettings().first()
+            if (!settings.enableNotifications) return@withContext
 
         // Throttle: check at most once per 2 hours
         val lastCheck = prefs.getLong("last_update_check", 0L)
@@ -83,13 +89,14 @@ class ChapterUpdateChecker @Inject constructor(
                     }
                     if (mangaChapters.isEmpty()) continue
 
-                    val currentMaxChapter = mangaChapters.maxOf { it.chapterNumber }
-                    val lastKnownMax = prefs.getFloat("max_chapter_${favorite.mangaId}", -1f)
+                    val currentMaxChapter = mangaChapters.maxOf { it.chapterNumber.toDouble() }
+                    val lastKnownMax = prefs.getFloat("max_chapter_${favorite.mangaId}", -1f).toDouble()
 
-                    if (lastKnownMax < 0f) {
-                        prefs.edit().putFloat("max_chapter_${favorite.mangaId}", currentMaxChapter).apply()
+                    if (lastKnownMax < 0.0) {
+                        prefs.edit().putFloat("max_chapter_${favorite.mangaId}", currentMaxChapter.toFloat()).apply()
                     } else if (currentMaxChapter > lastKnownMax) {
-                        val diff = (currentMaxChapter - lastKnownMax).toInt().coerceAtLeast(1)
+                        val diff = mangaChapters.count { it.chapterNumber.toDouble() > lastKnownMax }
+                            .coerceAtLeast(1)
                         newChapters.add(
                             NewChapterInfo(
                                 title = favorite.title,
@@ -103,12 +110,15 @@ class ChapterUpdateChecker @Inject constructor(
                         prefs.edit().putFloat("max_chapter_${favorite.mangaId}", currentMaxChapter).apply()
                     }
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                Log.w("ChapterUpdateChecker", "Failed to check updates for source $sourceId: ${e.message}")
+            }
         }
 
         if (newChapters.isNotEmpty()) {
             showNewChaptersNotification(newChapters)
         }
+        } // end checkMutex.withLock
     }
 
     suspend fun snapshotCurrentCounts() = withContext(Dispatchers.IO) {
@@ -126,7 +136,9 @@ class ChapterUpdateChecker @Inject constructor(
                         .maxOfOrNull { it.chapterNumber } ?: continue
                     prefs.edit().putFloat("max_chapter_${favorite.mangaId}", maxChapter).apply()
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                Log.w("ChapterUpdateChecker", "Failed to snapshot counts for source $sourceId: ${e.message}")
+            }
         }
     }
 
@@ -187,7 +199,7 @@ class ChapterUpdateChecker @Inject constructor(
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(pendingContentIntent)
             .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .addAction(readAction)
 
         favAction?.let { builder.addAction(it) }
