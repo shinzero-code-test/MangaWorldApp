@@ -1,9 +1,12 @@
 package com.exapps.mangaworld.core.firebase
 
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
@@ -22,6 +25,9 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+
+private const val TAG = "SuggestionWorker"
+private const val SUGGESTION_CHANNEL_ID = "suggestions_channel"
 
 /**
  * Periodic worker that generates new manga suggestions and shows a notification.
@@ -47,16 +53,27 @@ class SuggestionNotificationWorker @AssistedInject constructor(
         appContext.getSharedPreferences("suggestion_notification_prefs", Context.MODE_PRIVATE)
     }
 
+    init {
+        // Create low-importance channel for suggestions (separate from CLOUD_CHANNEL_ID)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                SUGGESTION_CHANNEL_ID,
+                "اقتراحات المانجا",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "اقتراحات مانجا قد تعجبك"
+                enableVibration(false)
+                setSound(null, null)
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
             val ctx = applicationContext
             val settings = settingsRepository.getAppSettings().first()
             if (!settings.enableNotifications) return@withContext Result.success()
-
-            // Throttle: only send once per 12 hours
-            val lastSent = prefs.getLong("last_suggestion_notification", 0L)
-            val now = System.currentTimeMillis()
-            if (now - lastSent < 12 * 60 * 60 * 1000L) return@withContext Result.success()
 
             // Load cached manga as candidates
             val cachedMangas = cacheDao.getAll(200).mapNotNull { cache ->
@@ -106,7 +123,7 @@ class SuggestionNotificationWorker @AssistedInject constructor(
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            val title = "مانجا قد تعجبك 📚"
+            val title = ctx.getString(com.exapps.mangaworld.R.string.suggestion_notif_title)
             val body = newSuggestions.take(3).joinToString("\n") { "• ${it.title}" }
             val extraText = if (newSuggestions.size > 3) "\nو ${newSuggestions.size - 3} أخرى" else ""
 
@@ -140,14 +157,13 @@ class SuggestionNotificationWorker @AssistedInject constructor(
                 favPendingIntent
             )
 
-            val notification = NotificationCompat.Builder(ctx, MangaWorldApp.CLOUD_CHANNEL_ID)
+            val notification = NotificationCompat.Builder(ctx, SUGGESTION_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_notify_chat)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText("$body$extraText"))
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
                 .addAction(readAction)
                 .addAction(favAction)
                 .build()
@@ -166,9 +182,10 @@ class SuggestionNotificationWorker @AssistedInject constructor(
             }
             suggestionsManager.addSuggestions(mangaSuggestions)
 
-            prefs.edit().putLong("last_suggestion_notification", now).apply()
+            prefs.edit().putLong("last_suggestion_notification", System.currentTimeMillis()).apply()
             Result.success()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "Suggestion worker failed: ${e.message}")
             Result.retry()
         }
     }
