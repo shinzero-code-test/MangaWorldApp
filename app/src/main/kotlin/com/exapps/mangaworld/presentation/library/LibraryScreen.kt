@@ -32,6 +32,7 @@ fun LibraryScreen(
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var showClearHistoryConfirm by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().background(MangaColors.Background)) {
         // Header
@@ -43,7 +44,7 @@ fun LibraryScreen(
             Text(stringResource(R.string.library_title), style = MaterialTheme.typography.headlineMedium,
                 color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
             if (state.activeTab == LibraryTab.HISTORY && state.history.isNotEmpty()) {
-                IconButton(onClick = viewModel::clearHistory) {
+                IconButton(onClick = { showClearHistoryConfirm = true }) {
                     Icon(Icons.Filled.DeleteSweep, stringResource(R.string.clear_history), tint = MangaColors.Muted)
                 }
             }
@@ -92,6 +93,26 @@ fun LibraryScreen(
                 onBrowse = onBrowseClick
             )
         }
+    }
+
+    if (showClearHistoryConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearHistoryConfirm = false },
+            containerColor = MangaColors.Background,
+            title = { Text(stringResource(R.string.clear_history), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+            text = { Text(stringResource(R.string.clear_history_confirm), color = MangaColors.OnSurfaceVariant) },
+            confirmButton = {
+                Button(onClick = { viewModel.clearHistory(); showClearHistoryConfirm = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Error)) {
+                    Text(stringResource(R.string.delete), color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearHistoryConfirm = false }) {
+                    Text(stringResource(R.string.cancel), color = MangaColors.Muted)
+                }
+            }
+        )
     }
 }
 

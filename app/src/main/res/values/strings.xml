@@ -677,6 +677,7 @@
     <string name="ongoing">مستمر</string>
     <string name="clear">مسح</string>
     <string name="clear_history">مسح السجل</string>
+    <string name="clear_history_confirm">هل تريد مسح سجل القراءة بالكامل؟ لا يمكن التراجع عن هذا الإجراء.</string>
     <string name="clear_cookies">مسح الكوكيز</string>
     <string name="clear_completed">مسح المكتملة</string>
     <string name="watch">مشاهدة</string>
