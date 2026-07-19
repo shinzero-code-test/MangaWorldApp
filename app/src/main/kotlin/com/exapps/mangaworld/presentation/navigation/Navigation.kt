@@ -548,10 +548,16 @@ fun MangaNavGraph(
             )
             val source = MangaSource.fromIdOrNull(sourceId) ?: MangaSource.fromId(sourceId)
             val isImported = mangaId.startsWith("imported_") || sourceId == "local"
+            val slug = mangaId.substringAfter("${sourceId}_").ifBlank { mangaId }
             ReaderScreen(
                 source = source, mangaId = mangaId,
                 chapterUrl = chapterUrl,
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    // Always navigate back to detail screen (works for both normal and deep link paths)
+                    navController.navigate(Screen.Detail.createRoute(sourceId, slug)) {
+                        popUpTo(Screen.Detail.createRoute(sourceId, slug)) { inclusive = true }
+                    }
+                },
                 onOpenCommunity = if (isImported) {{}} else {
                     { navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl)) }
                 }
@@ -577,11 +583,16 @@ fun MangaNavGraph(
             )
             val source = MangaSource.fromIdOrNull(sourceId) ?: return@composable
             val isImported = mangaId.startsWith("imported_") || sourceId == "local"
+            val slug = mangaId.substringAfter("${sourceId}_").ifBlank { mangaId }
             ReaderScreen(
                 source = source,
                 mangaId = mangaId,
                 chapterUrl = chapterUrl,
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    navController.navigate(Screen.Detail.createRoute(sourceId, slug)) {
+                        popUpTo(Screen.Detail.createRoute(sourceId, slug)) { inclusive = true }
+                    }
+                },
                 onOpenCommunity = if (isImported) {{}} else {
                     { navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl)) }
                 }
