@@ -259,7 +259,7 @@ private fun PublicProfileHero(
             if (!profile?.bannerUrl.isNullOrBlank()) {
                 AsyncImage(
                     model = profile.bannerUrl,
-                    contentDescription = "غلاف الملف الشخصي",
+                    contentDescription = stringResource(R.string.profile_cover),
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
@@ -335,7 +335,7 @@ private fun PublicProfileHero(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = profile?.username ?: "مستخدم",
+                    text = profile?.username ?: stringResource(R.string.user),
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleLarge
@@ -360,8 +360,8 @@ private fun PublicProfileHero(
             Spacer(Modifier.height(20.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatChip(modifier = Modifier.weight(1f), value = listsCount.toString(), label = "قوائم عامة")
-                StatChip(modifier = Modifier.weight(1f), value = activityCount.toString(), label = "نشاط حديث")
+                StatChip(modifier = Modifier.weight(1f), value = listsCount.toString(), label = stringResource(R.string.public_lists_alt))
+                StatChip(modifier = Modifier.weight(1f), value = activityCount.toString(), label = stringResource(R.string.recent_activity_alt))
             }
         }
     }
@@ -393,7 +393,7 @@ private fun ProfileAvatar(profile: CommunityProfile?) {
                 if (!profile?.avatarUrl.isNullOrBlank()) {
                     AsyncImage(
                         model = profile.avatarUrl,
-                        contentDescription = "صورة الملف الشخصي",
+                        contentDescription = stringResource(R.string.profile_image),
                         modifier = Modifier.fillMaxSize().clip(CircleShape),
                         contentScale = ContentScale.Crop
                     )
@@ -457,7 +457,7 @@ private fun FollowButton(isFollowing: Boolean, onClick: () -> Unit) {
         )
         Spacer(Modifier.width(6.dp))
         Text(
-            if (isFollowing) "إلغاء المتابعة" else "متابعة",
+            if (isFollowing) stringResource(R.string.unfollow) else stringResource(R.string.follow),
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelLarge
         )
@@ -485,7 +485,7 @@ private fun PublicListsSection(
     onItemClick: (sourceId: String, slug: String) -> Unit
 ) {
     Column(Modifier.padding(top = 32.dp)) {
-        SectionHeader(title = "القوائم العامة", subtitle = "${lists.size} قوائم منسقة")
+        SectionHeader(title = stringResource(R.string.public_lists), subtitle = stringResource(R.string.fmt_032, lists.size))
         Spacer(Modifier.height(14.dp))
         lists.forEach { list ->
             PublicListCard(
@@ -607,7 +607,7 @@ private fun PublicListCard(
                 Icon(Icons.Filled.BookmarkBorder, contentDescription = null, tint = MangaColors.Cyan, modifier = Modifier.size(12.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    if (isExpanded) "إخفاء العناصر" else "${list.itemCount} عنصر — اضغط للمشاهدة",
+                    if (isExpanded) stringResource(R.string.hide_items) else stringResource(R.string.fmt_031, list.itemCount),
                     color = MangaColors.Cyan,
                     style = MaterialTheme.typography.labelSmall
                 )
@@ -626,7 +626,7 @@ private fun PublicListCard(
                 }
             } else if (isExpanded && listItems.isEmpty()) {
                 Text(
-                    "القائمة فارغة",
+                    stringResource(R.string.list_empty),
                     color = MangaColors.Muted,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 8.dp)
@@ -647,19 +647,19 @@ private fun PublicLibrarySection(
     onItemClick: (sourceId: String, slug: String) -> Unit
 ) {
     val statusLabels = mapOf(
-        "reading" to "أقرأها الآن",
-        "completed" to "تم قراءتها",
-        "plan_to_read" to "أرغب بقراءتها",
-        "on_hold" to "أكملها لاحقاً",
-        "dropped" to "لا أرغب بقراءتها"
+        "reading" to stringResource(R.string.library_reading),
+        "completed" to stringResource(R.string.library_read),
+        "plan_to_read" to stringResource(R.string.library_plan_to_read),
+        "on_hold" to stringResource(R.string.library_on_hold),
+        "dropped" to stringResource(R.string.library_dropped)
     )
 
     val hasAnyItems = readingLists.values.any { it.isNotEmpty() }
 
     Column(Modifier.padding(top = 32.dp)) {
         SectionHeader(
-            title = "المكتبة",
-            subtitle = if (hasAnyItems) "قوائم القراءة" else "المكتبة متاح للعرض العام"
+            title = stringResource(R.string.library_section_title),
+            subtitle = if (hasAnyItems) stringResource(R.string.reading_lists) else stringResource(R.string.library_public_visible)
         )
         Spacer(Modifier.height(14.dp))
 
@@ -711,7 +711,7 @@ private fun PublicLibrarySection(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "المكتبة متاح للعرض العام",
+                    stringResource(R.string.library_public_visible),
                     color = MangaColors.OnSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center
@@ -821,8 +821,8 @@ private fun PublicListItemCard(item: CustomUserListItem, onItemClick: () -> Unit
 private fun ActivitySection(activity: List<CommunityComment>, username: String?) {
     Column(Modifier.padding(top = 32.dp)) {
         SectionHeader(
-            title = "النشاط الأخير",
-            subtitle = if (!username.isNullOrBlank()) "آخر تحديثات $username" else "آخر التحديثات"
+            title = stringResource(R.string.recent_activity),
+            subtitle = if (!username.isNullOrBlank()) stringResource(R.string.fmt_044, username) else stringResource(R.string.last_updates)
         )
         Spacer(Modifier.height(14.dp))
         Column(
@@ -919,7 +919,7 @@ private fun EmptyPublicContent() {
         }
         Spacer(Modifier.height(20.dp))
         Text(
-            "هذا الملف لا يحتوي على محتوى عام",
+            stringResource(R.string.str_435),
             color = MangaColors.OnSurface,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.titleSmall,
@@ -927,7 +927,7 @@ private fun EmptyPublicContent() {
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            "لم يشارك هذا المستخدم أي قوائم أو نشاط بعد",
+            stringResource(R.string.str_377),
             color = MangaColors.Muted,
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center

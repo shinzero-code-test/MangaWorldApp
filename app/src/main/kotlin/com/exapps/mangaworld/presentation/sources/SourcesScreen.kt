@@ -65,7 +65,7 @@ fun SourcesScreen(
         ) {
             // Section header
             Text(
-                "المصادر العربية",
+                stringResource(R.string.arabic_sources),
                 style = MaterialTheme.typography.titleMedium,
                 color = MangaColors.OnSurface,
                 fontWeight = FontWeight.Bold,
@@ -74,7 +74,7 @@ fun SourcesScreen(
 
             // Hint
             Text(
-                "اضغط مطولاً على مصدر لإعداداته",
+                stringResource(R.string.long_press_source_settings),
                 style = MaterialTheme.typography.bodySmall,
                 color = MangaColors.Muted,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -214,7 +214,7 @@ private fun SourceGridCard(
             // Disabled badge
             if (!isEnabled) {
                 Text(
-                    "معطّل",
+                    stringResource(R.string.disabled_alt),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
                     color = MangaColors.Error,
                     fontWeight = FontWeight.Bold

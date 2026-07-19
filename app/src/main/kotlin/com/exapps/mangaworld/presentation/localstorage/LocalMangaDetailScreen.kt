@@ -81,7 +81,7 @@ fun LocalMangaDetailScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text(manga?.title ?: "مانجا محلية", color = MangaColors.OnSurface) },
+                title = { Text(manga?.title ?: stringResource(R.string.local_manga), color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
@@ -124,7 +124,7 @@ fun LocalMangaDetailScreen(
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "${manga.downloadedChapters} فصل متاح",
+                                stringResource(R.string.fmt_033, manga.downloadedChapters),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MangaColors.Cyan
                             )
@@ -142,7 +142,7 @@ fun LocalMangaDetailScreen(
                     HorizontalDivider(color = MangaColors.SurfaceHigh)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "الفصول",
+                        stringResource(R.string.chapters),
                         style = MaterialTheme.typography.titleSmall,
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.Bold
@@ -152,7 +152,7 @@ fun LocalMangaDetailScreen(
                 if (chapters.isEmpty()) {
                     item {
                         Text(
-                            "لا توجد فصول محملة",
+                            stringResource(R.string.downloads_empty),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MangaColors.Muted,
                             modifier = Modifier.padding(16.dp)
@@ -183,7 +183,7 @@ fun LocalMangaDetailScreen(
                                         color = MangaColors.OnSurface
                                     )
                                     Text(
-                                        "$pageCount صفحة",
+                                        stringResource(R.string.fmt_043, pageCount),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MangaColors.Muted
                                     )

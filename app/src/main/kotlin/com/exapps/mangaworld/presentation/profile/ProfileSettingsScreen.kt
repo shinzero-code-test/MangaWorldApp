@@ -293,14 +293,14 @@ class ProfileSettingsViewModel @Inject constructor(
             _providerLinkError.value = accountMergeMessage(error.reason)
         } catch (error: ProviderManagementRequiresSignInException) {
             _providerLinkError.value = if (error.isGuestSession) {
-                "أنشئ حساباً دائماً قبل إدارة مزوّدي تسجيل الدخول."
+                stringResource(R.string.settings_provider_guest_error)
             } else {
-                "سجّل الدخول أولاً قبل إدارة مزوّدي تسجيل الدخول."
+                stringResource(R.string.settings_provider_sign_in_error)
             }
         } catch (error: IllegalArgumentException) {
-            _providerLinkError.value = error.message ?: "لا يمكن إجراء هذا التغيير"
+            _providerLinkError.value = error.message ?: stringResource(R.string.cannot_make_change)
         } catch (_: Exception) {
-            _providerLinkError.value = "تعذر تحديث مزود تسجيل الدخول. حاول مرة أخرى."
+            _providerLinkError.value = stringResource(R.string.settings_provider_link_error)
         }
     }
 }
@@ -308,11 +308,11 @@ class ProfileSettingsViewModel @Inject constructor(
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 private fun formatJoinDate(timestamp: Long): String {
-    if (timestamp == 0L) return "غير معروف"
+    if (timestamp == 0L) return stringResource(R.string.unknown)
     return try {
         val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
         sdf.format(Date(timestamp))
-    } catch (_: Exception) { "غير معروف" }
+    } catch (_: Exception) { stringResource(R.string.unknown) }
 }
 
 // ─── Screen ─────────────────────────────────────────────────────────────────
@@ -367,7 +367,7 @@ fun ProfileSettingsScreen(
                 viewModel.linkGoogle(idToken)
             }
         } catch (e: Exception) {
-            viewModel.onProviderLinkError("فشل ربط حساب Google: ${e.localizedMessage ?: "خطأ غير معروف"}")
+            viewModel.onProviderLinkError(stringResource(R.string.fmt_078, e.localizedMessage ?: stringResource(R.string.unknown_error)))
         }
     }
     val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
@@ -390,7 +390,7 @@ fun ProfileSettingsScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("إعدادات الحساب", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.str_076), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
             )
@@ -428,7 +428,7 @@ fun ProfileSettingsScreen(
             Section(stringResource(R.string.settings_notifications), Icons.Filled.Notifications, MangaColors.Pink, "notif", expandedSection, onToggle = { expandedSection = it }) {
                 NotificationSection(appSettings.enableNotifications, viewModel::toggleNotifications)
             }
-            Section("الإنجازات والإحصائيات", Icons.Filled.BarChart, MangaColors.Cyan, "stats", expandedSection, onToggle = { expandedSection = it }) {
+            Section(stringResource(R.string.achievements_stats), Icons.Filled.BarChart, MangaColors.Cyan, "stats", expandedSection, onToggle = { expandedSection = it }) {
                 StatsSection(totalReadingTimeMs, totalMangaRead, currentStreak, onOpenReadingStats)
             }
             Section(stringResource(R.string.settings_sync), Icons.Filled.CloudSync, MangaColors.Cyan, "sync", expandedSection, onToggle = { expandedSection = it }) {
@@ -449,15 +449,15 @@ fun ProfileSettingsScreen(
                     }
                 )
             }
-            Section("المصادر والمحتوى", Icons.Filled.Tune, MangaColors.Green, "content", expandedSection, onToggle = { expandedSection = it }) {
+            Section(stringResource(R.string.settings_sources), Icons.Filled.Tune, MangaColors.Green, "content", expandedSection, onToggle = { expandedSection = it }) {
                 ContentSection(appSettings.enabledSources.size, appSettings.contentBlacklist.size, onOpenSources)
             }
-            Section("التفاعل الاجتماعي", Icons.Filled.People, MangaColors.Pink, "social", expandedSection, onToggle = { expandedSection = it }) {
+            Section(stringResource(R.string.settings_social), Icons.Filled.People, MangaColors.Pink, "social", expandedSection, onToggle = { expandedSection = it }) {
                 SocialInteractionSection(followingCount, followersCount, commentsCount, reviewsCount,
                     onShowFollowing = { showFollowingList = true },
                     onShowFollowers = { showFollowersList = true })
             }
-            Section("التفضيلات الشخصية", Icons.Filled.Favorite, MangaColors.Orange, "preferences", expandedSection, onToggle = { expandedSection = it }) {
+            Section(stringResource(R.string.personal_preferences), Icons.Filled.Favorite, MangaColors.Orange, "preferences", expandedSection, onToggle = { expandedSection = it }) {
                 PersonalPreferencesSection(favoriteGenres, appSettings.enabledSources.size,
                     onEditGenres = { showFavoriteGenres = true },
                     onOpenSources = onOpenSources)
@@ -468,20 +468,20 @@ fun ProfileSettingsScreen(
     }
 
     if (showEditProfile) EditProfileDialog(profile, { showEditProfile = false }) { u, d, b -> viewModel.updateProfile(u, b, d); showEditProfile = false }
-    if (showDeleteConfirm) ConfirmDialog(stringResource(R.string.settings_delete_account), "هل أنت متأكد من حذف حسابك؟ هذا الإجراء لا يمكن التراجع عنه.", stringResource(R.string.delete), { viewModel.deleteAccount(); showDeleteConfirm = false }, { showDeleteConfirm = false })
-    if (showSignOutConfirm) ConfirmDialog(stringResource(R.string.settings_sign_out), "هل تريد تسجيل الخروج من حسابك؟", "خروج", { viewModel.signOut(); showSignOutConfirm = false }, { showSignOutConfirm = false })
+    if (showDeleteConfirm) ConfirmDialog(stringResource(R.string.settings_delete_account), stringResource(R.string.settings_delete_account_confirm), stringResource(R.string.delete), { viewModel.deleteAccount(); showDeleteConfirm = false }, { showDeleteConfirm = false })
+    if (showSignOutConfirm) ConfirmDialog(stringResource(R.string.settings_sign_out), stringResource(R.string.settings_sign_out_confirm), stringResource(R.string.logout), { viewModel.signOut(); showSignOutConfirm = false }, { showSignOutConfirm = false })
     if (showBlockedUsers) BlockedUsersDialog(blockedUsers, onDismiss = { showBlockedUsers = false }, onUnblock = { uid -> viewModel.unblockUser(uid) })
     if (showFavoriteGenres) FavoriteGenresDialog(favoriteGenres, onDismiss = { showFavoriteGenres = false }, onSave = { genres -> viewModel.setFavoriteGenres(genres) })
-    if (showFollowingList) UserListDialog("المتابَعون", emptyList(), onDismiss = { showFollowingList = false })
-    if (showFollowersList) UserListDialog("المتابعون", emptyList(), onDismiss = { showFollowersList = false })
+    if (showFollowingList) UserListDialog(stringResource(R.string.settings_following), emptyList(), onDismiss = { showFollowingList = false })
+    if (showFollowersList) UserListDialog(stringResource(R.string.settings_followers), emptyList(), onDismiss = { showFollowersList = false })
 }
 
 // ─── Profile Hero ───────────────────────────────────────────────────────────
 
 @Composable
 private fun ProfileHeroSection(profile: CommunityProfile?, avatarUri: Uri?, onAvatarClick: () -> Unit) {
-    val roleText = profile?.role?.let { when(it) { "super-admin" -> "مدير عام"; "moderator" -> "مشرف"; else -> "مشاهد" } } ?: "مشاهد"
-    val displayNameText = profile?.displayName?.takeIf { it.isNotBlank() } ?: profile?.username ?: "ضيف"
+    val roleText = profile?.role?.let { when(it) { "super-admin" -> stringResource(R.string.profile_role_admin); "moderator" -> stringResource(R.string.profile_role_moderator); else -> stringResource(R.string.profile_role_viewer) } } ?: stringResource(R.string.profile_role_viewer)
+    val displayNameText = profile?.displayName?.takeIf { it.isNotBlank() } ?: profile?.username ?: stringResource(R.string.guest)
     Column(modifier = Modifier.fillMaxWidth().background(MangaColors.Surface).padding(horizontal = 20.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.BottomEnd) {
             Box(modifier = Modifier.size(96.dp).clip(CircleShape).background(MangaColors.PrimaryLight.copy(alpha = 0.4f)), contentAlignment = Alignment.Center) {
@@ -494,7 +494,7 @@ private fun ProfileHeroSection(profile: CommunityProfile?, avatarUri: Uri?, onAv
                 }
             }
             IconButton(onClick = onAvatarClick, modifier = Modifier.size(28.dp).clip(CircleShape).background(MangaColors.Cyan)) {
-                Icon(Icons.Filled.CameraAlt, "تغيير الصورة", tint = MangaColors.Background, modifier = Modifier.size(14.dp))
+                Icon(Icons.Filled.CameraAlt, stringResource(R.string.change_image), tint = MangaColors.Background, modifier = Modifier.size(14.dp))
             }
         }
         Spacer(Modifier.height(14.dp))
@@ -533,22 +533,22 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
 // ─── Section Content ────────────────────────────────────────────────────────
 
 @Composable private fun ProfileInfoSection(profile: CommunityProfile?, joinDateText: String, onEdit: () -> Unit) {
-    val roleText = profile?.role?.let { when(it) { "super-admin" -> "مدير عام"; "moderator" -> "مشرف"; else -> "مشاهد" } } ?: "مشاهد"
-    val displayNameText = profile?.displayName?.takeIf { it.isNotBlank() } ?: profile?.username ?: "ضيف"
+    val roleText = profile?.role?.let { when(it) { "super-admin" -> stringResource(R.string.profile_role_admin); "moderator" -> stringResource(R.string.profile_role_moderator); else -> stringResource(R.string.profile_role_viewer) } } ?: stringResource(R.string.profile_role_viewer)
+    val displayNameText = profile?.displayName?.takeIf { it.isNotBlank() } ?: profile?.username ?: stringResource(R.string.guest)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Badge, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_display_name), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(displayNameText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AlternateEmail, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_username), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.username ?: "غير محدد", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Info, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_bio), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.bio?.ifBlank { "لا توجد نبذة" } ?: "لا توجد نبذة", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AlternateEmail, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_username), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.username ?: stringResource(R.string.unspecified), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Info, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_bio), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.bio?.ifBlank { stringResource(R.string.no_bio) } ?: stringResource(R.string.no_bio), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.CalendarToday, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_join_date), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(joinDateText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الرتبة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(roleText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        if (!profile?.badgeLabel.isNullOrBlank()) Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Star, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الشارة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile.badgeLabel, color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_role), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(roleText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        if (!profile?.badgeLabel.isNullOrBlank()) Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Star, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_badge), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile.badgeLabel, color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
         OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(42.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = MangaColors.Cyan)) { Text(stringResource(R.string.profile_edit), fontWeight = FontWeight.SemiBold) }
     }
 }
 
 @Composable private fun AccountInfoSection(userEmail: String?, onSignOut: () -> Unit, onDeleteAccount: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Email, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("البريد الإلكتروني", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(userEmail ?: "غير متوفر", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Email, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_email), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(userEmail ?: stringResource(R.string.settings_unavailable), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Phone, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_phone), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_phone_unavailable), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().clickable(onClick = onDeleteAccount).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Delete, null, tint = MangaColors.Error, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_delete_account), color = MangaColors.Error, style = MaterialTheme.typography.bodyMedium) }
         Row(Modifier.fillMaxWidth().clickable(onClick = onSignOut).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Logout, null, tint = MangaColors.Error, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_sign_out), color = MangaColors.Error, style = MaterialTheme.typography.bodyMedium) }
@@ -558,49 +558,49 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
 @Composable private fun SecuritySection(biometricEnabled: Boolean, onToggleBiometric: (Boolean) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Fingerprint, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_biometric), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = biometricEnabled, onCheckedChange = onToggleBiometric, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.History, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("سجل تسجيل الدخول", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("لا يوجد سجل متاح حالياً", color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Devices, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الأجهزة المتصلة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("يتم تتبع الأجهزة تلقائياً", color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Security, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("إدارة الجلسات", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("الجلسات مُدارة عبر Firebase", color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.History, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_login_history), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_login_history_empty), color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Devices, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_devices), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.str_451), color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Security, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.manage_sessions), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_sessions), color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
 @Composable private fun PrivacySection(isPublic: Boolean, showLists: Boolean, showActivity: Boolean, showLibraryPublic: Boolean, blockedCount: Int, onTogglePublic: (Boolean) -> Unit, onToggleLists: (Boolean) -> Unit, onToggleActivity: (Boolean) -> Unit, onToggleShowLibraryPublic: (Boolean) -> Unit, onShowBlockedUsers: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Public, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الحساب العام", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = isPublic, onCheckedChange = onTogglePublic, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.List, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("إظهار قائمة القراءة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = showLists, onCheckedChange = onToggleLists, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.History, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("إظهار النشاط الأخير", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = showActivity, onCheckedChange = onToggleActivity, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LibraryBooks, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("إظهار المكتبة الشخصية", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = showLibraryPublic, onCheckedChange = onToggleShowLibraryPublic, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
-        Row(Modifier.fillMaxWidth().clickable(onClick = onShowBlockedUsers).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Block, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("حظر المستخدمين", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$blockedCount مستخدم", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Public, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.public_account), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = isPublic, onCheckedChange = onTogglePublic, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.List, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_show_lists_public), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = showLists, onCheckedChange = onToggleLists, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.History, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_show_activity_public), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = showActivity, onCheckedChange = onToggleActivity, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LibraryBooks, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_show_library_public), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = showLibraryPublic, onCheckedChange = onToggleShowLibraryPublic, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onShowBlockedUsers).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Block, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_block_users), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_023, blockedCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
 @Composable private fun LibrarySection(favCount: Int, histCount: Int, readCount: Int) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Favorite, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("المانجا المفضلة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$favCount مانجا", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AutoStories, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("أقرأها الآن", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$favCount مانجا", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.History, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("سجل القراءة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$histCount مانجا", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.MenuBook, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الفصول المقروءة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$readCount فصل", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Favorite, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.favorite_manga), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_034, favCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AutoStories, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.library_reading), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_034, favCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.History, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.reading_history), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_034, histCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.MenuBook, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.read_chapters), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_017, readCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
 @Composable private fun NotificationSection(enabled: Boolean, onToggle: (Boolean) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Notifications, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("إشعارات الفصول الجديدة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = enabled, onCheckedChange = onToggle, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
-        val status = if (enabled) "مفعل" else "معطل"
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.ChatBubble, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("إشعارات التعليقات", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(status, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.FavoriteBorder, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("إشعارات الإعجابات", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(status, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.PersonAdd, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("إشعارات المتابعين", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(status, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Notifications, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_notifications_new_chapters), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = enabled, onCheckedChange = onToggle, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
+        val status = if (enabled) stringResource(R.string.enabled) else stringResource(R.string.disabled)
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.ChatBubble, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_notifications_comments), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(status, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.FavoriteBorder, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_notifications_likes), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(status, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.PersonAdd, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_notifications_followers), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(status, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
 @Composable private fun StatsSection(timeMs: Long, chapters: Int, streak: Int, onOpenStats: () -> Unit) {
     val h = (timeMs / 3_600_000).toInt(); val m = ((timeMs % 3_600_000) / 60_000).toInt()
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.MenuBook, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الفصول المقروءة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$chapters فصل", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AccessTime, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("وقت القراءة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(if (h > 0) "${h}س ${m}د" else "${m}د", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Whatshot, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الأيام المتتالية", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$streak يوم", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("ترتيب المستخدم", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("مبني على النشاط", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenStats).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.more_goals), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("فتح", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.MenuBook, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.read_chapters), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_017, chapters), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AccessTime, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.reading_time), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(if (h > 0) stringResource(R.string.fmt_029, h, m) else stringResource(R.string.fmt_036, m), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Whatshot, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.str_121), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_020, streak), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.user_rank), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.str_385), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenStats).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.more_goals), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.open), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
@@ -614,8 +614,8 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     onUnlinkProvider: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenCloudSync).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Cloud, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("مزامنة الحساب مع السحابة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("فتح", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.ImportExport, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("استيراد/تصدير القوائم", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.coming_soon), color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenCloudSync).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Cloud, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_cloud_sync), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.open), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.ImportExport, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_export), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.coming_soon), color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
         ProviderLinkRow(
             label = "Google",
             providerId = "google.com",
@@ -636,8 +636,8 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Email, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(12.dp))
-                Text("البريد الإلكتروني", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                Text("مرتبط ✓", color = MangaColors.Green, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.settings_email), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.settings_provider_linked), color = MangaColors.Green, style = MaterialTheme.typography.bodySmall)
             }
         }
         providerLinkError?.let { message ->
@@ -664,32 +664,32 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
             Spacer(Modifier.width(12.dp))
             Text(label, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             if (linked && canUnlink) {
-                TextButton(onClick = { onUnlink(providerId) }) { Text("إزالة", color = MangaColors.Pink) }
+                TextButton(onClick = { onUnlink(providerId) }) { Text(stringResource(R.string.remove), color = MangaColors.Pink) }
             } else {
-                Text(if (linked) "مرتبط ✓" else "ربط", color = if (linked) MangaColors.Green else MangaColors.Cyan, style = MaterialTheme.typography.bodySmall)
+                Text(if (linked) stringResource(R.string.settings_provider_linked) else stringResource(R.string.link), color = if (linked) MangaColors.Green else MangaColors.Cyan, style = MaterialTheme.typography.bodySmall)
             }
     }
 }
 
 @Composable private fun ContentSection(srcCount: Int, blacklistCount: Int, onOpenSources: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenSources).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Tune, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("مصادر الترجمة المفضلة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$srcCount مصدر", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Block, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Column(modifier = Modifier.weight(1f)) { Text("إعدادات تصفية المحتوى", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium); Text("$blacklistCount كلمة محظورة مُعرّفة", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) } }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenSources).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Tune, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.favorite_translation_sources), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_019, srcCount), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Block, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Column(modifier = Modifier.weight(1f)) { Text(stringResource(R.string.content_filter_settings), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium); Text(stringResource(R.string.fmt_001, blacklistCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) } }
     }
 }
 
 @Composable private fun SocialInteractionSection(followingCount: Int, followersCount: Int, commentsCount: Int, reviewsCount: Int, onShowFollowing: () -> Unit, onShowFollowers: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onShowFollowing).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.PersonAdd, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("المتابَعون", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$followingCount", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().clickable(onClick = onShowFollowers).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.People, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("المتابعون", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$followersCount", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Comment, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("التعليقات المكتوبة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$commentsCount", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.RateReview, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("مراجعات المانجا", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$reviewsCount", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onShowFollowing).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.PersonAdd, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_following), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$followingCount", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onShowFollowers).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.People, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_followers), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$followersCount", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Comment, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_comments_count), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$commentsCount", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.RateReview, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_reviews_count), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$reviewsCount", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
 @Composable private fun PersonalPreferencesSection(favoriteGenres: List<String>, sourcesCount: Int, onEditGenres: () -> Unit, onOpenSources: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onEditGenres).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Category, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الأنواع المفضلة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(if (favoriteGenres.isEmpty()) "اضغط للتعديل" else "${favoriteGenres.size} أنواع", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onEditGenres).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Category, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_favorite_genres), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(if (favoriteGenres.isEmpty()) stringResource(R.string.tap_to_edit) else stringResource(R.string.fmt_027, favoriteGenres.size), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         if (favoriteGenres.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().padding(start = 30.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)) {
                 favoriteGenres.take(4).forEach { genre ->
@@ -700,7 +700,7 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
                 if (favoriteGenres.size > 4) Text("+${favoriteGenres.size - 4}", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
             }
         }
-        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenSources).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Language, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("المصادر المفضلة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$sourcesCount مصدر", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenSources).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Language, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.favorite_sources), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_019, sourcesCount), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
@@ -714,9 +714,9 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     val normalizedUsername = username.trim().lowercase()
     val usernameError = when {
         normalizedUsername.isEmpty() -> stringResource(R.string.auth_error_username_required)
-        normalizedUsername.length < 3 -> "اسم المستخدم قصير جداً (3 أحرف على الأقل)"
-        normalizedUsername.length > 20 -> "اسم المستخدم طويل جداً (20 حرف كحد أقصى)"
-        !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$")) -> "أحرف وأرقام وشرطات سفلية فقط"
+        normalizedUsername.length < 3 -> stringResource(R.string.auth_error_username_short)
+        normalizedUsername.length > 20 -> stringResource(R.string.auth_error_username_long)
+        !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$")) -> stringResource(R.string.str_012)
         else -> null
     }
 
@@ -726,14 +726,14 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
             OutlinedTextField(
                 value = displayName, onValueChange = { displayName = it },
                 label = { Text(stringResource(R.string.profile_display_name)) },
-                placeholder = { Text("اسمك كما يظهر للآخرين") },
+                placeholder = { Text(stringResource(R.string.profile_username_display_name_hint)) },
                 modifier = Modifier.fillMaxWidth(), singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
             )
             OutlinedTextField(
                 value = username, onValueChange = { username = it },
                 label = { Text(stringResource(R.string.profile_username)) },
-                placeholder = { Text("3-20 حرف، أرقام وشرطات سفلية") },
+                placeholder = { Text(stringResource(R.string.auth_username_rules)) },
                 modifier = Modifier.fillMaxWidth(), singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
             )
@@ -769,10 +769,10 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
 
 @Composable private fun BlockedUsersDialog(blockedUsers: Set<String>, onDismiss: () -> Unit, onUnblock: (String) -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
-        title = { Text("المستخدمون المحظورون", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+        title = { Text(stringResource(R.string.settings_blocked_users_title), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
         text = {
             if (blockedUsers.isEmpty()) {
-                Text("لا يوجد مستخدمون محظورون", color = MangaColors.OnSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
+                Text(stringResource(R.string.settings_blocked_empty), color = MangaColors.OnSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
                     blockedUsers.forEach { uid ->
@@ -780,7 +780,7 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
                             Icon(Icons.Filled.Person, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(12.dp))
                             Text(uid.take(16) + "...", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                            TextButton(onClick = { onUnblock(uid) }) { Text("إلغاء الحظر", color = MangaColors.Cyan) }
+                            TextButton(onClick = { onUnblock(uid) }) { Text(stringResource(R.string.settings_unblock), color = MangaColors.Cyan) }
                         }
                     }
                 }
@@ -792,19 +792,19 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
 }
 
 private val AVAILABLE_GENRES = listOf(
-    "أكشن", "مغامرة", "كوميديا", "دراما", "خيال", "رعب", "رومانسي", "خيال علمي",
-    "شونين", "شوجو", "سينين", "سينين", "إيتشي", "نهاية العالم", "تاريخي", "رياضي",
-    "غامض", "سايكولوجي", "سحر"
+    stringResource(R.string.genre_action), stringResource(R.string.genre_adventure), stringResource(R.string.genre_comedy), stringResource(R.string.genre_drama), stringResource(R.string.genre_fantasy), stringResource(R.string.genre_horror), stringResource(R.string.genre_romance), stringResource(R.string.genre_scifi),
+    stringResource(R.string.genre_shounen), stringResource(R.string.genre_shoujo), stringResource(R.string.genre_seinen), stringResource(R.string.genre_seinen), stringResource(R.string.genre_ecchi), stringResource(R.string.genre_apocalypse), stringResource(R.string.my_history), stringResource(R.string.genre_sports),
+    stringResource(R.string.genre_mystery), stringResource(R.string.str_288), stringResource(R.string.genre_supernatural)
 )
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable private fun FavoriteGenresDialog(currentGenres: List<String>, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
     val selectedGenres = remember { mutableStateListOf<String>().apply { addAll(currentGenres) } }
     AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
-        title = { Text("الأنواع المفضلة", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+        title = { Text(stringResource(R.string.settings_favorite_genres), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                Text("اختر أنواع المانجا المفضلة لديك", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 12.dp))
+                Text(stringResource(R.string.choose_favorite_genres), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 12.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     AVAILABLE_GENRES.forEach { genre ->
                         val isSelected = genre in selectedGenres
@@ -836,7 +836,7 @@ private val AVAILABLE_GENRES = listOf(
         title = { Text(title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
         text = {
             if (users.isEmpty()) {
-                Text("لا يوجد مستخدمون حالياً", color = MangaColors.OnSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
+                Text(stringResource(R.string.dialog_no_users), color = MangaColors.OnSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
                     users.forEach { user ->

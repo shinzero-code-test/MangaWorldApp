@@ -73,9 +73,9 @@ fun SettingsScreen(
         )
 
         // ── Appearance ────────────────────────────────────────────────────────
-        SettingsSection("المظهر") {
+        SettingsSection(stringResource(R.string.appearance)) {
             SettingsItem(
-                icon = Icons.Filled.Palette, title = "السمة",
+                icon = Icons.Filled.Palette, title = stringResource(R.string.theme),
                 subtitle = app.theme.label
             ) {
                 var expanded by remember { mutableStateOf(false) }
@@ -103,41 +103,41 @@ fun SettingsScreen(
             SwitchItem(
                 icon = Icons.Filled.ColorLens,
                 title = stringResource(R.string.settings_dynamic_colors),
-                subtitle = "مطابقة ألوان النظام على Android 12+",
+                subtitle = stringResource(R.string.system_color_match),
                 checked = app.useDynamicColors,
                 onCheckedChange = viewModel::setDynamicColors
             )
         }
 
-        SettingsSection("الخصوصية والحماية") {
+        SettingsSection(stringResource(R.string.privacy_security)) {
             SwitchItem(
                 icon = Icons.Filled.Fingerprint,
-                title = "قفل التطبيق بالبصمة",
-                subtitle = "يطلب المصادقة عند العودة للتطبيق",
+                title = stringResource(R.string.app_lock_fingerprint),
+                subtitle = stringResource(R.string.str_453),
                 checked = app.biometricLockEnabled,
                 onCheckedChange = viewModel::setBiometricLock
             )
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
                 icon = Icons.Filled.Security,
-                title = "حماية القارئ من اللقطات",
-                subtitle = "منع لقطات الشاشة وتسجيل القارئ",
+                title = stringResource(R.string.reader_screenshot_blocked),
+                subtitle = stringResource(R.string.str_424),
                 checked = app.secureReaderEnabled,
                 onCheckedChange = viewModel::setSecureReader
             )
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
                 icon = Icons.Filled.Visibility,
-                title = "إخفاء الحرق افتراضياً",
-                subtitle = "طيّ تعليقات السبويْلر حتى تكشفها يدوياً",
+                title = stringResource(R.string.settings_spoiler_default),
+                subtitle = stringResource(R.string.reader_spoiler_collapse),
                 checked = app.spoilerCollapseDefault,
                 onCheckedChange = viewModel::setSpoilerCollapseDefault
             )
         }
 
         // ── Reader ────────────────────────────────────────────────────────────
-        SettingsSection("القارئ") {
-            SettingsItem(icon = Icons.Filled.ChromeReaderMode, title = "وضع القراءة",
+        SettingsSection(stringResource(R.string.settings_reader)) {
+            SettingsItem(icon = Icons.Filled.ChromeReaderMode, title = stringResource(R.string.reading_mode),
                 subtitle = reader.mode.label) {
                 var expanded by remember { mutableStateOf(false) }
                 Box {
@@ -161,42 +161,42 @@ fun SettingsScreen(
             }
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(icon = Icons.Filled.ScreenLockPortrait,
-                title = "إبقاء الشاشة مضاءة",
-                subtitle = "أثناء القراءة",
+                title = stringResource(R.string.keep_screen_on),
+                subtitle = stringResource(R.string.while_reading),
                 checked = reader.keepScreenOn,
                 onCheckedChange = viewModel::setKeepScreen)
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(icon = Icons.Filled.AutoAwesome,
-                title = "الكشف التلقائي عن Webtoon",
-                subtitle = "تغيير وضع القراءة تلقائياً",
+                title = stringResource(R.string.auto_webtoon_detection),
+                subtitle = stringResource(R.string.auto_read_mode),
                 checked = reader.autoWebtoonDetection,
                 onCheckedChange = viewModel::setAutoWebtoon)
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
                 icon = Icons.Filled.VisibilityOff,
-                title = "وضع التصفح الخفي",
-                subtitle = "لا يحفظ التقدم أو السجل أثناء القراءة",
+                title = stringResource(R.string.incognito_browse),
+                subtitle = stringResource(R.string.str_371),
                 checked = reader.incognitoMode,
                 onCheckedChange = viewModel::setIncognito
             )
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
                 icon = Icons.Filled.FlashOn,
-                title = "التحميل المسبق للفصل التالي",
-                subtitle = "يبدأ عند تجاوز 50% من الفصل الحالي",
+                title = stringResource(R.string.preload_next_chapter),
+                subtitle = stringResource(R.string.str_449),
                 checked = reader.smartPrefetchEnabled,
                 onCheckedChange = viewModel::setSmartPrefetch
             )
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
                 icon = Icons.Filled.TouchApp,
-                title = "الاهتزازات اللمسية",
-                subtitle = "ردود فعل عند الإشارات والإكمال",
+                title = stringResource(R.string.haptic_feedback),
+                subtitle = stringResource(R.string.str_282),
                 checked = reader.hapticsEnabled,
                 onCheckedChange = viewModel::setReaderHaptics
             )
             GradientDivider(Modifier.padding(horizontal = 16.dp))
-            SettingsItem(icon = Icons.Filled.Tune, title = "فلتر الصور", subtitle = reader.imageFilter.label) {
+            SettingsItem(icon = Icons.Filled.Tune, title = stringResource(R.string.str_342), subtitle = reader.imageFilter.label) {
                 var expanded by remember { mutableStateOf(false) }
                 Box {
                     TextButton(onClick = { expanded = true }) {
@@ -219,40 +219,40 @@ fun SettingsScreen(
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
                 icon = Icons.Filled.SkipNext,
-                title = "الانتقال التلقائي للفصل التالي",
-                subtitle = "افتح الفصل التالي عند إنهاء الحالي",
+                title = stringResource(R.string.auto_next_chapter_alt),
+                subtitle = stringResource(R.string.auto_next_chapter),
                 checked = reader.autoOpenNextChapter,
                 onCheckedChange = viewModel::setAutoOpenNextChapter
             )
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
                 icon = Icons.Filled.Groups,
-                title = "إظهار عداد القراء المباشر",
-                subtitle = "إظهار عدد القراء المتواجدين حالياً",
+                title = stringResource(R.string.str_069),
+                subtitle = stringResource(R.string.show_online_readers),
                 checked = reader.showLiveReadersOverlay,
                 onCheckedChange = viewModel::setShowLiveReadersOverlay
             )
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
                 icon = Icons.Filled.EmojiEmotions,
-                title = "إظهار طبقة التفاعلات",
-                subtitle = "إظهار التفاعلات المباشرة داخل الفصل",
+                title = stringResource(R.string.show_interaction_layer),
+                subtitle = stringResource(R.string.str_064),
                 checked = reader.showReactionOverlay,
                 onCheckedChange = viewModel::setShowReactionOverlay
             )
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
                 icon = Icons.Filled.ViewCarousel,
-                title = "وضع الصفحتين أفقياً",
-                subtitle = "عرض صفحتين معاً على الشاشات العريضة",
+                title = stringResource(R.string.str_445),
+                subtitle = stringResource(R.string.str_313),
                 checked = reader.dualPageLandscape,
                 onCheckedChange = viewModel::setDualPageLandscape
             )
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
                 icon = Icons.Filled.VerticalAlignCenter,
-                title = "دمج صفحات الويب تون",
-                subtitle = "إزالة الفراغات بين الصور في وضع الويب تون",
+                title = stringResource(R.string.str_280),
+                subtitle = stringResource(R.string.str_050),
                 checked = reader.webtoonAutoStitch,
                 onCheckedChange = viewModel::setWebtoonAutoStitch
             )
@@ -275,7 +275,7 @@ fun SettingsScreen(
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(
                 icon = Icons.Filled.Shield,
-                title = "حل حماية Cloudflare",
+                title = stringResource(R.string.str_265),
                 subtitle = "Olympus / Starz"
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -304,31 +304,31 @@ fun SettingsScreen(
         // ── Downloads ─────────────────────────────────────────────────────────
         SettingsSection(stringResource(R.string.more_downloads)) {
             SwitchItem(icon = Icons.Filled.Wifi,
-                title = "التنزيل عبر Wi-Fi فقط",
-                subtitle = "توفير البيانات الخلوية",
+                title = stringResource(R.string.str_147),
+                subtitle = stringResource(R.string.str_248),
                 checked = app.downloadOnWifiOnly,
                 onCheckedChange = viewModel::setWifiOnly)
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
                 icon = Icons.Filled.CloudDownload,
-                title = "تنزيل تلقائي للفصول الجديدة",
-                subtitle = "تنزيل 3 فصول غير مقروءة من المفضلة",
+                title = stringResource(R.string.auto_download_new_chapters),
+                subtitle = stringResource(R.string.str_245),
                 checked = app.autoDownloadNewChapters,
                 onCheckedChange = viewModel::setAutoDownload
             )
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SwitchItem(
                 icon = Icons.Filled.DeleteSweep,
-                title = "حذف التنزيلات المقروءة تلقائياً",
-                subtitle = "بعد فترة من إنهاء الفصل",
+                title = stringResource(R.string.auto_delete_read_downloads),
+                subtitle = stringResource(R.string.str_206),
                 checked = app.autoCleanupReadDownloads,
                 onCheckedChange = viewModel::setAutoCleanup
             )
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(
                 icon = Icons.Filled.Schedule,
-                title = "فترة الحذف التلقائي",
-                subtitle = "${app.cleanupAfterHours} ساعة"
+                title = stringResource(R.string.str_329),
+                subtitle = stringResource(R.string.fmt_021, app.cleanupAfterHours)
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(24, 48, 72).forEach { hours ->
@@ -343,15 +343,15 @@ fun SettingsScreen(
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(
                 icon = Icons.Filled.Cached,
-                title = "حجم كاش الصور",
+                title = stringResource(R.string.str_255),
                 subtitle = formatBytes(cacheSizeBytes)
             ) {
-                OutlinedButton(onClick = viewModel::clearImageCache) { Text("مسح") }
+                OutlinedButton(onClick = viewModel::clearImageCache) { Text(stringResource(R.string.clear)) }
             }
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(
                 icon = Icons.Filled.Storage,
-                title = "حد كاش الصور",
+                title = stringResource(R.string.str_256),
                 subtitle = "${app.imageCacheLimitMb} MB"
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -366,28 +366,28 @@ fun SettingsScreen(
             }
         }
 
-        SettingsSection("النسخ الاحتياطي المحلي") {
+        SettingsSection(stringResource(R.string.local_backup)) {
             SettingsItem(
                 icon = Icons.Filled.CloudUpload,
-                title = "تصدير النسخة الاحتياطية",
-                subtitle = "المفضلة، السجل، التقدم، الإعدادات، والملاحظات"
+                title = stringResource(R.string.str_221),
+                subtitle = stringResource(R.string.str_190)
             ) {
-                OutlinedButton(onClick = { exportLauncher.launch("MangaWorld-backup.json") }) { Text("تصدير") }
+                OutlinedButton(onClick = { exportLauncher.launch("MangaWorld-backup.json") }) { Text(stringResource(R.string.export)) }
             }
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(
                 icon = Icons.Filled.FileOpen,
-                title = "استيراد نسخة احتياطية",
-                subtitle = "دمج البيانات المحلية مع الملف المستورد"
+                title = stringResource(R.string.import_backup),
+                subtitle = stringResource(R.string.merge_local_imported)
             ) {
-                OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json")) }) { Text("استيراد") }
+                OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json")) }) { Text(stringResource(R.string.import)) }
             }
         }
 
         SettingsSection(stringResource(R.string.settings_notifications)) {
             SettingsItem(
                 icon = Icons.Filled.Notifications,
-                title = "وضع التنبيهات",
+                title = stringResource(R.string.alert_mode),
                 subtitle = app.notificationDeliveryMode.label
             ) {
                 var expanded by remember { mutableStateOf(false) }
@@ -411,24 +411,24 @@ fun SettingsScreen(
             }
         }
 
-        SettingsSection("التحكم بالمحتوى") {
+        SettingsSection(stringResource(R.string.content_control)) {
             SettingsItem(
                 icon = Icons.Filled.Block,
-                title = "الكلمات المحجوبة",
-                subtitle = if (app.contentBlacklist.isEmpty()) "لا توجد كلمات محجوبة" else "${app.contentBlacklist.size} كلمة"
+                title = stringResource(R.string.blocked_keywords),
+                subtitle = if (app.contentBlacklist.isEmpty()) stringResource(R.string.no_blocked_keywords) else stringResource(R.string.fmt_022, app.contentBlacklist.size)
             ) {
                 OutlinedButton(onClick = { blacklistText = app.contentBlacklist.joinToString("\n"); blacklistDialog = true }) {
-                    Text("إدارة")
+                    Text(stringResource(R.string.manage))
                 }
             }
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(
                 icon = Icons.Filled.PersonOff,
-                title = "المستخدمون المكتومون",
-                subtitle = if (app.mutedUserIds.isEmpty()) "لا يوجد كتم" else "${app.mutedUserIds.size} مستخدم"
+                title = stringResource(R.string.muted_users),
+                subtitle = if (app.mutedUserIds.isEmpty()) stringResource(R.string.no_muted) else stringResource(R.string.fmt_023, app.mutedUserIds.size)
             ) {
                 OutlinedButton(onClick = { viewModel.setMutedUserIds(emptySet()) }, enabled = app.mutedUserIds.isNotEmpty()) {
-                    Text("مسح")
+                    Text(stringResource(R.string.clear))
                 }
             }
         }
@@ -436,25 +436,25 @@ fun SettingsScreen(
         // ── Notifications ─────────────────────────────────────────────────────
         SettingsSection(stringResource(R.string.settings_notifications)) {
             SwitchItem(icon = Icons.Filled.Notifications,
-                title = "إشعارات الفصول الجديدة",
-                subtitle = "عند صدور فصل جديد من قائمة متابعتك",
+                title = stringResource(R.string.settings_notifications_new_chapters),
+                subtitle = stringResource(R.string.str_315),
                 checked = app.enableNotifications,
                 onCheckedChange = viewModel::setNotifications)
         }
 
         // ── About ─────────────────────────────────────────────────────────────
-        SettingsSection("عن التطبيق") {
-            SettingsItem(icon = Icons.Filled.Info, title = "الإصدار", subtitle = com.exapps.mangaworld.BuildConfig.VERSION_NAME) {}
+        SettingsSection(stringResource(R.string.about_app)) {
+            SettingsItem(icon = Icons.Filled.Info, title = stringResource(R.string.settings_version), subtitle = com.exapps.mangaworld.BuildConfig.VERSION_NAME) {}
             GradientDivider(Modifier.padding(horizontal = 16.dp))
             SettingsItem(icon = Icons.Filled.Code, title = "com.exapps.mangaworld",
-                subtitle = "مبني بـ Kotlin + Jetpack Compose") {}
+                subtitle = stringResource(R.string.str_384)) {}
             GradientDivider(Modifier.padding(horizontal = 16.dp))
-            SettingsItem(icon = Icons.Filled.CloudSync, title = "السحابة والمزامنة", subtitle = "الحساب، Google Sign-In، ونسخ المكتبة") {
-                OutlinedButton(onClick = onOpenCloudSync) { Text("فتح") }
+            SettingsItem(icon = Icons.Filled.CloudSync, title = stringResource(R.string.str_159), subtitle = stringResource(R.string.str_151)) {
+                OutlinedButton(onClick = onOpenCloudSync) { Text(stringResource(R.string.open)) }
             }
             GradientDivider(Modifier.padding(horizontal = 16.dp))
-            SettingsItem(icon = Icons.Filled.BugReport, title = "التشخيص وصحة المصادر", subtitle = "فحص المصادر والودجت والكاش") {
-                OutlinedButton(onClick = onOpenDiagnostics) { Text("فتح") }
+            SettingsItem(icon = Icons.Filled.BugReport, title = stringResource(R.string.diagnostics_sources_health), subtitle = stringResource(R.string.str_330)) {
+                OutlinedButton(onClick = onOpenDiagnostics) { Text(stringResource(R.string.open)) }
             }
         }
 
@@ -464,10 +464,10 @@ fun SettingsScreen(
     if (blacklistDialog) {
         AlertDialog(
             onDismissRequest = { blacklistDialog = false },
-            title = { Text("الكلمات المحجوبة") },
+            title = { Text(stringResource(R.string.blocked_keywords)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("أدخل كلمة أو عبارة في كل سطر لإخفائها من الرئيسية/التصفح/التحديثات.")
+                    Text(stringResource(R.string.blacklist_hint))
                     OutlinedTextField(
                         value = blacklistText,
                         onValueChange = { blacklistText = it },

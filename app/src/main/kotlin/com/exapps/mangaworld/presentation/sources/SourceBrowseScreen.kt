@@ -101,7 +101,7 @@ fun SourceBrowseScreen(
                 },
                 actions = {
                     IconButton(onClick = { showSortSheet = true }) {
-                        Icon(Icons.Filled.Sort, "ترتيب", tint = MangaColors.Cyan)
+                        Icon(Icons.Filled.Sort, stringResource(R.string.sort), tint = MangaColors.Cyan)
                     }
                     IconButton(onClick = {
                         viewModel.setStatus(
@@ -113,7 +113,7 @@ fun SourceBrowseScreen(
                             }
                         )
                     }) {
-                        Icon(Icons.Filled.FilterList, "تصفيات", tint = MangaColors.OnSurfaceVariant)
+                        Icon(Icons.Filled.FilterList, stringResource(R.string.filters), tint = MangaColors.OnSurfaceVariant)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
@@ -127,7 +127,7 @@ fun SourceBrowseScreen(
                 onValueChange = viewModel::setQuery,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                 placeholder = {
-                    Text("ابحث في ${uiState.source.displayName}...", color = MangaColors.Muted,
+                    Text(stringResource(R.string.fmt_047, uiState.source.displayName), color = MangaColors.Muted,
                         style = MaterialTheme.typography.bodyMedium)
                 },
                 leadingIcon = { Icon(Icons.Filled.Search, null, tint = MangaColors.Primary) },
@@ -156,21 +156,21 @@ fun SourceBrowseScreen(
                     StatusFilterChip(
                         selected = uiState.selectedStatus == null,
                         onClick = { viewModel.setStatus(null) },
-                        text = "الكل"
+                        text = stringResource(R.string.browse_all)
                     )
                 }
                 item {
                     StatusFilterChip(
                         selected = uiState.selectedStatus == MangaStatus.ONGOING,
                         onClick = { viewModel.setStatus(MangaStatus.ONGOING) },
-                        text = "مستمر"
+                        text = stringResource(R.string.ongoing)
                     )
                 }
                 item {
                     StatusFilterChip(
                         selected = uiState.selectedStatus == MangaStatus.COMPLETED,
                         onClick = { viewModel.setStatus(MangaStatus.COMPLETED) },
-                        text = "مكتمل"
+                        text = stringResource(R.string.completed_alt)
                     )
                 }
             }
@@ -195,7 +195,7 @@ fun SourceBrowseScreen(
                         Icon(Icons.Filled.Shield, null, tint = MangaColors.Yellow)
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "يتطلب التحقق من الهوية — انقر لإكمال",
+                            stringResource(R.string.str_450),
                             color = MangaColors.Yellow,
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.weight(1f)
@@ -231,7 +231,7 @@ fun SourceBrowseScreen(
                         Icon(Icons.Filled.Search, null, tint = MangaColors.Muted, modifier = Modifier.size(48.dp))
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            if (uiState.query.isNotBlank()) stringResource(R.string.search_empty) else "اضغط للبحث أو انتظر التحميل",
+                            if (uiState.query.isNotBlank()) stringResource(R.string.search_empty) else stringResource(R.string.tap_to_search_or_wait),
                             color = MangaColors.OnSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium
                         )
@@ -264,7 +264,7 @@ fun SourceBrowseScreen(
                                     onClick = { viewModel.loadMore() },
                                     modifier = Modifier.fillMaxWidth().padding(8.dp)
                                 ) {
-                                    Text("حمّل المزيد", color = MangaColors.Cyan)
+                                    Text(stringResource(R.string.load_more), color = MangaColors.Cyan)
                                 }
                             }
                         }
@@ -281,7 +281,7 @@ fun SourceBrowseScreen(
             containerColor = MangaColors.Surface
         ) {
             Column(Modifier.padding(16.dp)) {
-                Text("ترتيب حسب", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.browse_sort), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))
                 com.exapps.mangaworld.domain.model.SortBy.entries.forEach { sort ->
                     Row(

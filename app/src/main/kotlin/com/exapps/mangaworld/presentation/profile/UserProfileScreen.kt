@@ -316,7 +316,7 @@ private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, bannerUri
             if (!bannerModel.isNullOrBlank()) {
                 AsyncImage(
                     model = bannerModel,
-                    contentDescription = "غلاف الملف الشخصي",
+                    contentDescription = stringResource(R.string.profile_cover),
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
@@ -369,7 +369,7 @@ private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, bannerUri
             ) {
                 Icon(
                     Icons.Filled.CameraAlt,
-                    contentDescription = "تغيير الغلاف",
+                    contentDescription = stringResource(R.string.change_cover),
                     tint = Color.White,
                     modifier = Modifier.size(14.dp)
                 )
@@ -408,14 +408,14 @@ private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, bannerUri
                             if (avatarUri != null) {
                                 AsyncImage(
                                     model = avatarUri,
-                                    contentDescription = "صورة الملف الشخصي",
+                                    contentDescription = stringResource(R.string.profile_image),
                                     modifier = Modifier.fillMaxSize().clip(CircleShape),
                                     contentScale = ContentScale.Crop
                                 )
                             } else if (!profile?.avatarUrl.isNullOrBlank()) {
                                 AsyncImage(
                                     model = profile.avatarUrl,
-                                    contentDescription = "صورة الملف الشخصي",
+                                    contentDescription = stringResource(R.string.profile_image),
                                     modifier = Modifier.fillMaxSize().clip(CircleShape),
                                     contentScale = ContentScale.Crop
                                 )
@@ -438,7 +438,7 @@ private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, bannerUri
                 ) {
                     Icon(
                         Icons.Filled.CameraAlt,
-                        contentDescription = "تغيير الصورة",
+                        contentDescription = stringResource(R.string.change_image),
                         tint = MangaColors.Background,
                         modifier = Modifier.size(16.dp)
                     )
@@ -449,7 +449,7 @@ private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, bannerUri
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = profile?.username ?: "ضيف",
+                    text = profile?.username ?: stringResource(R.string.guest),
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleLarge
@@ -491,7 +491,7 @@ private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, bannerUri
 private fun StatsRow(totalReadingTimeMs: Long, chaptersRead: Int, streak: Int) {
     val hours = (totalReadingTimeMs / 3_600_000).toInt()
     val mins = ((totalReadingTimeMs % 3_600_000) / 60_000).toInt()
-    val readingTimeText = if (hours > 0) "${hours}س ${mins}د" else "${mins}د"
+    val readingTimeText = if (hours > 0) stringResource(R.string.fmt_029, hours, mins) else stringResource(R.string.fmt_036, mins)
 
     Row(
         modifier = Modifier
@@ -499,9 +499,9 @@ private fun StatsRow(totalReadingTimeMs: Long, chaptersRead: Int, streak: Int) {
             .padding(horizontal = 16.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        StatCard(modifier = Modifier.weight(1f), icon = Icons.Filled.AccessTime, tint = MangaColors.Cyan, value = readingTimeText, label = "وقت القراءة")
-        StatCard(modifier = Modifier.weight(1f), icon = Icons.Filled.MenuBook, tint = MangaColors.Cyan, value = chaptersRead.toString(), label = "فصول مقروءة")
-        StatCard(modifier = Modifier.weight(1f), icon = Icons.Filled.Whatshot, tint = MangaColors.Orange, value = "$streak", label = "أيام متتالية")
+        StatCard(modifier = Modifier.weight(1f), icon = Icons.Filled.AccessTime, tint = MangaColors.Cyan, value = readingTimeText, label = stringResource(R.string.reading_time))
+        StatCard(modifier = Modifier.weight(1f), icon = Icons.Filled.MenuBook, tint = MangaColors.Cyan, value = chaptersRead.toString(), label = stringResource(R.string.read_chapters_alt))
+        StatCard(modifier = Modifier.weight(1f), icon = Icons.Filled.Whatshot, tint = MangaColors.Orange, value = "$streak", label = stringResource(R.string.consecutive_days))
     }
 }
 
@@ -543,10 +543,10 @@ private fun QuickActionsGrid(
     onOpenProfileSettings: () -> Unit
 ) {
     val actions = listOf(
-        QuickAction(Icons.Filled.CloudSync, "السحابة", MangaColors.Cyan, 0, onOpenCloudSync),
+        QuickAction(Icons.Filled.CloudSync, stringResource(R.string.cloud), MangaColors.Cyan, 0, onOpenCloudSync),
         QuickAction(Icons.Filled.Tune, stringResource(R.string.more_diagnostics), MangaColors.Pink, 0, onOpenDiagnostics),
-        QuickAction(Icons.Filled.Notifications, "إشعارات", MangaColors.Yellow, unreadNotifications, onOpenNotifications),
-        QuickAction(Icons.Filled.Speed, "إحصائيات", MangaColors.Orange, 0, onOpenReadingStats),
+        QuickAction(Icons.Filled.Notifications, stringResource(R.string.notifications), MangaColors.Yellow, unreadNotifications, onOpenNotifications),
+        QuickAction(Icons.Filled.Speed, stringResource(R.string.stats), MangaColors.Orange, 0, onOpenReadingStats),
         QuickAction(Icons.Filled.Tune, stringResource(R.string.more_settings), MangaColors.Muted, 0, onOpenProfileSettings)
     )
     val rows = actions.chunked(3)
@@ -559,7 +559,7 @@ private fun QuickActionsGrid(
             .background(MangaColors.SurfaceContainer)
             .padding(16.dp)
     ) {
-        Text("إجراءات سريعة", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.quick_actions), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.height(16.dp))
         rows.forEachIndexed { rowIndex, rowActions ->
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -635,7 +635,7 @@ private fun CustomListsSection(lists: List<CustomUserList>, onOpenLists: () -> U
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("قوائمي", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.library_custom_lists), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
             Row(
                 modifier = Modifier.clickable(onClick = onOpenLists),
                 verticalAlignment = Alignment.CenterVertically
@@ -652,7 +652,7 @@ private fun CustomListsSection(lists: List<CustomUserList>, onOpenLists: () -> U
         }
         Spacer(Modifier.height(14.dp))
         if (lists.isEmpty()) {
-            Text("لا توجد قوائم بعد", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.library_empty_lists), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         } else {
             Box(modifier = Modifier.heightIn(max = 180.dp)) {
                 LazyRow(
@@ -727,7 +727,7 @@ private fun ListCardItem(list: CustomUserList, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    "${list.itemCount} عنصر",
+                    stringResource(R.string.fmt_030, list.itemCount),
                     color = MangaColors.Cyan,
                     style = MaterialTheme.typography.labelSmall
                 )
@@ -746,11 +746,11 @@ private fun LibraryReadingListsSection(
     onMangaClick: (sourceId: String, slug: String) -> Unit
 ) {
     val statusLabels = mapOf(
-        "reading" to "أقرأها الآن",
-        "completed" to "تم قراءتها",
-        "plan_to_read" to "أرغب بقراءتها",
-        "on_hold" to "أكملها لاحقاً",
-        "dropped" to "لا أرغب بقراءتها"
+        "reading" to stringResource(R.string.library_reading),
+        "completed" to stringResource(R.string.library_read),
+        "plan_to_read" to stringResource(R.string.library_plan_to_read),
+        "on_hold" to stringResource(R.string.library_on_hold),
+        "dropped" to stringResource(R.string.library_dropped)
     )
 
     val hasAnyItems = readingLists.values.any { it.isNotEmpty() }
@@ -764,7 +764,7 @@ private fun LibraryReadingListsSection(
             .background(MangaColors.SurfaceContainer)
             .padding(16.dp)
     ) {
-        Text("المكتبة", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.library_section_title), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.height(12.dp))
 
         statusLabels.forEach { (status, label) ->
@@ -909,7 +909,7 @@ private fun NotificationsSection(
             .padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("إشعارات المجتمع", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.profile_community_notifications), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
             if (unreadCount > 0) {
                 Spacer(Modifier.width(8.dp))
                 Box(
@@ -992,7 +992,7 @@ private fun ModerationEntryCard(onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(stringResource(R.string.moderation_title), color = MangaColors.Yellow, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-            Text("إدارة البلاغات والمحتوى", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
+            Text(stringResource(R.string.settings_sources_moderation), color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
         }
         Icon(
             Icons.AutoMirrored.Filled.ArrowForward,

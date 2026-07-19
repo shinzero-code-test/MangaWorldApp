@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.detail
 
 import androidx.compose.runtime.Immutable
@@ -169,7 +172,7 @@ class MangaDetailViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             isLoading = false,
-                            error = if (it.manga == null) (e.message ?: "خطأ في التحميل") else null,
+                            error = if (it.manga == null) (e.message ?: stringResource(R.string.download_error)) else null,
                             cloudflareUrl = if (e is CloudflareChallengeException) e.targetUrl else null,
                             cloudflareDomain = if (e is CloudflareChallengeException) e.domain else null
                         )
@@ -195,7 +198,7 @@ class MangaDetailViewModel @Inject constructor(
                 val mangaDirPath = downloadQueueManager.getMangaDirPath(currentMangaId)
                 val mangaDir = File(mangaDirPath)
                 if (!mangaDir.exists()) {
-                    _state.update { it.copy(isLoading = false, error = "المجلد المحلي غير موجود") }
+                    _state.update { it.copy(isLoading = false, error = stringResource(R.string.local_folder_missing)) }
                     return@launch
                 }
 
@@ -229,7 +232,7 @@ class MangaDetailViewModel @Inject constructor(
                         id = "${currentMangaId}_${dir.name}",
                         mangaId = currentMangaId,
                         number = chNumber,
-                        title = "الفصل ${chNumber}",
+                        title = stringResource(R.string.fmt_059, chNumber),
                         // chapterUrl = directory name; reader uses getLocalChapterPages(mangaId, chapterUrl)
                         url = dir.name,
                         totalPages = pageCount,
@@ -276,7 +279,7 @@ class MangaDetailViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, error = e.message ?: "خطأ في تحميل المانجا المحلية") }
+                _state.update { it.copy(isLoading = false, error = e.message ?: stringResource(R.string.local_manga_load_error)) }
             }
         }
     }
@@ -399,7 +402,7 @@ class MangaDetailViewModel @Inject constructor(
                         SourceComparison(
                             source = source,
                             match = null,
-                            error = e.message ?: "خطأ غير معروف"
+                            error = e.message ?: stringResource(R.string.unknown_error)
                         )
                     }
                 }
@@ -499,7 +502,7 @@ class MangaDetailViewModel @Inject constructor(
                         mangaId = currentMangaId,
                         mangaTitle = m?.title ?: currentSlug,
                         chapterUrl = chapter.url,
-                        chapterTitle = chapter.title ?: "الفصل ${chapter.displayNumber}",
+                        chapterTitle = chapter.title ?: stringResource(R.string.fmt_059, chapter.displayNumber),
                         pages = pages,
                         wifiOnly = wifiOnly,
                         referer = srcReferer,

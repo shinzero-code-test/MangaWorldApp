@@ -360,7 +360,7 @@ private fun LatestChapterRow(item: LatestChapterItem, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                "الفصل ${item.chapterNumber.let { if (it == it.toInt().toFloat()) it.toInt() else it }}",
+                stringResource(R.string.fmt_058, item.chapterNumber.let { if (it == it.toInt().toFloat()) it.toInt() else it ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MangaColors.PrimaryLight
             )
@@ -372,7 +372,7 @@ private fun LatestChapterRow(item: LatestChapterItem, onClick: () -> Unit) {
             if (item.isNew) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "جديد",
+                    stringResource(R.string.new),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                     modifier = Modifier
@@ -449,7 +449,7 @@ private fun LatestChapterGridCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    "الفصل ${item.chapterNumber.let { if (it == it.toInt().toFloat()) it.toInt() else it }}",
+                    stringResource(R.string.fmt_058, item.chapterNumber.let { if (it == it.toInt().toFloat()) it.toInt() else it ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.PrimaryLight
                 )

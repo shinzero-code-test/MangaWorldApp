@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.settings
 
 import androidx.lifecycle.ViewModel
@@ -79,8 +82,8 @@ class SettingsViewModel @Inject constructor(
 
     fun exportBackup(uri: android.net.Uri) = viewModelScope.launch {
         runCatching { localBackupManager.exportTo(uri) }
-            .onSuccess { _backupMessage.value = "تم تصدير النسخة الاحتياطية بنجاح" }
-            .onFailure { _backupMessage.value = it.message ?: "فشل تصدير النسخة الاحتياطية" }
+            .onSuccess { _backupMessage.value = stringResource(R.string.str_240) }
+            .onFailure { _backupMessage.value = it.message ?: stringResource(R.string.str_336) }
     }
 
     fun importBackup(uri: android.net.Uri) = viewModelScope.launch {
@@ -88,9 +91,9 @@ class SettingsViewModel @Inject constructor(
             localBackupManager.importFrom(uri)
             firebaseSyncManager.pushLocalSnapshot()
         }.onSuccess {
-            _backupMessage.value = "تم استيراد النسخة الاحتياطية بنجاح"
+            _backupMessage.value = stringResource(R.string.str_238)
         }.onFailure {
-            _backupMessage.value = it.message ?: "فشل استيراد النسخة الاحتياطية"
+            _backupMessage.value = it.message ?: stringResource(R.string.str_332)
         }
     }
 

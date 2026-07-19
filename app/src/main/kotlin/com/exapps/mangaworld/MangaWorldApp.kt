@@ -1,3 +1,4 @@
+import com.exapps.mangaworld.R
 package com.exapps.mangaworld
 
 import android.app.Application
@@ -142,26 +143,26 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
             manager.createNotificationChannel(
                 NotificationChannel(
                     DOWNLOAD_CHANNEL_ID,
-                    "تنزيل الفصول",
+                    getString(R.string.channel_downloads),
                     NotificationManager.IMPORTANCE_LOW
-                ).apply { description = "تقدم تنزيل الفصول" }
+                ).apply { description = getString(R.string.channel_downloads_desc) }
             )
 
             // Completion/failure channel — normal importance so user sees it
             manager.createNotificationChannel(
                 NotificationChannel(
                     COMPLETE_CHANNEL_ID,
-                    "إشعارات التنزيل",
+                    getString(R.string.channel_downloads_notif),
                     NotificationManager.IMPORTANCE_DEFAULT
-                ).apply { description = "الفصول المكتملة والفاشلة" }
+                ).apply { description = getString(R.string.channel_downloads_notif_desc) }
             )
 
             manager.createNotificationChannel(
                 NotificationChannel(
                     CLOUD_CHANNEL_ID,
-                    "إشعارات السحابة والمصادر",
+                    getString(R.string.channel_cloud_sources),
                     NotificationManager.IMPORTANCE_HIGH
-                ).apply { description = "تحديثات الفصول والتنبيهات العامة" }
+                ).apply { description = getString(R.string.channel_cloud_sources_desc) }
             )
         }
     }

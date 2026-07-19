@@ -124,14 +124,14 @@ fun LocalStorageScreen(
                 Icon(Icons.Filled.FolderOpen, null,
                     tint = MangaColors.Primary, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(10.dp))
-                Text("التخزين المحلي", style = MaterialTheme.typography.titleLarge,
+                Text(stringResource(R.string.local_storage_alt), style = MaterialTheme.typography.titleLarge,
                     color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onImportManga) {
-                    Icon(Icons.Filled.FileUpload, "استيراد", tint = MangaColors.Cyan)
+                    Icon(Icons.Filled.FileUpload, stringResource(R.string.import), tint = MangaColors.Cyan)
                 }
                 if (mangas.isNotEmpty()) {
-                    Text("${mangas.size} مانجا", style = MaterialTheme.typography.bodySmall,
+                    Text(stringResource(R.string.fmt_034, mangas.size), style = MaterialTheme.typography.bodySmall,
                         color = MangaColors.Muted)
                 }
             }
@@ -144,9 +144,9 @@ fun LocalStorageScreen(
                         modifier = Modifier.padding(32.dp)) {
                         Icon(Icons.Filled.FolderOff, null,
                             modifier = Modifier.size(72.dp), tint = MangaColors.Muted)
-                        Text("لا توجد مانجا محملة", style = MaterialTheme.typography.titleMedium,
+                        Text(stringResource(R.string.no_manga_loaded), style = MaterialTheme.typography.titleMedium,
                             color = MangaColors.Muted)
-                        Text("نزّل فصولاً من صفحة التفاصيل لتظهر هنا",
+                        Text(stringResource(R.string.downloads_empty_hint),
                             style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
                         Spacer(Modifier.height(8.dp))
                         Button(
@@ -155,7 +155,7 @@ fun LocalStorageScreen(
                         ) {
                             Icon(Icons.Filled.FileUpload, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("استيراد مانجا خارجية")
+                            Text(stringResource(R.string.import_external_manga))
                         }
                     }
                 }
@@ -190,9 +190,9 @@ fun LocalStorageScreen(
                     Icon(Icons.Filled.DeleteForever, null,
                         tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(32.dp))
                 },
-                title = { Text("حذف التنزيلات", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.settings_delete_account_empty), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
                 text = {
-                    Text("سيتم حذف جميع فصول \"${confirmDelete!!.title}\" من الجهاز نهائياً.",
+                    Text(stringResource(R.string.str_297)${confirmDelete!!.title}\stringResource(R.string.str_003),
                         color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 },
                 confirmButton = {
@@ -266,8 +266,8 @@ private fun LocalMangaCard(
                         modifier = Modifier.size(14.dp), tint = MangaColors.Primary)
                     Text(
                         if (manga.totalChapters > 0)
-                            "$downloadedChapters / ${manga.totalChapters} فصل"
-                        else "$downloadedChapters فصل محمل",
+                            stringResource(R.string.fmt_009, downloadedChapters, manga.totalChapters)
+                        else stringResource(R.string.fmt_010, downloadedChapters),
                         style = MaterialTheme.typography.bodySmall,
                         color = MangaColors.OnSurfaceVariant
                     )

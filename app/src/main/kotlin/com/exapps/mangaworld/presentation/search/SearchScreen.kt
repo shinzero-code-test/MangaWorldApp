@@ -143,8 +143,8 @@ fun SearchScreen(
                 Icon(Icons.Filled.Shield, null,
                     modifier = Modifier.size(16.dp), tint = MangaColors.Yellow)
                 Text(
-                    "هذا المصدر يحتاج إلى التحقق من Cloudflare. " +
-                    "يمكنك إتمام التحقق مباشرة من هنا.",
+                    stringResource(R.string.str_434) +
+                    stringResource(R.string.str_455),
                     style = MaterialTheme.typography.labelSmall,
                     color = MangaColors.Yellow,
                     modifier = Modifier.weight(1f)
@@ -160,7 +160,7 @@ fun SearchScreen(
                                 )
                         )
                     }) {
-                        Text("تحقق الآن", color = MangaColors.Yellow)
+                        Text(stringResource(R.string.search_cloudflare_button), color = MangaColors.Yellow)
                     }
                 }
             }
@@ -170,7 +170,7 @@ fun SearchScreen(
         when {
             query.isEmpty() -> SearchHints(onSuggestionClick = viewModel::setQuery)
             query.length < 2 -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("أكمل كتابة الكلمة...", color = MangaColors.Muted,
+                Text(stringResource(R.string.finish_typing), color = MangaColors.Muted,
                     style = MaterialTheme.typography.bodyMedium)
             }
             else -> SearchResults(query = query, onMangaClick = onMangaClick, viewModel = viewModel)
@@ -182,7 +182,7 @@ fun SearchScreen(
 private fun SearchHints(onSuggestionClick: (String) -> Unit) {
     val suggestions = listOf(
         "Solo Leveling", "Nano Machine", "Tower of God",
-        "One Piece", "Black Clover", "Naruto", "مانهوا أكشن", "رومانسي"
+        "One Piece", "Black Clover", "Naruto", stringResource(R.string.manhwa_action), stringResource(R.string.genre_romance)
     )
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
         Text(stringResource(R.string.search_suggested), style = MaterialTheme.typography.titleSmall,
@@ -220,11 +220,11 @@ private fun SearchResults(
             val e = (pagingItems.loadState.refresh as LoadState.Error).error
             EmptyState(
                 icon = Icons.Filled.SearchOff,
-                title = if (SearchViewModel.isCloudflareCause(e)) "تحقق Cloudflare مطلوب"
-                        else "خطأ في البحث",
+                title = if (SearchViewModel.isCloudflareCause(e)) stringResource(R.string.search_cloudflare_required)
+                        else stringResource(R.string.search_error),
                 subtitle = if (SearchViewModel.isCloudflareCause(e))
-                    "افتح أي مانجا من هذا المصدر ثم أعد المحاولة."
-                else "تأكد من الاتصال بالإنترنت وحاول مجدداً.",
+                    stringResource(R.string.str_113)
+                else stringResource(R.string.str_210),
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -232,8 +232,8 @@ private fun SearchResults(
             if (pagingItems.itemCount == 0 && pagingItems.loadState.refresh !is LoadState.Loading) {
                 EmptyState(
                     icon = Icons.Filled.SearchOff,
-                    title = "لا توجد نتائج لـ \"$query\"",
-                    subtitle = "جرب كلمات مختلفة أو مصدراً آخر",
+                    title = stringResource(R.string.str_370)$query\"",
+                    subtitle = stringResource(R.string.try_different_keywords),
                     modifier = Modifier.fillMaxSize()
                 )
                 return

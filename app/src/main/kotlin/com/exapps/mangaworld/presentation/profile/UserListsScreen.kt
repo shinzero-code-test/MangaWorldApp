@@ -161,7 +161,7 @@ fun UserListsScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = MangaColors.OnSurface)
                         }
                         Text(
-                            "قوائمي المخصصة",
+                            stringResource(R.string.my_custom_lists),
                             color = MangaColors.OnSurface,
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleLarge
@@ -181,7 +181,7 @@ fun UserListsScreen(
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = null, tint = MangaColors.Background, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("جديدة", color = MangaColors.Background, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                        Text(stringResource(R.string.new_female), color = MangaColors.Background, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                     }
                 }
                 Box(
@@ -210,14 +210,14 @@ fun UserListsScreen(
                     }
                     Spacer(Modifier.height(20.dp))
                     Text(
-                        "لا توجد قوائم بعد",
+                        stringResource(R.string.library_empty_lists),
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleSmall
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "أنشئ قائمتك الأولى لتنظيم المانجا المفضلة لديك",
+                        stringResource(R.string.library_create_first_list),
                         color = MangaColors.Muted,
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center
@@ -234,7 +234,7 @@ fun UserListsScreen(
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("إنشاء قائمة جديدة", fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.create_new_list), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -365,7 +365,7 @@ private fun ListCard(
                     }
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("${list.itemCount} عنصر", color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
+                        Text(stringResource(R.string.fmt_030, list.itemCount), color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
                         if (list.rating > 0) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.Star, contentDescription = null, tint = MangaColors.Yellow, modifier = Modifier.size(11.dp))
@@ -386,7 +386,7 @@ private fun ListCard(
             }
             Row {
                 IconButton(onClick = onEdit, modifier = Modifier.size(34.dp)) {
-                    Icon(Icons.Filled.Edit, contentDescription = "تعديل", modifier = Modifier.size(18.dp), tint = MangaColors.Cyan)
+                    Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit), modifier = Modifier.size(18.dp), tint = MangaColors.Cyan)
                 }
                 IconButton(onClick = onDelete, modifier = Modifier.size(34.dp)) {
                     Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.delete), modifier = Modifier.size(18.dp), tint = MangaColors.Error)
@@ -406,7 +406,7 @@ private fun ListCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                if (isExpanded) "إخفاء العناصر" else "عرض العناصر (${list.itemCount})",
+                if (isExpanded) stringResource(R.string.hide_items) else stringResource(R.string.fmt_074, list.itemCount),
                 color = MangaColors.Cyan,
                 style = MaterialTheme.typography.labelMedium
             )
@@ -434,7 +434,7 @@ private fun ListCard(
                     }
                 } else {
                     Text(
-                        "القائمة فارغة — أضف مانجا من صفحة التفاصيل",
+                        stringResource(R.string.str_173),
                         color = MangaColors.Muted,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 8.dp)
@@ -481,7 +481,7 @@ private fun ListItemCard(item: CustomUserListItem, onItemClick: () -> Unit, onRe
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.5f))
             ) {
-                Icon(Icons.Filled.Close, contentDescription = "إزالة", modifier = Modifier.size(14.dp), tint = Color.White)
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.remove), modifier = Modifier.size(14.dp), tint = Color.White)
             }
         }
         Column(Modifier.padding(8.dp)) {
@@ -529,10 +529,10 @@ private fun DeleteConfirmDialog(list: CustomUserList, onConfirm: () -> Unit, onD
                 Icon(Icons.Filled.Delete, contentDescription = null, tint = MangaColors.Error, modifier = Modifier.size(26.dp))
             }
             Spacer(Modifier.height(16.dp))
-            Text("حذف القائمة؟", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.delete_list_confirm), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Text(
-                "سيتم حذف \"${list.name}\" وجميع عناصرها (${list.itemCount}) بشكل نهائي. لا يمكن التراجع عن هذا الإجراء.",
+                stringResource(R.string.str_295)${list.name}\stringResource(R.string.fmt_000, list.itemCount),
                 color = MangaColors.OnSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center
@@ -621,7 +621,7 @@ private fun ListEditorSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        if (isEditing) "تعديل القائمة" else "إنشاء قائمة جديدة",
+                        if (isEditing) stringResource(R.string.edit_list) else stringResource(R.string.create_new_list),
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
@@ -682,7 +682,7 @@ private fun ListEditorSheet(
                         shape = RoundedCornerShape(percent = 50),
                         colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan, contentColor = MangaColors.Background)
                     ) {
-                        Text(if (isEditing) "حفظ التغييرات" else "إنشاء القائمة", fontWeight = FontWeight.Bold)
+                        Text(if (isEditing) stringResource(R.string.save_changes) else stringResource(R.string.create_list), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -692,7 +692,7 @@ private fun ListEditorSheet(
 
 @Composable
 private fun EditorTabRow(selectedTab: Int, onTabSelected: (Int) -> Unit) {
-    val tabs = listOf("معلومات", "الغلاف", "التفاصيل", stringResource(R.string.settings_privacy))
+    val tabs = listOf(stringResource(R.string.info), stringResource(R.string.cover), stringResource(R.string.details), stringResource(R.string.settings_privacy))
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -733,7 +733,7 @@ private fun InfoTab(
         OutlinedTextField(
             value = name,
             onValueChange = onNameChange,
-            label = { Text("اسم القائمة") },
+            label = { Text(stringResource(R.string.list_name)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
@@ -741,7 +741,7 @@ private fun InfoTab(
         OutlinedTextField(
             value = description,
             onValueChange = onDescriptionChange,
-            label = { Text("الوصف") },
+            label = { Text(stringResource(R.string.description)) },
             modifier = Modifier.fillMaxWidth().heightIn(min = 110.dp),
             maxLines = 4,
             colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
@@ -769,7 +769,7 @@ private fun CoverTab(
             if (coverUrl.isNotBlank()) {
                 AsyncImage(
                     model = coverUrl,
-                    contentDescription = "غلاف القائمة",
+                    contentDescription = stringResource(R.string.list_cover),
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
@@ -785,7 +785,7 @@ private fun CoverTab(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Edit, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("تغيير الصورة", color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.change_image), color = Color.White, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -795,14 +795,14 @@ private fun CoverTab(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Filled.Image, contentDescription = null, tint = MangaColors.Muted, modifier = Modifier.size(32.dp))
                     Spacer(Modifier.height(8.dp))
-                    Text("اضغط لاختيار صورة الغلاف", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.tap_to_choose_cover), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
         OutlinedTextField(
             value = coverUrl,
             onValueChange = onCoverChange,
-            label = { Text("أو الصق رابط صورة") },
+            label = { Text(stringResource(R.string.or_paste_image_link)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
@@ -819,7 +819,7 @@ private fun MetaTab(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Column {
-            Text("التقييم", color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
+            Text(stringResource(R.string.rating), color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(10.dp))
             val rounded = rating.roundToInt()
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -850,14 +850,14 @@ private fun MetaTab(
             OutlinedTextField(
                 value = genresText,
                 onValueChange = onGenresChange,
-                label = { Text("التصنيفات") },
-                placeholder = { Text("أكشن، مغامرة، دراما") },
+                label = { Text(stringResource(R.string.genres)) },
+                placeholder = { Text(stringResource(R.string.genre_action_adventure_drama)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
             )
             Spacer(Modifier.height(4.dp))
-            Text("افصل بين التصنيفات بفاصلة", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
+            Text(stringResource(R.string.separate_genres_comma), color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -867,15 +867,15 @@ private fun VisibilityTab(isPublic: Boolean, onPublicChange: (Boolean) -> Unit) 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         VisibilityOption(
             icon = Icons.Filled.Public,
-            title = "عامة",
-            description = "يمكن لأي شخص العثور على هذه القائمة ومشاهدتها",
+            title = stringResource(R.string.public),
+            description = stringResource(R.string.str_454),
             selected = isPublic,
             onClick = { onPublicChange(true) }
         )
         VisibilityOption(
             icon = Icons.Filled.Lock,
-            title = "خاصة",
-            description = "أنت فقط من يمكنه رؤية هذه القائمة",
+            title = stringResource(R.string.private),
+            description = stringResource(R.string.str_031),
             selected = !isPublic,
             onClick = { onPublicChange(false) }
         )

@@ -146,7 +146,7 @@ fun ReaderScreen(
                     ReaderError(state.error!!, onBack)
                 }
             }
-            state.pages.isEmpty() -> ReaderError("لا توجد صفحات", onBack)
+            state.pages.isEmpty() -> ReaderError(stringResource(R.string.no_pages), onBack)
                 else -> ReaderContent(
                     state = state,
                     onPageChanged = viewModel::onPageChanged,
@@ -177,7 +177,7 @@ fun ReaderScreen(
                 downloadInProgress = state.downloadInProgress,
                 onCancelDownload = viewModel::cancelDownload,
                 onRetryDownload = viewModel::retryCurrentChapterDownload,
-                canRetry = state.downloadMessage?.startsWith("فشل") == true,
+                canRetry = state.downloadMessage?.startsWith(stringResource(R.string.str_331)) == true,
                 brightness = state.brightness,
                 onBrightnessChange = viewModel::setBrightness,
                 imageFilter = state.imageFilter,
@@ -261,7 +261,7 @@ fun ReaderScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (state.showLiveReadersOverlay) {
-                    Text("${state.liveReaders} قارئ", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(R.string.fmt_041, state.liveReaders), color = Color.White, style = MaterialTheme.typography.labelMedium)
                 }
                 if (state.showReactionOverlay) {
                     listOf("🔥", "😂", "😱", "❤️").forEach { emoji ->
@@ -274,7 +274,7 @@ fun ReaderScreen(
         if (noteDialog) {
             AlertDialog(
                 onDismissRequest = { noteDialog = false },
-                title = { Text("ملاحظة الصفحة ${state.currentPage + 1}") },
+                title = { Text(stringResource(R.string.fmt_079, state.currentPage + 1)) },
                 text = {
                     OutlinedTextField(
                         value = noteText,
@@ -302,8 +302,8 @@ fun ReaderScreen(
         if (showSavePageDialog) {
             AlertDialog(
                 onDismissRequest = { showSavePageDialog = false },
-                title = { Text("حفظ الصفحة") },
-                text = { Text("هل تريد حفظ الصفحة ${state.currentPage + 1} في المعرض؟") },
+                title = { Text(stringResource(R.string.reader_save_page)) },
+                text = { Text(stringResource(R.string.fmt_080, state.currentPage + 1)) },
                 confirmButton = {
                     TextButton(onClick = {
                         viewModel.saveCurrentPage()
@@ -319,13 +319,13 @@ fun ReaderScreen(
         if (annotationsSheetOpen) {
             ModalBottomSheet(onDismissRequest = { annotationsSheetOpen = false }) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    Text("الإشارات والملاحظات", style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.bookmarks_and_notes), style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(12.dp))
                     val annotatedPages = state.pages.filter { page ->
                         page.index in state.bookmarkedPages || !state.pageNotes[page.index].isNullOrBlank()
                     }
                     if (annotatedPages.isEmpty()) {
-                        Text("لا توجد إشارات أو ملاحظات في هذا الفصل.", color = MangaColors.Muted)
+                        Text(stringResource(R.string.str_358), color = MangaColors.Muted)
                     } else {
                         annotatedPages.forEach { page ->
                             Card(
@@ -334,7 +334,7 @@ fun ReaderScreen(
                             ) {
                                 Column(Modifier.fillMaxWidth().padding(14.dp)) {
                                     Text(
-                                        text = "الصفحة ${page.index + 1}${if (page.index in state.bookmarkedPages) " • محفوظة" else ""}",
+                                        text = stringResource(R.string.fmt_052, page.index + 1) • محفوظة" else ""}",
                                         color = MangaColors.OnSurface,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -706,7 +706,7 @@ private fun MangaPageImage(page: ChapterPage, imageFilter: ReaderImageFilter, mo
             ) {
                 Icon(Icons.Filled.BrokenImage, null, tint = MangaColors.Muted, modifier = Modifier.size(40.dp))
                 Spacer(Modifier.height(8.dp))
-                Text("فشل تحميل الصفحة ${page.index + 1}",
+                Text(stringResource(R.string.fmt_076, page.index + 1),
                     style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
             }
         }
@@ -769,13 +769,13 @@ private fun ReaderTopBar(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onPreviousChapter, enabled = hasPreviousChapter) {
-                    Icon(Icons.Filled.NavigateBefore, "الفصل السابق", tint = Color.White)
+                    Icon(Icons.Filled.NavigateBefore, stringResource(R.string.reader_previous), tint = Color.White)
                 }
                 IconButton(onClick = onNextChapter, enabled = hasNextChapter) {
-                    Icon(Icons.Filled.NavigateNext, "الفصل التالي", tint = Color.White)
+                    Icon(Icons.Filled.NavigateNext, stringResource(R.string.reader_next), tint = Color.White)
                 }
                 IconButton(onClick = onOpenSettings) {
-                    Icon(Icons.Filled.MoreVert, "إعدادات", tint = Color.White)
+                    Icon(Icons.Filled.MoreVert, stringResource(R.string.settings), tint = Color.White)
                 }
             }
         }
@@ -818,10 +818,10 @@ private fun ReaderSettingsSheet(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text("إعدادات القارئ", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.reader_settings), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
         // Quick Actions
-        SectionHeader("الإجراءات السريعة", "actions", expandedSection, { expandedSection = it }) {
+        SectionHeader(stringResource(R.string.quick_actions_alt), "actions", expandedSection, { expandedSection = it }) {
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -829,13 +829,13 @@ private fun ReaderSettingsSheet(
                 ActionButton(
                     modifier = Modifier.weight(1f),
                     icon = if (state.currentPage in state.bookmarkedPages) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                    label = "إشارة",
+                    label = stringResource(R.string.bookmark),
                     onClick = onToggleBookmark
                 )
                 ActionButton(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Filled.Download,
-                    label = "تنزيل",
+                    label = stringResource(R.string.download),
                     onClick = onDownload,
                     enabled = !state.downloadInProgress
                 )
@@ -856,26 +856,26 @@ private fun ReaderSettingsSheet(
                 ActionButton(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Filled.EditNote,
-                    label = "ملاحظة",
+                    label = stringResource(R.string.note),
                     onClick = onEditNote
                 )
                 ActionButton(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Filled.FormatListBulleted,
-                    label = "الإشارات",
+                    label = stringResource(R.string.bookmarks),
                     onClick = onBrowseAnnotations
                 )
                 ActionButton(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Filled.Forum,
-                    label = "النقاش",
+                    label = stringResource(R.string.discussion),
                     onClick = onOpenComments
                 )
             }
         }
 
         // Reading Mode Section
-        SectionHeader("وضع القراءة", "mode", expandedSection, { expandedSection = it }) {
+        SectionHeader(stringResource(R.string.reading_mode), "mode", expandedSection, { expandedSection = it }) {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 ReaderMode.entries.forEachIndexed { index, mode ->
                     SegmentedButton(
@@ -888,7 +888,7 @@ private fun ReaderSettingsSheet(
         }
 
         // Image Filter Section
-        SectionHeader("فلتر الصورة", "filter", expandedSection, { expandedSection = it }) {
+        SectionHeader(stringResource(R.string.str_343), "filter", expandedSection, { expandedSection = it }) {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 ReaderImageFilter.entries.forEachIndexed { index, filter ->
                     SegmentedButton(
@@ -901,13 +901,13 @@ private fun ReaderSettingsSheet(
         }
 
         // Brightness Section
-        SectionHeader("السطوع", "brightness", expandedSection, { expandedSection = it }) {
+        SectionHeader(stringResource(R.string.brightness), "brightness", expandedSection, { expandedSection = it }) {
             Slider(value = state.brightness, onValueChange = onBrightnessChange, valueRange = 0.05f..1f)
             Text("${(state.brightness * 100).toInt()}%", color = MangaColors.Muted)
         }
 
         // Page Spacing
-        SectionHeader("المسافة بين الصفحات", "spacing", expandedSection, { expandedSection = it }) {
+        SectionHeader(stringResource(R.string.page_spacing), "spacing", expandedSection, { expandedSection = it }) {
             Slider(
                 value = state.pageSpacing.toFloat(),
                 onValueChange = { onPageSpacingChange(it.toInt()) },
@@ -918,31 +918,31 @@ private fun ReaderSettingsSheet(
         }
 
         // Reading Options
-        SectionHeader("خيارات القراءة", "reading", expandedSection, { expandedSection = it }) {
-            SwitchRow("وضع خفي", state.incognitoMode, onIncognitoChange)
-            SwitchRow("الانتقال التلقائي للفصل التالي", state.autoOpenNextChapter, onAutoNextChange)
-            SwitchRow("إبقاء الشاشة مضاءة", state.keepScreenOn, onKeepScreenOnChange)
-            SwitchRow("إظهار رقم الصفحة", state.showPageNumber, onShowPageNumberChange)
-            SwitchRow("التحميل المسبق الذكي", state.smartPrefetchEnabled, onSmartPrefetchChange)
+        SectionHeader(stringResource(R.string.reading_options), "reading", expandedSection, { expandedSection = it }) {
+            SwitchRow(stringResource(R.string.incognito), state.incognitoMode, onIncognitoChange)
+            SwitchRow(stringResource(R.string.auto_next_chapter_alt), state.autoOpenNextChapter, onAutoNextChange)
+            SwitchRow(stringResource(R.string.keep_screen_on), state.keepScreenOn, onKeepScreenOnChange)
+            SwitchRow(stringResource(R.string.show_page_number), state.showPageNumber, onShowPageNumberChange)
+            SwitchRow(stringResource(R.string.smart_preload), state.smartPrefetchEnabled, onSmartPrefetchChange)
         }
 
         // Overlays
-        SectionHeader("الطبقات العلوية", "overlays", expandedSection, { expandedSection = it }) {
-            SwitchRow("إظهار عداد القراء", state.showLiveReadersOverlay, onLiveReadersChange)
-            SwitchRow("إظهار التفاعلات", state.showReactionOverlay, onReactionsChange)
+        SectionHeader(stringResource(R.string.top_layers), "overlays", expandedSection, { expandedSection = it }) {
+            SwitchRow(stringResource(R.string.show_reader_count), state.showLiveReadersOverlay, onLiveReadersChange)
+            SwitchRow(stringResource(R.string.show_interactions), state.showReactionOverlay, onReactionsChange)
         }
 
         // Display
-        SectionHeader("العرض", "display", expandedSection, { expandedSection = it }) {
-            SwitchRow("وضع الصفحتين أفقياً", state.dualPageLandscape, onDualPageChange)
-            SwitchRow("دمج صفحات الويب تون", state.webtoonAutoStitch, onWebtoonStitchChange)
+        SectionHeader(stringResource(R.string.width), "display", expandedSection, { expandedSection = it }) {
+            SwitchRow(stringResource(R.string.str_445), state.dualPageLandscape, onDualPageChange)
+            SwitchRow(stringResource(R.string.str_280), state.webtoonAutoStitch, onWebtoonStitchChange)
         }
 
         // Gestures
-        SectionHeader("الإجراءات", "gestures", expandedSection, { expandedSection = it }) {
-            SwitchRow("زر الصوت للتنقل بين الصفحات", state.volumeButtonPageTurn, onVolumeButtonChange)
-            SwitchRow("التكبير بالنقر المزدوج", state.doubleTapZoom, onDoubleTapZoomChange)
-            SwitchRow("الاهتزازات اللمسية", state.hapticsEnabled, onHapticsChange)
+        SectionHeader(stringResource(R.string.actions), "gestures", expandedSection, { expandedSection = it }) {
+            SwitchRow(stringResource(R.string.str_287), state.volumeButtonPageTurn, onVolumeButtonChange)
+            SwitchRow(stringResource(R.string.double_tap_zoom), state.doubleTapZoom, onDoubleTapZoomChange)
+            SwitchRow(stringResource(R.string.haptic_feedback), state.hapticsEnabled, onHapticsChange)
         }
     }
 }
@@ -1028,18 +1028,18 @@ private fun ReaderCommentsSheet(
     val expandedSpoilers = remember { mutableStateListOf<String>() }
     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("تعليقات الفصل", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            TextButton(onClick = onOpenCommunity) { Text("فتح المجتمع") }
+            Text(stringResource(R.string.str_230), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onOpenCommunity) { Text(stringResource(R.string.str_327)) }
         }
         if (comments.isEmpty()) {
-            Text("لا توجد تعليقات بعد.", color = MangaColors.Muted)
+            Text(stringResource(R.string.str_363), color = MangaColors.Muted)
         } else {
             comments.takeLast(20).forEach { comment ->
                 Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = RoundedCornerShape(14.dp)) {
                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(comment.authorName, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
                         if (comment.spoiler && collapseSpoilersByDefault && comment.id !in expandedSpoilers) {
-                            TextButton(onClick = { expandedSpoilers.add(comment.id) }) { Text("إظهار السبويْلر") }
+                            TextButton(onClick = { expandedSpoilers.add(comment.id) }) { Text(stringResource(R.string.community_show_spoiler)) }
                         } else {
                             Text(comment.text, color = MangaColors.OnSurfaceVariant)
                         }
@@ -1047,11 +1047,11 @@ private fun ReaderCommentsSheet(
                 }
             }
         }
-        OutlinedTextField(value = commentText, onValueChange = onCommentTextChange, modifier = Modifier.fillMaxWidth(), label = { Text("أضف تعليقاً") })
+        OutlinedTextField(value = commentText, onValueChange = onCommentTextChange, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.add_comment)) })
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = spoiler, onCheckedChange = onSpoilerChange)
-                Text("سبويْلر")
+                Text(stringResource(R.string.community_spoiler))
             }
             Button(onClick = onSend, enabled = commentText.isNotBlank()) { Text(stringResource(R.string.community_send)) }
         }
@@ -1134,7 +1134,7 @@ private fun ReaderLoading() {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator(color = MangaColors.Primary, strokeWidth = 3.dp)
             Spacer(Modifier.height(16.dp))
-            Text("جاري تحميل الفصل...",
+            Text(stringResource(R.string.loading_chapter),
                 style = MaterialTheme.typography.bodyMedium, color = MangaColors.OnSurfaceVariant)
         }
     }
@@ -1146,7 +1146,7 @@ private fun ReaderError(message: String, onBack: () -> Unit) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
             Icon(Icons.Filled.ErrorOutline, null, tint = MangaColors.Muted, modifier = Modifier.size(56.dp))
             Spacer(Modifier.height(12.dp))
-            Text("فشل تحميل الفصل", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text(stringResource(R.string.str_333), style = MaterialTheme.typography.titleMedium, color = Color.White)
             Spacer(Modifier.height(6.dp))
             Text(message, style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center)
@@ -1168,11 +1168,11 @@ private fun ReaderCloudflareError(domain: String, onBack: () -> Unit, onSolve: (
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
             Icon(Icons.Filled.Shield, null, tint = MangaColors.Muted, modifier = Modifier.size(56.dp))
             Spacer(Modifier.height(12.dp))
-            Text("تحقق Cloudflare مطلوب", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text(stringResource(R.string.search_cloudflare_required), style = MaterialTheme.typography.titleMedium, color = Color.White)
             Spacer(Modifier.height(6.dp))
-            Text("المصدر $domain يحتاج حل التحقق مرة واحدة.", style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
+            Text(stringResource(R.string.fmt_062, domain), style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
             Spacer(Modifier.height(18.dp))
-            Button(onClick = onSolve) { Text("فتح أداة التحقق") }
+            Button(onClick = onSolve) { Text(stringResource(R.string.str_326)) }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onBack) { Text(stringResource(R.string.back)) }
         }

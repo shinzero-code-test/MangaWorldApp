@@ -79,7 +79,7 @@ fun GoalsScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("الأهداف والإنجازات", color = MangaColors.OnSurface) },
+                title = { Text(stringResource(R.string.goals_and_achievements), color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
@@ -105,13 +105,13 @@ fun GoalsScreen(
                 ) {
                     StatCard(
                         modifier = Modifier.weight(1f),
-                        title = "إجمالي الصفحات",
+                        title = stringResource(R.string.total_pages),
                         value = "$totalPages",
                         emoji = "📖"
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
-                        title = "إجمالي الفصول",
+                        title = stringResource(R.string.total_chapters),
                         value = "$totalChapters",
                         emoji = "📚"
                     )
@@ -126,13 +126,13 @@ fun GoalsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "الأهداف النشطة",
+                        stringResource(R.string.active_goals),
                         style = MaterialTheme.typography.titleMedium,
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.Bold
                     )
                     IconButton(onClick = { showCreateDialog = true }) {
-                        Icon(Icons.Filled.Add, "إضافة هدف", tint = MangaColors.Cyan)
+                        Icon(Icons.Filled.Add, stringResource(R.string.add_goal), tint = MangaColors.Cyan)
                     }
                 }
             }
@@ -145,7 +145,7 @@ fun GoalsScreen(
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Text(
-                            "لا توجد أهداف بعد. أضف هدفاً لبدء تتبع تقدمك!",
+                            stringResource(R.string.str_357),
                             modifier = Modifier.padding(16.dp),
                             color = MangaColors.OnSurfaceVariant
                         )
@@ -248,7 +248,7 @@ private fun GoalCard(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "الهدف: ${goal.targetValue} | ${goal.period.label}",
+                        stringResource(R.string.fmt_064, goal.targetValue, goal.period.label),
                         style = MaterialTheme.typography.bodySmall,
                         color = MangaColors.OnSurfaceVariant
                     )
@@ -340,10 +340,10 @@ private fun CreateGoalDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("إنشاء هدف جديد") },
+        title = { Text(stringResource(R.string.create_new_goal)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("نوع الهدف:", color = MangaColors.OnSurface)
+                Text(stringResource(R.string.str_430), color = MangaColors.OnSurface)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     GoalType.entries.forEach { type ->
                         FilterChip(
@@ -357,12 +357,12 @@ private fun CreateGoalDialog(
                 OutlinedTextField(
                     value = targetValue,
                     onValueChange = { targetValue = it.filter { c -> c.isDigit() } },
-                    label = { Text("القيمة المستهدفة") },
+                    label = { Text(stringResource(R.string.target_value)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Text("الفترة:", color = MangaColors.OnSurface)
+                Text(stringResource(R.string.str_168), color = MangaColors.OnSurface)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     GoalPeriod.entries.forEach { period ->
                         FilterChip(
@@ -383,7 +383,7 @@ private fun CreateGoalDialog(
                 },
                 enabled = targetValue.toIntOrNull() != null && (targetValue.toIntOrNull() ?: 0) > 0
             ) {
-                Text("إنشاء")
+                Text(stringResource(R.string.create))
             }
         },
         dismissButton = {

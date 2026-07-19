@@ -42,7 +42,7 @@ fun BrowseScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             placeholder = {
-                Text("ابحث عن مانجا...", color = MangaColors.Muted,
+                Text(stringResource(R.string.search_manga_hint), color = MangaColors.Muted,
                     style = MaterialTheme.typography.bodyMedium)
             },
             leadingIcon = { Icon(Icons.Filled.Search, null, tint = MangaColors.Primary) },
@@ -73,7 +73,7 @@ fun BrowseScreen(
         ) {
             items(uiState.genres.size, key = { uiState.genres[it] }) { i ->
                 val genre = uiState.genres[i]
-                val isAll = genre == "الكل"
+                val isAll = genre == stringResource(R.string.browse_all)
                 val isSelected = if (isAll) uiState.selectedGenre == null
                                  else uiState.selectedGenre == genre
                 GenreChip(
@@ -138,12 +138,12 @@ fun BrowseScreen(
                 Icon(Icons.Filled.FilterList, null,
                     tint = MangaColors.Cyan, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("تصفية", color = MangaColors.Cyan,
+                Text(stringResource(R.string.filter), color = MangaColors.Cyan,
                     style = MaterialTheme.typography.bodySmall)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "${pagingItems.itemCount} نتيجة",
+                    stringResource(R.string.fmt_037, pagingItems.itemCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.Muted
                 )
@@ -192,7 +192,7 @@ fun BrowseScreen(
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             TextButton(onClick = { retry() },
                                 modifier = Modifier.fillMaxWidth()) {
-                                Text("إعادة التحميل", color = MangaColors.Primary)
+                                Text(stringResource(R.string.reload), color = MangaColors.Primary)
                             }
                         }
                     }
@@ -255,7 +255,7 @@ private fun BrowseListItem(
             }
             Spacer(Modifier.height(4.dp))
             if (manga.latestChapter != null)
-                Text("الفصل ${manga.latestChapter}", style = MaterialTheme.typography.bodySmall,
+                Text(stringResource(R.string.fmt_059, manga.latestChapter), style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.PrimaryLight)
         }
         if (manga.rating != null)
@@ -289,16 +289,16 @@ private fun FilterBottomSheet(
         dragHandle = { BottomSheetDefaults.DragHandle(color = MangaColors.OutlineVariant) }
     ) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
-            Text("تصفية النتائج", style = MaterialTheme.typography.titleMedium,
+            Text(stringResource(R.string.filter_results), style = MaterialTheme.typography.titleMedium,
                 color = MangaColors.OnSurface, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
             Spacer(Modifier.height(16.dp))
 
-            Text("الحالة", style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
+            Text(stringResource(R.string.browse_filter_status), style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(null to "الكل",
-                    com.exapps.mangaworld.domain.model.MangaStatus.ONGOING to "مستمر",
-                    com.exapps.mangaworld.domain.model.MangaStatus.COMPLETED to "مكتمل"
+                listOf(null to stringResource(R.string.browse_all),
+                    com.exapps.mangaworld.domain.model.MangaStatus.ONGOING to stringResource(R.string.ongoing),
+                    com.exapps.mangaworld.domain.model.MangaStatus.COMPLETED to stringResource(R.string.completed_alt)
                 ).forEach { (status, label) ->
                     FilterChip(
                         selected = selectedStatus == status,
@@ -315,12 +315,12 @@ private fun FilterBottomSheet(
             }
             Spacer(Modifier.height(16.dp))
 
-            Text("النوع / الفئة", style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
+            Text(stringResource(R.string.type_category), style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(null to "الكل",
-                    com.exapps.mangaworld.domain.model.MangaType.MANGA to "مانجا",
-                    com.exapps.mangaworld.domain.model.MangaType.MANHWA to "مانهوا"
+                listOf(null to stringResource(R.string.browse_all),
+                    com.exapps.mangaworld.domain.model.MangaType.MANGA to stringResource(R.string.manga),
+                    com.exapps.mangaworld.domain.model.MangaType.MANHWA to stringResource(R.string.manhwa)
                 ).forEach { (type, label) ->
                     FilterChip(
                         selected = selectedType == type,
@@ -338,7 +338,7 @@ private fun FilterBottomSheet(
             Spacer(Modifier.height(24.dp))
 
             GradientButton(
-                text = "تطبيق الفلتر",
+                text = stringResource(R.string.browse_filter_apply),
                 onClick = { onApply(selectedStatus, selectedType) },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -349,7 +349,7 @@ private fun FilterBottomSheet(
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MangaColors.Muted),
                 border = BorderStroke(1.dp, MangaColors.OutlineVariant)
             ) {
-                Text("إعادة تعيين")
+                Text(stringResource(R.string.browse_filter_reset))
             }
         }
     }

@@ -48,9 +48,9 @@ fun SignUpScreen(
     val normalizedUsername = username.trim().lowercase()
     val usernameError = when {
         normalizedUsername.isEmpty() -> null
-        normalizedUsername.length < 3 -> "اسم المستخدم قصير جداً (3 أحرف على الأقل)"
-        normalizedUsername.length > 20 -> "اسم المستخدم طويل جداً (20 حرف كحد أقصى)"
-        !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$")) -> "أحرف وأرقام وشرطات سفلية فقط"
+        normalizedUsername.length < 3 -> stringResource(R.string.auth_error_username_short)
+        normalizedUsername.length > 20 -> stringResource(R.string.auth_error_username_long)
+        !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$")) -> stringResource(R.string.str_012)
         else -> null
     }
 
@@ -121,7 +121,7 @@ fun SignUpScreen(
 
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 HorizontalDivider(modifier = Modifier.weight(1f), color = MangaColors.SurfaceContainer)
-                Text("  أو  ", color = MangaColors.OnSurfaceVariant, fontSize = 13.sp)
+                Text(stringResource(R.string.str_001), color = MangaColors.OnSurfaceVariant, fontSize = 13.sp)
                 HorizontalDivider(modifier = Modifier.weight(1f), color = MangaColors.SurfaceContainer)
             }
             Spacer(modifier = Modifier.height(20.dp))
@@ -159,7 +159,7 @@ fun SignUpScreen(
             MangaTextField(
                 value = email,
                 onValueChange = { email = it },
-                placeholder = "البريد الإلكتروني",
+                placeholder = stringResource(R.string.settings_email),
                 leadingIcon = Icons.Filled.Email,
                 keyboardType = KeyboardType.Email,
                 imeAction = ImeAction.Next
@@ -198,7 +198,7 @@ fun SignUpScreen(
 
             if (password.isNotBlank() && confirmPassword.isNotBlank() && password != confirmPassword) {
                 Spacer(Modifier.height(4.dp))
-                Text("كلمتا المرور غير متطابقتين", color = MangaColors.Yellow, fontSize = 12.sp)
+                Text(stringResource(R.string.auth_error_passwords_mismatch), color = MangaColors.Yellow, fontSize = 12.sp)
             }
 
             Spacer(Modifier.height(20.dp))

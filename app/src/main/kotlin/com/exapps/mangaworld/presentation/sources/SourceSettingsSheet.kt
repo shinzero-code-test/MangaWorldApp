@@ -77,8 +77,8 @@ fun SourceSettingsSheet(
             // Enable/disable source
             SourceSettingToggle(
                 icon = Icons.Filled.PowerSettingsNew,
-                label = "تفعيل المصدر",
-                subtitle = if (isEnabled) "مفعّل" else "معطّل",
+                label = stringResource(R.string.enable_source),
+                subtitle = if (isEnabled) stringResource(R.string.enabled_alt) else stringResource(R.string.disabled_alt),
                 checked = isEnabled,
                 onCheckedChange = onToggleEnabled
             )
@@ -86,8 +86,8 @@ fun SourceSettingsSheet(
             // Enable/disable notifications
             SourceSettingToggle(
                 icon = Icons.Filled.Notifications,
-                label = "إشعارات المصدر",
-                subtitle = if (isNotificationEnabled) "تلقائي عند فصول جديدة" else "صامت",
+                label = stringResource(R.string.notifications_source),
+                subtitle = if (isNotificationEnabled) stringResource(R.string.auto_new_chapters) else stringResource(R.string.silent),
                 checked = isNotificationEnabled,
                 onCheckedChange = onToggleNotification
             )
@@ -97,7 +97,7 @@ fun SourceSettingsSheet(
             // Open in browser
             SourceSettingAction(
                 icon = Icons.Filled.Language,
-                label = "فتح في المتصفح",
+                label = stringResource(R.string.open_in_browser),
                 subtitle = source.baseUrl,
                 onClick = {
                     onDismiss()
@@ -109,16 +109,16 @@ fun SourceSettingsSheet(
             // Clear cookies
             SourceSettingAction(
                 icon = Icons.Filled.DeleteSweep,
-                label = "مسح الكوكيز",
-                subtitle = "إزالة بيانات التحقق المحفوظة",
+                label = stringResource(R.string.clear_cookies),
+                subtitle = stringResource(R.string.str_051),
                 onClick = { showClearConfirm = true }
             )
 
             // Create home screen shortcut
             SourceSettingAction(
                 icon = Icons.Filled.Star,
-                label = "إضافة اختصار للشاشة",
-                subtitle = "وصول مباشر من شاشة الموبايل",
+                label = stringResource(R.string.add_home_shortcut),
+                subtitle = stringResource(R.string.str_441),
                 onClick = {
                     onDismiss()
                     createSourceShortcut(context, source)
@@ -133,10 +133,10 @@ fun SourceSettingsSheet(
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
             containerColor = MangaColors.Surface,
-            title = { Text("مسح الكوكيز", color = MangaColors.OnSurface) },
+            title = { Text(stringResource(R.string.clear_cookies), color = MangaColors.OnSurface) },
             text = {
                 Text(
-                    "سيتم حذف بيانات التحقق المحفوظة لـ \"${source.displayName}\". قد تحتاج لحل تحدي Cloudflare مرة أخرى.",
+                    stringResource(R.string.str_296)${source.displayName}\stringResource(R.string.str_006),
                     color = MangaColors.OnSurfaceVariant
                 )
             },
@@ -147,7 +147,7 @@ fun SourceSettingsSheet(
                         onClearCookies()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Error)
-                ) { Text("مسح") }
+                ) { Text(stringResource(R.string.clear)) }
             },
             dismissButton = {
                 TextButton(onClick = { showClearConfirm = false }) {

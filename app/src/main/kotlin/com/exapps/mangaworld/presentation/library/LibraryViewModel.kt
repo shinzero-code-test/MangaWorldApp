@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.library
 
 import androidx.lifecycle.ViewModel
@@ -13,7 +16,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.Stable
 import javax.inject.Inject
 
-enum class LibraryTab(val label: String) { FAVORITES("المفضلة"), HISTORY("السجل") }
+enum class LibraryTab(val label: String) { FAVORITES(stringResource(R.string.favorites)), HISTORY(stringResource(R.string.history)) }
 
 @Stable
 data class LibraryUiState(

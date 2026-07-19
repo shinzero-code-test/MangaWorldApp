@@ -71,19 +71,19 @@ fun MoreScreen(
     val canModerate = role in setOf("moderator", "super-admin")
 
     val gridItems = buildList {
-        add(MoreGridItem(Icons.Filled.Download, stringResource(R.string.more_downloads), "الفصول المنزّلة", MangaColors.Cyan, onOpenDownloads))
-        add(MoreGridItem(Icons.Filled.FolderOpen, stringResource(R.string.more_local), "المانجا المحفوظة", MangaColors.GlowPurple, onOpenLocalStorage))
-        add(MoreGridItem(Icons.Filled.AutoAwesome, stringResource(R.string.more_suggestions), "مانجا قد تعجبك", MangaColors.Yellow, onOpenSuggestions))
-        add(MoreGridItem(Icons.Filled.BarChart, stringResource(R.string.more_stats), "وقت القراءة", MangaColors.Pink, onOpenReadingStats))
-        add(MoreGridItem(Icons.Filled.EmojiEvents, stringResource(R.string.more_goals), "تتبع التقدم", MangaColors.Yellow, onOpenGoals))
-        add(MoreGridItem(Icons.Filled.Cloud, stringResource(R.string.more_sync), "البيانات السحابية", MangaColors.Cyan, onOpenCloudSync))
-        add(MoreGridItem(Icons.Filled.Tune, stringResource(R.string.more_sources), "إدارة مصادر المانجا", MangaColors.Green, onOpenSources))
+        add(MoreGridItem(Icons.Filled.Download, stringResource(R.string.more_downloads), stringResource(R.string.downloaded_chapters), MangaColors.Cyan, onOpenDownloads))
+        add(MoreGridItem(Icons.Filled.FolderOpen, stringResource(R.string.more_local), stringResource(R.string.more_local_subtitle), MangaColors.GlowPurple, onOpenLocalStorage))
+        add(MoreGridItem(Icons.Filled.AutoAwesome, stringResource(R.string.more_suggestions), stringResource(R.string.manga_you_may_like), MangaColors.Yellow, onOpenSuggestions))
+        add(MoreGridItem(Icons.Filled.BarChart, stringResource(R.string.more_stats), stringResource(R.string.reading_time), MangaColors.Pink, onOpenReadingStats))
+        add(MoreGridItem(Icons.Filled.EmojiEvents, stringResource(R.string.more_goals), stringResource(R.string.track_progress), MangaColors.Yellow, onOpenGoals))
+        add(MoreGridItem(Icons.Filled.Cloud, stringResource(R.string.more_sync), stringResource(R.string.cloud_data), MangaColors.Cyan, onOpenCloudSync))
+        add(MoreGridItem(Icons.Filled.Tune, stringResource(R.string.more_sources), stringResource(R.string.str_046), MangaColors.Green, onOpenSources))
         if (canModerate) {
-            add(MoreGridItem(Icons.Filled.Shield, stringResource(R.string.moderation_title), "إدارة المحتوى", MangaColors.Yellow, onOpenModeration))
+            add(MoreGridItem(Icons.Filled.Shield, stringResource(R.string.moderation_title), stringResource(R.string.more_moderation_subtitle), MangaColors.Yellow, onOpenModeration))
         }
-        add(MoreGridItem(Icons.Filled.Person, stringResource(R.string.more_profile), "حسابك وبياناتك", MangaColors.Cyan, onOpenProfile))
-        add(MoreGridItem(Icons.Filled.Settings, stringResource(R.string.more_settings), "تخصيص التطبيق", MangaColors.Muted, onOpenSettings))
-        add(MoreGridItem(Icons.Filled.BugReport, stringResource(R.string.more_diagnostics), "معلومات تقنية", MangaColors.Orange, onOpenDiagnostics))
+        add(MoreGridItem(Icons.Filled.Person, stringResource(R.string.more_profile), stringResource(R.string.account_data), MangaColors.Cyan, onOpenProfile))
+        add(MoreGridItem(Icons.Filled.Settings, stringResource(R.string.more_settings), stringResource(R.string.customize_app), MangaColors.Muted, onOpenSettings))
+        add(MoreGridItem(Icons.Filled.BugReport, stringResource(R.string.more_diagnostics), stringResource(R.string.technical_info), MangaColors.Orange, onOpenDiagnostics))
     }
 
     Scaffold(

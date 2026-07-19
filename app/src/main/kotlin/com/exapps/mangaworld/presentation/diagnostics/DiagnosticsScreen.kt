@@ -179,7 +179,7 @@ fun DiagnosticsScreen(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = MangaColors.Cyan)
             }
             Text(
-                "التشخيص والصحة",
+                stringResource(R.string.diagnostics_health),
                 style = MaterialTheme.typography.titleLarge,
                 color = MangaColors.OnSurface,
                 fontWeight = FontWeight.Bold
@@ -191,7 +191,7 @@ fun DiagnosticsScreen(
                     .clip(RoundedCornerShape(12.dp))
                     .background(MangaColors.SurfaceContainer)
             ) {
-                Icon(Icons.Filled.Refresh, contentDescription = "تحديث", tint = MangaColors.Cyan)
+                Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.update), tint = MangaColors.Cyan)
             }
         }
 
@@ -259,7 +259,7 @@ private fun GeneralStatusCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "الحالة العامة",
+                    stringResource(R.string.general_status),
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
@@ -279,11 +279,11 @@ private fun GeneralStatusCard(
         Spacer(Modifier.height(18.dp))
 
         val rows = listOf(
-            Triple(Icons.Filled.Storage, MangaColors.Cyan, "المصادر المفعلة") to appSettings.enabledSources.size.toString(),
-            Triple(Icons.Filled.Block, MangaColors.Pink, "الكلمات المحجوبة") to appSettings.contentBlacklist.size.toString(),
-            Triple(Icons.Filled.Image, MangaColors.Orange, "حجم كاش الصور") to formatDiagnosticBytes(imageCacheSizeBytes),
-            Triple(Icons.Filled.AccessTime, MangaColors.PrimaryLight, "آخر تحديث لودجت") to lastUpdatedLabel(widgetSnapshotUpdatedAt),
-            Triple(Icons.Filled.Fingerprint, MangaColors.Green, stringResource(R.string.settings_biometric)) to if (appSettings.biometricLockEnabled) "مفعل" else "معطل"
+            Triple(Icons.Filled.Storage, MangaColors.Cyan, stringResource(R.string.enabled_sources)) to appSettings.enabledSources.size.toString(),
+            Triple(Icons.Filled.Block, MangaColors.Pink, stringResource(R.string.blocked_keywords)) to appSettings.contentBlacklist.size.toString(),
+            Triple(Icons.Filled.Image, MangaColors.Orange, stringResource(R.string.str_255)) to formatDiagnosticBytes(imageCacheSizeBytes),
+            Triple(Icons.Filled.AccessTime, MangaColors.PrimaryLight, stringResource(R.string.str_009)) to lastUpdatedLabel(widgetSnapshotUpdatedAt),
+            Triple(Icons.Filled.Fingerprint, MangaColors.Green, stringResource(R.string.settings_biometric)) to if (appSettings.biometricLockEnabled) stringResource(R.string.enabled) else stringResource(R.string.disabled)
         )
 
         rows.forEachIndexed { index, (meta, value) ->
@@ -306,7 +306,7 @@ private fun lastUpdatedLabel(updatedAt: Long): String {
     return if (updatedAt > 0) {
         java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(updatedAt))
     } else {
-        "لا يوجد"
+        stringResource(R.string.none_alt)
     }
 }
 
@@ -383,7 +383,7 @@ private fun SourcesSectionHeader() {
         )
         Spacer(Modifier.width(10.dp))
         Text(
-            "صحة المصادر",
+            stringResource(R.string.sources_health),
             color = MangaColors.OnSurface,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.titleMedium
@@ -429,7 +429,7 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
                 Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MangaColors.Green, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    if (status.homeOk) "سليم" else "فشل",
+                    if (status.homeOk) stringResource(R.string.ok_alt) else stringResource(R.string.str_331),
                     color = if (status.homeOk) MangaColors.Green else MangaColors.Error,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodyMedium
@@ -443,7 +443,7 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    if (status.hasCookie) "متوفر" else "غير متوفر",
+                    if (status.hasCookie) stringResource(R.string.available) else stringResource(R.string.settings_unavailable),
                     color = if (status.hasCookie) MangaColors.Green else MangaColors.Muted,
                     style = MaterialTheme.typography.labelSmall
                 )
@@ -462,11 +462,11 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(10.dp))
-                SourceDetailLabel(icon = Icons.Filled.Home, label = "الصفحة الرئيسية")
+                SourceDetailLabel(icon = Icons.Filled.Home, label = stringResource(R.string.home_page))
                 Spacer(Modifier.height(8.dp))
-                SourceDetailLabel(icon = Icons.Filled.Search, label = "نتائج البحث (solo)")
+                SourceDetailLabel(icon = Icons.Filled.Search, label = stringResource(R.string.str_426))
                 Spacer(Modifier.height(8.dp))
-                SourceDetailLabel(icon = Icons.Filled.Public, label = "كوكي Cloudflare")
+                SourceDetailLabel(icon = Icons.Filled.Public, label = stringResource(R.string.str_355))
             }
 
             Spacer(Modifier.width(10.dp))
@@ -534,7 +534,7 @@ private fun InfoFooterBanner() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            "تأكد من صحة مصادر المحتوى لضمان أفضل تجربة في التطبيق.",
+            stringResource(R.string.str_211),
             color = MangaColors.OnSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.weight(1f)

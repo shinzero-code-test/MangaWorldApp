@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.reader
 
 import android.app.Application
@@ -176,12 +179,12 @@ class ReaderViewModel @Inject constructor(
                             totalPages = localPages.size,
                             currentPage = 0,
                             chapterNumber = parseFallbackChapterNumber(chapterUrl),
-                            downloadMessage = "قراءة بدون إنترنت"
+                            downloadMessage = stringResource(R.string.read_offline)
                         )
                     }
                     beginSession(mangaId, chapterUrl)
                 } else {
-                    _state.update { it.copy(isLoading = false, error = "لا توجد صفحات محملة لهذا الفصل") }
+                    _state.update { it.copy(isLoading = false, error = stringResource(R.string.no_pages_loaded)) }
                 }
             }
             return
@@ -204,7 +207,7 @@ class ReaderViewModel @Inject constructor(
                         currentPage = 0,
                         chapterNumber = currentChapterNumber,
                         chapterTitle = chapterMeta?.title,
-                        downloadMessage = "قراءة بدون إنترنت"
+                        downloadMessage = stringResource(R.string.read_offline)
                     )
                 }
                 observeAnnotations(mangaId, chapterUrl)
@@ -335,7 +338,7 @@ class ReaderViewModel @Inject constructor(
                     ?: resolveDetailForChapter(st.mangaId, currentSource)?.title
                     ?: st.mangaId.substringAfter("_").ifBlank { st.mangaId }
             }
-            _state.update { it.copy(downloadInProgress = true, downloadProgress = 0f, downloadMessage = "بدء التنزيل...", activeDownloadTaskId = taskId) }
+            _state.update { it.copy(downloadInProgress = true, downloadProgress = 0f, downloadMessage = stringResource(R.string.starting_download), activeDownloadTaskId = taskId) }
             downloadQueueManager.enqueueAndRun(
                 taskId = taskId,
                 mangaId = st.mangaId,
@@ -488,11 +491,11 @@ class ReaderViewModel @Inject constructor(
                         resolver.update(it, contentValues, null, null)
                     }
                 }
-                _state.update { it.copy(downloadMessage = "تم حفظ الصفحة") }
+                _state.update { it.copy(downloadMessage = stringResource(R.string.reader_page_saved)) }
                 kotlinx.coroutines.delay(2000)
                 _state.update { it.copy(downloadMessage = null) }
             } catch (_: Exception) {
-                _state.update { it.copy(downloadMessage = "فشل حفظ الصفحة") }
+                _state.update { it.copy(downloadMessage = stringResource(R.string.str_337)) }
                 kotlinx.coroutines.delay(2000)
                 _state.update { it.copy(downloadMessage = null) }
             }

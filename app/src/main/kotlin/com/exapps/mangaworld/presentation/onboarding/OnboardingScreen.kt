@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.presentation.components.GradientButton
 import com.exapps.mangaworld.presentation.theme.rememberDominantColor
 import com.exapps.mangaworld.presentation.theme.MangaColors
@@ -38,29 +39,29 @@ val onboardingPages = listOf(
         icon = Icons.Filled.MenuBook,
         iconTint = MangaColors.PrimaryLight,
         iconBg = MangaColors.GlowPurple,
-        title = "اقرأ المانجا بلا حدود",
-        subtitle = "آلاف المانجا والمانهوا العربية من أفضل المصادر في مكان واحد"
+        title = stringResource(R.string.onboarding_read_title),
+        subtitle = stringResource(R.string.str_010)
     ),
     OnboardingPage(
         icon = Icons.Filled.Language,
         iconTint = MangaColors.Cyan,
         iconBg = MangaColors.GlowCyan,
-        title = "مصادر متعددة",
+        title = stringResource(R.string.onboarding_sources_title),
         subtitle = "Olympus Staff · Azora Moon · Manga Starz\nManga Sid · Meshmanga"
     ),
     OnboardingPage(
         icon = Icons.Filled.Download,
         iconTint = MangaColors.Green,
         iconBg = Color(0x2244BB44),
-        title = "حمّل واقرأ بلا إنترنت",
-        subtitle = "نزّل فصولك المفضلة وتمتع بالقراءة في أي مكان حتى بدون اتصال"
+        title = stringResource(R.string.onboarding_offline_title),
+        subtitle = stringResource(R.string.download_favorites_offline)
     ),
     OnboardingPage(
         icon = Icons.Filled.Tune,
         iconTint = MangaColors.Yellow,
         iconBg = Color(0x22FFDD00),
-        title = "تجربة قراءة مخصصة",
-        subtitle = "وضع التمرير العمودي للمانهوا، الأفقي للمانجا اليابانية، وكل ما بينهما"
+        title = stringResource(R.string.onboarding_custom_title),
+        subtitle = stringResource(R.string.str_443)
     )
 )
 
@@ -83,7 +84,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                 horizontalArrangement = Arrangement.End) {
                 AnimatedVisibility(!isLast) {
                     TextButton(onClick = onFinish) {
-                        Text("تخطي", color = MangaColors.Muted,
+                        Text(stringResource(R.string.onboarding_skip), color = MangaColors.Muted,
                             style = MaterialTheme.typography.bodyMedium)
                     }
                 }
@@ -120,7 +121,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
 
                 // Button
                 GradientButton(
-                    text = if (isLast) "ابدأ الآن" else "التالي",
+                    text = if (isLast) stringResource(R.string.onboarding_start) else stringResource(R.string.next),
                     onClick = {
                         if (isLast) onFinish()
                         else scope.launch {

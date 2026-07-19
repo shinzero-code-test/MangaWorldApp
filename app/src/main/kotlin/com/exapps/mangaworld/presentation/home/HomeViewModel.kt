@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.home
 
 import androidx.compose.runtime.Immutable
@@ -61,7 +64,7 @@ class HomeViewModel @Inject constructor(
                                 featured = emptyList(),
                                 latestChapters = emptyList(),
                                 trending = emptyList(),
-                                error = "فعّل مصدراً واحداً على الأقل من الإعدادات"
+                                error = stringResource(R.string.str_341)
                             )
                         }
                     } else {

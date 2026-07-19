@@ -65,7 +65,7 @@ class LoginViewModel @Inject constructor(
         val normalizedEmail = email.trim()
         _uiState.update { it.copy(email = normalizedEmail) }
         if (normalizedEmail.isBlank() || password.isBlank()) {
-            _uiState.update { it.copy(error = "أدخل البريد الإلكتروني وكلمة المرور") }
+            _uiState.update { it.copy(error = stringResource(R.string.auth_error_empty_fields)) }
             return
         }
         viewModelScope.launch {
@@ -75,7 +75,7 @@ class LoginViewModel @Inject constructor(
                 if (uid != null) {
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
-                    _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول. تحقق من البيانات.") }
+                    _uiState.update { it.copy(isLoading = false, error = stringResource(R.string.auth_error_login_failed)) }
                 }
             } catch (error: AccountMergeRequiredException) {
                 _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
@@ -88,7 +88,7 @@ class LoginViewModel @Inject constructor(
     fun signUpWithEmail(email: String, password: String, displayName: String = "", username: String = "") {
         val normalizedEmail = email.trim()
         if (normalizedEmail.isBlank() || password.isBlank()) {
-            _uiState.update { it.copy(error = "أدخل البريد الإلكتروني وكلمة المرور") }
+            _uiState.update { it.copy(error = stringResource(R.string.auth_error_empty_fields)) }
             return
         }
         if (displayName.isBlank()) {
@@ -96,12 +96,12 @@ class LoginViewModel @Inject constructor(
             return
         }
         if (username.isBlank()) {
-            _uiState.update { it.copy(error = "أدخل اسم المستخدم") }
+            _uiState.update { it.copy(error = stringResource(R.string.enter_username)) }
             return
         }
         val normalizedUsername = username.trim().lowercase()
         if (normalizedUsername.length !in 3..20 || !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$"))) {
-            _uiState.update { it.copy(error = "اسم المستخدم يجب أن يكون 3-20 حرف وأرقام وشرطات سفلية فقط") }
+            _uiState.update { it.copy(error = stringResource(R.string.str_108)) }
             return
         }
         viewModelScope.launch {
@@ -118,7 +118,7 @@ class LoginViewModel @Inject constructor(
                     )
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
-                    _uiState.update { it.copy(isLoading = false, error = "فشل إنشاء الحساب.") }
+                    _uiState.update { it.copy(isLoading = false, error = stringResource(R.string.auth_error_signup_failed)) }
                 }
             } catch (error: AccountMergeRequiredException) {
                 _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
@@ -138,7 +138,7 @@ class LoginViewModel @Inject constructor(
                     ensureProfileExists(uid)
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
-                    _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول بـ Google.") }
+                    _uiState.update { it.copy(isLoading = false, error = stringResource(R.string.str_335)) }
                 }
             } catch (error: AccountMergeRequiredException) {
                 _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
@@ -158,7 +158,7 @@ class LoginViewModel @Inject constructor(
                     ensureProfileExists(uid)
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
-                    _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول بـ Facebook.") }
+                    _uiState.update { it.copy(isLoading = false, error = stringResource(R.string.str_334)) }
                 }
             } catch (error: AccountMergeRequiredException) {
                 _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
@@ -209,11 +209,11 @@ class LoginViewModel @Inject constructor(
     fun sendPasswordReset(email: String) {
         val normalizedEmail = email.trim()
         if (normalizedEmail.isBlank()) {
-            _uiState.update { it.copy(error = "أدخل البريد الإلكتروني") }
+            _uiState.update { it.copy(error = stringResource(R.string.enter_email)) }
             return
         }
         if (!android.util.Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()) {
-            _uiState.update { it.copy(error = "البريد الإلكتروني غير صالح") }
+            _uiState.update { it.copy(error = stringResource(R.string.invalid_email)) }
             return
         }
         viewModelScope.launch {

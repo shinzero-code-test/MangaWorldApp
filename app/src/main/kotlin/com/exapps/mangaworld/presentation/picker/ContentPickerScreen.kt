@@ -39,7 +39,7 @@ fun ContentPickerScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("اختيار المانجا", color = MangaColors.OnSurface) },
+                title = { Text(stringResource(R.string.select_manga), color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
@@ -60,7 +60,7 @@ fun ContentPickerScreen(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("بحث عن مانجا...") },
+                placeholder = { Text(stringResource(R.string.search_manga)) },
                 leadingIcon = { Icon(Icons.Filled.Search, null) },
                 singleLine = true
             )
@@ -69,7 +69,7 @@ fun ContentPickerScreen(
 
             // Source selector
             Text(
-                "المصدر",
+                stringResource(R.string.source),
                 style = MaterialTheme.typography.labelLarge,
                 color = MangaColors.Cyan
             )

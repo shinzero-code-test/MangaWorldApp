@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.browse
 
 import androidx.lifecycle.ViewModel
@@ -24,7 +27,7 @@ data class BrowseUiState(
     val isGridView: Boolean = true,
     val enabledSourceIds: Set<String> = MangaSource.entries.map { it.id }.toSet(),
     val blockedKeywords: Set<String> = emptySet(),
-    val genres: List<String> = listOf("الكل")
+    val genres: List<String> = listOf(stringResource(R.string.browse_all))
 ) {
     val filters get() = SearchFilters(
         query = query,
@@ -58,7 +61,7 @@ class BrowseViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collectLatest { (enabledSources, blacklist, selectedSource) ->
                     val loaded = repo.getGenres(source = selectedSource, enabledSourceIds = enabledSources)
-                    val availableGenres = listOf("الكل") + loaded
+                    val availableGenres = listOf(stringResource(R.string.browse_all)) + loaded
                     _uiState.update {
                         it.copy(
                             enabledSourceIds = enabledSources,

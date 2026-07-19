@@ -168,7 +168,7 @@ fun LoginScreen(
             // Divider
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 HorizontalDivider(modifier = Modifier.weight(1f), color = MangaColors.SurfaceContainer)
-                Text("  أو  ", color = MangaColors.OnSurfaceVariant, fontSize = 13.sp)
+                Text(stringResource(R.string.str_001), color = MangaColors.OnSurfaceVariant, fontSize = 13.sp)
                 HorizontalDivider(modifier = Modifier.weight(1f), color = MangaColors.SurfaceContainer)
             }
             Spacer(modifier = Modifier.height(24.dp))
@@ -189,7 +189,7 @@ fun LoginScreen(
                         tint = Color.Unspecified
                     )
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text("متابعة باستخدام Google", color = MangaColors.OnSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.continue_google), color = MangaColors.OnSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -205,7 +205,7 @@ fun LoginScreen(
                 ) {
                     Text("f", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text("متابعة باستخدام Facebook", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.continue_facebook), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
 
                 Spacer(modifier = Modifier.height(28.dp))
@@ -259,7 +259,7 @@ private fun MangaWorldLogo(modifier: Modifier = Modifier) {
     ) {
         androidx.compose.foundation.Image(
             painter = painterResource(id = R.drawable.mangaworld_logo),
-            contentDescription = "MangaWorld",
+            contentDescription = stringResource(R.string.app_name),
             modifier = Modifier.size(72.dp)
         )
     }
@@ -321,7 +321,7 @@ fun MangaTextField(
             Spacer(modifier = Modifier.width(8.dp))
             Icon(
                 imageVector = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                contentDescription = if (passwordVisible) "إخفاء" else "إظهار",
+                contentDescription = if (passwordVisible) stringResource(R.string.hide) else stringResource(R.string.show),
                 tint = MangaColors.OnSurfaceVariant,
                 modifier = Modifier
                     .size(20.dp)

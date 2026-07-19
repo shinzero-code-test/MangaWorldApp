@@ -96,7 +96,7 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
             LargeTopAppBar(
                 title = {
                     Text(
-                        "قائمة التنزيلات",
+                        stringResource(R.string.download_list),
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.Bold
                     )
@@ -116,7 +116,7 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
                             IconButton(onClick = { showMenu = true }) {
                                 Icon(
                                     Icons.Filled.MoreVert,
-                                    contentDescription = "خيارات",
+                                    contentDescription = stringResource(R.string.options),
                                     tint = MangaColors.OnSurface
                                 )
                             }
@@ -125,23 +125,23 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
                                 onDismissRequest = { showMenu = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("إيقاف الكل", color = MangaColors.OnSurface) },
+                                    text = { Text(stringResource(R.string.pause_all), color = MangaColors.OnSurface) },
                                     leadingIcon = { Icon(Icons.Filled.Pause, null, tint = MangaColors.Yellow) },
                                     onClick = { viewModel.pauseAll(); showMenu = false }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("استئناف الكل", color = MangaColors.OnSurface) },
+                                    text = { Text(stringResource(R.string.resume_all), color = MangaColors.OnSurface) },
                                     leadingIcon = { Icon(Icons.Filled.PlayArrow, null, tint = MangaColors.Cyan) },
                                     onClick = { viewModel.resumeAll(); showMenu = false }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("إلغاء الكل", color = MangaColors.OnSurface) },
+                                    text = { Text(stringResource(R.string.clear_all), color = MangaColors.OnSurface) },
                                     leadingIcon = { Icon(Icons.Filled.Cancel, null, tint = MangaColors.Error) },
                                     onClick = { showCancelAllDialog = true; showMenu = false }
                                 )
                                 HorizontalDivider(color = MangaColors.Muted.copy(alpha = 0.2f))
                                 DropdownMenuItem(
-                                    text = { Text("مسح المكتملة", color = MangaColors.OnSurface) },
+                                    text = { Text(stringResource(R.string.clear_completed), color = MangaColors.OnSurface) },
                                     leadingIcon = { Icon(Icons.Filled.DeleteSweep, null, tint = MangaColors.Muted) },
                                     onClick = { viewModel.clearCompleted(); showMenu = false }
                                 )
@@ -243,13 +243,13 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
             containerColor = MangaColors.SurfaceContainer,
             titleContentColor = MangaColors.OnSurface,
             textContentColor = MangaColors.OnSurfaceVariant,
-            title = { Text("إلغاء جميع التنزيلات") },
-            text = { Text("هل تريد إلغاء جميع التنزيلات الجارية وفي الانتظار؟") },
+            title = { Text(stringResource(R.string.str_079)) },
+            text = { Text(stringResource(R.string.str_437)) },
             confirmButton = {
                 TextButton(
                     onClick = { viewModel.cancelAll(); showCancelAllDialog = false },
                     colors = ButtonDefaults.textButtonColors(contentColor = MangaColors.Error)
-                ) { Text("إلغاء الكل") }
+                ) { Text(stringResource(R.string.clear_all)) }
             },
             dismissButton = {
                 TextButton(
@@ -282,7 +282,7 @@ private fun EmptyState(modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                "سيظهر هنا أي فصل تقوم بتنزيله",
+                stringResource(R.string.downloaded_chapters_appear_here),
                 color = MangaColors.Muted.copy(alpha = 0.6f),
                 style = MaterialTheme.typography.bodySmall
             )
@@ -326,15 +326,15 @@ private fun MangaGroupHeader(
                 )
                 if (inProgressCount + queuedCount > 0) {
                     IconButton(onClick = onCancelAll, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Filled.Close, "إلغاء الكل", modifier = Modifier.size(18.dp), tint = MangaColors.Muted)
+                        Icon(Icons.Filled.Close, stringResource(R.string.clear_all), modifier = Modifier.size(18.dp), tint = MangaColors.Muted)
                     }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (inProgressCount > 0) StatusChip("$inProgressCount جاري", MangaColors.Cyan)
-                if (queuedCount > 0) StatusChip("$queuedCount انتظار", MangaColors.Yellow)
-                if (completedCount > 0) StatusChip("$completedCount مكتمل", MangaColors.Primary)
-                if (failedCount > 0) StatusChip("$failedCount فشل", MangaColors.Error)
+                if (inProgressCount > 0) StatusChip(stringResource(R.string.fmt_014, inProgressCount), MangaColors.Cyan)
+                if (queuedCount > 0) StatusChip(stringResource(R.string.fmt_016, queuedCount), MangaColors.Yellow)
+                if (completedCount > 0) StatusChip(stringResource(R.string.fmt_006, completedCount), MangaColors.Primary)
+                if (failedCount > 0) StatusChip(stringResource(R.string.fmt_011, failedCount), MangaColors.Error)
             }
             // Progress bar
             val total = totalChapters.coerceAtLeast(1)
@@ -346,7 +346,7 @@ private fun MangaGroupHeader(
                 trackColor = MangaColors.Background,
             )
             Text(
-                "$completedCount / $totalChapters فصل",
+                stringResource(R.string.fmt_009, completedCount, totalChapters),
                 style = MaterialTheme.typography.labelSmall,
                 color = MangaColors.Muted
             )
@@ -419,12 +419,12 @@ private fun ChapterDownloadCard(
             // Status text
             Text(
                 when (task.status) {
-                    "queued" -> "انتظار"
+                    "queued" -> stringResource(R.string.pending)
                     "running" -> "${(progress * 100).toInt()}%"
-                    "paused" -> "متوقف"
+                    "paused" -> stringResource(R.string.stopped)
                     "completed" -> "✓"
-                    "failed" -> "فشل"
-                    "cancelled" -> "ملغي"
+                    "failed" -> stringResource(R.string.str_331)
+                    "cancelled" -> stringResource(R.string.cancelled)
                     else -> task.status
                 },
                 style = MaterialTheme.typography.labelSmall,
@@ -435,17 +435,17 @@ private fun ChapterDownloadCard(
             // Action buttons
             if (onPause != null) {
                 IconButton(onClick = onPause, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Filled.Pause, "إيقاف", modifier = Modifier.size(16.dp), tint = MangaColors.Yellow)
+                    Icon(Icons.Filled.Pause, stringResource(R.string.pause), modifier = Modifier.size(16.dp), tint = MangaColors.Yellow)
                 }
             }
             if (onResume != null) {
                 IconButton(onClick = onResume, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Filled.PlayArrow, "استئناف", modifier = Modifier.size(16.dp), tint = MangaColors.Cyan)
+                    Icon(Icons.Filled.PlayArrow, stringResource(R.string.resume), modifier = Modifier.size(16.dp), tint = MangaColors.Cyan)
                 }
             }
             if (onRetry != null) {
                 IconButton(onClick = onRetry, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Filled.Refresh, "إعادة", modifier = Modifier.size(16.dp), tint = MangaColors.Cyan)
+                    Icon(Icons.Filled.Refresh, stringResource(R.string.retry_short), modifier = Modifier.size(16.dp), tint = MangaColors.Cyan)
                 }
             }
             if (onCancel != null) {
@@ -476,14 +476,14 @@ private fun CompletedChaptersSummary(count: Int, onCancelAll: () -> Unit) {
             Icon(Icons.Filled.CheckCircle, null, tint = MangaColors.Primary, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                "$count فصل مكتمل",
+                stringResource(R.string.fmt_007, count),
                 style = MaterialTheme.typography.bodySmall,
                 color = MangaColors.Primary,
                 modifier = Modifier.weight(1f)
             )
             TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(0.dp)) {
                 Text(
-                    if (expanded) "طي" else "عرض",
+                    if (expanded) stringResource(R.string.collapse) else stringResource(R.string.show_alt),
                     style = MaterialTheme.typography.labelSmall,
                     color = MangaColors.Muted
                 )

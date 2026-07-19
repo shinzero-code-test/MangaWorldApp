@@ -83,7 +83,7 @@ fun MangaCard(
             // New badge
             if (manga.isNew) {
                 Text(
-                    "جديد",
+                    stringResource(R.string.new),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                     modifier = Modifier
@@ -119,7 +119,7 @@ fun MangaCard(
             )
             if (manga.latestChapter != null) {
                 Text(
-                    "الفصل ${manga.latestChapter}",
+                    stringResource(R.string.fmt_059, manga.latestChapter),
                     style = MaterialTheme.typography.labelSmall,
                     color = MangaColors.PrimaryLight,
                     modifier = Modifier.padding(top = 2.dp)
@@ -161,9 +161,9 @@ fun MangaCover(
 @Composable
 fun TypeBadge(type: MangaType, modifier: Modifier = Modifier) {
     val (bg, text) = when (type) {
-        MangaType.MANGA  -> Color(0xCC000033) to "مانجا"    // 80% alpha for contrast
-        MangaType.MANHWA -> Color(0xCC001133) to "مانهوا"
-        MangaType.MANHUA -> Color(0xCC330011) to "مانهوا"
+        MangaType.MANGA  -> Color(0xCC000033) to stringResource(R.string.manga)    // 80% alpha for contrast
+        MangaType.MANHWA -> Color(0xCC001133) to stringResource(R.string.manhwa)
+        MangaType.MANHUA -> Color(0xCC330011) to stringResource(R.string.manhwa)
         else             -> return
     }
     Text(

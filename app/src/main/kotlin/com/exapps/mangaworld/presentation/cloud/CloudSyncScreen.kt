@@ -187,7 +187,7 @@ fun CloudSyncScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("السحابة والمزامنة", color = MangaColors.OnSurface) },
+                title = { Text(stringResource(R.string.str_159), color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
@@ -195,7 +195,7 @@ fun CloudSyncScreen(
                 },
                 actions = {
                     IconButton(onClick = viewModel::clearMessages) {
-                        Icon(Icons.Filled.Refresh, "تحديث", tint = MangaColors.OnSurface)
+                        Icon(Icons.Filled.Refresh, stringResource(R.string.update), tint = MangaColors.OnSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
@@ -337,12 +337,12 @@ private fun AccountCard(
                     Icon(Icons.Filled.Person, null, tint = MangaColors.Primary, modifier = Modifier.size(24.dp))
                 }
                 Column(Modifier.weight(1f)) {
-                    Text("الحساب", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
+                    Text(stringResource(R.string.account), fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
                     Text(
                         when {
-                            user == null -> "غير متصل"
-                            user.isAnonymous -> "ضيف محلي"
-                            else -> user.email ?: "متصل"
+                            user == null -> stringResource(R.string.offline)
+                            user.isAnonymous -> stringResource(R.string.local_guest)
+                            else -> user.email ?: stringResource(R.string.online)
                         },
                         color = MangaColors.OnSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall
@@ -372,7 +372,7 @@ private fun AccountCard(
                 OutlinedTextField(
                     value = email, onValueChange = onEmailChange,
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("البريد الإلكتروني") },
+                    placeholder = { Text(stringResource(R.string.settings_email)) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp)
                 )
@@ -398,7 +398,7 @@ private fun AccountCard(
                         shape = RoundedCornerShape(10.dp),
                         enabled = !isSigningIn
                     ) {
-                        Text("متابعة بـ Google")
+                        Text(stringResource(R.string.continue_google_alt))
                     }
                 }
             }
@@ -434,7 +434,7 @@ private fun ProfileCard(
                 Column(Modifier.weight(1f)) {
                     Text(stringResource(R.string.more_profile), fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
                     if (!badgeLabel.isNullOrBlank()) {
-                        Text("البادج: $badgeLabel", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.fmt_048, badgeLabel), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -449,7 +449,7 @@ private fun ProfileCard(
             OutlinedTextField(
                 value = bio, onValueChange = onBioChange,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("نبذة قصيرة") },
+                placeholder = { Text(stringResource(R.string.short_bio)) },
                 maxLines = 3,
                 shape = RoundedCornerShape(10.dp)
             )
@@ -504,7 +504,7 @@ private fun SyncActionsCard(
                 ) {
                     Icon(Icons.Filled.CloudUpload, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("رفع")
+                    Text(stringResource(R.string.upload))
                 }
                 OutlinedButton(
                     onClick = onPull,
@@ -514,24 +514,24 @@ private fun SyncActionsCard(
                 ) {
                     Icon(Icons.Filled.CloudDownload, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("استرجاع")
+                    Text(stringResource(R.string.restore))
                 }
             }
 
             if (!isSignedIn) {
-                Text("سجّل الدخول أولاً للمزامنة السحابية", color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.str_290), color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall)
             }
 
             // Restore preview
             restorePreview?.let { preview ->
                 HorizontalDivider(color = MangaColors.Muted.copy(alpha = 0.15f))
-                Text("معاينة الاستعادة", fontWeight = FontWeight.SemiBold, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.restore_preview), fontWeight = FontWeight.SemiBold, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SyncStat("محلي", preview.localFavorites, MangaColors.Cyan)
-                    SyncStat("سحابي", preview.remoteFavorites, MangaColors.Primary)
+                    SyncStat(stringResource(R.string.local), preview.localFavorites, MangaColors.Cyan)
+                    SyncStat(stringResource(R.string.cloud_alt), preview.remoteFavorites, MangaColors.Primary)
                 }
-                Text("المفضلة: ${preview.localFavorites} محلي / ${preview.remoteFavorites} سحابي", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                Text("السجل: ${preview.localHistory} محلي / ${preview.remoteHistory} سحابي", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.fmt_063, preview.localFavorites, preview.remoteFavorites), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.fmt_051, preview.localHistory, preview.remoteHistory), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
 
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     CloudRestoreStrategy.entries.forEach { strategy ->
@@ -539,9 +539,9 @@ private fun SyncActionsCard(
                             selected = preview.suggestedStrategy == strategy,
                             onClick = { onApplyRestore(strategy) },
                             label = { Text(when(strategy) {
-                                CloudRestoreStrategy.MERGE -> "دمج"
-                                CloudRestoreStrategy.REMOTE_OVERWRITE -> " الكتابة السحابية"
-                                CloudRestoreStrategy.KEEP_LOCAL -> "الاحتفاظ المحلي"
+                                CloudRestoreStrategy.MERGE -> stringResource(R.string.merge)
+                                CloudRestoreStrategy.REMOTE_OVERWRITE -> stringResource(R.string.str_002)
+                                CloudRestoreStrategy.KEEP_LOCAL -> stringResource(R.string.local_storage)
                             }, fontSize = 11.sp) },
                             shape = RoundedCornerShape(8.dp)
                         )
@@ -578,7 +578,7 @@ private fun NotificationsCard(
                 ) {
                     Icon(Icons.Filled.NotificationsActive, null, tint = MangaColors.Yellow, modifier = Modifier.size(24.dp))
                 }
-                Text("إشعارات المجتمع", fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
+                Text(stringResource(R.string.profile_community_notifications), fontWeight = FontWeight.Bold, color = MangaColors.OnSurface)
             }
 
             notifications.forEach { item ->

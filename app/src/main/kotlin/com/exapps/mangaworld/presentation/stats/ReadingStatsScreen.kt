@@ -35,7 +35,7 @@ fun ReadingStatsScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("إحصائيات القراءة", color = MangaColors.OnSurface) },
+                title = { Text(stringResource(R.string.reading_stats), color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
@@ -61,13 +61,13 @@ fun ReadingStatsScreen(
                 ) {
                     StatCard(
                         modifier = Modifier.weight(1f),
-                        title = "وقت القراءة",
+                        title = stringResource(R.string.reading_time),
                         value = "${state.totalReadingHours}h ${state.totalReadingMinutes}m",
                         color = MangaColors.Cyan
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
-                        title = "مانجا مقروءة",
+                        title = stringResource(R.string.read_manga),
                         value = "${state.totalMangaRead}",
                         color = MangaColors.GlowPurple
                     )
@@ -90,14 +90,14 @@ fun ReadingStatsScreen(
                 ) {
                     StatCard(
                         modifier = Modifier.weight(1f),
-                        title = "اليوم",
-                        value = "${state.todayPages} صفحة",
+                        title = stringResource(R.string.today),
+                        value = stringResource(R.string.fmt_043, state.todayPages),
                         color = MangaColors.PrimaryLight
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
-                        title = "هذا الأسبوع",
-                        value = "${state.thisWeekPages} صفحة",
+                        title = stringResource(R.string.this_week),
+                        value = stringResource(R.string.fmt_043, state.thisWeekPages),
                         color = MangaColors.Cyan
                     )
                 }
@@ -107,8 +107,8 @@ fun ReadingStatsScreen(
             item {
                 StatCard(
                     modifier = Modifier.fillMaxWidth(),
-                    title = "متوسط الصفحات/يوم",
-                    value = "${state.averagePagesPerDay} صفحة",
+                    title = stringResource(R.string.avg_pages_day),
+                    value = stringResource(R.string.fmt_043, state.averagePagesPerDay),
                     color = MangaColors.Muted
                 )
             }
@@ -117,7 +117,7 @@ fun ReadingStatsScreen(
             if (state.dailyStats.isNotEmpty()) {
                 item {
                     Text(
-                        "النشاط اليومي (آخر 30 يوم)",
+                        stringResource(R.string.str_194),
                         style = MaterialTheme.typography.titleMedium,
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.Bold
@@ -138,7 +138,7 @@ fun ReadingStatsScreen(
             if (state.dailyStats.isNotEmpty()) {
                 item {
                     Text(
-                        "التفاصيل اليومية",
+                        stringResource(R.string.daily_details),
                         style = MaterialTheme.typography.titleMedium,
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.Bold
@@ -210,18 +210,18 @@ private fun StreakCard(
             )
             Column {
                 Text(
-                    "سلسلة القراءة",
+                    stringResource(R.string.reading_sequence),
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.OnSurfaceVariant
                 )
                 Text(
-                    "$currentStreak يوم",
+                    stringResource(R.string.fmt_020, currentStreak),
                     style = MaterialTheme.typography.headlineMedium,
                     color = if (currentStreak > 0) MangaColors.GlowPurple else MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "أطول سلسلة: $longestStreak يوم",
+                    stringResource(R.string.fmt_045, longestStreak),
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.OnSurfaceVariant
                 )
@@ -282,12 +282,12 @@ private fun DailyStatRow(stat: com.exapps.mangaworld.core.data.DailyStat) {
             )
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    "${stat.pagesRead} صفحة",
+                    stringResource(R.string.fmt_043, stat.pagesRead),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MangaColors.Cyan
                 )
                 Text(
-                    "${stat.readingTimeMinutes} دقيقة",
+                    stringResource(R.string.fmt_039, stat.readingTimeMinutes),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MangaColors.OnSurfaceVariant
                 )

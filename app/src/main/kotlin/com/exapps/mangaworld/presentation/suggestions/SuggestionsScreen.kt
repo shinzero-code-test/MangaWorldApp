@@ -86,7 +86,7 @@ class SuggestionsViewModel @Inject constructor(
                 }
 
                 if (cachedMangas.isEmpty()) {
-                    errorMessage = "لا توجد مانجا كافية للتوصيات. قم بتصفح المانجا أولاً."
+                    errorMessage = stringResource(R.string.str_367)
                     isLoading = false
                     return@launch
                 }
@@ -106,7 +106,7 @@ class SuggestionsViewModel @Inject constructor(
                 }
                 suggestionsManager.updateSuggestions(mangaSuggestions)
             } catch (e: Exception) {
-                errorMessage = "فشل تحميل التوصيات: ${e.message}"
+                errorMessage = stringResource(R.string.fmt_075, e.message)
             }
             isLoading = false
         }
@@ -132,7 +132,7 @@ fun SuggestionsScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("اقتراحات لك", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.str_116), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
@@ -140,7 +140,7 @@ fun SuggestionsScreen(
                 },
                 actions = {
                     IconButton(onClick = { viewModel.loadSuggestions() }) {
-                        Icon(Icons.Filled.Refresh, "تحديث", tint = MangaColors.Cyan)
+                        Icon(Icons.Filled.Refresh, stringResource(R.string.update), tint = MangaColors.Cyan)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
@@ -186,8 +186,8 @@ fun SuggestionsScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text("📭", style = MaterialTheme.typography.displayMedium)
-                        Text("لا توجد اقتراحات بعد", color = MangaColors.OnSurfaceVariant)
-                        Text("تصفح المانجا واقرأ فصولاً لتحسين التوصيات", color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.no_suggestions_yet), color = MangaColors.OnSurfaceVariant)
+                        Text(stringResource(R.string.str_224), color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 else -> {
@@ -197,7 +197,7 @@ fun SuggestionsScreen(
                     ) {
                         item {
                             Text(
-                                "بناءً على ذوقك في القراءة",
+                                stringResource(R.string.based_on_reading_taste),
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MangaColors.OnSurfaceVariant
                             )

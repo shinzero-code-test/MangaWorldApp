@@ -42,7 +42,7 @@ fun ForgotPasswordScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("استعادة كلمة المرور", color = MangaColors.OnSurface) },
+                title = { Text(stringResource(R.string.reset_password), color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
@@ -69,7 +69,7 @@ fun ForgotPasswordScreen(
             Spacer(Modifier.height(20.dp))
 
             Text(
-                "أدخل بريدك الإلكتروني وسنرسل لك رابطاً لإعادة تعيين كلمة المرور",
+                stringResource(R.string.enter_email_for_reset),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MangaColors.OnSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -79,7 +79,7 @@ fun ForgotPasswordScreen(
             MangaTextField(
                 value = email,
                 onValueChange = { email = it },
-                placeholder = "البريد الإلكتروني",
+                placeholder = stringResource(R.string.settings_email),
                 leadingIcon = Icons.Filled.Email,
                 keyboardType = KeyboardType.Email,
                 imeAction = ImeAction.Done,
@@ -110,7 +110,7 @@ fun ForgotPasswordScreen(
                 if (isLoading) {
                     CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
                 } else {
-                    Text("إرسال رابط الاستعادة", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.str_047), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -128,7 +128,7 @@ fun ForgotPasswordScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "تحقق من بريدك الإلكتروني\nلقد أرسلنا رابطًا لإعادة تعيين كلمة المرور إلى \"$email\".\nيرجى فتح الرسالة والنقر على الرابط لإكمال العملية.\nاذا لم تجد الرسالة تحقق من صندوق spam.",
+                            stringResource(R.string.str_216)$email\stringResource(R.string.str_007),
                             modifier = Modifier.weight(1f),
                             color = MangaColors.OnSurface,
                             textAlign = TextAlign.Center,
@@ -137,7 +137,7 @@ fun ForgotPasswordScreen(
                     }
                 }
                 TextButton(onClick = onDismissSuccess) {
-                    Text("إخفاء الرسالة")
+                    Text(stringResource(R.string.hide_message))
                 }
             }
         }

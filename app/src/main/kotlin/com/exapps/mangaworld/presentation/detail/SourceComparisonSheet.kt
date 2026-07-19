@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.detail
 
 import androidx.compose.foundation.background
@@ -51,7 +54,7 @@ fun SourceComparisonSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "مقارنة المصادر",
+                    stringResource(R.string.compare_sources),
                     style = MaterialTheme.typography.titleLarge,
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold
@@ -64,7 +67,7 @@ fun SourceComparisonSheet(
             }
 
             Text(
-                "اختر المصدر للقراءة",
+                stringResource(R.string.choose_source_to_read),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MangaColors.OnSurfaceVariant
             )
@@ -138,7 +141,7 @@ private fun SourceCard(
                     )
                     if (isCurrentSource) {
                         Text(
-                            "(الحالي)",
+                            stringResource(R.string.str_005),
                             style = MaterialTheme.typography.labelSmall,
                             color = MangaColors.Cyan
                         )
@@ -170,7 +173,7 @@ private fun SourceCard(
                 chapterCount != null -> {
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            "$chapterCount فصل",
+                            stringResource(R.string.fmt_017, chapterCount),
                             style = MaterialTheme.typography.labelMedium,
                             color = MangaColors.Cyan,
                             fontWeight = FontWeight.Bold
@@ -178,7 +181,7 @@ private fun SourceCard(
                         if (onClick != null) {
                             Icon(
                                 Icons.Filled.CheckCircle,
-                                contentDescription = "اختيار",
+                                contentDescription = stringResource(R.string.select),
                                 tint = MangaColors.Cyan,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -187,7 +190,7 @@ private fun SourceCard(
                 }
                 else -> {
                     Text(
-                        "غير متاح",
+                        stringResource(R.string.unavailable),
                         style = MaterialTheme.typography.labelSmall,
                         color = MangaColors.Muted
                     )

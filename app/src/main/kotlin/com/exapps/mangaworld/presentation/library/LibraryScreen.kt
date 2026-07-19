@@ -44,7 +44,7 @@ fun LibraryScreen(
                 color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
             if (state.activeTab == LibraryTab.HISTORY && state.history.isNotEmpty()) {
                 IconButton(onClick = viewModel::clearHistory) {
-                    Icon(Icons.Filled.DeleteSweep, "مسح السجل", tint = MangaColors.Muted)
+                    Icon(Icons.Filled.DeleteSweep, stringResource(R.string.clear_history), tint = MangaColors.Muted)
                 }
             }
         }
@@ -108,8 +108,8 @@ private fun FavoritesContent(
         EmptyState(
             icon = Icons.Filled.BookmarkBorder,
             title = stringResource(R.string.library_empty_favorites),
-            subtitle = "أضف مانجا إلى مفضلتك لتجدها هنا",
-            action = { GradientButton("تصفح المانجا", onBrowse) },
+            subtitle = stringResource(R.string.library_empty_favorites_hint),
+            action = { GradientButton(stringResource(R.string.browse_manga), onBrowse) },
             modifier = Modifier.fillMaxSize()
         )
         return
@@ -156,7 +156,7 @@ private fun FavoriteCard(fav: FavoriteManga, onClick: () -> Unit, onRemove: () -
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false },
                     modifier = Modifier.background(MangaColors.SurfaceContainer)) {
                     DropdownMenuItem(
-                        text = { Text("إزالة من المفضلة", color = MaterialTheme.colorScheme.error) },
+                        text = { Text(stringResource(R.string.library_remove_favorite), color = MaterialTheme.colorScheme.error) },
                         leadingIcon = { Icon(Icons.Filled.BookmarkRemove, null, tint = MaterialTheme.colorScheme.error) },
                         onClick = { onRemove(); showMenu = false }
                     )
@@ -176,7 +176,7 @@ private fun FavoriteCard(fav: FavoriteManga, onClick: () -> Unit, onRemove: () -
                     trackColor = MangaColors.OutlineVariant
                 )
                 Spacer(Modifier.height(3.dp))
-                Text("${fav.readChapters}/${fav.totalChapters} فصل",
+                Text(stringResource(R.string.fmt_026, fav.readChapters, fav.totalChapters),
                     style = MaterialTheme.typography.labelSmall, color = MangaColors.Muted)
             }
         }
@@ -196,8 +196,8 @@ private fun HistoryContent(
         EmptyState(
             icon = Icons.Filled.History,
             title = stringResource(R.string.library_empty_history),
-            subtitle = "ابدأ القراءة لتظهر هنا",
-            action = { GradientButton("تصفح المانجا", onBrowse) },
+            subtitle = stringResource(R.string.start_reading_to_appear),
+            action = { GradientButton(stringResource(R.string.browse_manga), onBrowse) },
             modifier = Modifier.fillMaxSize()
         )
         return
@@ -233,7 +233,7 @@ private fun HistoryItem(item: ReadingHistoryItem, onClick: () -> Unit, onRemove:
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(4.dp))
             Text(
-                "الفصل ${item.lastChapterNumber.let { if (it == it.toInt().toFloat()) it.toInt().toString() else it.toString() }}",
+                stringResource(R.string.fmt_058, item.lastChapterNumber.let { if (it == it.toInt().toFloat()) it.toInt().toString() else it.toString() ),
                 style = MaterialTheme.typography.bodySmall, color = MangaColors.PrimaryLight
             )
             if (item.totalChapters > 0) {
@@ -256,7 +256,7 @@ private fun HistoryItem(item: ReadingHistoryItem, onClick: () -> Unit, onRemove:
             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false },
                 modifier = Modifier.background(MangaColors.SurfaceContainer)) {
                 DropdownMenuItem(
-                    text = { Text("حذف من السجل", color = MaterialTheme.colorScheme.error) },
+                    text = { Text(stringResource(R.string.delete_from_history), color = MaterialTheme.colorScheme.error) },
                     leadingIcon = { Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.error) },
                     onClick = { onRemove(); showMenu = false }
                 )

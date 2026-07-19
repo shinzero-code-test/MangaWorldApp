@@ -68,7 +68,7 @@ fun CollectionsScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("قوائمي", color = MangaColors.OnSurface) },
+                title = { Text(stringResource(R.string.library_custom_lists), color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
@@ -76,7 +76,7 @@ fun CollectionsScreen(
                 },
                 actions = {
                     IconButton(onClick = { showCreateDialog = true }) {
-                        Icon(Icons.Filled.Add, "إضافة", tint = MangaColors.Cyan)
+                        Icon(Icons.Filled.Add, stringResource(R.string.add), tint = MangaColors.Cyan)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
@@ -92,13 +92,13 @@ fun CollectionsScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "لا توجد قوائم بعد",
+                        stringResource(R.string.library_empty_lists),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MangaColors.OnSurfaceVariant
                     )
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = { showCreateDialog = true }) {
-                        Text("إنشاء قائمة جديدة")
+                        Text(stringResource(R.string.create_new_list))
                     }
                 }
             }
@@ -170,7 +170,7 @@ private fun CollectionCard(
                     )
                 }
                 Text(
-                    "${collection.mangaIds.size} مانجا",
+                    stringResource(R.string.fmt_034, collection.mangaIds.size),
                     style = MaterialTheme.typography.labelSmall,
                     color = MangaColors.Cyan
                 )
@@ -184,8 +184,8 @@ private fun CollectionCard(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("حذف القائمة") },
-            text = { Text("هل أنت متأكد من حذف \"${collection.name}\"؟") },
+            title = { Text(stringResource(R.string.delete_list)) },
+            text = { Text(stringResource(R.string.str_436)${collection.name}\"؟") },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete()
@@ -213,20 +213,20 @@ private fun CreateCollectionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("إنشاء قائمة جديدة") },
+        title = { Text(stringResource(R.string.create_new_list)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("اسم القائمة") },
+                    label = { Text(stringResource(R.string.list_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("الوصف (اختياري)") },
+                    label = { Text(stringResource(R.string.str_198)) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -236,7 +236,7 @@ private fun CreateCollectionDialog(
                 onClick = { onCreate(name, description) },
                 enabled = name.isNotBlank()
             ) {
-                Text("إنشاء")
+                Text(stringResource(R.string.create))
             }
         },
         dismissButton = {

@@ -85,7 +85,7 @@ fun NotificationCenterScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("مركز الإشعارات", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.notification_center), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
@@ -94,7 +94,7 @@ fun NotificationCenterScreen(
                 actions = {
                     if (unreadCount > 0) {
                         TextButton(onClick = viewModel::markAllRead) {
-                            Text("قراءة الكل", color = MangaColors.Cyan, style = MaterialTheme.typography.labelMedium)
+                            Text(stringResource(R.string.read_all), color = MangaColors.Cyan, style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 },
@@ -115,7 +115,7 @@ fun NotificationCenterScreen(
                 FilterChip(
                     selected = !unreadOnly,
                     onClick = { if (unreadOnly) viewModel.toggleUnreadOnly() },
-                    label = { Text("الكل") },
+                    label = { Text(stringResource(R.string.browse_all)) },
                     shape = RoundedCornerShape(10.dp)
                 )
                 FilterChip(
@@ -123,7 +123,7 @@ fun NotificationCenterScreen(
                     onClick = { if (!unreadOnly) viewModel.toggleUnreadOnly() },
                     label = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("غير المقروء")
+                            Text(stringResource(R.string.unread))
                             if (unreadCount > 0) {
                                 Spacer(Modifier.width(4.dp))
                                 Box(
@@ -154,7 +154,7 @@ fun NotificationCenterScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            if (unreadOnly) "لا توجد إشعارات غير مقروءة" else "لا توجد إشعارات حالياً",
+                            if (unreadOnly) stringResource(R.string.no_unread_notifications) else stringResource(R.string.no_notifications),
                             color = MangaColors.Muted,
                             style = MaterialTheme.typography.bodyLarge
                         )
@@ -206,11 +206,11 @@ private fun NotificationCard(
 
     val typeLabel = when (notification.type) {
         CommunityNotificationType.REPLY -> stringResource(R.string.community_reply)
-        CommunityNotificationType.MENTION -> "إشارة"
-        CommunityNotificationType.REVIEW_REACTION -> "تفاعل"
-        CommunityNotificationType.COMMENT_THREAD -> "مناقشة"
-        CommunityNotificationType.CHAT_MENTION -> "محادثة"
-        CommunityNotificationType.SYSTEM_ALERT -> "تنبيه"
+        CommunityNotificationType.MENTION -> stringResource(R.string.bookmark)
+        CommunityNotificationType.REVIEW_REACTION -> stringResource(R.string.interact)
+        CommunityNotificationType.COMMENT_THREAD -> stringResource(R.string.discussion_alt)
+        CommunityNotificationType.CHAT_MENTION -> stringResource(R.string.conversation)
+        CommunityNotificationType.SYSTEM_ALERT -> stringResource(R.string.alert)
     }
 
     Card(

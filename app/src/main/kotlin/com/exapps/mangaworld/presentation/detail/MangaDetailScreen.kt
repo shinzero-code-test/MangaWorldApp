@@ -144,13 +144,13 @@ fun MangaDetailScreen(
     if (state.showAddToListDialog) {
         AlertDialog(
             onDismissRequest = viewModel::hideAddToListDialog,
-            title = { Text("إضافة إلى قائمة", color = MangaColors.OnSurface) },
+            title = { Text(stringResource(R.string.add_to_list), color = MangaColors.OnSurface) },
             containerColor = MangaColors.Surface,
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (state.userLists.isEmpty()) {
                         Text(
-                            "أنشئ قائمة مخصصة أولاً من صفحة الملف الشخصي.",
+                            stringResource(R.string.create_list_first),
                             color = MangaColors.OnSurfaceVariant
                         )
                     } else {
@@ -301,9 +301,9 @@ private fun DetailContent(
                         SourceBadge(manga.source)
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            StatItem(Icons.Filled.MenuBook, "${manga.totalChapters}", "فصل")
+                            StatItem(Icons.Filled.MenuBook, "${manga.totalChapters}", stringResource(R.string.chapter))
                             if (manga.views != null)
-                                StatItem(Icons.Filled.Visibility, manga.views, "مشاهدة")
+                                StatItem(Icons.Filled.Visibility, manga.views, stringResource(R.string.watch))
                         }
                         Spacer(Modifier.height(6.dp))
                         Row(
@@ -321,7 +321,7 @@ private fun DetailContent(
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                "إضافة إلى قائمة",
+                                stringResource(R.string.add_to_list),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MangaColors.PrimaryLight
                             )
@@ -341,7 +341,7 @@ private fun DetailContent(
                     val firstUnread = sortedChapters.lastOrNull { !readChapters.contains(it.number) }
                         ?: sortedChapters.last()
                     GradientButton(
-                        text = "اقرأ الآن",
+                        text = stringResource(R.string.read_now),
                         onClick = { onChapterClick(firstUnread) },
                         modifier = Modifier.weight(1f).height(52.dp)
                     )
@@ -353,7 +353,7 @@ private fun DetailContent(
                         .size(50.dp)
                         .background(MangaColors.SurfaceContainer, RoundedCornerShape(12.dp))
                 ) {
-                    Icon(Icons.Filled.Download, "تنزيل", tint = MangaColors.Cyan)
+                    Icon(Icons.Filled.Download, stringResource(R.string.download), tint = MangaColors.Cyan)
                 }
                 // Library button — opens library bottom sheet
                 IconButton(
@@ -367,7 +367,7 @@ private fun DetailContent(
                 ) {
                     Icon(
                         Icons.Filled.AutoStories,
-                        "المكتبة",
+                        stringResource(R.string.library_section_title),
                         tint = if (isFavorite) Color.White else MangaColors.PrimaryLight
                     )
                 }
@@ -386,7 +386,7 @@ private fun DetailContent(
                         .size(50.dp)
                         .background(MangaColors.SurfaceContainer, RoundedCornerShape(12.dp))
                 ) {
-                    Icon(Icons.Filled.CompareArrows, "مقارنة المصادر", tint = MangaColors.Yellow)
+                    Icon(Icons.Filled.CompareArrows, stringResource(R.string.compare_sources), tint = MangaColors.Yellow)
                 }
             }
         }
@@ -411,7 +411,7 @@ private fun DetailContent(
                 Spacer(Modifier.height(12.dp))
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     Text(
-                        "القصة", style = MaterialTheme.typography.titleSmall,
+                        stringResource(R.string.story), style = MaterialTheme.typography.titleSmall,
                         color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(6.dp))
@@ -425,7 +425,7 @@ private fun DetailContent(
                     if (manga.description.length > 150) {
                         TextButton(onClick = { descExpanded = !descExpanded }) {
                             Text(
-                                if (descExpanded) "عرض أقل" else stringResource(R.string.view_more),
+                                if (descExpanded) stringResource(R.string.show_less) else stringResource(R.string.view_more),
                                 color = MangaColors.Cyan,
                                 style = MaterialTheme.typography.bodySmall
                             )
@@ -441,10 +441,10 @@ private fun DetailContent(
                 GradientDivider(Modifier.padding(horizontal = 16.dp))
                 Spacer(Modifier.height(12.dp))
                 Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("معلومات إضافية", style = MaterialTheme.typography.titleSmall, color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold)
-                    manga.authorName?.let { InfoRow("المؤلف", it) }
-                    manga.artistName?.let { InfoRow("الرسام", it) }
-                    if (manga.alternativeTitles.isNotEmpty()) InfoRow("أسماء بديلة", manga.alternativeTitles.joinToString(" • "))
+                    Text(stringResource(R.string.additional_info), style = MaterialTheme.typography.titleSmall, color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold)
+                    manga.authorName?.let { InfoRow(stringResource(R.string.author), it) }
+                    manga.artistName?.let { InfoRow(stringResource(R.string.artist), it) }
+                    if (manga.alternativeTitles.isNotEmpty()) InfoRow(stringResource(R.string.alternative_names), manga.alternativeTitles.joinToString(" • "))
                 }
                 Spacer(Modifier.height(12.dp))
             }
@@ -457,7 +457,7 @@ private fun DetailContent(
                 GradientDivider(Modifier.padding(horizontal = 16.dp))
                 Spacer(Modifier.height(12.dp))
                 Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("أعمال مشابهة", style = MaterialTheme.typography.titleSmall, color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.similar_works), style = MaterialTheme.typography.titleSmall, color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold)
                     manga.relatedManga.take(8).forEach { item ->
                         Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
                             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -466,7 +466,7 @@ private fun DetailContent(
                                     Text(item.source.displayName, color = MangaColors.OnSurfaceVariant)
                                 }
                                 OutlinedButton(onClick = { onOpenOtherSource(item.source.id, item.slug) }) {
-                                    Text("فتح")
+                                    Text(stringResource(R.string.open))
                                 }
                             }
                         }
@@ -485,7 +485,7 @@ private fun DetailContent(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    "الفصول (${sortedChapters.size})",
+                    stringResource(R.string.fmt_061, sortedChapters.size),
                     style = MaterialTheme.typography.titleSmall,
                     color = MangaColors.OnSurface, fontWeight = FontWeight.Bold
                 )
@@ -500,7 +500,7 @@ private fun DetailContent(
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                "تنزيل",
+                                stringResource(R.string.download),
                                 color = MangaColors.Cyan,
                                 style = MaterialTheme.typography.labelSmall
                             )
@@ -510,7 +510,7 @@ private fun DetailContent(
                         Icon(
                             if (chaptersReversed) Icons.Filled.KeyboardArrowDown
                             else Icons.Filled.KeyboardArrowUp,
-                            "ترتيب", tint = MangaColors.Cyan
+                            stringResource(R.string.sort), tint = MangaColors.Cyan
                         )
                     }
                 }
@@ -523,7 +523,7 @@ private fun DetailContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
-                placeholder = { Text("بحث في الفصول...", style = MaterialTheme.typography.bodySmall) },
+                placeholder = { Text(stringResource(R.string.search_chapters), style = MaterialTheme.typography.bodySmall) },
                 leadingIcon = { Icon(Icons.Filled.Search, null, modifier = Modifier.size(18.dp)) },
                 trailingIcon = {
                     if (chapterSearchQuery.isNotEmpty()) {
@@ -555,13 +555,13 @@ private fun DetailContent(
                 TextButton(onClick = onMarkAllRead) {
                     Icon(Icons.Filled.DoneAll, null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("تحديد الكل كمقروء ($totalCount)", style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(R.string.fmt_066, totalCount), style = MaterialTheme.typography.labelSmall)
                 }
                 if (readCount > 0) {
                     TextButton(onClick = onMarkAllUnread) {
                         Icon(Icons.Filled.RemoveDone, null, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("إلغاء تحديد الكل ($readCount)", style = MaterialTheme.typography.labelSmall)
+                        Text(stringResource(R.string.fmt_046, readCount), style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
@@ -635,7 +635,7 @@ private fun ChapterItem(
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(
-                    "الفصل ${chapter.displayNumber}",
+                    stringResource(R.string.fmt_059, chapter.displayNumber),
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (isRead) MangaColors.Muted else MangaColors.OnSurface,
                     fontWeight = FontWeight.Medium
@@ -663,7 +663,7 @@ private fun ChapterItem(
                     ) {
                         Icon(Icons.Filled.Lock, null, modifier = Modifier.size(10.dp), tint = MangaColors.Yellow)
                         Spacer(Modifier.width(3.dp))
-                        Text("مدفوع", style = MaterialTheme.typography.labelSmall, color = MangaColors.Yellow)
+                        Text(stringResource(R.string.paid), style = MaterialTheme.typography.labelSmall, color = MangaColors.Yellow)
                     }
                 }
             }
@@ -684,13 +684,13 @@ private fun ChapterItem(
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        Icons.Filled.Download, "تنزيل الفصل",
+                        Icons.Filled.Download, stringResource(R.string.download_chapter),
                         modifier = Modifier.size(18.dp), tint = MangaColors.Muted
                     )
                 }
             }
             IconButton(onClick = onOpenChapterComments, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.Forum, "تعليقات الفصل", modifier = Modifier.size(18.dp), tint = MangaColors.Muted)
+                Icon(Icons.Filled.Forum, stringResource(R.string.str_230), modifier = Modifier.size(18.dp), tint = MangaColors.Muted)
             }
         }
     }
@@ -711,18 +711,18 @@ private fun DownloadOptionsDialog(
         onDismissRequest = onDismiss,
         containerColor = MangaColors.Surface,
         title = {
-            Text("خيارات التنزيل", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.download_options), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "اختر الفصول التي تريد تنزيلها للقراءة بدون إنترنت.",
+                    stringResource(R.string.choose_chapters_for_offline),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MangaColors.OnSurfaceVariant
                 )
                 if (allCount == 0) {
                     Text(
-                        "جميع الفصول محملة بالفعل ✓",
+                        stringResource(R.string.all_chapters_downloaded),
                         style = MaterialTheme.typography.bodySmall,
                         color = MangaColors.Primary
                     )
@@ -739,7 +739,7 @@ private fun DownloadOptionsDialog(
                     ) {
                         Icon(Icons.Filled.Download, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("تنزيل جميع الفصول ($allCount)")
+                        Text(stringResource(R.string.fmt_070, allCount))
                     }
                 }
                 if (unreadCount > 0) {
@@ -750,7 +750,7 @@ private fun DownloadOptionsDialog(
                     ) {
                         Icon(Icons.Filled.BookmarkAdd, null, modifier = Modifier.size(16.dp), tint = MangaColors.Cyan)
                         Spacer(Modifier.width(6.dp))
-                        Text("تنزيل غير المقروءة ($unreadCount)", color = MangaColors.Cyan)
+                        Text(stringResource(R.string.fmt_071, unreadCount), color = MangaColors.Cyan)
                     }
                 }
                 TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
@@ -819,11 +819,11 @@ private fun DetailShimmer() {
 private fun CloudflareRequired(onSolve: () -> Unit) {
     EmptyState(
         icon = Icons.Filled.Shield,
-        title = "تحقق Cloudflare مطلوب",
-        subtitle = "يحتاج هذا المصدر إلى التحقق من المتصفح. اضغط لحل التحدي ثم ستُفتح المانجا تلقائياً.",
+        title = stringResource(R.string.search_cloudflare_required),
+        subtitle = stringResource(R.string.str_452),
         action = {
             GradientButton(
-                text = "حل تحدي Cloudflare",
+                text = stringResource(R.string.solve_cloudflare),
                 onClick = onSolve,
                 modifier = androidx.compose.ui.Modifier.padding(horizontal = 32.dp)
             )

@@ -113,10 +113,10 @@ sealed class Screen(val route: String) {
 }
 
 val bottomNavItems: List<Triple<Screen, String, ImageVector>> = listOf(
-    Triple(Screen.Home,         "الرئيسية",     Icons.Filled.Home),
-    Triple(Screen.Browse,       "تصفح",         Icons.Filled.GridView),
+    Triple(Screen.Home,         stringResource(R.string.home),     Icons.Filled.Home),
+    Triple(Screen.Browse,       stringResource(R.string.browse),         Icons.Filled.GridView),
     Triple(Screen.Search,       stringResource(R.string.search),          Icons.Filled.Search),
-    Triple(Screen.Library,      "المكتبة",      Icons.Filled.BookmarkBorder),
+    Triple(Screen.Library,      stringResource(R.string.library_section_title),      Icons.Filled.BookmarkBorder),
     Triple(Screen.More,         stringResource(R.string.more_title),       Icons.Filled.MoreHoriz),
 )
 
@@ -201,7 +201,7 @@ fun MangaNavGraph(
             route = Screen.CommunityChat.route,
             arguments = listOf(
                 navArgument("roomId") { type = NavType.StringType; defaultValue = "global" },
-                navArgument("title") { type = NavType.StringType; defaultValue = "الدردشة المباشرة" }
+                navArgument("title") { type = NavType.StringType; defaultValue = stringResource(R.string.live_chat) }
             )
         ) {
             CommunityChatScreen(onBack = { navController.popBackStack() })
@@ -592,7 +592,7 @@ fun MangaNavGraph(
             )
         ) {
             val mangaId = it.arguments?.getString("mangaId") ?: "global"
-            val slug = it.arguments?.getString("slug") ?: "الدردشة"
+            val slug = it.arguments?.getString("slug") ?: stringResource(R.string.chat)
             CommunityScreen(
                 onBack = { navController.popBackStack() },
                 onOpenChat = { navController.navigate(Screen.CommunityChat.createRoute(mangaId, slug)) },

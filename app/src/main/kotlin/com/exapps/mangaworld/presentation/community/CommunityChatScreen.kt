@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.community
 
 import androidx.compose.foundation.background
@@ -61,7 +64,7 @@ class CommunityChatViewModel @Inject constructor(
     private val remoteConfigManager: FirebaseRemoteConfigManager
 ) : ViewModel() {
     val roomId: String = java.net.URLDecoder.decode(savedStateHandle["roomId"] ?: "global", "UTF-8")
-    val title: String = java.net.URLDecoder.decode(savedStateHandle["title"] ?: "الدردشة المباشرة", "UTF-8")
+    val title: String = java.net.URLDecoder.decode(savedStateHandle["title"] ?: stringResource(R.string.live_chat), "UTF-8")
     val messages = communityRepository.observeChatMessages(roomId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -125,7 +128,7 @@ fun CommunityChatScreen(
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = message, onValueChange = { message = it }, modifier = Modifier.weight(1f), label = { Text("اكتب رسالة") })
+                OutlinedTextField(value = message, onValueChange = { message = it }, modifier = Modifier.weight(1f), label = { Text(stringResource(R.string.type_message)) })
                 IconButton(onClick = { if (message.isNotBlank()) { viewModel.send(message); message = "" } }) {
                     Icon(Icons.Filled.Send, null, tint = MangaColors.Cyan)
                 }

@@ -103,12 +103,12 @@ private fun CloudflareWebView(
             IconButton(onClick = onClose) {
                 Icon(Icons.Filled.Close, stringResource(R.string.close), tint = Color.White)
             }
-            Text("تحقق من الهوية — $domain",
+            Text(stringResource(R.string.fmt_067, domain),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MangaColors.OnSurface,
                 modifier = Modifier.weight(1f))
             IconButton(onClick = { webViewRef?.reload() }) {
-                Icon(Icons.Filled.Refresh, "إعادة تحميل", tint = MangaColors.Cyan)
+                Icon(Icons.Filled.Refresh, stringResource(R.string.reload_alt), tint = MangaColors.Cyan)
             }
         }
 

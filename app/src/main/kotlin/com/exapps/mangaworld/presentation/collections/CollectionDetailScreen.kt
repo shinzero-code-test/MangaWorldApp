@@ -89,7 +89,7 @@ fun CollectionDetailScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text(collection?.name ?: "قائمة", color = MangaColors.OnSurface) },
+                title = { Text(collection?.name ?: stringResource(R.string.list), color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
@@ -104,9 +104,9 @@ fun CollectionDetailScreen(
         if (mangaIds.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("القائمة فارغة", style = MaterialTheme.typography.bodyLarge, color = MangaColors.OnSurfaceVariant)
+                    Text(stringResource(R.string.list_empty), style = MaterialTheme.typography.bodyLarge, color = MangaColors.OnSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
-                    Text("أضف مانجا من صفحة التفاصيل", style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
+                    Text(stringResource(R.string.add_manga_from_details), style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
                 }
             }
         } else {
@@ -200,13 +200,13 @@ private fun CollectionMangaCard(
         AlertDialog(
             onDismissRequest = { showRemoveConfirm = false },
             containerColor = MangaColors.Surface,
-            title = { Text("إزالة من القائمة", color = MangaColors.OnSurface) },
-            text = { Text("إزالة \"$title\" من هذه القائمة؟", color = MangaColors.OnSurfaceVariant) },
+            title = { Text(stringResource(R.string.remove_from_list), color = MangaColors.OnSurface) },
+            text = { Text(stringResource(R.string.str_049)$title\stringResource(R.string.str_004), color = MangaColors.OnSurfaceVariant) },
             confirmButton = {
                 Button(
                     onClick = { showRemoveConfirm = false; onRemove() },
                     colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Error)
-                ) { Text("إزالة") }
+                ) { Text(stringResource(R.string.remove)) }
             },
             dismissButton = {
                 TextButton(onClick = { showRemoveConfirm = false }) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) }

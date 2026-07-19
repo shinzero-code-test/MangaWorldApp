@@ -67,7 +67,7 @@ fun ModerationDashboardScreen(onBack: () -> Unit, onOpenDashboard: () -> Unit = 
         }
 
         Card(colors = CardDefaults.cardColors(containerColor = MangaColors.Yellow.copy(alpha = 0.1f)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Text("لحل البلاغات أو اتخاذ إجراء، استخدم لوحة التحكم على الويب.", color = MangaColors.Yellow, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp))
+            Text(stringResource(R.string.moderation_use_dashboard), color = MangaColors.Yellow, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp))
         }
 
         LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -82,9 +82,9 @@ fun ModerationDashboardScreen(onBack: () -> Unit, onOpenDashboard: () -> Unit = 
 private fun ModerationReportCard(report: ModerationReport) {
     Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("بلاغ #${report.id.take(6)}", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.fmt_065, report.id.take(6)), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
             Text(report.reason, color = MangaColors.OnSurfaceVariant)
-            Text("الحالة: ${report.status}", color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
+            Text(stringResource(R.string.fmt_049, report.status), color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
         }
     }
 }

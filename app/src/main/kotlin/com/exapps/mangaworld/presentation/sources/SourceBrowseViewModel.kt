@@ -1,3 +1,6 @@
+import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
+
 package com.exapps.mangaworld.presentation.sources
 
 import androidx.lifecycle.SavedStateHandle
@@ -147,7 +150,7 @@ class SourceBrowseViewModel @Inject constructor(
                 )
             }
             else -> {
-                _uiState.value = _uiState.value.copy(errorText = e.message ?: "خطأ غير معروف", isLoading = false)
+                _uiState.value = _uiState.value.copy(errorText = e.message ?: stringResource(R.string.unknown_error), isLoading = false)
             }
         }
     }

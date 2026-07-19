@@ -51,7 +51,7 @@ fun LibraryBottomSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "المكتبة",
+                    stringResource(R.string.library_section_title),
                     style = MaterialTheme.typography.titleLarge,
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold
@@ -89,13 +89,13 @@ fun LibraryBottomSheet(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        if (isFavourite) "في المفضلة" else "إضافة إلى المفضلة",
+                        if (isFavourite) stringResource(R.string.in_favorites) else stringResource(R.string.add_to_favorites),
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        if (isFavourite) "انقر لإزالة من المفضلة" else "انقر للإضافة",
+                        if (isFavourite) stringResource(R.string.tap_remove_favorite) else stringResource(R.string.tap_to_add),
                         color = MangaColors.Muted,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -111,7 +111,7 @@ fun LibraryBottomSheet(
 
             // Status label
             Text(
-                "قائمة القراءة",
+                stringResource(R.string.reading_list),
                 color = MangaColors.OnSurface,
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.bodyMedium
@@ -121,11 +121,11 @@ fun LibraryBottomSheet(
 
             // Status buttons in 2-column grid
             val statuses = listOf(
-                ReadingListStatus.READING to Pair(Icons.Filled.AutoStories, "أقرأها الآن"),
-                ReadingListStatus.COMPLETED to Pair(Icons.Filled.CheckCircle, "تم قراءتها"),
-                ReadingListStatus.PLAN_TO_READ to Pair(Icons.Filled.Schedule, "أرغب بقراءتها"),
-                ReadingListStatus.ON_HOLD to Pair(Icons.Filled.PauseCircle, "أكملها لاحقاً"),
-                ReadingListStatus.DROPPED to Pair(Icons.Filled.Cancel, "لا أرغب بقراءتها")
+                ReadingListStatus.READING to Pair(Icons.Filled.AutoStories, stringResource(R.string.library_reading)),
+                ReadingListStatus.COMPLETED to Pair(Icons.Filled.CheckCircle, stringResource(R.string.library_read)),
+                ReadingListStatus.PLAN_TO_READ to Pair(Icons.Filled.Schedule, stringResource(R.string.library_plan_to_read)),
+                ReadingListStatus.ON_HOLD to Pair(Icons.Filled.PauseCircle, stringResource(R.string.library_on_hold)),
+                ReadingListStatus.DROPPED to Pair(Icons.Filled.Cancel, stringResource(R.string.library_dropped))
             )
 
             val rows = statuses.chunked(2)

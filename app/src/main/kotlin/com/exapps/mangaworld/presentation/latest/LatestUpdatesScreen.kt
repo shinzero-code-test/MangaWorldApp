@@ -126,7 +126,7 @@ class LatestUpdatesViewModel @Inject constructor(
                     next.copy(items = filterItems(next))
                 }
             }.onFailure { e ->
-                _state.update { it.copy(isLoading = false, error = e.message ?: "تعذر تحميل التحديثات") }
+                _state.update { it.copy(isLoading = false, error = e.message ?: stringResource(R.string.str_229)) }
             }
 
             if (result.isSuccess) {
@@ -180,13 +180,13 @@ fun LatestUpdatesScreen(
                 Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = MangaColors.OnSurface)
             }
             Text(
-                text = "أحدث التحديثات",
+                text = stringResource(R.string.shortcut_latest_short),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MangaColors.OnSurface
             )
             IconButton(onClick = viewModel::refresh) {
-                Icon(Icons.Filled.Refresh, contentDescription = "تحديث", tint = MangaColors.OnSurface)
+                Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.update), tint = MangaColors.OnSurface)
             }
         }
 
@@ -201,7 +201,7 @@ fun LatestUpdatesScreen(
             FilterChip(
                 selected = state.selectedSource == null,
                 onClick = { viewModel.setSource(null) },
-                label = { Text("الكل") }
+                label = { Text(stringResource(R.string.browse_all)) }
             )
             state.availableSources.forEach { src ->
                 FilterChip(
@@ -213,7 +213,7 @@ fun LatestUpdatesScreen(
             FilterChip(
                 selected = state.unreadOnly,
                 onClick = { viewModel.setUnreadOnly(!state.unreadOnly) },
-                label = { Text("غير المقروء") }
+                label = { Text(stringResource(R.string.unread)) }
             )
         }
 
@@ -226,8 +226,8 @@ fun LatestUpdatesScreen(
             }
             state.items.isEmpty() -> EmptyState(
                 icon = Icons.Filled.Refresh,
-                title = "لا توجد تحديثات حالياً",
-                subtitle = state.error ?: "جرّب التحديث لاحقاً",
+                title = stringResource(R.string.no_updates_yet),
+                subtitle = state.error ?: stringResource(R.string.try_later),
                 modifier = Modifier.fillMaxSize()
             )
             else -> LazyColumn(
@@ -267,7 +267,7 @@ fun LatestUpdatesScreen(
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    text = "الفصل ${if (item.chapterNumber == item.chapterNumber.toInt().toFloat()) item.chapterNumber.toInt() else item.chapterNumber}",
+                                    text = stringResource(R.string.fmt_059, if (item.chapterNumber == item.chapterNumber.toInt().toFloat()) item.chapterNumber.toInt() else item.chapterNumber),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MangaColors.PrimaryLight
                                 )
