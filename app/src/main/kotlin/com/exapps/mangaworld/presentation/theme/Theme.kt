@@ -39,19 +39,31 @@ object MangaColors {
     val CompletedColor   = Color(0xFF8888AA)
     val HiatusColor      = Orange
 
-    // Backward-compatible aliases — these are now theme-aware via LocalThemeColors
-    // but kept here so existing code compiles. Prefer themeColors() in new code.
+    // ─── DEPRECATED: Theme-dependent static vals ──────────────────────────────
+    // These always resolve to DarkThemeColors. Use themeColors() or mangaColors() instead.
+    @Deprecated("Use themeColors().Background or mangaColors().Background", ReplaceWith("themeColors().Background"))
     val Background       = DarkThemeColors.Background
+    @Deprecated("Use themeColors().Surface or mangaColors().Surface", ReplaceWith("themeColors().Surface"))
     val Surface          = DarkThemeColors.Surface
+    @Deprecated("Use themeColors().SurfaceContainer or mangaColors().SurfaceContainer", ReplaceWith("themeColors().SurfaceContainer"))
     val SurfaceContainer = DarkThemeColors.SurfaceContainer
+    @Deprecated("Use themeColors().SurfaceHigh or mangaColors().SurfaceHigh", ReplaceWith("themeColors().SurfaceHigh"))
     val SurfaceHigh      = DarkThemeColors.SurfaceHigh
+    @Deprecated("Use themeColors().SurfaceHighest or mangaColors().SurfaceHighest", ReplaceWith("themeColors().SurfaceHighest"))
     val SurfaceHighest   = DarkThemeColors.SurfaceHighest
+    @Deprecated("Use themeColors().CardBg or mangaColors().CardBg", ReplaceWith("themeColors().CardBg"))
     val CardBg           = DarkThemeColors.CardBg
+    @Deprecated("Use themeColors().OnSurface or mangaColors().OnSurface", ReplaceWith("themeColors().OnSurface"))
     val OnSurface        = DarkThemeColors.OnSurface
+    @Deprecated("Use themeColors().OnSurfaceVariant or mangaColors().OnSurfaceVariant", ReplaceWith("themeColors().OnSurfaceVariant"))
     val OnSurfaceVariant = DarkThemeColors.OnSurfaceVariant
+    @Deprecated("Use themeColors().Muted or mangaColors().Muted", ReplaceWith("themeColors().Muted"))
     val Muted            = DarkThemeColors.Muted
+    @Deprecated("Use themeColors().MutedLight or mangaColors().MutedLight", ReplaceWith("themeColors().MutedLight"))
     val MutedLight       = DarkThemeColors.MutedLight
+    @Deprecated("Use themeColors().OutlineVariant or mangaColors().OutlineVariant", ReplaceWith("themeColors().OutlineVariant"))
     val OutlineVariant   = DarkThemeColors.OutlineVariant
+    @Deprecated("Use themeColors().DividerColor or mangaColors().DividerColor", ReplaceWith("themeColors().DividerColor"))
     val DividerColor     = DarkThemeColors.DividerColor
 }
 
@@ -85,7 +97,7 @@ private val DarkThemeColors = ThemeColors(
     OnSurface        = Color(0xFFE4E1ED),
     OnSurfaceVariant = Color(0xFF9494B8),
     Muted            = Color(0xFF666680),
-    MutedLight       = Color(0xFFAAAAACC),
+    MutedLight       = Color(0xFFAAAACC),
     OutlineVariant   = Color(0xFF494455),
     DividerColor     = Color(0xFF1A1A2E)
 )
@@ -140,12 +152,26 @@ private val LightColorScheme = lightColorScheme(
     onPrimary         = Color(0xFFFFFFFF),
     primaryContainer  = Color(0xFFEDE7FF),
     onPrimaryContainer= Color(0xFF20005F),
+    secondary         = Color(0xFF006B73),
+    onSecondary       = Color(0xFFFFFFFF),
+    secondaryContainer= Color(0xFFB2EEF8),
+    onSecondaryContainer = Color(0xFF002025),
+    tertiary          = Color(0xFF8C3256),
+    onTertiary        = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFFFD9E3),
+    error             = Color(0xFFBA1A1A),
+    onError           = Color(0xFFFFFFFF),
     background        = Color(0xFFFBF8FF),
     onBackground      = Color(0xFF1C1B1F),
     surface           = Color(0xFFFBF8FF),
     onSurface         = Color(0xFF1C1B1F),
     surfaceVariant    = Color(0xFFE7E0EC),
     onSurfaceVariant  = Color(0xFF49454F),
+    outline           = Color(0xFF7A7581),
+    outlineVariant    = Color(0xFFCAC4D0),
+    surfaceContainer  = Color(0xFFF4F0FA),
+    surfaceContainerHigh = Color(0xFFEAE5F0),
+    surfaceContainerHighest = Color(0xFFDDD8E3),
 )
 
 // ─── Typography ───────────────────────────────────────────────────────────────
@@ -227,3 +253,14 @@ fun MangaWorldTheme(
 /** Access theme-aware colors from any composable */
 @Composable
 fun themeColors(): ThemeColors = LocalThemeColors.current
+
+/**
+ * Theme-aware replacement for the static MangaColors surface/text vals.
+ * Provides the same color roles as MangaColors.Background, MangaColors.Surface, etc.
+ * but adapts to the current theme (light/dark/dynamic).
+ *
+ * Usage: val colors = mangaColors()
+ *        Box(Modifier.background(colors.background))
+ */
+@Composable
+fun mangaColors() = LocalThemeColors.current
