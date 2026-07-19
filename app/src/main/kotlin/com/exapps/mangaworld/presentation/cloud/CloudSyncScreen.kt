@@ -242,8 +242,14 @@ fun CloudSyncScreen(
                         Text(
                             state.errorMessage ?: state.statusMessage ?: "",
                             color = if (state.errorMessage != null) MangaColors.Error else MangaColors.OnSurface,
-                            style = MaterialTheme.typography.bodySmall
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f)
                         )
+                        if (state.errorMessage != null && !state.busy) {
+                            TextButton(onClick = { viewModel.clearMessages() }) {
+                                Text("إغلاق", color = MangaColors.Error, style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
                     }
                 }
             }

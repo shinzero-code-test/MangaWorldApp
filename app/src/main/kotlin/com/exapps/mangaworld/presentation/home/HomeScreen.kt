@@ -113,18 +113,30 @@ fun HomeScreen(
                 }
 
                 if (useLatestGrid) {
-                    item {
-                        LatestChapterGrid(
-                            items = state.latestChapters.take(10),
-                            onMangaClick = { item -> onMangaClick(item.source.id, item.mangaSlug) }
-                        )
+                    if (state.latestChapters.isEmpty()) {
+                        item {
+                            Text("لا توجد فصول جديدة حالياً", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                        }
+                    } else {
+                        item {
+                            LatestChapterGrid(
+                                items = state.latestChapters.take(10),
+                                onMangaClick = { item -> onMangaClick(item.source.id, item.mangaSlug) }
+                            )
+                        }
                     }
                 } else {
-                    items(state.latestChapters.take(15), key = { "${it.source.id}_${it.chapterUrl}" }) { item ->
-                        LatestChapterRow(
-                            item = item,
-                            onClick = { onMangaClick(item.source.id, item.mangaSlug) }
-                        )
+                    if (state.latestChapters.isEmpty()) {
+                        item {
+                            Text("لا توجد فصول جديدة حالياً", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                        }
+                    } else {
+                        items(state.latestChapters.take(15), key = { "${it.source.id}_${it.chapterUrl}" }) { item ->
+                            LatestChapterRow(
+                                item = item,
+                                onClick = { onMangaClick(item.source.id, item.mangaSlug) }
+                            )
+                        }
                     }
                 }
 
