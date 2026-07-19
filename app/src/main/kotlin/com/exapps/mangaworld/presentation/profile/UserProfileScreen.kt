@@ -774,7 +774,7 @@ private fun LibraryReadingListsSection(
                         contentPadding = PaddingValues(horizontal = 2.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(items.size) { index ->
+                        items(items.size, key = { i -> items[i].mangaId }) { index ->
                             val manga = items[index]
                             LibraryMangaCard(
                                 manga = manga,

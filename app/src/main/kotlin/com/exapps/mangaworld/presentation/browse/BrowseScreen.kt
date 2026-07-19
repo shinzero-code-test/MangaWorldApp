@@ -162,7 +162,7 @@ fun BrowseScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(pagingItems.itemCount) { index ->
+            items(pagingItems.itemCount, key = { i -> pagingItems.peek(i)?.let { "${it.source.id}_${it.slug}" } ?: "item_$i" }) { index ->
                 val manga = pagingItems[index] ?: return@items
                 if (uiState.isGridView) {
                     MangaCard(

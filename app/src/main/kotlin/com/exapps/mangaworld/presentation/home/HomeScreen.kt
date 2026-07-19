@@ -212,12 +212,14 @@ private fun FeaturedCarousel(
 ) {
     val pagerState = rememberPagerState { items.size }
 
-    // Auto-scroll
+    // Auto-scroll — pause when user is interacting
     LaunchedEffect(pagerState) {
         while (true) {
             delay(4000)
-            val next = (pagerState.currentPage + 1) % items.size
-            pagerState.animateScrollToPage(next)
+            if (!pagerState.isScrollInProgress) {
+                val next = (pagerState.currentPage + 1) % items.size
+                pagerState.animateScrollToPage(next)
+            }
         }
     }
 

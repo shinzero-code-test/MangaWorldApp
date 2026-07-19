@@ -240,7 +240,7 @@ private fun SearchResults(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(pagingItems.itemCount) { i ->
+                items(pagingItems.itemCount, key = { i -> pagingItems.peek(i)?.let { "${it.source.id}_${it.slug}" } ?: "item_$i" }) { i ->
                     val manga = pagingItems[i] ?: return@items
                     SearchResultItem(
                         title = manga.title,
