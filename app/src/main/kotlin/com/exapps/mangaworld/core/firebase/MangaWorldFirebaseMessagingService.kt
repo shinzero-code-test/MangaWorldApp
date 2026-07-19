@@ -61,9 +61,10 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
 
             else -> AppLaunchIntents.latestUpdates(this)
         }
+        val requestCode = (message.data["sourceId"] ?: "") + "_" + (message.data["slug"] ?: "") + "_" + (message.data["chapterUrl"] ?: "")
         val pendingIntent = PendingIntent.getActivity(
             this,
-            intent.hashCode(),
+            requestCode.hashCode().coerceAtLeast(1),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -76,6 +77,8 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
+            .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
 
         // Load bitmap on IO thread to avoid blocking the main thread (ANR)
         serviceScope.launch {
@@ -90,8 +93,11 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
                     )
                 }
                 analyticsManager.logNotificationReceived(type = type, hasImage = imageUrl != null)
+                // Use a stable notification ID based on message data to avoid collisions
+                // with local notifications (which use IDs 5000+) and between different messages
+                val notificationId = 3000 + ((message.data["mangaId"] ?: body).hashCode() and 0x7FFFFFFF) % 1000
                 getSystemService<NotificationManager>()?.notify(
-                    message.messageId?.hashCode() ?: body.hashCode(),
+                    notificationId,
                     notificationBuilder.build()
                 )
             }
