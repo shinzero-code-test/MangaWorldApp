@@ -13,6 +13,7 @@ import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import com.exapps.mangaworld.domain.model.NotificationDeliveryMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -61,6 +62,8 @@ class ChapterUpdateChecker @Inject constructor(
         checkMutex.withLock {
             val settings = settingsRepository.getAppSettings().first()
             if (!settings.enableNotifications) return@withContext
+            // Respect delivery mode — only INSTANT notifications fire immediately
+            if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) return@withContext
 
         // Throttle: check at most once per 2 hours
         val lastCheck = prefs.getLong("last_update_check", 0L)

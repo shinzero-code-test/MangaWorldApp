@@ -11,6 +11,7 @@ import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import com.exapps.mangaworld.domain.model.NotificationDeliveryMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
@@ -43,6 +44,8 @@ class NotificationPolicyManager @Inject constructor(
         // Respect the user's notification preference
         val settings = settingsRepository.getAppSettings().first()
         if (!settings.enableNotifications) return
+        // Respect delivery mode — only INSTANT notifications are sent immediately
+        if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) return
 
         val prefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
 
@@ -63,30 +66,6 @@ class NotificationPolicyManager @Inject constructor(
                 prefs.edit().putLong("last_inactivity_sent", now).apply()
             }
         }
-    }
-
-    fun sendFavoriteUpdateNotification(mangaTitle: String, chapterNumber: String) {
-        val intent = AppLaunchIntents.home(context)
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            mangaTitle.hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notification = NotificationCompat.Builder(context, MangaWorldApp.CLOUD_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_chat)
-            .setContentTitle("تحديث جديد: $mangaTitle")
-            .setContentText("فصل $chapterNumber متاح الآن")
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .build()
-
-        notificationManager.notify(
-            NOTIFICATION_ID_FAVORITE_UPDATE + mangaTitle.hashCode(),
-            notification
-        )
     }
 
     private fun sendInactivityReminder(lastMangaTitle: String) {

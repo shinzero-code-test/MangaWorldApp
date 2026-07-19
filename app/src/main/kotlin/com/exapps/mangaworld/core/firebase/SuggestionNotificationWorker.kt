@@ -19,6 +19,7 @@ import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.domain.model.MangaItem
 import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.model.NotificationDeliveryMode
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -74,6 +75,8 @@ class SuggestionNotificationWorker @AssistedInject constructor(
             val ctx = applicationContext
             val settings = settingsRepository.getAppSettings().first()
             if (!settings.enableNotifications) return@withContext Result.success()
+            // Respect delivery mode — only INSTANT notifications fire immediately
+            if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) return@withContext Result.success()
 
             // Load cached manga as candidates
             val cachedMangas = cacheDao.getAll(200).mapNotNull { cache ->
