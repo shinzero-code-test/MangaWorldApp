@@ -203,6 +203,8 @@ class ChapterUpdateChecker @Inject constructor(
             .setContentIntent(pendingContentIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setGroup(GROUP_KEY_CHAPTER_UPDATES)
+            .setGroupSummary(false)
             .addAction(readAction)
 
         favAction?.let { builder.addAction(it) }
@@ -212,5 +214,6 @@ class ChapterUpdateChecker @Inject constructor(
 
     companion object {
         private const val NOTIFICATION_ID_NEW_CHAPTERS = 7000
+        private const val GROUP_KEY_CHAPTER_UPDATES = "chapter_updates"
     }
 }

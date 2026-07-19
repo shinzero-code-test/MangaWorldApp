@@ -79,6 +79,7 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
             .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
+            .setGroup("fcm_notifications")
 
         // Load bitmap on IO thread to avoid blocking the main thread (ANR)
         serviceScope.launch {
