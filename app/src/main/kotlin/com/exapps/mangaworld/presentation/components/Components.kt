@@ -68,7 +68,7 @@ fun MangaCard(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(6.dp)
-                        .background(Color(0xCC000000), RoundedCornerShape(4.dp))
+                        .background(Color(0xE6000000), RoundedCornerShape(4.dp))  // 90% black for better contrast
                         .padding(horizontal = 4.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
@@ -158,9 +158,9 @@ fun MangaCover(
 @Composable
 fun TypeBadge(type: MangaType, modifier: Modifier = Modifier) {
     val (bg, text) = when (type) {
-        MangaType.MANGA  -> Color(0x99000033) to "مانجا"
-        MangaType.MANHWA -> Color(0x99001133) to "مانهوا"
-        MangaType.MANHUA -> Color(0x99330011) to "مانهوا"
+        MangaType.MANGA  -> Color(0xCC000033) to "مانجا"    // 80% alpha for contrast
+        MangaType.MANHWA -> Color(0xCC001133) to "مانهوا"
+        MangaType.MANHUA -> Color(0xCC330011) to "مانهوا"
         else             -> return
     }
     Text(
@@ -178,11 +178,11 @@ fun TypeBadge(type: MangaType, modifier: Modifier = Modifier) {
 @Composable
 fun StatusBadge(status: MangaStatus, modifier: Modifier = Modifier) {
     val (bg, fg) = when (status) {
-        MangaStatus.ONGOING    -> Color(0x2266BB44) to MangaColors.OngoingColor
-        MangaStatus.COMPLETED  -> Color(0x22888888) to MangaColors.CompletedColor
-        MangaStatus.CANCELLED  -> Color(0x22BB2222) to MaterialTheme.colorScheme.error
-        MangaStatus.HIATUS     -> Color(0x22FF9800) to MangaColors.HiatusColor
-        MangaStatus.UNKNOWN    -> Color(0x22888888) to MangaColors.Muted
+        MangaStatus.ONGOING    -> Color(0x3366BB44) to MangaColors.OngoingColor    // 20% alpha
+        MangaStatus.COMPLETED  -> Color(0x33888888) to MangaColors.CompletedColor
+        MangaStatus.CANCELLED  -> Color(0x33BB2222) to MaterialTheme.colorScheme.error
+        MangaStatus.HIATUS     -> Color(0x33FF9800) to MangaColors.HiatusColor
+        MangaStatus.UNKNOWN    -> Color(0x33888888) to MangaColors.Muted
     }
     Text(
         status.label,
