@@ -285,7 +285,7 @@ class AchievementManager @Inject constructor(
 
     private suspend fun syncToFirestore() {
         try {
-            val uid = sessionManager.ensureGuestSession() ?: return
+            val uid = sessionManager.ensureFirebaseSession() ?: return
             val prefs = dataStore.data.first()
             val data = mapOf(
                 "totalPagesRead" to (prefs[totalPagesReadKey] ?: 0),

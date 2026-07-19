@@ -39,15 +39,15 @@ import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
 import com.exapps.mangaworld.core.firebase.CloudinaryUploader
 import com.exapps.mangaworld.core.firebase.AccountMergeRequiredException
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
+import com.exapps.mangaworld.core.firebase.ProviderManagementRequiresSignInException
 import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.UserFollow
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.BuildConfig
+import com.exapps.mangaworld.presentation.auth.accountMergeMessage
 import com.exapps.mangaworld.presentation.theme.MangaColors
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -73,10 +73,10 @@ class ProfileSettingsViewModel @Inject constructor(
     private val favoriteDao: FavoriteDao,
     private val historyDao: ReadingHistoryDao,
     private val readChapterDao: ReadChapterDao,
-    private val cloudinaryUploader: CloudinaryUploader
+    private val cloudinaryUploader: CloudinaryUploader,
+    private val auth: com.google.firebase.auth.FirebaseAuth,
+    private val firestore: com.google.firebase.firestore.FirebaseFirestore
 ) : ViewModel() {
-    private val auth = FirebaseAuth.getInstance()
-    private val firestore = FirebaseFirestore.getInstance()
 
     private val _userEmail = MutableStateFlow<String?>(auth.currentUser?.email)
     val userEmail: StateFlow<String?> = _userEmail.asStateFlow()
@@ -137,12 +137,12 @@ class ProfileSettingsViewModel @Inject constructor(
             if (uid != null) {
                 _followingCount.value = communityRepository.getFollowingCount(uid)
                 _followersCount.value = communityRepository.getFollowersCount(uid)
-                // Comments & reviews counts from Firestore
+                // Comments & reviews counts via Firestore aggregate queries
                 try {
-                    val commentsSnap = firestore.collectionGroup("comments").whereEqualTo("authorUid", uid).get().await()
-                    _commentsCount.value = commentsSnap.size()
-                    val reviewsSnap = firestore.collectionGroup("reviews").whereEqualTo("authorUid", uid).get().await()
-                    _reviewsCount.value = reviewsSnap.size()
+                    _commentsCount.value = firestore.collectionGroup("comments")
+                        .whereEqualTo("authorUid", uid).count().get().await().count.toInt()
+                    _reviewsCount.value = firestore.collectionGroup("reviews")
+                        .whereEqualTo("authorUid", uid).count().get().await().count.toInt()
                 } catch (_: Exception) {}
             }
         }
@@ -165,7 +165,14 @@ class ProfileSettingsViewModel @Inject constructor(
             val current = communityRepository.getCurrentProfile()
             val result = cloudinaryUploader.uploadImage(uri, assetType = "avatar")
             if (result != null) {
-                communityRepository.upsertProfile(current?.username ?: "", current?.bio ?: "", current?.isPublic ?: true, result.url, current?.bannerUrl)
+                communityRepository.upsertProfile(
+                    username = current?.username ?: "",
+                    bio = current?.bio ?: "",
+                    isPublic = current?.isPublic ?: true,
+                    avatarUrl = result.url,
+                    bannerUrl = current?.bannerUrl,
+                    displayName = current?.displayName ?: ""
+                )
                 val oldUrl = current?.avatarUrl
                 if (oldUrl != null) {
                     val oldId = cloudinaryUploader.extractPublicId(oldUrl)
@@ -176,17 +183,31 @@ class ProfileSettingsViewModel @Inject constructor(
         }
     }
 
-    fun updateProfile(username: String, bio: String) {
+    fun updateProfile(username: String, bio: String, displayName: String = "") {
         viewModelScope.launch {
             val c = communityRepository.getCurrentProfile()
-            communityRepository.upsertProfile(username.ifBlank { c?.username ?: "" }, bio, c?.isPublic ?: true, c?.avatarUrl, c?.bannerUrl)
+            communityRepository.upsertProfile(
+                username = username.ifBlank { c?.username ?: "" },
+                bio = bio,
+                isPublic = c?.isPublic ?: true,
+                avatarUrl = c?.avatarUrl,
+                bannerUrl = c?.bannerUrl,
+                displayName = displayName.ifBlank { c?.displayName ?: "" }
+            )
         }
     }
 
     fun updatePrivacy(showLists: Boolean, showActivity: Boolean, isPublic: Boolean) {
         viewModelScope.launch {
             val c = communityRepository.getCurrentProfile()
-            communityRepository.upsertProfile(c?.username ?: "", c?.bio ?: "", isPublic, c?.avatarUrl, c?.bannerUrl)
+            communityRepository.upsertProfile(
+                username = c?.username ?: "",
+                bio = c?.bio ?: "",
+                isPublic = isPublic,
+                avatarUrl = c?.avatarUrl,
+                bannerUrl = c?.bannerUrl,
+                displayName = c?.displayName ?: ""
+            )
             communityRepository.updateProfilePrivacy(showLists, showActivity)
         }
     }
@@ -204,7 +225,15 @@ class ProfileSettingsViewModel @Inject constructor(
             )
         }
     }
-    fun signOut() { viewModelScope.launch { sessionManager.signOut(); _userEmail.value = null } }
+    fun signOut() {
+        viewModelScope.launch {
+            try {
+                sessionManager.signOut()
+            } finally {
+                _userEmail.value = null
+            }
+        }
+    }
 
     fun blockUser(uid: String) {
         viewModelScope.launch { communityRepository.blockUser(uid) }
@@ -233,18 +262,24 @@ class ProfileSettingsViewModel @Inject constructor(
         viewModelScope.launch { linkProvider { sessionManager.unlinkProvider(providerId) } }
     }
 
-    fun exportAccountData() {
-        viewModelScope.launch {
-            // Trigger account data export
-        }
+    fun onProviderLinkError(message: String) {
+        _providerLinkError.value = message
     }
 
     private suspend fun linkProvider(action: suspend () -> Unit) {
         _providerLinkError.value = null
         try {
             action()
-        } catch (_: AccountMergeRequiredException) {
-            _providerLinkError.value = "هذا المزود مرتبط بحساب آخر. لا يمكن دمج الحسابات تلقائياً."
+        } catch (error: AccountMergeRequiredException) {
+            _providerLinkError.value = accountMergeMessage(error.reason)
+        } catch (error: ProviderManagementRequiresSignInException) {
+            _providerLinkError.value = if (error.isGuestSession) {
+                "أنشئ حساباً دائماً قبل إدارة مزوّدي تسجيل الدخول."
+            } else {
+                "سجّل الدخول أولاً قبل إدارة مزوّدي تسجيل الدخول."
+            }
+        } catch (error: IllegalArgumentException) {
+            _providerLinkError.value = error.message ?: "لا يمكن إجراء هذا التغيير"
         } catch (_: Exception) {
             _providerLinkError.value = "تعذر تحديث مزود تسجيل الدخول. حاول مرة أخرى."
         }
@@ -306,11 +341,14 @@ fun ProfileSettingsScreen(
         uri?.let { viewModel.uploadAvatar(it) }
     }
     val googleLinkLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        runCatching {
-            com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
-                .result
-                ?.idToken
-                ?.let(viewModel::linkGoogle)
+        try {
+            val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data).result
+            val idToken = account?.idToken
+            if (idToken != null) {
+                viewModel.linkGoogle(idToken)
+            }
+        } catch (e: Exception) {
+            viewModel.onProviderLinkError("فشل ربط حساب Google: ${e.localizedMessage ?: "خطأ غير معروف"}")
         }
     }
     val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
@@ -380,7 +418,6 @@ fun ProfileSettingsScreen(
                     linkedProviderIds = linkedProviderIds,
                     providerLinkError = providerLinkError,
                     onOpenCloudSync = onOpenCloudSync,
-                    onExport = viewModel::exportAccountData,
                     onLinkGoogle = { googleLinkLauncher.launch(viewModel.googleSignInIntent()) },
                     onUnlinkProvider = viewModel::unlinkProvider,
                     onLinkFacebook = {
@@ -411,7 +448,7 @@ fun ProfileSettingsScreen(
         }
     }
 
-    if (showEditProfile) EditProfileDialog(profile, { showEditProfile = false }) { u, b -> viewModel.updateProfile(u, b); showEditProfile = false }
+    if (showEditProfile) EditProfileDialog(profile, { showEditProfile = false }) { u, d, b -> viewModel.updateProfile(u, b, d); showEditProfile = false }
     if (showDeleteConfirm) ConfirmDialog("حذف الحساب", "هل أنت متأكد من حذف حسابك؟ هذا الإجراء لا يمكن التراجع عنه.", "حذف", { showDeleteConfirm = false }, { showDeleteConfirm = false })
     if (showSignOutConfirm) ConfirmDialog("تسجيل الخروج", "هل تريد تسجيل الخروج من حسابك؟", "خروج", { viewModel.signOut(); showSignOutConfirm = false }, { showSignOutConfirm = false })
     if (showBlockedUsers) BlockedUsersDialog(blockedUsers, onDismiss = { showBlockedUsers = false }, onUnblock = { uid -> viewModel.unblockUser(uid) })
@@ -424,6 +461,8 @@ fun ProfileSettingsScreen(
 
 @Composable
 private fun ProfileHeroSection(profile: CommunityProfile?, avatarUri: Uri?, onAvatarClick: () -> Unit) {
+    val roleText = profile?.role?.let { when(it) { "super-admin" -> "مدير عام"; "moderator" -> "مشرف"; else -> "مشاهد" } } ?: "مشاهد"
+    val displayNameText = profile?.displayName?.takeIf { it.isNotBlank() } ?: profile?.username ?: "ضيف"
     Column(modifier = Modifier.fillMaxWidth().background(MangaColors.Surface).padding(horizontal = 20.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.BottomEnd) {
             Box(modifier = Modifier.size(96.dp).clip(CircleShape).background(MangaColors.PrimaryLight.copy(alpha = 0.4f)), contentAlignment = Alignment.Center) {
@@ -431,7 +470,7 @@ private fun ProfileHeroSection(profile: CommunityProfile?, avatarUri: Uri?, onAv
                     Box(modifier = Modifier.size(82.dp).clip(CircleShape).background(MangaColors.GlowPurple), contentAlignment = Alignment.Center) {
                         if (avatarUri != null) AsyncImage(model = avatarUri, contentDescription = null, modifier = Modifier.fillMaxSize().clip(CircleShape))
                         else if (!profile?.avatarUrl.isNullOrBlank()) AsyncImage(model = profile.avatarUrl, contentDescription = null, modifier = Modifier.fillMaxSize().clip(CircleShape))
-                        else Text((profile?.username ?: "G").take(1).uppercase(), color = MangaColors.PrimaryLight, style = MaterialTheme.typography.headlineMedium)
+                        else Text((displayNameText).take(1).uppercase(), color = MangaColors.PrimaryLight, style = MaterialTheme.typography.headlineMedium)
                     }
                 }
             }
@@ -441,12 +480,16 @@ private fun ProfileHeroSection(profile: CommunityProfile?, avatarUri: Uri?, onAv
         }
         Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(profile?.username ?: "ضيف", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+            Text(displayNameText, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
             if (!profile?.badgeLabel.isNullOrBlank()) { Spacer(Modifier.width(8.dp)); Text(profile.badgeLabel, color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MangaColors.GlowCyan).padding(horizontal = 10.dp, vertical = 4.dp)) }
+        }
+        if (profile?.username?.isNotBlank() == true && displayNameText != profile.username) {
+            Spacer(Modifier.height(2.dp))
+            Text("@${profile.username}", color = MangaColors.Muted, style = MaterialTheme.typography.labelMedium)
         }
         if (!profile?.bio.isNullOrBlank()) { Spacer(Modifier.height(6.dp)); Text(profile.bio, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, maxLines = 3) }
         Spacer(Modifier.height(8.dp))
-        Text(profile?.role?.let { when(it) { "admin" -> "مدير"; "moderator" -> "مشرف"; else -> "قارئ" } } ?: "قارئ", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
+        Text(roleText, color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -471,11 +514,14 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
 // ─── Section Content ────────────────────────────────────────────────────────
 
 @Composable private fun ProfileInfoSection(profile: CommunityProfile?, joinDateText: String, onEdit: () -> Unit) {
+    val roleText = profile?.role?.let { when(it) { "super-admin" -> "مدير عام"; "moderator" -> "مشرف"; else -> "مشاهد" } } ?: "مشاهد"
+    val displayNameText = profile?.displayName?.takeIf { it.isNotBlank() } ?: profile?.username ?: "ضيف"
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Badge, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الاسم المعروض", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.username ?: "ضيف", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Badge, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الاسم المعروض", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(displayNameText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AlternateEmail, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("اسم المستخدم", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.username ?: "غير محدد", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Info, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("النبذة الشخصية", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.bio?.ifBlank { "لا توجد نبذة" } ?: "لا توجد نبذة", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.CalendarToday, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("تاريخ الانضمام", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(joinDateText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الرتبة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.role?.let { when(it) { "admin" -> "مدير"; "moderator" -> "مشرف"; else -> "قارئ" } } ?: "قارئ", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الرتبة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(roleText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         if (!profile?.badgeLabel.isNullOrBlank()) Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Star, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("الشارة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile.badgeLabel, color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
         OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(42.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = MangaColors.Cyan)) { Text("تعديل الملف الشخصي", fontWeight = FontWeight.SemiBold) }
     }
@@ -544,14 +590,13 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     linkedProviderIds: Set<String>,
     providerLinkError: String?,
     onOpenCloudSync: () -> Unit,
-    onExport: () -> Unit,
     onLinkGoogle: () -> Unit,
     onLinkFacebook: () -> Unit,
     onUnlinkProvider: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().clickable(onClick = onOpenCloudSync).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Cloud, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("مزامنة الحساب مع السحابة", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("فتح", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().clickable(onClick = onExport).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.ImportExport, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("استيراد/تصدير القوائم", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$totalItems عنصر", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.ImportExport, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text("استيراد/تصدير القوائم", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("قريباً", color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
         ProviderLinkRow(
             label = "Google",
             providerId = "google.com",
@@ -642,15 +687,54 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
 
 // ─── Dialogs ────────────────────────────────────────────────────────────────
 
-@Composable private fun EditProfileDialog(profile: CommunityProfile?, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
-    var username by remember { mutableStateOf(profile?.username ?: "") }; var bio by remember { mutableStateOf(profile?.bio ?: "") }
+@Composable private fun EditProfileDialog(profile: CommunityProfile?, onDismiss: () -> Unit, onSave: (String, String, String) -> Unit) {
+    var username by remember { mutableStateOf(profile?.username ?: "") }
+    var displayName by remember { mutableStateOf(profile?.displayName ?: "") }
+    var bio by remember { mutableStateOf(profile?.bio ?: "") }
+
+    val normalizedUsername = username.trim().lowercase()
+    val usernameError = when {
+        normalizedUsername.isEmpty() -> "اسم المستخدم مطلوب"
+        normalizedUsername.length < 3 -> "اسم المستخدم قصير جداً (3 أحرف على الأقل)"
+        normalizedUsername.length > 20 -> "اسم المستخدم طويل جداً (20 حرف كحد أقصى)"
+        !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$")) -> "أحرف وأرقام وشرطات سفلية فقط"
+        else -> null
+    }
+
     AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
         title = { Text("تعديل الملف الشخصي", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("اسم المستخدم") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface))
-            OutlinedTextField(value = bio, onValueChange = { bio = it }, label = { Text("النبذة الشخصية") }, modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp), maxLines = 4, colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface))
+            OutlinedTextField(
+                value = displayName, onValueChange = { displayName = it },
+                label = { Text("الاسم المعروض") },
+                placeholder = { Text("اسمك كما يظهر للآخرين") },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
+            )
+            OutlinedTextField(
+                value = username, onValueChange = { username = it },
+                label = { Text("اسم المستخدم") },
+                placeholder = { Text("3-20 حرف، أرقام وشرطات سفلية") },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
+            )
+            if (usernameError != null) {
+                Text(usernameError, color = MangaColors.Yellow, style = MaterialTheme.typography.bodySmall)
+            }
+            OutlinedTextField(
+                value = bio, onValueChange = { bio = it },
+                label = { Text("النبذة الشخصية") },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp), maxLines = 4,
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
+            )
         }},
-        confirmButton = { Button(onClick = { onSave(username, bio) }, colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)) { Text("حفظ") } },
+        confirmButton = {
+            Button(
+                onClick = { onSave(normalizedUsername, displayName.trim(), bio.trim()) },
+                colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan),
+                enabled = usernameError == null && normalizedUsername.isNotBlank()
+            ) { Text("حفظ") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء", color = MangaColors.Muted) } }
     )
 }

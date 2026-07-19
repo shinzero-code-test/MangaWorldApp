@@ -151,7 +151,8 @@ class UserProfileViewModel @Inject constructor(
                     bio = current?.bio ?: "",
                     isPublic = current?.isPublic ?: true,
                     avatarUrl = result.url,
-                    bannerUrl = current?.bannerUrl
+                    bannerUrl = current?.bannerUrl,
+                    displayName = current?.displayName ?: ""
                 )
                 current?.avatarUrl?.let { url ->
                     cloudinaryUploader.extractPublicId(url)?.let { id -> launch { cloudinaryUploader.deleteImage(id) } }
@@ -171,7 +172,8 @@ class UserProfileViewModel @Inject constructor(
                     bio = current?.bio ?: "",
                     isPublic = current?.isPublic ?: true,
                     avatarUrl = current?.avatarUrl,
-                    bannerUrl = result.url
+                    bannerUrl = result.url,
+                    displayName = current?.displayName ?: ""
                 )
                 current?.bannerUrl?.let { url ->
                     cloudinaryUploader.extractPublicId(url)?.let { id -> launch { cloudinaryUploader.deleteImage(id) } }
@@ -287,7 +289,7 @@ fun UserProfileScreen(
             onNotificationClick = { viewModel.markRead(it.id) }
         )
 
-        if (profile?.role in setOf("moderator", "admin")) {
+        if (profile?.role in setOf("moderator", "super-admin")) {
             ModerationEntryCard(onClick = onOpenModeration)
         }
     }

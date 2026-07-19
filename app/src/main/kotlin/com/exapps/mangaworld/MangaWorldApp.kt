@@ -42,7 +42,7 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     @Inject lateinit var okHttpClient: OkHttpClient
     @Inject lateinit var firebaseStartupCoordinator: FirebaseStartupCoordinator
 
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    internal val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -82,14 +82,23 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     }
 
     private fun initializeAppCheck() {
-        val firebaseAppCheck = FirebaseAppCheck.getInstance()
-        val providerFactory = if (BuildConfig.DEBUG) {
-            DebugAppCheckProviderFactory.getInstance()
-        } else {
-            PlayIntegrityAppCheckProviderFactory.getInstance()
+        try {
+            val firebaseAppCheck = FirebaseAppCheck.getInstance()
+            val providerFactory = if (BuildConfig.DEBUG) {
+                DebugAppCheckProviderFactory.getInstance()
+            } else {
+                try {
+                    PlayIntegrityAppCheckProviderFactory.getInstance()
+                } catch (_: Exception) {
+                    // Play Integrity unavailable (no Play Services) — fall back to debug provider
+                    DebugAppCheckProviderFactory.getInstance()
+                }
+            }
+            firebaseAppCheck.installAppCheckProviderFactory(providerFactory)
+            firebaseAppCheck.setTokenAutoRefreshEnabled(true)
+        } catch (e: Exception) {
+            android.util.Log.e("MangaWorldApp", "App Check initialization failed: ${e.message}")
         }
-        firebaseAppCheck.installAppCheckProviderFactory(providerFactory)
-        firebaseAppCheck.setTokenAutoRefreshEnabled(true)
     }
 
     private fun scheduleFirebaseSync() {

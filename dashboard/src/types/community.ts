@@ -17,6 +17,7 @@ export interface CommunityComment {
   parentId?: string;
   authorUid: string;
   authorName: string;
+  authorUsername?: string;
   authorAvatarUrl?: string;
   authorBadge?: string;
   text: string;
@@ -32,6 +33,7 @@ export interface MangaReview {
   mangaId: string;
   authorUid: string;
   authorName: string;
+  authorUsername?: string;
   authorAvatarUrl?: string;
   authorBadge?: string;
   rating: number;

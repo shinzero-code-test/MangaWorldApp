@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -36,7 +35,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -45,23 +43,19 @@ class ModerationDashboardViewModel @Inject constructor(
 ) : ViewModel() {
     val reports = communityRepository.observeModerationReports().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val profile = flow { emit(communityRepository.getCurrentProfile()) }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    fun resolve(reportId: String, status: String) {
-        viewModelScope.launch { runCatching { communityRepository.resolveModerationReport(reportId, status) } }
-    }
 }
 
 @Composable
-fun ModerationDashboardScreen(onBack: () -> Unit, viewModel: ModerationDashboardViewModel = hiltViewModel()) {
+fun ModerationDashboardScreen(onBack: () -> Unit, onOpenDashboard: () -> Unit = {}, viewModel: ModerationDashboardViewModel = hiltViewModel()) {
     val reports by viewModel.reports.collectAsStateWithLifecycle()
     val profile by viewModel.profile.collectAsStateWithLifecycle()
-    val canModerate = profile?.role in setOf("moderator", "admin")
+    val canModerate = profile?.role in setOf("moderator", "super-admin")
 
     Column(Modifier.fillMaxSize().background(MangaColors.Background)) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MangaColors.OnSurface) }
             Text("لوحة الإشراف", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-            androidx.compose.foundation.layout.Spacer(Modifier.padding(0.dp))
+            Spacer(Modifier.padding(0.dp))
         }
 
         if (!canModerate) {
@@ -69,25 +63,25 @@ fun ModerationDashboardScreen(onBack: () -> Unit, viewModel: ModerationDashboard
             return
         }
 
+        Card(colors = CardDefaults.cardColors(containerColor = MangaColors.Yellow.copy(alpha = 0.1f)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Text("لحل البلاغات أو اتخاذ إجراء، استخدم لوحة التحكم على الويب.", color = MangaColors.Yellow, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp))
+        }
+
         LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(reports, key = { it.id }) { report ->
-                ModerationReportCard(report = report, onResolve = viewModel::resolve)
+                ModerationReportCard(report = report)
             }
         }
     }
 }
 
 @Composable
-private fun ModerationReportCard(report: ModerationReport, onResolve: (String, String) -> Unit) {
+private fun ModerationReportCard(report: ModerationReport) {
     Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("بلاغ #${report.id.take(6)}", color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
             Text(report.reason, color = MangaColors.OnSurfaceVariant)
             Text("الحالة: ${report.status}", color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onResolve(report.id, "resolved") }) { Text("حل") }
-                Button(onClick = { onResolve(report.id, "dismissed") }) { Text("رفض") }
-            }
         }
     }
 }

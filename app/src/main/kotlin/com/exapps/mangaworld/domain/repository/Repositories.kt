@@ -137,7 +137,7 @@ interface CommunityRepository {
     fun observePublicActivity(userId: String): Flow<List<CommunityComment>>
     fun observeModerationReports(): Flow<List<ModerationReport>>
     suspend fun getCurrentProfile(): CommunityProfile?
-    suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String? = null, bannerUrl: String? = null)
+    suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String? = null, bannerUrl: String? = null, displayName: String = "")
     suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean, showLibraryPublic: Boolean = true)
     suspend fun createOrUpdateList(listId: String?, name: String, description: String, coverUrl: String, rating: Float, genres: List<String>, isPublic: Boolean): String
     suspend fun deleteList(listId: String)
@@ -151,7 +151,6 @@ interface CommunityRepository {
     suspend fun reportComment(comment: CommunityComment, reason: String)
     suspend fun likeComment(commentId: String)
     suspend fun dislikeComment(commentId: String)
-    suspend fun resolveModerationReport(reportId: String, status: String)
     suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean)
     suspend fun markNotificationRead(notificationId: String)
 

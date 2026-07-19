@@ -37,11 +37,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
+import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.exapps.mangaworld.domain.model.AppTheme
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.navigation.*
 import com.exapps.mangaworld.presentation.onboarding.OnboardingScreen
 import com.exapps.mangaworld.presentation.theme.*
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.flow.collect
@@ -54,6 +56,7 @@ import javax.inject.Inject
 class MainActivity : FragmentActivity() {
 
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var sessionManager: FirebaseSessionManager
     private val deepLinkIntents = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
 
     // Facebook login callback manager — set by the login composable
@@ -70,6 +73,7 @@ class MainActivity : FragmentActivity() {
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 MangaApp(
+                    sessionManager = sessionManager,
                     settingsRepo = settingsRepository,
                     launchIntent = intent,
                     deepLinkIntents = deepLinkIntents.asSharedFlow(),
@@ -113,6 +117,7 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 private fun MangaApp(
+    sessionManager: FirebaseSessionManager,
     settingsRepo: SettingsRepository,
     launchIntent: Intent?,
     deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>,
@@ -133,11 +138,11 @@ private fun MangaApp(
     var showPostOnboardingLogin by rememberSaveable { mutableStateOf(false) }
 
     // Check if user is logged in (not anonymous)
-    val sessionManager = remember { com.exapps.mangaworld.core.firebase.FirebaseSessionManager(context) }
-    val isLoggedIn by sessionManager.authState.collectAsStateWithLifecycle(
+    val firebaseUser by sessionManager.authState.collectAsStateWithLifecycle(
         initialValue = sessionManager.currentUser()
     )
-    val userIsLoggedIn = isLoggedIn != null && !(isLoggedIn?.isAnonymous ?: true)
+    val userIsLoggedIn = firebaseUser?.isAnonymous == false
+    val googleSignInClient = remember(sessionManager) { sessionManager.googleSignInClient() }
 
     // Show login screen on first launch if not logged in
     LaunchedEffect(settings.onboardingCompleted) {
@@ -189,16 +194,6 @@ private fun MangaApp(
                         }
                     }
 
-                    // Google Sign-In launcher
-                    val googleSignInClient = remember {
-                        com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(
-                            context,
-                            com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
-                                .requestIdToken(context.resources.getString(context.resources.getIdentifier("default_web_client_id", "string", context.packageName)))
-                                .requestEmail()
-                                .build()
-                        )
-                    }
                     val googleLauncher = rememberLauncherForActivityResult(
                         contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
                     ) { result ->
@@ -215,21 +210,22 @@ private fun MangaApp(
                         }
                     }
 
-                    // Facebook login callback — register and forward to Activity for onActivityResult
+                    // Keep the SDK registration scoped to the displayed login flow.
                     val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
-                    LaunchedEffect(facebookCallbackManager) {
-                        setFacebookCallbackManager(facebookCallbackManager)
-                        com.facebook.login.LoginManager.getInstance().registerCallback(facebookCallbackManager,
-                            object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
-                                override fun onSuccess(result: com.facebook.login.LoginResult) {
-                                    loginViewModel.signInWithFacebook(result.accessToken.token)
-                                }
-                                override fun onCancel() {}
-                                override fun onError(error: com.facebook.FacebookException) {
-                                    loginViewModel.clearError()
-                                }
+                    DisposableEffect(facebookCallbackManager) {
+                        val loginManager = com.facebook.login.LoginManager.getInstance()
+                        val callback = object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+                            override fun onSuccess(result: com.facebook.login.LoginResult) {
+                                loginViewModel.signInWithFacebook(result.accessToken.token)
                             }
-                        )
+                            override fun onCancel() = Unit
+                            override fun onError(error: com.facebook.FacebookException) {
+                                loginViewModel.clearError()
+                            }
+                        }
+                        setFacebookCallbackManager(facebookCallbackManager)
+                        loginManager.registerCallback(facebookCallbackManager, callback)
+                        onDispose { loginManager.unregisterCallback(facebookCallbackManager) }
                     }
 
                     when (postOnboardingScreen) {
@@ -268,7 +264,7 @@ private fun MangaApp(
                                 errorMessage = loginState.error,
                                 onEmailChanged = loginViewModel::onEmailChanged,
                                 onPasswordChanged = loginViewModel::onPasswordChanged,
-                                onLoginClick = { _, _ -> loginViewModel.signInWithEmail() },
+                                onLoginClick = loginViewModel::signInWithEmail,
                                 onGoogleSignInClick = {
                                     googleLauncher.launch(googleSignInClient.signInIntent)
                                 },
@@ -308,6 +304,7 @@ private fun MangaApp(
                     MangaWorldContent(
                         launchIntent = launchIntent,
                         deepLinkIntents = deepLinkIntents,
+                        googleSignInClient = googleSignInClient,
                         setFacebookCallbackManager = setFacebookCallbackManager
                     )
                 }
@@ -324,6 +321,7 @@ private fun MangaApp(
 private fun MangaWorldContent(
     launchIntent: Intent?,
     deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>,
+    googleSignInClient: GoogleSignInClient,
     setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit
 ) {
     val navController = rememberNavController()
@@ -380,6 +378,7 @@ private fun MangaWorldContent(
         ) {
             MangaNavGraph(
                 navController = navController,
+                googleSignInClient = googleSignInClient,
                 setFacebookCallbackManager = setFacebookCallbackManager
             )
         }

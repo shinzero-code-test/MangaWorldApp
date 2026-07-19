@@ -96,7 +96,7 @@ class CloudSyncViewModel @Inject constructor(
     fun signUpWithEmail(email: String, password: String) {
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = "Creating account...")
-            runCatching { sessionManager.signUpWithEmail(email, password); syncManager.pushLocalSnapshot() }
+            runCatching { sessionManager.signUpWithEmail(email, password, displayName = "", username = ""); syncManager.pushLocalSnapshot() }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Account created and synced") }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Account creation failed") }
         }
@@ -133,7 +133,7 @@ class CloudSyncViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = "Saving profile...")
             val currentProfile = profile.value
-            runCatching { communityRepository.upsertProfile(username, bio, isPublic, currentProfile?.avatarUrl) }
+            runCatching { communityRepository.upsertProfile(username, bio, isPublic, currentProfile?.avatarUrl, displayName = currentProfile?.displayName ?: "") }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Profile saved") }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Profile save failed") }
         }

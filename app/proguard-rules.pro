@@ -53,6 +53,10 @@
 -keep class com.exapps.mangaworld.domain.model.** { *; }
 -keep class com.exapps.mangaworld.core.data.remote.scraper.** { *; }
 
+# ── Firestore-serialized data classes (toObject()/toMap() must survive R8) ─────
+-keep class com.exapps.mangaworld.core.data.local.SyncTombstone { *; }
+-keep class com.exapps.mangaworld.core.data.AchievementManager$* { *; }
+
 # ── General ────────────────────────────────────────────────────────────────────
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile

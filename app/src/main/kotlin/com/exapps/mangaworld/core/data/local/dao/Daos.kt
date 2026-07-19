@@ -24,6 +24,10 @@ interface FavoriteDao {
     @Query("DELETE FROM favorites WHERE mangaId = :mangaId")
     suspend fun delete(mangaId: String)
 
+    /** Atomically delete only if the entity's addedAt is older than the given timestamp. */
+    @Query("DELETE FROM favorites WHERE mangaId = :mangaId AND addedAt <= :olderThan")
+    suspend fun deleteIfOlder(mangaId: String, olderThan: Long)
+
     @Query("UPDATE favorites SET readChapters = :read, totalChapters = :total WHERE mangaId = :mangaId")
     suspend fun updateProgress(mangaId: String, read: Int, total: Int)
 
@@ -47,6 +51,10 @@ interface ReadingHistoryDao {
 
     @Query("DELETE FROM reading_history WHERE mangaId = :mangaId")
     suspend fun delete(mangaId: String)
+
+    /** Atomically delete only if the entity's lastReadAt is older than the given timestamp. */
+    @Query("DELETE FROM reading_history WHERE mangaId = :mangaId AND lastReadAt <= :olderThan")
+    suspend fun deleteIfOlder(mangaId: String, olderThan: Long)
 
     @Query("DELETE FROM reading_history")
     suspend fun clearAll()
@@ -122,6 +130,10 @@ interface ReaderAnnotationDao {
 
     @Query("DELETE FROM reader_annotations WHERE mangaId = :mangaId AND chapterUrl = :chapterUrl AND pageIndex = :pageIndex")
     suspend fun delete(mangaId: String, chapterUrl: String, pageIndex: Int)
+
+    /** Atomically delete annotation only if its updatedAt is older than the given timestamp. */
+    @Query("DELETE FROM reader_annotations WHERE mangaId = :mangaId AND chapterUrl = :chapterUrl AND pageIndex = :pageIndex AND updatedAt <= :olderThan")
+    suspend fun deleteIfOlder(mangaId: String, chapterUrl: String, pageIndex: Int, olderThan: Long)
 }
 
 @Dao

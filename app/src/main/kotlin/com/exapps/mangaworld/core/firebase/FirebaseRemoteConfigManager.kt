@@ -2,13 +2,20 @@ package com.exapps.mangaworld.core.firebase
 
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import android.util.Log
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val TAG = "RemoteConfig"
 
 data class ScraperRuntimeConfig(
     val connectTimeoutSeconds: Int = 30,
@@ -20,6 +27,7 @@ data class ScraperRuntimeConfig(
 @Singleton
 class FirebaseRemoteConfigManager @Inject constructor() {
     private val remoteConfig: FirebaseRemoteConfig = FirebaseRemoteConfig.getInstance()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _disabledSourceIds = MutableStateFlow<Set<String>>(emptySet())
     val disabledSourceIds: StateFlow<Set<String>> = _disabledSourceIds.asStateFlow()
@@ -40,48 +48,53 @@ class FirebaseRemoteConfigManager @Inject constructor() {
     val scraperRuntimeConfig: StateFlow<ScraperRuntimeConfig> = _scraperRuntimeConfig.asStateFlow()
 
     init {
-        remoteConfig.setConfigSettingsAsync(
-            FirebaseRemoteConfigSettings.Builder()
-                .setMinimumFetchIntervalInSeconds(3600)
-                .build()
-        )
-        remoteConfig.setDefaultsAsync(
-            mapOf(
-                "source_olympus_enabled" to true,
-                "source_azora_enabled" to true,
-                "source_starz_enabled" to true,
-                "source_mangasid_enabled" to true,
-                "source_meshmanga_enabled" to true,
-                "source_asq3_enabled" to true,
-                "source_lekmanga_enabled" to true,
-                "source_lekmangaonline_enabled" to true,
-                "source_likemanga_enabled" to true,
-                "source_linkmanga_enabled" to true,
-                "source_mangaleko_enabled" to true,
-                "source_mangalionz_enabled" to true,
-                "source_areascans_enabled" to true,
-                "source_hijala_enabled" to true,
-                "source_lavascans_enabled" to true,
-                "source_stellarsaber_enabled" to true,
-                "source_procomic_enabled" to true,
-                "source_rockmanga_enabled" to true,
-                "scraper_selector_overrides" to "{}",
-                "scraper_connect_timeout_seconds" to 30,
-                "scraper_read_timeout_seconds" to 30,
-                "scraper_write_timeout_seconds" to 15,
-                "scraper_retry_count" to 1,
-                "home_layout_variant" to "default",
-                "community_banned_keywords" to "",
-                "remote_alert_message" to ""
-            )
-        )
-        applyState()
+        scope.launch {
+            // Await both async operations so applyState() reads correct defaults
+            remoteConfig.setConfigSettingsAsync(
+                FirebaseRemoteConfigSettings.Builder()
+                    .setMinimumFetchIntervalInSeconds(3600)
+                    .build()
+            ).await()
+            remoteConfig.setDefaultsAsync(
+                mapOf(
+                    "source_olympus_enabled" to true,
+                    "source_azora_enabled" to true,
+                    "source_starz_enabled" to true,
+                    "source_mangasid_enabled" to true,
+                    "source_meshmanga_enabled" to true,
+                    "source_asq3_enabled" to true,
+                    "source_lekmanga_enabled" to true,
+                    "source_lekmangaonline_enabled" to true,
+                    "source_likemanga_enabled" to true,
+                    "source_linkmanga_enabled" to true,
+                    "source_mangaleko_enabled" to true,
+                    "source_mangalionz_enabled" to true,
+                    "source_areascans_enabled" to true,
+                    "source_hijala_enabled" to true,
+                    "source_lavascans_enabled" to true,
+                    "source_stellarsaber_enabled" to true,
+                    "source_procomic_enabled" to true,
+                    "source_rockmanga_enabled" to true,
+                    "scraper_selector_overrides" to "{}",
+                    "scraper_connect_timeout_seconds" to 30,
+                    "scraper_read_timeout_seconds" to 30,
+                    "scraper_write_timeout_seconds" to 15,
+                    "scraper_retry_count" to 1,
+                    "home_layout_variant" to "default",
+                    "community_banned_keywords" to "",
+                    "remote_alert_message" to ""
+                )
+            ).await()
+            applyState()
+        }
     }
 
     suspend fun refresh() {
         runCatching {
             remoteConfig.fetchAndActivate().await()
             applyState()
+        }.onFailure { e ->
+            Log.w(TAG, "Remote config fetch failed: ${e.message}", e)
         }
     }
 

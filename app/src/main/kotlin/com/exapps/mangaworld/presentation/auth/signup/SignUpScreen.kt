@@ -5,8 +5,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,17 +29,29 @@ import com.exapps.mangaworld.presentation.theme.MangaColors
 @Composable
 fun SignUpScreen(
     onBack: () -> Unit,
-    onSignUp: (email: String, password: String) -> Unit,
+    onSignUp: (email: String, password: String, displayName: String, username: String) -> Unit,
     onGoogleSignInClick: () -> Unit = {},
     onFacebookLoginClick: () -> Unit = {},
     isLoading: Boolean = false,
     error: String? = null
 ) {
+    var displayName by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
+
+    // Username validation state
+    val normalizedUsername = username.trim().lowercase()
+    val usernameError = when {
+        normalizedUsername.isEmpty() -> null
+        normalizedUsername.length < 3 -> "اسم المستخدم قصير جداً (3 أحرف على الأقل)"
+        normalizedUsername.length > 20 -> "اسم المستخدم طويل جداً (20 حرف كحد أقصى)"
+        !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$")) -> "أحرف وأرقام وشرطات سفلية فقط"
+        else -> null
+    }
 
     Scaffold(
         containerColor = MangaColors.Background,
@@ -111,6 +125,34 @@ fun SignUpScreen(
             }
             Spacer(modifier = Modifier.height(20.dp))
 
+            // ── Display Name Field ───────────────────────────────────────────
+
+            MangaTextField(
+                value = displayName,
+                onValueChange = { displayName = it },
+                placeholder = "الاسم المعروض",
+                leadingIcon = Icons.Filled.Person,
+                keyboardType = KeyboardType.Text,
+                imeAction = ImeAction.Next
+            )
+            Spacer(Modifier.height(12.dp))
+
+            // ── Username Field ───────────────────────────────────────────────
+
+            MangaTextField(
+                value = username,
+                onValueChange = { username = it },
+                placeholder = "اسم المستخدم",
+                leadingIcon = Icons.Filled.Badge,
+                keyboardType = KeyboardType.Ascii,
+                imeAction = ImeAction.Next
+            )
+            if (usernameError != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(usernameError, color = MangaColors.Yellow, fontSize = 12.sp)
+            }
+            Spacer(Modifier.height(12.dp))
+
             // ── Email / Password Fields ─────────────────────────────────────
 
             MangaTextField(
@@ -126,7 +168,7 @@ fun SignUpScreen(
             MangaTextField(
                 value = password,
                 onValueChange = { password = it },
-                placeholder = "كلمة المرور (6 أحرف على الأقل)",
+                placeholder = "كلمة المرور",
                 leadingIcon = Icons.Filled.Lock,
                 isPassword = true,
                 passwordVisible = passwordVisible,
@@ -160,15 +202,19 @@ fun SignUpScreen(
 
             Spacer(Modifier.height(20.dp))
 
+            val canSubmit = !isLoading &&
+                email.isNotBlank() && password.isNotBlank() && password == confirmPassword &&
+                displayName.isNotBlank() && username.isNotBlank() && usernameError == null
+
             Button(
                 onClick = {
                     keyboardController?.hide()
-                    onSignUp(email.trim(), password)
+                    onSignUp(email.trim(), password, displayName.trim(), normalizedUsername)
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Primary),
-                enabled = !isLoading && email.isNotBlank() && password.length >= 6 && password == confirmPassword
+                enabled = canSubmit
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))

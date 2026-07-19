@@ -178,9 +178,11 @@ class FirebaseAnalyticsManager @Inject constructor(
     }
 }
 
+private val RESERVED_PREFIXES = setOf("firebase_", "google_", "ga_")
+
 private fun String.toFirebaseEventName(): String =
     toFirebaseKey(maxLength = 40).let { sanitized ->
-        if (sanitized.startsWith("firebase_")) "mw_$sanitized".take(40) else sanitized
+        if (RESERVED_PREFIXES.any { sanitized.startsWith(it) }) "mw_$sanitized".take(40) else sanitized
     }
 
 private fun String.toFirebaseKey(maxLength: Int = 40): String {

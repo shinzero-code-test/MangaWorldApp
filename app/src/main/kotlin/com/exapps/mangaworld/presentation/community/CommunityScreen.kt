@@ -120,7 +120,7 @@ class CommunityViewModel @Inject constructor(
     fun postComment(text: String, spoiler: Boolean) {
         viewModelScope.launch {
             runCatching {
-                val replyPrefix = _replyTo.value?.let { "@${it.authorName} " } ?: ""
+                val replyPrefix = _replyTo.value?.let { "@${it.authorUsername.ifBlank { it.authorName }} " } ?: ""
                 val fullText = replyPrefix + text
                 if (chapterUrl == null) communityRepository.postMangaComment(mangaId, slug, sourceId, fullText, spoiler, _replyTo.value?.id)
                 else communityRepository.postChapterComment(mangaId, slug, sourceId, chapterUrl, fullText, spoiler, _replyTo.value?.id)
@@ -281,7 +281,7 @@ fun CommunityScreen(
                             Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.Reply, null, tint = MangaColors.Cyan, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("الرد على @${reply.authorName}", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall)
+                                Text("الرد على @${reply.authorUsername.ifBlank { reply.authorName }}", color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall)
                                 Spacer(Modifier.weight(1f))
                                 IconButton(onClick = { viewModel.setReply(null) }, modifier = Modifier.size(20.dp)) {
                                     Icon(Icons.Filled.Close, null, tint = MangaColors.Muted, modifier = Modifier.size(14.dp))

@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
         recipients.set(parentUid, {
           type: "REPLY",
           title: "رد جديد على تعليقك",
-          body: `${String(comment.authorName ?? "قارئ")}: ${String(comment.text ?? "").slice(0, 80)}`,
+          body: `${String(comment.authorName ?? "مشاهد")}: ${String(comment.text ?? "").slice(0, 80)}`,
         });
       }
     }
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
         recipients.set(targetUid, {
           type: "MENTION",
           title: "تمت الإشارة إليك",
-          body: `${String(comment.authorName ?? "قارئ")} ذكر ${username}`,
+          body: `${String(comment.authorName ?? "مشاهد")} ذكر ${username}`,
         });
       }
     }));

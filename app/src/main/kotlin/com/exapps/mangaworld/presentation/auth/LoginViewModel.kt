@@ -5,14 +5,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.firebase.AccountMergeRequiredException
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
-import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 @Immutable
@@ -22,12 +20,15 @@ data class AuthUiState(
     val isSignedIn: Boolean = false,
     val email: String = "",
     val password: String = "",
+    val displayName: String = "",
+    val username: String = "",
     val passwordResetSent: Boolean = false
 )
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(
-    private val sessionManager: FirebaseSessionManager
+    private val sessionManager: FirebaseSessionManager,
+    private val communityRepository: com.exapps.mangaworld.domain.repository.CommunityRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -42,52 +43,82 @@ class LoginViewModel @Inject constructor(
     }
 
     fun onEmailChanged(email: String) {
-        _uiState.update { it.copy(email = email, error = null) }
+        _uiState.update { it.copy(email = email.trim(), error = null) }
     }
 
     fun onPasswordChanged(password: String) {
         _uiState.update { it.copy(password = password, error = null) }
     }
 
-    fun signInWithEmail() {
-        val state = _uiState.value
-        if (state.email.isBlank() || state.password.isBlank()) {
+    fun onDisplayNameChanged(displayName: String) {
+        _uiState.update { it.copy(displayName = displayName, error = null) }
+    }
+
+    fun onUsernameChanged(username: String) {
+        _uiState.update { it.copy(username = username.trim(), error = null) }
+    }
+
+    fun signInWithEmail(email: String, password: String) {
+        val normalizedEmail = email.trim()
+        _uiState.update { it.copy(email = normalizedEmail) }
+        if (normalizedEmail.isBlank() || password.isBlank()) {
             _uiState.update { it.copy(error = "أدخل البريد الإلكتروني وكلمة المرور") }
             return
         }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                val uid = sessionManager.signInWithEmail(state.email.trim(), state.password)
+                val uid = sessionManager.signInWithEmail(normalizedEmail, password)
                 if (uid != null) {
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول. تحقق من البيانات.") }
                 }
+            } catch (error: AccountMergeRequiredException) {
+                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
             }
         }
     }
 
-    fun signUpWithEmail(email: String, password: String) {
-        if (email.isBlank() || password.isBlank()) {
+    fun signUpWithEmail(email: String, password: String, displayName: String = "", username: String = "") {
+        val normalizedEmail = email.trim()
+        if (normalizedEmail.isBlank() || password.isBlank()) {
             _uiState.update { it.copy(error = "أدخل البريد الإلكتروني وكلمة المرور") }
             return
         }
-        if (password.length < 6) {
-            _uiState.update { it.copy(error = "كلمة المرور يجب أن تكون 6 أحرف على الأقل") }
+        if (displayName.isBlank()) {
+            _uiState.update { it.copy(error = "أدخل الاسم المعروض") }
+            return
+        }
+        if (username.isBlank()) {
+            _uiState.update { it.copy(error = "أدخل اسم المستخدم") }
+            return
+        }
+        val normalizedUsername = username.trim().lowercase()
+        if (normalizedUsername.length !in 3..20 || !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$"))) {
+            _uiState.update { it.copy(error = "اسم المستخدم يجب أن يكون 3-20 حرف وأرقام وشرطات سفلية فقط") }
             return
         }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                val uid = sessionManager.signUpWithEmail(email.trim(), password)
+                val uid = sessionManager.signUpWithEmail(normalizedEmail, password, displayName.trim(), normalizedUsername)
                 if (uid != null) {
+                    // Create the Firestore profile with the username
+                    communityRepository.upsertProfile(
+                        username = normalizedUsername,
+                        bio = "",
+                        isPublic = true,
+                        displayName = displayName.trim()
+                    )
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "فشل إنشاء الحساب.") }
                 }
+            } catch (error: AccountMergeRequiredException) {
+                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
             }
@@ -100,12 +131,14 @@ class LoginViewModel @Inject constructor(
             try {
                 val uid = sessionManager.signInWithGoogleIdToken(idToken)
                 if (uid != null) {
+                    // Ensure profile exists with the provider's display name
+                    ensureProfileExists(uid)
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول بـ Google.") }
                 }
-            } catch (_: AccountMergeRequiredException) {
-                _uiState.update { it.copy(isLoading = false, error = "هذا الحساب مرتبط بحساب آخر. سجّل الدخول بالحساب الأصلي ثم اربط مزود الدخول من الإعدادات.") }
+            } catch (error: AccountMergeRequiredException) {
+                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
             }
@@ -118,34 +151,73 @@ class LoginViewModel @Inject constructor(
             try {
                 val uid = sessionManager.signInWithFacebook(accessToken)
                 if (uid != null) {
+                    // Ensure profile exists with the provider's display name
+                    ensureProfileExists(uid)
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "فشل تسجيل الدخول بـ Facebook.") }
                 }
-            } catch (_: AccountMergeRequiredException) {
-                _uiState.update { it.copy(isLoading = false, error = "هذا الحساب مرتبط بحساب آخر. سجّل الدخول بالحساب الأصلي ثم اربط مزود الدخول من الإعدادات.") }
+            } catch (error: AccountMergeRequiredException) {
+                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
             }
         }
     }
 
+    /**
+     * After social sign-in, check if the user already has a Firestore profile.
+     * If not, create one using the provider's display name as both displayName and username.
+     */
+    private suspend fun ensureProfileExists(uid: String) {
+        val existing = communityRepository.getCurrentProfile()
+        if (existing == null || existing.username.isBlank()) {
+            val firebaseUser = sessionManager.currentUser()
+            val providerName = firebaseUser?.displayName?.takeIf { it.isNotBlank() } ?: ""
+            // Generate a username from provider name: lowercase, replace spaces with underscores, keep alphanumeric + underscores
+            val generatedUsername = providerName.lowercase()
+                .replace(Regex("[^a-zA-Z0-9\\s]"), "")
+                .trim()
+                .replace(Regex("\\s+"), "_")
+                .take(20)
+                .ifBlank { "user_${uid.takeLast(6)}" }
+            try {
+                communityRepository.upsertProfile(
+                    username = generatedUsername,
+                    bio = "",
+                    isPublic = true,
+                    displayName = providerName
+                )
+            } catch (_: Exception) {
+                // Username might be taken — append random suffix
+                val fallback = "${generatedUsername}_${(1000..9999).random()}"
+                try {
+                    communityRepository.upsertProfile(
+                        username = fallback,
+                        bio = "",
+                        isPublic = true,
+                        displayName = providerName
+                    )
+                } catch (_: Exception) { /* Profile creation failed silently */ }
+            }
+        }
+    }
+
     fun sendPasswordReset(email: String) {
-        if (email.isBlank()) {
+        val normalizedEmail = email.trim()
+        if (normalizedEmail.isBlank()) {
             _uiState.update { it.copy(error = "أدخل البريد الإلكتروني") }
             return
         }
-        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()) {
             _uiState.update { it.copy(error = "البريد الإلكتروني غير صالح") }
             return
         }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null, passwordResetSent = false) }
             try {
-                FirebaseAuth.getInstance().sendPasswordResetEmail(email.trim()).await()
+                sessionManager.sendPasswordResetEmail(normalizedEmail)
                 _uiState.update { it.copy(isLoading = false, passwordResetSent = true, error = null) }
-                kotlinx.coroutines.delay(5000)
-                _uiState.update { it.copy(passwordResetSent = false) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e), passwordResetSent = false) }
             }
@@ -160,26 +232,5 @@ class LoginViewModel @Inject constructor(
         _uiState.update { it.copy(error = null) }
     }
 
-    private fun mapAuthError(e: Exception): String {
-        val msg = e.message ?: ""
-        return when {
-            msg.contains("password is invalid", true) || msg.contains("wrong password", true) ||
-            msg.contains("INVALID_LOGIN_CREDENTIALS", true) -> "بيانات الدخول غير صحيحة"
-            msg.contains("no user record", true) || msg.contains("user not found", true) ->
-                "لا يوجد حساب بهذا البريد الإلكتروني"
-            msg.contains("email address is already", true) || msg.contains("already in use", true) ->
-                "هذا البريد الإلكتروني مستخدم بالفعل"
-            msg.contains("weak password", true) || msg.contains("should be at least", true) ->
-                "كلمة المرور ضعيفة. استخدم 6 أحرف على الأقل"
-            msg.contains("invalid email", true) || msg.contains("malformed", true) ->
-                "البريد الإلكتروني غير صالح"
-            msg.contains("network", true) || msg.contains("timeout", true) ->
-                "تحقق من اتصال الإنترنت"
-            msg.contains("too many requests", true) || msg.contains("quota", true) ->
-                "محاولات كثيرة. حاول مرة أخرى بعد قليل"
-            msg.contains("NETWORK_ERROR", true) ->
-                "خطأ في الشبكة. تحقق من اتصال الإنترنت"
-            else -> "حدث خطأ. حاول مرة أخرى"
-        }
-    }
+    private fun mapAuthError(error: Exception): String = firebaseAuthErrorMessage(error)
 }

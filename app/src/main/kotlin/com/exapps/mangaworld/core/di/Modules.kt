@@ -162,6 +162,18 @@ object ScraperModule {
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
+    @Provides @Singleton
+    fun provideFirebaseAuth(): com.google.firebase.auth.FirebaseAuth = com.google.firebase.auth.FirebaseAuth.getInstance()
+
+    @Provides @Singleton
+    fun provideFirebaseFirestore(): com.google.firebase.firestore.FirebaseFirestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+
+    @Provides @Singleton
+    fun provideFirebaseDatabase(): com.google.firebase.database.FirebaseDatabase = com.google.firebase.database.FirebaseDatabase.getInstance()
+
+    @Provides @Singleton
+    fun provideFirebaseRemoteConfig(): com.google.firebase.remoteconfig.FirebaseRemoteConfig = com.google.firebase.remoteconfig.FirebaseRemoteConfig.getInstance()
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): MangaDatabase =

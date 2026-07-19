@@ -10,6 +10,14 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Adds retry logic, configurable timeouts, and scraper metadata to OkHttp requests.
+ *
+ * NOTE: HTTP metrics (latency, payload size, status code) are automatically
+ * captured by the Firebase Performance Gradle plugin's auto-instrumentation.
+ * This interceptor only adds custom attributes — it does NOT create its own
+ * HttpMetric to avoid double-counting.
+ */
 @Singleton
 class FirebaseNetworkInterceptor @Inject constructor(
     private val remoteConfigManager: FirebaseRemoteConfigManager,
@@ -34,31 +42,33 @@ class FirebaseNetworkInterceptor @Inject constructor(
             .withReadTimeout(runtimeConfig.readTimeoutSeconds, TimeUnit.SECONDS)
             .withWriteTimeout(runtimeConfig.writeTimeoutSeconds, TimeUnit.SECONDS)
 
-        val metric = FirebasePerformance.getInstance().newHttpMetric(request.url.toString(), request.method)
-        metric.putAttribute("network_type", firebaseTelemetry.refreshNetworkTypeKey())
+        // Use a non-HTTP custom trace for scraper metadata only.
+        // HTTP latency/payload metrics are handled by Gradle auto-instrumentation.
+        val trace = FirebasePerformance.getInstance().newTrace("scraper_request")
+        trace.putAttribute("network_type", firebaseTelemetry.refreshNetworkTypeKey())
         sourceId?.let {
             firebaseTelemetry.setActiveSource(it)
-            metric.putAttribute("scraper_source", it)
+            trace.putAttribute("scraper_source", it)
         }
-        metric.start()
+        trace.start()
 
         try {
             var lastException: IOException? = null
             repeat(runtimeConfig.retryCount + 1) { attempt ->
                 try {
                     val response = tunedChain.proceed(request)
-                    metric.setHttpResponseCode(response.code)
-                    response.body?.contentLength()?.takeIf { it >= 0 }?.let(metric::setResponsePayloadSize)
+                    trace.putAttribute("response_code", response.code.toString())
                     return response
                 } catch (exception: IOException) {
                     lastException = exception
+                    trace.incrementMetric("retry_count", 1)
                     if (attempt == runtimeConfig.retryCount) throw exception
                 }
             }
 
             throw lastException ?: IOException("Unknown scraper network error")
         } finally {
-            metric.stop()
+            trace.stop()
         }
     }
 }

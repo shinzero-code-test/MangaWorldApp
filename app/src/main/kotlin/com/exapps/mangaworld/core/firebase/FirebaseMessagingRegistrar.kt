@@ -17,8 +17,7 @@ import javax.inject.Singleton
 @Singleton
 class FirebaseMessagingRegistrar @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val sessionManager: FirebaseSessionManager,
-    private val analyticsManager: FirebaseAnalyticsManager
+    private val sessionManager: FirebaseSessionManager
 ) {
     private val firestore = FirebaseFirestore.getInstance()
     private val messaging = FirebaseMessaging.getInstance()
@@ -33,8 +32,7 @@ class FirebaseMessagingRegistrar @Inject constructor(
     }
 
     private suspend fun persistToken(token: String) {
-        val uid = sessionManager.ensureGuestSession() ?: return
-        analyticsManager.setUserId(uid)
+        val uid = sessionManager.ensureFirebaseSession() ?: return
         val deviceDocId = token.sha256().take(32)
         firestore.collection("users")
             .document(uid)

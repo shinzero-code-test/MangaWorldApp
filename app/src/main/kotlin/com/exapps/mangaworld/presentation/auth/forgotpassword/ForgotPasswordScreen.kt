@@ -133,6 +133,9 @@ fun ForgotPasswordScreen(
                         )
                     }
                 }
+                TextButton(onClick = onDismissSuccess) {
+                    Text("إخفاء الرسالة")
+                }
             }
         }
     }

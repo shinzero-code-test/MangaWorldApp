@@ -38,15 +38,15 @@ import com.exapps.mangaworld.presentation.localstorage.LocalMangaDetailScreen
 import com.exapps.mangaworld.presentation.localstorage.ImportMangaScreen
 import com.exapps.mangaworld.presentation.suggestions.SuggestionsScreen
 import com.exapps.mangaworld.presentation.auth.login.LoginScreen
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.compose.rememberLauncherForActivityResult
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
 
 sealed class Screen(val route: String) {
     object Home        : Screen("home")
@@ -120,6 +120,7 @@ val bottomNavItems: List<Triple<Screen, String, ImageVector>> = listOf(
 @Composable
 fun MangaNavGraph(
     navController: NavHostController,
+    googleSignInClient: GoogleSignInClient,
     setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit
 ) {
     NavHost(
@@ -299,7 +300,8 @@ fun MangaNavGraph(
                 onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
                 onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) },
                 onOpenSuggestions = { navController.navigate(Screen.Suggestions.route) },
-                onOpenProfile = { navController.navigate(Screen.Profile.route) }
+                onOpenProfile = { navController.navigate(Screen.Profile.route) },
+                onOpenModeration = { navController.navigate(Screen.ModerationDashboard.route) }
             )
         }
         composable(Screen.Sources.route) {
@@ -352,18 +354,7 @@ fun MangaNavGraph(
             val viewModel: com.exapps.mangaworld.presentation.auth.LoginViewModel = hiltViewModel()
             val state by viewModel.uiState.collectAsStateWithLifecycle()
             val context = LocalContext.current
-            val scope = rememberCoroutineScope()
 
-            // Google Sign-In launcher
-            val googleSignInClient = remember {
-                com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(
-                    context,
-                    com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
-                        .requestIdToken(context.resources.getString(context.resources.getIdentifier("default_web_client_id", "string", context.packageName)))
-                        .requestEmail()
-                        .build()
-                )
-            }
             val googleLauncher = rememberLauncherForActivityResult(
                 contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
             ) { result ->
@@ -389,21 +380,22 @@ fun MangaNavGraph(
                 }
             }
 
-            // Facebook login — register callback in LaunchedEffect, handle via Activity.onActivityResult
+            // Keep the SDK registration scoped to the login destination.
             val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
-            LaunchedEffect(facebookCallbackManager) {
-                setFacebookCallbackManager(facebookCallbackManager)
-                com.facebook.login.LoginManager.getInstance().registerCallback(facebookCallbackManager,
-                    object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
-                        override fun onSuccess(loginResult: com.facebook.login.LoginResult) {
-                            viewModel.signInWithFacebook(loginResult.accessToken.token)
-                        }
-                        override fun onCancel() {}
-                        override fun onError(error: com.facebook.FacebookException) {
-                            viewModel.clearError()
-                        }
+            DisposableEffect(facebookCallbackManager) {
+                val loginManager = com.facebook.login.LoginManager.getInstance()
+                val callback = object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+                    override fun onSuccess(loginResult: com.facebook.login.LoginResult) {
+                        viewModel.signInWithFacebook(loginResult.accessToken.token)
                     }
-                )
+                    override fun onCancel() = Unit
+                    override fun onError(error: com.facebook.FacebookException) {
+                        viewModel.clearError()
+                    }
+                }
+                setFacebookCallbackManager(facebookCallbackManager)
+                loginManager.registerCallback(facebookCallbackManager, callback)
+                onDispose { loginManager.unregisterCallback(facebookCallbackManager) }
             }
 
             LoginScreen(
@@ -413,7 +405,7 @@ fun MangaNavGraph(
                 errorMessage = state.error,
                 onEmailChanged = viewModel::onEmailChanged,
                 onPasswordChanged = viewModel::onPasswordChanged,
-                onLoginClick = { _, _ -> viewModel.signInWithEmail() },
+                onLoginClick = viewModel::signInWithEmail,
                 onGoogleSignInClick = {
                     googleLauncher.launch(googleSignInClient.signInIntent)
                 },
@@ -434,16 +426,6 @@ fun MangaNavGraph(
             val state by viewModel.uiState.collectAsStateWithLifecycle()
             val signUpContext = LocalContext.current
 
-            // Google Sign-In launcher (same as Login route)
-            val googleSignInClient = remember {
-                com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(
-                    signUpContext,
-                    com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
-                        .requestIdToken(signUpContext.resources.getString(signUpContext.resources.getIdentifier("default_web_client_id", "string", signUpContext.packageName)))
-                        .requestEmail()
-                        .build()
-                )
-            }
             val googleLauncher = rememberLauncherForActivityResult(
                 contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
             ) { result ->
@@ -469,21 +451,22 @@ fun MangaNavGraph(
                 }
             }
 
-            // Facebook callback for SignUp route
+            // Keep the SDK registration scoped to the sign-up destination.
             val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
-            LaunchedEffect(facebookCallbackManager) {
-                setFacebookCallbackManager(facebookCallbackManager)
-                com.facebook.login.LoginManager.getInstance().registerCallback(facebookCallbackManager,
-                    object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
-                        override fun onSuccess(loginResult: com.facebook.login.LoginResult) {
-                            viewModel.signInWithFacebook(loginResult.accessToken.token)
-                        }
-                        override fun onCancel() {}
-                        override fun onError(error: com.facebook.FacebookException) {
-                            viewModel.clearError()
-                        }
+            DisposableEffect(facebookCallbackManager) {
+                val loginManager = com.facebook.login.LoginManager.getInstance()
+                val callback = object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+                    override fun onSuccess(loginResult: com.facebook.login.LoginResult) {
+                        viewModel.signInWithFacebook(loginResult.accessToken.token)
                     }
-                )
+                    override fun onCancel() = Unit
+                    override fun onError(error: com.facebook.FacebookException) {
+                        viewModel.clearError()
+                    }
+                }
+                setFacebookCallbackManager(facebookCallbackManager)
+                loginManager.registerCallback(facebookCallbackManager, callback)
+                onDispose { loginManager.unregisterCallback(facebookCallbackManager) }
             }
 
             com.exapps.mangaworld.presentation.auth.signup.SignUpScreen(

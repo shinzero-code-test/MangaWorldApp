@@ -26,6 +26,15 @@ export async function POST(request: NextRequest) {
     const { idToken } = await signInRes.json();
     const decoded = await getAdminAuth().verifyIdToken(idToken);
 
+    // Block viewers from accessing the dashboard
+    const userRole = decoded.role;
+    if (!userRole || userRole === "viewer") {
+      return NextResponse.json(
+        { error: "ليس لديك صلاحية الوصول إلى لوحة التحكم. هذه اللوحة مخصصة للمشرفين والمديرين فقط." },
+        { status: 403 }
+      );
+    }
+
     const profileDoc = await getAdminDb().collection("publicProfiles").doc(decoded.uid).get();
     if (!profileDoc.exists) {
       await getAdminDb().collection("publicProfiles").doc(decoded.uid).set({

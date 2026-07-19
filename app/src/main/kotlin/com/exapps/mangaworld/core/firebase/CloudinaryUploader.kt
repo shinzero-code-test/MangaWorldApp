@@ -4,18 +4,25 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Base64
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
-import java.net.HttpURLConnection
 import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val TAG = "CloudinaryUploader"
+
 /**
  * Handles image uploads and deletions via the admin dashboard's Cloudinary API.
+ * Uses injected OkHttpClient for connection pooling, caching, and interceptor support.
  *
  * Dashboard API: POST https://mangaworld-admin.vercel.app/api/cloudinary/app-upload
  * Dashboard API: POST https://mangaworld-admin.vercel.app/api/cloudinary/app-delete
@@ -23,7 +30,8 @@ import javax.inject.Singleton
 @Singleton
 class CloudinaryUploader @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val sessionManager: FirebaseSessionManager
+    private val sessionManager: FirebaseSessionManager,
+    private val okHttpClient: OkHttpClient
 ) {
     companion object {
         private const val DASHBOARD_URL = "https://mangaworld-admin.vercel.app"
@@ -43,40 +51,33 @@ class CloudinaryUploader @Inject constructor(
                 val token = sessionManager.currentIdToken() ?: return@withContext null
                 val dataUrl = "data:image/jpeg;base64,$base64"
 
-                val url = URL("$DASHBOARD_URL/api/cloudinary/app-upload")
-                val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = "POST"
-                connection.setRequestProperty("Content-Type", "application/json")
-                connection.setRequestProperty("Authorization", "Bearer $token")
-                connection.connectTimeout = 15000
-                connection.readTimeout = 15000
-                connection.doOutput = true
-
                 val payload = JSONObject().apply {
                     put("image", dataUrl)
                     put("assetType", assetType)
                 }
 
-                connection.outputStream.use { os ->
-                    os.write(payload.toString().toByteArray())
-                }
+                val request = Request.Builder()
+                    .url("$DASHBOARD_URL/api/cloudinary/app-upload")
+                    .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                    .addHeader("Authorization", "Bearer $token")
+                    .build()
 
-                val responseCode = connection.responseCode
-                val responseBody = (if (responseCode in 200..299) connection.inputStream else connection.errorStream)
-                    ?.bufferedReader()
-                    ?.use { it.readText() }
-                    .orEmpty()
-
-                if (responseCode == 200) {
-                    val json = JSONObject(responseBody)
-                    UploadResult(
-                        url = json.getString("url"),
-                        publicId = json.optString("publicId", "")
-                    )
-                } else {
-                    null
+                val response = okHttpClient.newCall(request).execute()
+                response.use { resp ->
+                    if (resp.isSuccessful) {
+                        val body = resp.body?.string().orEmpty()
+                        val json = JSONObject(body)
+                        UploadResult(
+                            url = json.getString("url"),
+                            publicId = json.optString("publicId", "")
+                        )
+                    } else {
+                        Log.w(TAG, "Upload failed: ${resp.code}")
+                        null
+                    }
                 }
             } catch (e: Exception) {
+                Log.w(TAG, "Upload error: ${e.message}")
                 null
             }
         }
@@ -91,26 +92,17 @@ class CloudinaryUploader @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val token = sessionManager.currentIdToken() ?: return@withContext false
-                val url = URL("$DASHBOARD_URL/api/cloudinary/app-delete")
-                val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = "POST"
-                connection.setRequestProperty("Content-Type", "application/json")
-                connection.setRequestProperty("Authorization", "Bearer $token")
-                connection.connectTimeout = 10000
-                connection.readTimeout = 10000
-                connection.doOutput = true
+                val payload = JSONObject().apply { put("publicId", publicId) }
 
-                val payload = JSONObject().apply {
-                    put("publicId", publicId)
-                }
+                val request = Request.Builder()
+                    .url("$DASHBOARD_URL/api/cloudinary/app-delete")
+                    .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                    .addHeader("Authorization", "Bearer $token")
+                    .build()
 
-                connection.outputStream.use { os ->
-                    os.write(payload.toString().toByteArray())
-                }
-
-                val responseCode = connection.responseCode
-                responseCode == 200
-            } catch (_: Exception) {
+                okHttpClient.newCall(request).execute().use { it.isSuccessful }
+            } catch (e: Exception) {
+                Log.w(TAG, "Delete error: ${e.message}")
                 false
             }
         }

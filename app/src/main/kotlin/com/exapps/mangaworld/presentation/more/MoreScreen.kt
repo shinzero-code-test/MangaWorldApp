@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,7 +21,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import javax.inject.Inject
+
+@HiltViewModel
+class MoreViewModel @Inject constructor(
+    communityRepository: CommunityRepository
+) : ViewModel() {
+    val role = kotlinx.coroutines.flow.flow { emit(communityRepository.getCurrentProfile()?.role ?: "viewer") }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "viewer")
+}
 
 private data class MoreGridItem(
     val icon: ImageVector,
@@ -42,20 +60,28 @@ fun MoreScreen(
     onOpenDiagnostics: () -> Unit,
     onOpenCloudSync: () -> Unit,
     onOpenSuggestions: () -> Unit = {},
-    onOpenProfile: () -> Unit = {}
+    onOpenProfile: () -> Unit = {},
+    onOpenModeration: () -> Unit = {},
+    viewModel: MoreViewModel = hiltViewModel()
 ) {
-    val gridItems = listOf(
-        MoreGridItem(Icons.Filled.Download, "التنزيلات", "الفصول المنزّلة", MangaColors.Cyan, onOpenDownloads),
-        MoreGridItem(Icons.Filled.FolderOpen, "المحلي", "المانجا المحفوظة", MangaColors.GlowPurple, onOpenLocalStorage),
-        MoreGridItem(Icons.Filled.AutoAwesome, "اقتراحات", "مانجا قد تعجبك", MangaColors.Yellow, onOpenSuggestions),
-        MoreGridItem(Icons.Filled.BarChart, "الإحصائيات", "وقت القراءة", MangaColors.Pink, onOpenReadingStats),
-        MoreGridItem(Icons.Filled.EmojiEvents, "الإنجازات", "تتبع التقدم", MangaColors.Yellow, onOpenGoals),
-        MoreGridItem(Icons.Filled.Cloud, "المزامنة", "البيانات السحابية", MangaColors.Cyan, onOpenCloudSync),
-        MoreGridItem(Icons.Filled.Tune, "المصادر", "إدارة مصادر المانجا", MangaColors.Green, onOpenSources),
-        MoreGridItem(Icons.Filled.Person, "الملف الشخصي", "حسابك وبياناتك", MangaColors.Cyan, onOpenProfile),
-        MoreGridItem(Icons.Filled.Settings, "الإعدادات", "تخصيص التطبيق", MangaColors.Muted, onOpenSettings),
-        MoreGridItem(Icons.Filled.BugReport, "التشخيص", "معلومات تقنية", MangaColors.Orange, onOpenDiagnostics),
-    )
+    val role by viewModel.role.collectAsStateWithLifecycle()
+    val canModerate = role in setOf("moderator", "super-admin")
+
+    val gridItems = buildList {
+        add(MoreGridItem(Icons.Filled.Download, "التنزيلات", "الفصول المنزّلة", MangaColors.Cyan, onOpenDownloads))
+        add(MoreGridItem(Icons.Filled.FolderOpen, "المحلي", "المانجا المحفوظة", MangaColors.GlowPurple, onOpenLocalStorage))
+        add(MoreGridItem(Icons.Filled.AutoAwesome, "اقتراحات", "مانجا قد تعجبك", MangaColors.Yellow, onOpenSuggestions))
+        add(MoreGridItem(Icons.Filled.BarChart, "الإحصائيات", "وقت القراءة", MangaColors.Pink, onOpenReadingStats))
+        add(MoreGridItem(Icons.Filled.EmojiEvents, "الإنجازات", "تتبع التقدم", MangaColors.Yellow, onOpenGoals))
+        add(MoreGridItem(Icons.Filled.Cloud, "المزامنة", "البيانات السحابية", MangaColors.Cyan, onOpenCloudSync))
+        add(MoreGridItem(Icons.Filled.Tune, "المصادر", "إدارة مصادر المانجا", MangaColors.Green, onOpenSources))
+        if (canModerate) {
+            add(MoreGridItem(Icons.Filled.Shield, "لوحة الإشراف", "إدارة المحتوى", MangaColors.Yellow, onOpenModeration))
+        }
+        add(MoreGridItem(Icons.Filled.Person, "الملف الشخصي", "حسابك وبياناتك", MangaColors.Cyan, onOpenProfile))
+        add(MoreGridItem(Icons.Filled.Settings, "الإعدادات", "تخصيص التطبيق", MangaColors.Muted, onOpenSettings))
+        add(MoreGridItem(Icons.Filled.BugReport, "التشخيص", "معلومات تقنية", MangaColors.Orange, onOpenDiagnostics))
+    }
 
     Scaffold(
         containerColor = MangaColors.Background,

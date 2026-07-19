@@ -17,6 +17,13 @@ service cloud.firestore {
       return signedIn() && request.auth.token.role in ['moderator', 'super-admin'];
     }
 
+    function hasInitialCommentCounters() {
+      return (!request.resource.data.keys().hasAny(['likes']) || request.resource.data.likes == 0)
+        && (!request.resource.data.keys().hasAny(['dislikes']) || request.resource.data.dislikes == 0)
+        && request.resource.data.replyCount == 0
+        && request.resource.data.reportedCount == 0;
+    }
+
     match /users/{userId} {
       allow read, write: if owner(userId);
 
@@ -68,9 +75,9 @@ service cloud.firestore {
     match /publicProfiles/{userId} {
       allow read: if resource.data.isPublic == true || owner(userId);
       allow create: if owner(userId)
-        && request.resource.data.keys().hasOnly(['username', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'bio', 'updatedAt']);
+        && request.resource.data.keys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'role', 'updatedAt']);
       allow update: if owner(userId)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'bio', 'updatedAt']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'role', 'updatedAt']);
       allow delete: if owner(userId);
     }
 
@@ -88,10 +95,15 @@ service cloud.firestore {
 
       match /comments/{commentId} {
         allow read: if true;
-        allow create: if canWriteCommunity(request.resource.data.authorUid);
-        allow update: if canWriteCommunity(resource.data.authorUid)
-          && request.resource.data.authorUid == resource.data.authorUid;
+        allow create: if canWriteCommunity(request.resource.data.authorUid)
+          && request.resource.data.id == commentId
+          && hasInitialCommentCounters();
+        allow update: if false;
         allow delete: if canWriteCommunity(resource.data.authorUid);
+
+        match /votes/{voterUid} {
+          allow read, write: if false;
+        }
       }
 
       match /reviews/{reviewId} {
@@ -104,10 +116,15 @@ service cloud.firestore {
 
       match /chapters/{chapterKey}/comments/{commentId} {
         allow read: if true;
-        allow create: if canWriteCommunity(request.resource.data.authorUid);
-        allow update: if canWriteCommunity(resource.data.authorUid)
-          && request.resource.data.authorUid == resource.data.authorUid;
+        allow create: if canWriteCommunity(request.resource.data.authorUid)
+          && request.resource.data.id == commentId
+          && hasInitialCommentCounters();
+        allow update: if false;
         allow delete: if canWriteCommunity(resource.data.authorUid);
+
+        match /votes/{voterUid} {
+          allow read, write: if false;
+        }
       }
     }
 

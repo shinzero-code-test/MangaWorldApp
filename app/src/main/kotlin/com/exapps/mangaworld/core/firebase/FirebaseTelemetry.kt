@@ -3,6 +3,7 @@ package com.exapps.mangaworld.core.firebase
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.perf.FirebasePerformance
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -16,10 +17,15 @@ class FirebaseTelemetry @Inject constructor(
     private val crashlytics = FirebaseCrashlytics.getInstance()
     private val performance = FirebasePerformance.getInstance()
 
+    /** Call after auth state changes to attach user context to crash reports. */
+    fun setCrashlyticsUserId(uid: String?) {
+        crashlytics.setUserId(uid ?: "")
+    }
+
     fun logScraperFailure(sourceId: String, stage: String, throwable: Throwable) {
         setActiveSource(sourceId)
         refreshNetworkTypeKey()
-        crashlytics.log("scraper_failure source=$sourceId stage=$stage")
+        crashlytics.log("scraper_failure source=$sourceId stage=$stage message=${throwable.message}")
         crashlytics.setCustomKey("scraper_source", sourceId)
         crashlytics.setCustomKey("scraper_stage", stage)
         crashlytics.recordException(throwable)

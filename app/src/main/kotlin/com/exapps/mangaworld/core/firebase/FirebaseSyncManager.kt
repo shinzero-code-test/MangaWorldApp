@@ -37,7 +37,7 @@ class FirebaseSyncManager @Inject constructor(
     private val syncMutex = Mutex()
 
     suspend fun pushLocalSnapshot() = syncMutex.withLock {
-        val uid = sessionManager.ensureGuestSession() ?: return@withLock
+        val uid = sessionManager.ensureFirebaseSession() ?: return@withLock
         val favorites = favoriteDao.getFavoritesList()
         val history = historyDao.getAll()
         val annotations = readerAnnotationDao.getAll()
@@ -66,9 +66,9 @@ class FirebaseSyncManager @Inject constructor(
                 "autoCleanupReadDownloads" to settings.autoCleanupReadDownloads,
                 "cleanupAfterHours" to settings.cleanupAfterHours,
                 "imageCacheLimitMb" to settings.imageCacheLimitMb,
-                "contentBlacklist" to settings.contentBlacklist.toList(),
+                "contentBlacklist" to settings.contentBlacklist.take(200).toList(),
                 "spoilerCollapseDefault" to settings.spoilerCollapseDefault,
-                "mutedUserIds" to settings.mutedUserIds.toList()
+                "mutedUserIds" to settings.mutedUserIds.take(100).toList()
             )
             writes += userRef.collection("preferences").document("reader") to mapOf(
                 "mode" to reader.mode.name,
@@ -108,15 +108,42 @@ class FirebaseSyncManager @Inject constructor(
         }
     }
 
+    /**
+     * Fetch all documents from a Firestore collection using cursor-based pagination.
+     * Caps at [maxDocs] total to prevent unbounded reads for power users.
+     */
+    private suspend fun fetchAllCollection(
+        ref: com.google.firebase.firestore.CollectionReference,
+        maxDocs: Int = 10_000
+    ): List<com.google.firebase.firestore.DocumentSnapshot> {
+        val result = mutableListOf<com.google.firebase.firestore.DocumentSnapshot>()
+        var lastDocId: String? = null
+        while (result.size < maxDocs) {
+            val pageSize = minOf(1000, maxDocs - result.size)
+            val query = if (lastDocId != null) {
+                ref.orderBy(com.google.firebase.firestore.FieldPath.documentId())
+                    .startAfter(lastDocId).limit(pageSize)
+            } else {
+                ref.orderBy(com.google.firebase.firestore.FieldPath.documentId()).limit(pageSize)
+            }
+            val snap = query.get().await()
+            if (snap.isEmpty) break
+            result.addAll(snap.documents)
+            lastDocId = snap.documents.lastOrNull()?.id ?: break
+            if (snap.size() < pageSize) break
+        }
+        return result
+    }
+
     suspend fun pullRemoteSnapshot() = syncMutex.withLock {
-        val uid = sessionManager.ensureGuestSession() ?: return@withLock
+        val uid = sessionManager.ensureFirebaseSession() ?: return@withLock
         firebaseTelemetry.traceDatabaseSync(operation = "pull") {
             val userRef = firestore.collection("users").document(uid)
             val profile = userRef.get().await()
-            val favorites = userRef.collection("favorites").get().await().documents
-            val history = userRef.collection("readingHistory").get().await().documents
-            val annotations = userRef.collection("readerAnnotations").get().await().documents
-            val remoteTombstones = userRef.collection("syncTombstones").get().await().documents
+            val favorites = fetchAllCollection(userRef.collection("favorites"))
+            val history = fetchAllCollection(userRef.collection("readingHistory"))
+            val annotations = fetchAllCollection(userRef.collection("readerAnnotations"))
+            val remoteTombstones = fetchAllCollection(userRef.collection("syncTombstones"))
                 .mapNotNull { it.toObject(SyncTombstone::class.java) }
             val readerPrefs = userRef.collection("preferences").document("reader").get().await()
 
@@ -183,12 +210,12 @@ class FirebaseSyncManager @Inject constructor(
     }
 
     suspend fun previewRemoteSnapshot(): CloudRestorePreview {
-        val uid = sessionManager.ensureGuestSession() ?: error("No user")
+        val uid = sessionManager.ensureFirebaseSession() ?: error("No user")
         val userRef = firestore.collection("users").document(uid)
         val profile = userRef.get().await()
-        val remoteFavorites = userRef.collection("favorites").get().await().documents.mapNotNull { it.toObject(FavoriteEntity::class.java) }
-        val remoteHistory = userRef.collection("readingHistory").get().await().documents.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
-        val remoteAnnotations = userRef.collection("readerAnnotations").get().await().documents.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
+        val remoteFavorites = fetchAllCollection(userRef.collection("favorites")).mapNotNull { it.toObject(FavoriteEntity::class.java) }
+        val remoteHistory = fetchAllCollection(userRef.collection("readingHistory")).mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
+        val remoteAnnotations = fetchAllCollection(userRef.collection("readerAnnotations")).mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
 
         val localFavorites = favoriteDao.getFavoritesList()
         val localHistory = historyDao.getAll()
@@ -234,13 +261,13 @@ class FirebaseSyncManager @Inject constructor(
     }
 
     private suspend fun mergeRemoteSnapshot() = syncMutex.withLock {
-        val uid = sessionManager.ensureGuestSession() ?: return@withLock
+        val uid = sessionManager.ensureFirebaseSession() ?: return@withLock
         firebaseTelemetry.traceDatabaseSync(operation = "merge") {
             val userRef = firestore.collection("users").document(uid)
-            val remoteFavorites = userRef.collection("favorites").get().await().documents.mapNotNull { it.toObject(FavoriteEntity::class.java) }
-            val remoteHistory = userRef.collection("readingHistory").get().await().documents.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
-            val remoteAnnotations = userRef.collection("readerAnnotations").get().await().documents.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
-            val remoteTombstones = userRef.collection("syncTombstones").get().await().documents
+            val remoteFavorites = fetchAllCollection(userRef.collection("favorites")).mapNotNull { it.toObject(FavoriteEntity::class.java) }
+            val remoteHistory = fetchAllCollection(userRef.collection("readingHistory")).mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
+            val remoteAnnotations = fetchAllCollection(userRef.collection("readerAnnotations")).mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
+            val remoteTombstones = fetchAllCollection(userRef.collection("syncTombstones"))
                 .mapNotNull { it.toObject(SyncTombstone::class.java) }
             remoteTombstones.forEach { prefs.markSyncTombstone(it.collection, it.documentId, it.deletedAt) }
             val tombstones = newestTombstones(prefs.getSyncTombstones())
@@ -266,25 +293,35 @@ class FirebaseSyncManager @Inject constructor(
         FirebaseSyncMerge.annotationDocId(entity)
 
     private suspend fun commitChunked(writes: List<Pair<com.google.firebase.firestore.DocumentReference, Any>>) {
-        writes.chunked(400).forEach { chunk ->
-            val batch: WriteBatch = firestore.batch()
-            chunk.forEach { (ref, value) -> batch.set(ref, value, SetOptions.merge()) }
-            batch.commit().await()
+        val chunks = writes.chunked(400)
+        var failedChunks = 0
+        for ((index, chunk) in chunks.withIndex()) {
+            runCatching {
+                val batch: WriteBatch = firestore.batch()
+                chunk.forEach { (ref, value) -> batch.set(ref, value, SetOptions.merge()) }
+                batch.commit().await()
+            }.onFailure { e ->
+                android.util.Log.e("FirebaseSync", "Chunk ${index + 1}/${chunks.size} failed: ${e.message}")
+                failedChunks++
+            }
+        }
+        if (failedChunks > 0) {
+            android.util.Log.w("FirebaseSync", "$failedChunks/${chunks.size} sync chunks failed — will retry on next sync")
         }
     }
 
     private suspend fun applyTombstones(tombstones: Map<String, SyncTombstone>) {
         tombstones.values.forEach { tombstone ->
             when (tombstone.collection) {
-                "favorites" -> favoriteDao.getById(tombstone.documentId)
-                    ?.takeIf { it.addedAt <= tombstone.deletedAt }
-                    ?.let { favoriteDao.delete(it.mangaId) }
-                "readingHistory" -> historyDao.getByMangaId(tombstone.documentId)
-                    ?.takeIf { it.lastReadAt <= tombstone.deletedAt }
-                    ?.let { historyDao.delete(it.mangaId) }
-                "readerAnnotations" -> readerAnnotationDao.getAll()
-                    .firstOrNull { annotationDocId(it) == tombstone.documentId && it.updatedAt <= tombstone.deletedAt }
-                    ?.let { readerAnnotationDao.delete(it.mangaId, it.chapterUrl, it.pageIndex) }
+                "favorites" -> favoriteDao.deleteIfOlder(tombstone.documentId, tombstone.deletedAt)
+                "readingHistory" -> historyDao.deleteIfOlder(tombstone.documentId, tombstone.deletedAt)
+                "readerAnnotations" -> {
+                    // annotationDocId = "mangaId_chapterUrlHash_pageIndex"
+                    // We can't reverse the chapterUrl hash, so find by matching key and delete atomically
+                    val all = readerAnnotationDao.getAll()
+                    all.find { annotationDocId(it) == tombstone.documentId && it.updatedAt <= tombstone.deletedAt }
+                        ?.let { readerAnnotationDao.deleteIfOlder(it.mangaId, it.chapterUrl, it.pageIndex, tombstone.deletedAt) }
+                }
             }
         }
     }

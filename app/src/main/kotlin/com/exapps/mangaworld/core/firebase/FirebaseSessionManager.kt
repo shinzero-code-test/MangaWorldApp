@@ -1,16 +1,20 @@
 package com.exapps.mangaworld.core.firebase
 
 import android.content.Context
+import com.facebook.login.LoginManager
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FacebookAuthProvider
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthProvider
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.GoogleAuthProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
@@ -24,14 +28,23 @@ class FirebaseSessionManager @Inject constructor(
 
     val authState: Flow<com.google.firebase.auth.FirebaseUser?> = callbackFlow {
         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
-            trySend(firebaseAuth.currentUser).isSuccess
+            trySend(firebaseAuth.currentUser)
         }
         auth.addAuthStateListener(listener)
         trySend(auth.currentUser)
         awaitClose { auth.removeAuthStateListener(listener) }
-    }
+    }.buffer(Channel.CONFLATED)
 
-    suspend fun ensureGuestSession(): String? {
+    /**
+     * Returns the active Firebase UID, creating an anonymous guest session only when no user exists.
+     *
+     * Firebase preserves an anonymous UID after a successful credential link. If linking collides
+     * with an existing account, the fallback signs into that account and cannot merge guest-owned
+     * Firestore data client-side because the active UID changes.
+     *
+     * Returns null only when Firebase cannot create an anonymous session.
+     */
+    suspend fun ensureFirebaseSession(): String? {
         auth.currentUser?.uid?.let { return it }
         return runCatching { auth.signInAnonymously().await().user?.uid }.getOrNull()
     }
@@ -44,7 +57,7 @@ class FirebaseSessionManager @Inject constructor(
 
     fun linkedProviderIds(): Set<String> = auth.currentUser?.providerData
         ?.map { it.providerId }
-        ?.filterNot { it == "firebase" }
+        ?.filterNot { it == FirebaseAuthProvider.PROVIDER_ID }
         ?.toSet()
         .orEmpty()
 
@@ -65,7 +78,7 @@ class FirebaseSessionManager @Inject constructor(
     }
 
     suspend fun linkGoogle(idToken: String): String =
-        linkCredential(requireAuthenticatedUser(), GoogleAuthProvider.getCredential(idToken, null))
+        linkCredential(requireNamedUserForProviderManagement(), GoogleAuthProvider.getCredential(idToken, null))
 
     // ─── Email ───────────────────────────────────────────────────────────────
 
@@ -76,15 +89,28 @@ class FirebaseSessionManager @Inject constructor(
         else auth.signInWithEmailAndPassword(email, password).await().user?.uid
     }
 
-    suspend fun signUpWithEmail(email: String, password: String): String? {
+    suspend fun signUpWithEmail(email: String, password: String, displayName: String = "", username: String = ""): String? {
         val current = auth.currentUser
         val credential = EmailAuthProvider.getCredential(email, password)
-        return if (current != null && current.isAnonymous) linkOrSignIn(current, credential)
-        else auth.createUserWithEmailAndPassword(email, password).await().user?.uid
+        val uid = if (current != null && current.isAnonymous) linkOrSignIn(current, credential)
+            else auth.createUserWithEmailAndPassword(email, password).await().user?.uid
+        // Set displayName on Firebase Auth profile so it persists
+        if (uid != null && displayName.isNotBlank()) {
+            auth.currentUser?.updateProfile(
+                com.google.firebase.auth.UserProfileChangeRequest.Builder()
+                    .setDisplayName(displayName)
+                    .build()
+            )?.await()
+        }
+        return uid
+    }
+
+    suspend fun sendPasswordResetEmail(email: String) {
+        auth.sendPasswordResetEmail(email).await()
     }
 
     suspend fun linkEmailPassword(email: String, password: String): String =
-        linkCredential(requireAuthenticatedUser(), EmailAuthProvider.getCredential(email, password))
+        linkCredential(requireNamedUserForProviderManagement(), EmailAuthProvider.getCredential(email, password))
 
     // ─── Facebook ────────────────────────────────────────────────────────────
 
@@ -99,10 +125,10 @@ class FirebaseSessionManager @Inject constructor(
     }
 
     suspend fun linkFacebook(accessToken: String): String =
-        linkCredential(requireAuthenticatedUser(), FacebookAuthProvider.getCredential(accessToken))
+        linkCredential(requireNamedUserForProviderManagement(), FacebookAuthProvider.getCredential(accessToken))
 
     suspend fun unlinkProvider(providerId: String) {
-        val user = requireAuthenticatedUser()
+        val user = requireNamedUserForProviderManagement()
         require(linkedProviderIds().size > 1) { "Keep at least one sign-in provider" }
         user.unlink(providerId).await()
     }
@@ -110,8 +136,15 @@ class FirebaseSessionManager @Inject constructor(
     // ─── Sign Out ────────────────────────────────────────────────────────────
 
     suspend fun signOut() {
-        googleSignInClient().signOut().await()
-        auth.signOut()
+        try {
+            googleSignInClient().signOut().await()
+        } finally {
+            try {
+                LoginManager.getInstance().logOut()
+            } finally {
+                auth.signOut()
+            }
+        }
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -128,34 +161,111 @@ class FirebaseSessionManager @Inject constructor(
         return if (id == 0) "" else context.getString(id)
     }
 
-    private fun requireAuthenticatedUser(): com.google.firebase.auth.FirebaseUser =
-        requireNotNull(auth.currentUser?.takeUnless { it.isAnonymous }) { "Sign in before linking a provider" }
+    private fun requireNamedUserForProviderManagement(): com.google.firebase.auth.FirebaseUser {
+        val user = auth.currentUser
+            ?: throw ProviderManagementRequiresSignInException(isGuestSession = false)
+        if (user.isAnonymous) {
+            throw ProviderManagementRequiresSignInException(isGuestSession = true)
+        }
+        return user
+    }
 
     private suspend fun linkCredential(
         user: com.google.firebase.auth.FirebaseUser,
         credential: com.google.firebase.auth.AuthCredential
     ): String = try {
-        requireNotNull(user.linkWithCredential(credential).await().user).uid
+        linkedUserId(user, credential)
     } catch (error: FirebaseAuthUserCollisionException) {
-        throw AccountMergeRequiredException(error.errorCode)
+        throw AccountMergeRequiredException(error)
     }
 
     /**
-     * Try to link the credential to the anonymous user. If the credential is already
-     * attached to another account (collision), sign in as that existing account instead.
-     * This handles the common case where a user has a multi-provider account and tries
-     * to sign in from a fresh/guest session.
+     * Try to link the credential to the anonymous user. Firebase permits a direct sign-in
+     * fallback only when the credential or email is already linked; a different-credential
+     * collision requires the user to first authenticate with the original provider.
      */
     private suspend fun linkOrSignIn(
         user: com.google.firebase.auth.FirebaseUser,
         credential: com.google.firebase.auth.AuthCredential
     ): String? = try {
-        requireNotNull(user.linkWithCredential(credential).await().user).uid
-    } catch (_: FirebaseAuthUserCollisionException) {
-        // Credential is already linked to another UID — sign in as that account
+        linkedUserId(user, credential)
+    } catch (collision: FirebaseAuthUserCollisionException) {
+        if (!collision.allowsSignInFallback()) {
+            throw AccountMergeRequiredException(collision)
+        }
+        signInAfterLinkCollision(credential, collision)
+    }
+
+    private suspend fun linkedUserId(
+        user: com.google.firebase.auth.FirebaseUser,
+        credential: com.google.firebase.auth.AuthCredential
+    ): String = checkNotNull(user.linkWithCredential(credential).await().user) {
+        "Firebase did not return a user after linking a credential"
+    }.uid
+
+    private suspend fun signInAfterLinkCollision(
+        credential: com.google.firebase.auth.AuthCredential,
+        initialCollision: FirebaseAuthUserCollisionException
+    ): String? = try {
         auth.signInWithCredential(credential).await().user?.uid
+    } catch (retryCollision: FirebaseAuthUserCollisionException) {
+        throw AccountMergeRequiredException(retryCollision).also {
+            it.addSuppressed(initialCollision)
+        }
     }
 }
 
-class AccountMergeRequiredException(errorCode: String) :
-    Exception("The credential is already linked to another account: $errorCode")
+enum class AccountMergeReason {
+    ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL,
+    CREDENTIAL_ALREADY_IN_USE,
+    EMAIL_ALREADY_IN_USE,
+    UNKNOWN
+}
+
+class ProviderManagementRequiresSignInException(
+    val isGuestSession: Boolean
+) : IllegalStateException(
+    if (isGuestSession) {
+        "Upgrade the guest session before managing linked providers"
+    } else {
+        "Sign in before managing linked providers"
+    }
+)
+
+class AccountMergeRequiredException(
+    val reason: AccountMergeReason,
+    val errorCode: String,
+    collision: FirebaseAuthUserCollisionException
+) : IllegalStateException(
+    "Firebase account merge is required (reason=$reason, errorCode=$errorCode): " +
+        collision.message.orEmpty(),
+    collision
+) {
+    constructor(collision: FirebaseAuthUserCollisionException) : this(
+        reason = collision.toAccountMergeReason(),
+        errorCode = collision.errorCode,
+        collision = collision
+    )
+}
+
+private fun FirebaseAuthUserCollisionException.allowsSignInFallback(): Boolean =
+    when (toAccountMergeReason()) {
+        AccountMergeReason.CREDENTIAL_ALREADY_IN_USE,
+        AccountMergeReason.EMAIL_ALREADY_IN_USE -> true
+        AccountMergeReason.ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL,
+        AccountMergeReason.UNKNOWN -> false
+    }
+
+private fun FirebaseAuthUserCollisionException.toAccountMergeReason(): AccountMergeReason =
+    when (errorCode) {
+        ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL ->
+            AccountMergeReason.ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL
+        ERROR_CREDENTIAL_ALREADY_IN_USE -> AccountMergeReason.CREDENTIAL_ALREADY_IN_USE
+        ERROR_EMAIL_ALREADY_IN_USE -> AccountMergeReason.EMAIL_ALREADY_IN_USE
+        else -> AccountMergeReason.UNKNOWN
+    }
+
+private const val ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL =
+    "ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL"
+private const val ERROR_CREDENTIAL_ALREADY_IN_USE = "ERROR_CREDENTIAL_ALREADY_IN_USE"
+private const val ERROR_EMAIL_ALREADY_IN_USE = "ERROR_EMAIL_ALREADY_IN_USE"

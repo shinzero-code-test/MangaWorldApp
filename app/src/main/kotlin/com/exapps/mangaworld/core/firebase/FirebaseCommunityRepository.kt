@@ -33,6 +33,11 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val DASHBOARD_BASE_URL = "https://mangaworld-admin.vercel.app"
+
+/** Username must be 3-20 chars: alphanumeric and underscores only, no leading/trailing underscores. */
+private val USERNAME_REGEX = Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$")
+
 @Singleton
 class FirebaseCommunityRepository @Inject constructor(
     private val sessionManager: FirebaseSessionManager,
@@ -63,12 +68,14 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override fun observeReaderPresenceCount(mangaId: String, chapterUrl: String): Flow<Int> = callbackFlow {
-        val reg = firestore.collection("community_presence").document(threadId(mangaId, chapterUrl))
-            .collection("members")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
-                trySend(snapshot?.size() ?: 0)
-            }
+        // Use a counter document instead of reading all member documents.
+        // The counter is maintained by setReaderPresence (increment/decrement).
+        val counterRef = firestore.collection("community_presence").document(threadId(mangaId, chapterUrl))
+        val reg = counterRef.addSnapshotListener { snapshot, error ->
+            if (error != null) return@addSnapshotListener
+            val count = (snapshot?.getLong("presenceCount") ?: 0L).toInt()
+            trySend(count)
+        }
         awaitClose { reg.remove() }
     }
 
@@ -206,21 +213,24 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun getCurrentProfile(): CommunityProfile? {
-        val uid = sessionManager.ensureGuestSession() ?: return null
+        val uid = sessionManager.ensureFirebaseSession() ?: return null
         val existing = firestore.collection("publicProfiles").document(uid).get().await().toProfile()
         return existing ?: defaultProfile(uid)
     }
 
-    override suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String?, bannerUrl: String?) {
-        val uid = sessionManager.ensureGuestSession() ?: return
+    override suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String?, bannerUrl: String?, displayName: String) {
+        val uid = sessionManager.ensureFirebaseSession() ?: return
         val normalized = username.trim().lowercase()
         require(normalized.isNotBlank()) { "اسم المستخدم مطلوب" }
+        require(normalized.length in 3..20) { "اسم المستخدم يجب أن يكون بين 3 و 20 حرف" }
+        require(USERNAME_REGEX.matches(normalized)) { "اسم المستخدم يجب أن يحتوي على أحرف وأرقام وشرطات سفلية فقط" }
 
         val existing = getCurrentProfile() ?: defaultProfile(uid)
         // Recalculate badge based on current achievements
         val newBadge = try { achievementManager.calculateBadge() } catch (_: Exception) { existing.badgeLabel }
         val profile = existing.copy(
             username = username.trim(),
+            displayName = displayName.trim().ifBlank { existing.displayName },
             bio = bio.trim(),
             isPublic = isPublic,
             badgeLabel = newBadge,
@@ -232,8 +242,17 @@ class FirebaseCommunityRepository @Inject constructor(
         val usernameRef = firestore.collection("usernames").document(normalized)
         val profileRef = firestore.collection("publicProfiles").document(uid)
         firestore.runTransaction { transaction ->
+            // If username changed, check uniqueness and clean up old username doc
+            val oldNormalized = existing.username.trim().lowercase()
+            if (oldNormalized != normalized && oldNormalized.isNotBlank()) {
+                val oldUsernameOwner = transaction.get(firestore.collection("usernames").document(oldNormalized)).getString("uid")
+                if (oldUsernameOwner == uid) {
+                    transaction.delete(firestore.collection("usernames").document(oldNormalized))
+                }
+            }
             val currentOwner = transaction.get(usernameRef).getString("uid")
             require(currentOwner == null || currentOwner == uid) { "اسم المستخدم مستخدم بالفعل" }
+            // Use SetOptions.merge to update existing doc, never create a separate one
             transaction.set(profileRef, profile.toEditableMap(), SetOptions.merge())
             transaction.set(
                 usernameRef,
@@ -243,7 +262,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean, showLibraryPublic: Boolean) {
-        val uid = sessionManager.ensureGuestSession() ?: return
+        val uid = sessionManager.ensureFirebaseSession() ?: return
         firestore.collection("publicProfiles").document(uid).set(
             mapOf(
                 "showListsPublic" to showListsPublic,
@@ -256,7 +275,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun createOrUpdateList(listId: String?, name: String, description: String, coverUrl: String, rating: Float, genres: List<String>, isPublic: Boolean): String {
-        val uid = sessionManager.ensureGuestSession() ?: error("No user")
+        val uid = sessionManager.ensureFirebaseSession() ?: error("No user")
         val id = listId ?: UUID.randomUUID().toString()
         val doc = firestore.collection("users").document(uid).collection("lists").document(id)
         val existingCount = runCatching { doc.collection("items").get().await().size() }.getOrDefault(0)
@@ -276,7 +295,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun deleteList(listId: String) {
-        val uid = sessionManager.ensureGuestSession() ?: return
+        val uid = sessionManager.ensureFirebaseSession() ?: return
         val doc = firestore.collection("users").document(uid).collection("lists").document(listId)
         val items = doc.collection("items").get().await().documents
         firestore.runBatch { batch ->
@@ -286,7 +305,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun addMangaToList(listId: String, item: CustomUserListItem) {
-        val uid = sessionManager.ensureGuestSession() ?: return
+        val uid = sessionManager.ensureFirebaseSession() ?: return
         val listDoc = firestore.collection("users").document(uid).collection("lists").document(listId)
         val itemDoc = listDoc.collection("items").document(item.mangaId)
         val existed = itemDoc.get().await().exists()
@@ -300,7 +319,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun removeMangaFromList(listId: String, mangaId: String) {
-        val uid = sessionManager.ensureGuestSession() ?: return
+        val uid = sessionManager.ensureFirebaseSession() ?: return
         val listDoc = firestore.collection("users").document(uid).collection("lists").document(listId)
         listDoc.collection("items").document(mangaId).delete().await()
         listDoc.update(
@@ -327,7 +346,8 @@ class FirebaseCommunityRepository @Inject constructor(
             id = profile.uid,
             mangaId = mangaId,
             authorUid = profile.uid,
-            authorName = profile.username,
+            authorName = profile.displayName.ifBlank { profile.username },
+            authorUsername = profile.username,
             authorAvatarUrl = profile.avatarUrl,
             authorBadge = profile.badgeLabel,
             rating = rating.coerceIn(1, 5),
@@ -351,7 +371,7 @@ class FirebaseCommunityRepository @Inject constructor(
             pageIndex = pageIndex,
             emoji = emoji,
             authorUid = profile.uid,
-            authorName = profile.username,
+            authorName = profile.displayName.ifBlank { profile.username },
             normalizedX = normalizedX.coerceIn(0f, 1f),
             normalizedY = normalizedY.coerceIn(0f, 1f)
         )
@@ -371,7 +391,7 @@ class FirebaseCommunityRepository @Inject constructor(
             id = ref.key ?: UUID.randomUUID().toString(),
             roomId = roomId,
             authorUid = profile.uid,
-            authorName = profile.username,
+            authorName = profile.displayName.ifBlank { profile.username },
             authorBadge = profile.badgeLabel,
             text = trimmed,
             createdAt = System.currentTimeMillis()
@@ -399,43 +419,29 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun likeComment(commentId: String) {
-        val docs = firestore.collectionGroup("comments").whereEqualTo("id", commentId).get().await().documents
-        firestore.runBatch { batch ->
-            docs.forEach { doc ->
-                batch.update(doc.reference, "likes", com.google.firebase.firestore.FieldValue.increment(1))
-            }
-        }.await()
+        voteOnComment(commentId, vote = 1)
     }
 
     override suspend fun dislikeComment(commentId: String) {
-        val docs = firestore.collectionGroup("comments").whereEqualTo("id", commentId).get().await().documents
-        firestore.runBatch { batch ->
-            docs.forEach { doc ->
-                batch.update(doc.reference, "dislikes", com.google.firebase.firestore.FieldValue.increment(1))
-            }
-        }.await()
-    }
-
-    override suspend fun resolveModerationReport(reportId: String, status: String) {
-        firestore.collection("moderationReports").document(reportId)
-            .update("status", status)
-            .await()
+        voteOnComment(commentId, vote = -1)
     }
 
     override suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean) {
         val profile = currentProfileOrThrow()
-        val doc = firestore.collection("community_presence").document(threadId(mangaId, chapterUrl))
-            .collection("members").document(profile.uid)
+        val threadDoc = firestore.collection("community_presence").document(threadId(mangaId, chapterUrl))
+        val memberDoc = threadDoc.collection("members").document(profile.uid)
         if (active) {
-            doc.set(
+            memberDoc.set(
                 mapOf(
                     "uid" to profile.uid,
                     "username" to profile.username,
                     "updatedAt" to System.currentTimeMillis()
                 )
             ).await()
+            threadDoc.set(mapOf("presenceCount" to FieldValue.increment(1)), SetOptions.merge()).await()
         } else {
-            doc.delete().await()
+            memberDoc.delete().await()
+            threadDoc.set(mapOf("presenceCount" to FieldValue.increment(-1)), SetOptions.merge()).await()
         }
     }
 
@@ -473,9 +479,12 @@ class FirebaseCommunityRepository @Inject constructor(
             id = UUID.randomUUID().toString(),
             mangaId = mangaId,
             chapterUrl = chapterUrl,
+            slug = slug,
+            sourceId = sourceId,
             parentId = parentId,
             authorUid = profile.uid,
-            authorName = profile.username,
+            authorName = profile.displayName.ifBlank { profile.username },
+            authorUsername = profile.username,
             authorAvatarUrl = profile.avatarUrl,
             authorBadge = profile.badgeLabel,
             text = trimmed,
@@ -484,9 +493,7 @@ class FirebaseCommunityRepository @Inject constructor(
             createdAt = System.currentTimeMillis()
         )
         val collection = commentsCollection(mangaId, chapterUrl)
-        collection.document(comment.id).set(
-            comment.toMap() + mapOf("slug" to slug, "sourceId" to sourceId)
-        ).await()
+        collection.document(comment.id).set(comment.toMap()).await()
         if (parentId != null || comment.mentions.isNotEmpty()) {
             sendPushNotification(mangaId, chapterUrl, comment.id)
         }
@@ -496,28 +503,54 @@ class FirebaseCommunityRepository @Inject constructor(
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
                 val token = sessionManager.currentIdToken() ?: return@runCatching
-                val baseUrl = "https://mangaworld-admin.vercel.app"
                 val body = org.json.JSONObject().apply {
                     put("mangaId", mangaId)
                     put("commentId", commentId)
                     if (chapterUrl != null) put("chapterUrl", chapterUrl)
                 }
-                val conn = java.net.URL("$baseUrl/api/notifications/push-reply").openConnection() as java.net.HttpURLConnection
+                val conn = java.net.URL("$DASHBOARD_BASE_URL/api/notifications/push-reply").openConnection() as java.net.HttpURLConnection
+                try {
+                    conn.requestMethod = "POST"
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.setRequestProperty("Authorization", "Bearer $token")
+                    conn.doOutput = true
+                    conn.connectTimeout = 5000
+                    conn.readTimeout = 5000
+                    conn.outputStream.use { os -> os.write(body.toString().toByteArray()) }
+                    conn.responseCode // just trigger the request
+                } finally {
+                    conn.disconnect()
+                }
+            }
+        }
+    }
+
+    private suspend fun voteOnComment(commentId: String, vote: Int) {
+        require(commentId.isNotBlank()) { "معرّف التعليق مطلوب" }
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val token = sessionManager.currentIdToken() ?: error("Sign in before voting")
+            val body = org.json.JSONObject().apply {
+                put("commentId", commentId)
+                put("vote", vote)
+            }
+            val conn = java.net.URL("$DASHBOARD_BASE_URL/api/community/vote").openConnection() as java.net.HttpURLConnection
+            try {
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("Authorization", "Bearer $token")
                 conn.doOutput = true
                 conn.connectTimeout = 5000
                 conn.readTimeout = 5000
-                conn.outputStream.use { os -> os.write(body.toString().toByteArray()) }
-                conn.responseCode // just trigger the request
+                conn.outputStream.use { output -> output.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                check(conn.responseCode in 200..299) { "Unable to update comment vote" }
+            } finally {
                 conn.disconnect()
             }
         }
     }
 
     private suspend fun currentProfileOrThrow(): CommunityProfile {
-        val uid = sessionManager.ensureGuestSession() ?: error("No user")
+        val uid = sessionManager.ensureFirebaseSession() ?: error("No user")
         return getCurrentProfile() ?: defaultProfile(uid)
     }
 
@@ -535,9 +568,11 @@ class FirebaseCommunityRepository @Inject constructor(
                 else -> "Beginner"
             }
         }
+        val displayName = firebaseUser?.displayName?.takeIf { it.isNotBlank() } ?: ""
         return CommunityProfile(
             uid = uid,
-            username = firebaseUser?.displayName?.takeIf { it.isNotBlank() } ?: "reader_${uid.takeLast(6)}",
+            username = "",  // Must be set via upsertProfile during signup
+            displayName = displayName,
             avatarUrl = firebaseUser?.photoUrl?.toString(),
             badgeLabel = badge,
             role = "viewer",
@@ -560,6 +595,7 @@ class FirebaseCommunityRepository @Inject constructor(
 
     private fun threadId(mangaId: String, chapterUrl: String): String = "$mangaId-${stableChapterKey(chapterUrl)}"
 
+    /** 24 hex chars (96 bits) — matches the dashboard's stableChapterKey. Do NOT change without updating both Kotlin and TypeScript. */
     private fun stableChapterKey(value: String): String {
         val bytes = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
         return bytes.joinToString("") { "%02x".format(it) }.take(24)
@@ -579,6 +615,7 @@ class FirebaseCommunityRepository @Inject constructor(
 
     private fun CommunityProfile.toEditableMap() = mapOf(
         "username" to username,
+        "displayName" to displayName,
         "avatarUrl" to avatarUrl,
         "bannerUrl" to bannerUrl,
         "isPublic" to isPublic,
@@ -586,6 +623,7 @@ class FirebaseCommunityRepository @Inject constructor(
         "showActivityPublic" to showActivityPublic,
         "showLibraryPublic" to showLibraryPublic,
         "bio" to bio,
+        "role" to role,
         "updatedAt" to updatedAt
     )
 
@@ -617,9 +655,12 @@ class FirebaseCommunityRepository @Inject constructor(
         "id" to id,
         "mangaId" to mangaId,
         "chapterUrl" to chapterUrl,
+        "slug" to slug,
+        "sourceId" to sourceId,
         "parentId" to parentId,
         "authorUid" to authorUid,
         "authorName" to authorName,
+        "authorUsername" to authorUsername,
         "authorAvatarUrl" to authorAvatarUrl,
         "authorBadge" to authorBadge,
         "text" to text,
@@ -627,7 +668,9 @@ class FirebaseCommunityRepository @Inject constructor(
         "spoiler" to spoiler,
         "reportedCount" to reportedCount,
         "createdAt" to createdAt,
-        "replyCount" to replyCount
+        "replyCount" to replyCount,
+        "likes" to likes,
+        "dislikes" to dislikes
     )
 
     private fun MangaReview.toMap() = mapOf(
@@ -635,6 +678,7 @@ class FirebaseCommunityRepository @Inject constructor(
         "mangaId" to mangaId,
         "authorUid" to authorUid,
         "authorName" to authorName,
+        "authorUsername" to authorUsername,
         "authorAvatarUrl" to authorAvatarUrl,
         "authorBadge" to authorBadge,
         "rating" to rating,
@@ -684,10 +728,11 @@ class FirebaseCommunityRepository @Inject constructor(
         CommunityProfile(
             uid = getString("uid") ?: id,
             username = getString("username") ?: return null,
+            displayName = getString("displayName") ?: "",
             avatarUrl = getString("avatarUrl"),
             bannerUrl = getString("bannerUrl"),
             badgeLabel = getString("badgeLabel") ?: "Beginner",
-            role = "viewer",
+            role = getString("role") ?: "viewer",
             isPublic = getBoolean("isPublic") ?: true,
             showListsPublic = getBoolean("showListsPublic") ?: true,
             showActivityPublic = getBoolean("showActivityPublic") ?: true,
@@ -702,9 +747,12 @@ class FirebaseCommunityRepository @Inject constructor(
             id = getString("id") ?: id,
             mangaId = getString("mangaId") ?: return null,
             chapterUrl = getString("chapterUrl"),
+            slug = getString("slug") ?: "",
+            sourceId = getString("sourceId") ?: "",
             parentId = getString("parentId"),
             authorUid = getString("authorUid") ?: return null,
             authorName = getString("authorName") ?: "User",
+            authorUsername = getString("authorUsername") ?: "",
             authorAvatarUrl = getString("authorAvatarUrl"),
             authorBadge = getString("authorBadge") ?: "Beginner",
             text = getString("text") ?: return null,
@@ -724,6 +772,7 @@ class FirebaseCommunityRepository @Inject constructor(
             mangaId = getString("mangaId") ?: return null,
             authorUid = getString("authorUid") ?: return null,
             authorName = getString("authorName") ?: "User",
+            authorUsername = getString("authorUsername") ?: "",
             authorAvatarUrl = getString("authorAvatarUrl"),
             authorBadge = getString("authorBadge") ?: "Beginner",
             rating = (getLong("rating") ?: 0L).toInt(),
@@ -822,18 +871,27 @@ class FirebaseCommunityRepository @Inject constructor(
     // ─── Following ──────────────────────────────────────────────────────
     override suspend fun followUser(targetUid: String) {
         val uid = sessionManager.currentUserId() ?: return
+        require(uid != targetUid) { "لا يمكنك متابعة نفسك" }
         val myProfile = getCurrentProfile()
+        val targetProfile = getCurrentProfileForUid(targetUid)
+        val followedAt = System.currentTimeMillis()
         val data1 = hashMapOf<String, Any?>(
-            "uid" to targetUid, "username" to "", "followedAt" to System.currentTimeMillis()
+            "uid" to targetUid, "username" to (targetProfile?.username ?: ""), "followedAt" to followedAt
         )
         val data2 = hashMapOf<String, Any?>(
-            "uid" to uid, "username" to (myProfile?.username ?: ""), "followedAt" to System.currentTimeMillis()
+            "uid" to uid, "username" to (myProfile?.username ?: ""), "followedAt" to followedAt
         )
         firestore.runBatch { batch ->
             batch.set(firestore.collection("relationships").document(uid).collection("following").document(targetUid), data1)
             batch.set(firestore.collection("relationships").document(targetUid).collection("followers").document(uid), data2)
         }.await()
     }
+
+    private suspend fun getCurrentProfileForUid(uid: String): CommunityProfile? =
+        firestore.collection("publicProfiles").document(uid).get().await().toProfile()
+
+    private suspend fun publicProfileUsername(uid: String): String =
+        getCurrentProfileForUid(uid)?.username ?: ""
 
     override suspend fun unfollowUser(targetUid: String) {
         val uid = sessionManager.currentUserId() ?: return
@@ -874,11 +932,11 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun getFollowingCount(userId: String): Int = runCatching {
-        firestore.collection("relationships").document(userId).collection("following").get().await().size()
+        firestore.collection("relationships").document(userId).collection("following").count().get().await().count.toInt()
     }.getOrDefault(0)
 
     override suspend fun getFollowersCount(userId: String): Int = runCatching {
-        firestore.collection("relationships").document(userId).collection("followers").get().await().size()
+        firestore.collection("relationships").document(userId).collection("followers").count().get().await().count.toInt()
     }.getOrDefault(0)
 
     override suspend fun blockUser(uid: String) {
