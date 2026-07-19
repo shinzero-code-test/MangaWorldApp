@@ -651,12 +651,14 @@ private fun CustomListsSection(lists: List<CustomUserList>, onOpenLists: () -> U
         if (lists.isEmpty()) {
             Text("لا توجد قوائم بعد", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         } else {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(lists, key = { it.id }) { list ->
-                    ListCardItem(list = list, onClick = onOpenLists)
+            Box(modifier = Modifier.heightIn(max = 180.dp)) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(lists, key = { it.id }) { list ->
+                        ListCardItem(list = list, onClick = onOpenLists)
+                    }
                 }
             }
         }
@@ -767,16 +769,18 @@ private fun LibraryReadingListsSection(
             if (items.isNotEmpty()) {
                 Text(label, color = MangaColors.PrimaryLight, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(8.dp))
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(items.size) { index ->
-                        val manga = items[index]
-                        LibraryMangaCard(
-                            manga = manga,
-                            onClick = { onMangaClick(manga.source.id, manga.slug) }
-                        )
+                Box(modifier = Modifier.heightIn(max = 180.dp)) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(items.size) { index ->
+                            val manga = items[index]
+                            LibraryMangaCard(
+                                manga = manga,
+                                onClick = { onMangaClick(manga.source.id, manga.slug) }
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(14.dp))

@@ -191,7 +191,7 @@ private fun SourceSelectorRow(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(sources) { source ->
+        items(sources, key = { it.id }) { source ->
             GenreChip(
                 label = source.displayName,
                 selected = source == active,

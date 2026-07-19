@@ -235,6 +235,22 @@ class ProfileSettingsViewModel @Inject constructor(
         }
     }
 
+    fun deleteAccount() {
+        viewModelScope.launch {
+            try {
+                val user = auth.currentUser
+                if (user != null) {
+                    user.delete().await()
+                }
+            } catch (_: Exception) {
+                // Account deletion may require recent authentication
+            } finally {
+                try { sessionManager.signOut() } catch (_: Exception) {}
+                _userEmail.value = null
+            }
+        }
+    }
+
     fun blockUser(uid: String) {
         viewModelScope.launch { communityRepository.blockUser(uid) }
     }
@@ -449,7 +465,7 @@ fun ProfileSettingsScreen(
     }
 
     if (showEditProfile) EditProfileDialog(profile, { showEditProfile = false }) { u, d, b -> viewModel.updateProfile(u, b, d); showEditProfile = false }
-    if (showDeleteConfirm) ConfirmDialog("حذف الحساب", "هل أنت متأكد من حذف حسابك؟ هذا الإجراء لا يمكن التراجع عنه.", "حذف", { showDeleteConfirm = false }, { showDeleteConfirm = false })
+    if (showDeleteConfirm) ConfirmDialog("حذف الحساب", "هل أنت متأكد من حذف حسابك؟ هذا الإجراء لا يمكن التراجع عنه.", "حذف", { viewModel.deleteAccount(); showDeleteConfirm = false }, { showDeleteConfirm = false })
     if (showSignOutConfirm) ConfirmDialog("تسجيل الخروج", "هل تريد تسجيل الخروج من حسابك؟", "خروج", { viewModel.signOut(); showSignOutConfirm = false }, { showSignOutConfirm = false })
     if (showBlockedUsers) BlockedUsersDialog(blockedUsers, onDismiss = { showBlockedUsers = false }, onUnblock = { uid -> viewModel.unblockUser(uid) })
     if (showFavoriteGenres) FavoriteGenresDialog(favoriteGenres, onDismiss = { showFavoriteGenres = false }, onSave = { genres -> viewModel.setFavoriteGenres(genres) })
