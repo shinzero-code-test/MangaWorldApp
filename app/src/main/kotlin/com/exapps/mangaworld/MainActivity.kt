@@ -96,12 +96,26 @@ class MainActivity : FragmentActivity() {
         facebookCallbackManager?.onActivityResult(requestCode, resultCode, data)
     }
 
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val denied = permissions.filterValues { !it }.keys
+        if (denied.isNotEmpty()) {
+            android.util.Log.w("MainActivity", "Permissions denied: $denied")
+        }
+    }
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) {
+            android.util.Log.i("MainActivity", "POST_NOTIFICATIONS permission denied — notifications will not be shown")
+        }
+    }
+
     private fun requestStoragePermissionsIfNeeded() {
         val base = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            arrayOf(
-                Manifest.permission.READ_MEDIA_IMAGES,
-                Manifest.permission.POST_NOTIFICATIONS
-            )
+            arrayOf(Manifest.permission.READ_MEDIA_IMAGES)
         } else {
             arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
@@ -109,10 +123,22 @@ class MainActivity : FragmentActivity() {
         val missing = base.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (missing.isEmpty()) return
+        if (missing.isNotEmpty()) {
+            storagePermissionLauncher.launch(missing.toTypedArray())
+        }
 
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
-            .launch(missing.toTypedArray())
+        // Request notification permission separately (Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val notifPermission = Manifest.permission.POST_NOTIFICATIONS
+            if (ContextCompat.checkSelfPermission(this, notifPermission) != PackageManager.PERMISSION_GRANTED) {
+                if (shouldShowRequestPermissionRationale(notifPermission)) {
+                    // User previously denied — we can request again but OS may auto-deny
+                    notificationPermissionLauncher.launch(notifPermission)
+                } else {
+                    notificationPermissionLauncher.launch(notifPermission)
+                }
+            }
+        }
     }
 }
 
