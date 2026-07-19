@@ -209,6 +209,20 @@ val MangaShapes = Shapes(
     extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
 )
 
+// ─── Spacing System ──────────────────────────────────────────────────────────
+
+object Spacing {
+    val xs  = 2.dp    // icon-to-text gaps, micro padding
+    val sm  = 4.dp    // small internal gaps
+    val md  = 8.dp    // common inner padding, chip padding
+    val lg  = 12.dp   // section content padding, field spacing
+    val xl  = 16.dp   // standard page horizontal padding
+    val xxl = 20.dp   // setting section padding
+    val xxxl = 24.dp   // section spacers, card padding
+    val huge = 32.dp   // empty state padding, form horizontal padding
+    val jumbo = 40.dp  // login/signup form top spacer
+}
+
 // ─── Theme Composable ─────────────────────────────────────────────────────────
 
 @Composable

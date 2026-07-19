@@ -66,112 +66,111 @@ fun LoginScreen(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        Box(
-            modifier = modifier
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MangaColors.Background)
+    ) {
+        BackgroundDecor(modifier = Modifier.fillMaxSize())
+
+        Column(
+            modifier = Modifier
                 .fillMaxSize()
-                .background(MangaColors.Background)
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 40.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            BackgroundDecor(modifier = Modifier.fillMaxSize())
+            Spacer(modifier = Modifier.height(40.dp))
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .imePadding()
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = 40.dp, vertical = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Spacer(modifier = Modifier.height(40.dp))
+            // App Logo
+            MangaWorldLogo()
+            Spacer(modifier = Modifier.height(20.dp))
 
-                // App Logo
-                MangaWorldLogo()
-                Spacer(modifier = Modifier.height(20.dp))
+            Row {
+                Text("Manga", color = MangaColors.OnSurface, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
+                Text("World", color = MangaColors.Primary, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text("عالمك. مانغاك.", color = MangaColors.OnSurfaceVariant, fontSize = 15.sp)
+            Spacer(modifier = Modifier.height(36.dp))
 
-                Row {
-                    Text("Manga", color = MangaColors.OnSurface, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("World", color = MangaColors.Primary, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
-                }
-                Spacer(modifier = Modifier.height(6.dp))
-                Text("عالمك. مانغاك.", color = MangaColors.OnSurfaceVariant, fontSize = 15.sp)
-                Spacer(modifier = Modifier.height(36.dp))
+            // Email field
+            MangaTextField(
+                value = email,
+                onValueChange = onEmailChanged,
+                placeholder = "البريد الإلكتروني أو اسم المستخدم",
+                leadingIcon = Icons.Filled.Email,
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Next,
+                keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
+            )
+            Spacer(modifier = Modifier.height(12.dp))
 
-                // Email field
-                MangaTextField(
-                    value = email,
-                    onValueChange = onEmailChanged,
-                    placeholder = "البريد الإلكتروني أو اسم المستخدم",
-                    leadingIcon = Icons.Filled.Email,
-                    keyboardType = KeyboardType.Email,
-                    imeAction = ImeAction.Next,
-                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
-                )
-                Spacer(modifier = Modifier.height(12.dp))
+            // Password field
+            MangaTextField(
+                value = password,
+                onValueChange = onPasswordChanged,
+                placeholder = "كلمة المرور",
+                leadingIcon = Icons.Filled.Lock,
+                isPassword = true,
+                passwordVisible = passwordVisible,
+                onTogglePasswordVisibility = { passwordVisible = !passwordVisible },
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done,
+                keyboardActions = KeyboardActions(onDone = {
+                    keyboardController?.hide()
+                    onLoginClick(email, password)
+                })
+            )
 
-                // Password field
-                MangaTextField(
-                    value = password,
-                    onValueChange = onPasswordChanged,
-                    placeholder = "كلمة المرور",
-                    leadingIcon = Icons.Filled.Lock,
-                    isPassword = true,
-                    passwordVisible = passwordVisible,
-                    onTogglePasswordVisibility = { passwordVisible = !passwordVisible },
-                    keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Done,
-                    keyboardActions = KeyboardActions(onDone = {
-                        keyboardController?.hide()
-                        onLoginClick(email, password)
-                    })
-                )
-
-                if (errorMessage != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(errorMessage, color = MangaColors.Primary, fontSize = 12.sp, textAlign = TextAlign.Center)
-                }
-
+            if (errorMessage != null) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Text(
-                        "نسيت كلمة المرور؟",
-                        color = MangaColors.Primary,
-                        fontSize = 13.sp,
-                        modifier = Modifier.clickable { onForgotPasswordClick() }
-                    )
-                }
-                Spacer(modifier = Modifier.height(20.dp))
+                Text(errorMessage, color = MangaColors.Primary, fontSize = 12.sp, textAlign = TextAlign.Center)
+            }
 
-                // Login button
-                Button(
-                    onClick = {
-                        keyboardController?.hide()
-                        onLoginClick(email, password)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Primary),
-                    enabled = !isLoading
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
-                    } else {
-                        Text("تسجيل الدخول", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Text(
+                    "نسيت كلمة المرور؟",
+                    color = MangaColors.Primary,
+                    fontSize = 13.sp,
+                    modifier = Modifier.clickable { onForgotPasswordClick() }
+                )
+            }
+            Spacer(modifier = Modifier.height(20.dp))
 
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Divider
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = MangaColors.SurfaceContainer)
-                    Text("  أو  ", color = MangaColors.OnSurfaceVariant, fontSize = 13.sp)
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = MangaColors.SurfaceContainer)
+            // Login button
+            Button(
+                onClick = {
+                    keyboardController?.hide()
+                    onLoginClick(email, password)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Primary),
+                enabled = !isLoading
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+                } else {
+                    Text("تسجيل الدخول", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
-                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Divider
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = MangaColors.SurfaceContainer)
+                Text("  أو  ", color = MangaColors.OnSurfaceVariant, fontSize = 13.sp)
+                HorizontalDivider(modifier = Modifier.weight(1f), color = MangaColors.SurfaceContainer)
+            }
+            Spacer(modifier = Modifier.height(24.dp))
 
                 // Google Sign-In button
                 OutlinedButton(
@@ -222,7 +221,6 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
-    }
 }
 
 @Composable
@@ -297,21 +295,20 @@ fun MangaTextField(
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = true,
-                textStyle = TextStyle(color = MangaColors.OnSurface, fontSize = 15.sp, textAlign = TextAlign.End),
+                textStyle = TextStyle(color = MangaColors.OnSurface, fontSize = 15.sp, textAlign = TextAlign.Start),
                 visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
                 keyboardActions = keyboardActions,
                 cursorBrush = SolidColor(MangaColors.Primary),
                 modifier = Modifier.fillMaxWidth(),
                 decorationBox = { innerTextField ->
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
                         if (value.isEmpty()) {
                             Text(
                                 text = placeholder,
                                 color = MangaColors.OnSurfaceVariant,
                                 fontSize = 15.sp,
-                                textAlign = TextAlign.End,
-                                modifier = Modifier.fillMaxWidth()
+                                textAlign = TextAlign.Start,
                             )
                         }
                         innerTextField()
