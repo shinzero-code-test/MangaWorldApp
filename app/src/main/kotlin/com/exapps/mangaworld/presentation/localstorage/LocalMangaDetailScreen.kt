@@ -136,7 +136,7 @@ fun LocalMangaDetailScreen(
                         }
                     }
                     Spacer(Modifier.height(16.dp))
-                    Divider(color = MangaColors.SurfaceHigh)
+                    HorizontalDivider(color = MangaColors.SurfaceHigh)
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "الفصول",

@@ -201,12 +201,25 @@ val MangaTypography = Typography(
 
 // ─── Shapes ───────────────────────────────────────────────────────────────────
 
+object MangaCorner {
+    val xs   = 4.dp
+    val sm   = 6.dp
+    val md   = 8.dp
+    val lg   = 10.dp
+    val xl   = 12.dp
+    val xxl  = 14.dp
+    val xxxl = 16.dp
+    val huge = 18.dp
+    val jumbo= 20.dp
+    val pill = 100.dp
+}
+
 val MangaShapes = Shapes(
-    extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
-    small      = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-    medium     = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-    large      = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-    extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+    extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(MangaCorner.xs),
+    small      = androidx.compose.foundation.shape.RoundedCornerShape(MangaCorner.md),
+    medium     = androidx.compose.foundation.shape.RoundedCornerShape(MangaCorner.xl),
+    large      = androidx.compose.foundation.shape.RoundedCornerShape(MangaCorner.xxxl),
+    extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(MangaCorner.jumbo),
 )
 
 // ─── Spacing System ──────────────────────────────────────────────────────────
