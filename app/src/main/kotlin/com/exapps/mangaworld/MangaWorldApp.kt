@@ -111,22 +111,25 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
             ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<FirebaseSyncWorker>(12, TimeUnit.HOURS)
                 .setConstraints(constraints)
+                .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
                 .build()
         )
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "favorite_digest_periodic",
-            ExistingPeriodicWorkPolicy.UPDATE,
+            ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<FavoriteDigestWorker>(6, TimeUnit.HOURS)
                 .setConstraints(constraints)
+                .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
                 .build()
         )
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "suggestion_notification_periodic",
-            ExistingPeriodicWorkPolicy.UPDATE,
+            ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<SuggestionNotificationWorker>(12, TimeUnit.HOURS)
                 .setConstraints(constraints)
+                .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
                 .build()
         )
     }
