@@ -572,15 +572,18 @@ fun MangaNavGraph(
         ) { back ->
             val sourceId = back.arguments?.getString("sourceId") ?: return@composable
             val mangaId = back.arguments?.getString("mangaId") ?: return@composable
-            val chapterUrl = back.arguments?.getString("chapterUrl") ?: return@composable
+            val chapterUrl = java.net.URLDecoder.decode(
+                back.arguments?.getString("chapterUrl") ?: "", "UTF-8"
+            )
             val source = MangaSource.fromIdOrNull(sourceId) ?: return@composable
+            val isImported = mangaId.startsWith("imported_") || sourceId == "local"
             ReaderScreen(
                 source = source,
                 mangaId = mangaId,
                 chapterUrl = chapterUrl,
                 onBack = { navController.popBackStack() },
-                onOpenCommunity = {
-                    navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl))
+                onOpenCommunity = if (isImported) {{}} else {
+                    { navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl)) }
                 }
             )
         }
