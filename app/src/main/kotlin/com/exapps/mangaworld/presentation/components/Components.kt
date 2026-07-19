@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -42,7 +43,9 @@ fun MangaCard(
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.semantics(mergeDescendants = true) {
+            contentDescription = manga.title
+        },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MangaColors.CardBg),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)

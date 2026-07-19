@@ -62,6 +62,13 @@ fun ReaderScreen(
     val ctx = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val activity = ctx as? Activity
+
+    // Announce page changes to TalkBack users
+    LaunchedEffect(state.currentPage) {
+        if (state.currentPage >= 0 && state.totalPages > 0) {
+            ctx.announceForAccessibility(ctx.getString(R.string.reader_page_counter, "${state.currentPage + 1}", "${state.totalPages}"))
+        }
+    }
     var noteDialog by remember { mutableStateOf(false) }
     var noteText by remember { mutableStateOf("") }
     var annotationsSheetOpen by remember { mutableStateOf(false) }
@@ -127,6 +134,10 @@ fun ReaderScreen(
         when {
             state.isLoading -> ReaderLoading()
             state.error != null -> {
+                // Announce error to TalkBack users
+                LaunchedEffect(state.error) {
+                    ctx.announceForAccessibility(ctx.getString(R.string.error_generic))
+                }
                 if (state.error!!.startsWith("CLOUDFLARE_REQUIRED|")) {
                     val parts = state.error!!.split("|")
                     val domain = parts.getOrNull(1).orEmpty()
