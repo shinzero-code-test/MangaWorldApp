@@ -54,6 +54,11 @@ class NotificationPolicyManager @Inject constructor(
         val now = System.currentTimeMillis()
         if (now - lastInactivitySent < 24 * 60 * 60 * 1000L) return
 
+        // Suppress inactivity reminder if the app was just opened (within 5 minutes)
+        // This prevents the awkward UX of getting a "we miss you" notification immediately after launching
+        val appStartTime = prefs.getLong("app_start_time", 0L)
+        if (now - appStartTime < 5 * 60 * 1000L) return
+
         // Use optimized query instead of loading entire history
         val lastRead = historyDao.getLatest()
 

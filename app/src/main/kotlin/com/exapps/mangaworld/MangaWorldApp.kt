@@ -73,6 +73,9 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
         com.facebook.FacebookSdk.sdkInitialize(this)
         initializeAppCheck()
         createNotificationChannels()
+        // Record app start time for inactivity reminder suppression
+        getSharedPreferences("notification_prefs", MODE_PRIVATE)
+            .edit().putLong("app_start_time", System.currentTimeMillis()).apply()
         widgetRefreshScheduler.schedule()
         scheduleFirebaseSync()
         scheduleAutoDownload()
