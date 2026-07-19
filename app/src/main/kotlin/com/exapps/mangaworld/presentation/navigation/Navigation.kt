@@ -203,7 +203,10 @@ fun MangaNavGraph(
                 navArgument("roomId") { type = NavType.StringType; defaultValue = "global" },
                 navArgument("title") { type = NavType.StringType; defaultValue = stringResource(R.string.live_chat) }
             )
-        ) {
+        ) { back ->
+            // NavType.StringType does NOT auto-decode URL-encoded query params
+            val roomId = java.net.URLDecoder.decode(back.arguments?.getString("roomId") ?: "global", "UTF-8")
+            val title = java.net.URLDecoder.decode(back.arguments?.getString("title") ?: "", "UTF-8")
             CommunityChatScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.Settings.route)    {
