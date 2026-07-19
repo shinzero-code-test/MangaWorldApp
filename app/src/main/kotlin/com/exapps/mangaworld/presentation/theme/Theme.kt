@@ -147,6 +147,14 @@ private val DarkColorScheme = darkColorScheme(
     onSurfaceVariant  = DarkThemeColors.OnSurfaceVariant,
     outline           = Color(0xFF948EA1),
     outlineVariant    = DarkThemeColors.OutlineVariant,
+    inverseSurface    = Color(0xFFE5E1E8),
+    inverseOnSurface = Color(0xFF1C1B1F),
+    inversePrimary    = MangaColors.PrimaryDim,
+    surfaceTint       = MangaColors.PrimaryLight,
+    surfaceContainerLow      = DarkThemeColors.Surface,
+    surfaceContainerLowest   = DarkThemeColors.Background,
+    surfaceBright            = DarkThemeColors.SurfaceHighest,
+    surfaceDim               = DarkThemeColors.Background,
     surfaceContainer  = DarkThemeColors.SurfaceContainer,
     surfaceContainerHigh = DarkThemeColors.SurfaceHigh,
     surfaceContainerHighest = DarkThemeColors.SurfaceHighest,
@@ -174,6 +182,14 @@ private val LightColorScheme = lightColorScheme(
     onSurfaceVariant  = LightThemeColors.OnSurfaceVariant,
     outline           = Color(0xFF7A7581),
     outlineVariant    = LightThemeColors.OutlineVariant,
+    inverseSurface    = Color(0xFF313033),
+    inverseOnSurface = Color(0xFFF4EFF4),
+    inversePrimary    = Color(0xFFD8C0FF),
+    surfaceTint       = Color(0xFF6833EA),
+    surfaceContainerLow      = LightThemeColors.Surface,
+    surfaceContainerLowest   = LightThemeColors.Background,
+    surfaceBright            = LightThemeColors.SurfaceHighest,
+    surfaceDim               = LightThemeColors.Background,
     surfaceContainer  = LightThemeColors.SurfaceContainer,
     surfaceContainerHigh = LightThemeColors.SurfaceHigh,
     surfaceContainerHighest = LightThemeColors.SurfaceHighest,
@@ -234,6 +250,26 @@ object Spacing {
     val xxxl = 24.dp   // section spacers, card padding
     val huge = 32.dp   // empty state padding, form horizontal padding
     val jumbo = 40.dp  // login/signup form top spacer
+}
+
+// ─── Animation System ────────────────────────────────────────────────────────
+
+object Anim {
+    /** Standard screen transition duration */
+    const val screenEnter = 220
+    const val screenExit  = 180
+
+    /** Fast micro-interaction (ripple, scale, color change) */
+    const val fast = 120
+
+    /** Standard content transition (expand/collapse, fade) */
+    const val medium = 220
+
+    /** Slow content transition (page transition, shimmer) */
+    const val slow = 400
+
+    /** Shimmer loop duration */
+    const val shimmer = 1200
 }
 
 // ─── Theme Composable ─────────────────────────────────────────────────────────
