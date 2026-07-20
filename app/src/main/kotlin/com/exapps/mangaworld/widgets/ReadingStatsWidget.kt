@@ -1,3 +1,4 @@
+import androidx.glance.appwidget.stringResource
 package com.exapps.mangaworld.widgets
 
 import android.content.Context
@@ -61,26 +62,26 @@ private fun ReadingStatsContent(
     val transparentBg = settings.isTransparentBg()
 
     WidgetCard(
-        title = "إحصائيات القراءة",
+        title = stringResource(com.exapps.mangaworld.R.string.widget_stats_section),
         showTitle = showTitles,
         transparentBg = transparentBg
     ) {
         if (stats.totalChaptersRead == 0 && stats.totalReadingMinutes == 0L) {
             WidgetEmptyState(
-                title = "لا توجد إحصائيات بعد",
-                subtitle = "ابدأ القراءة لتظهر إنجازاتك",
+                title = stringResource(com.exapps.mangaworld.R.string.widget_empty_stats),
+                subtitle = stringResource(com.exapps.mangaworld.R.string.widget_empty_stats_hint),
                 intent = AppLaunchIntents.home(context),
-                actionLabel = "ابدأ الآن",
+                actionLabel = stringResource(com.exapps.mangaworld.R.string.widget_start_reading),
                 retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
         }
 
-        StatsRow(icon = "🔥", label = "سلسلة القراءة", value = "${stats.readingStreakDays} يوم")
+        StatsRow(icon = "🔥", label = stringResource(com.exapps.mangaworld.R.string.widget_reading_streak), value = "${stats.readingStreakDays} يوم")
         Spacer(GlanceModifier.height(8.dp))
-        StatsRow(icon = "📖", label = "الفصول المقروءة", value = stats.totalChaptersRead.toString())
+        StatsRow(icon = "📖", label = stringResource(com.exapps.mangaworld.R.string.widget_chapters_read), value = stats.totalChaptersRead.toString())
         Spacer(GlanceModifier.height(8.dp))
-        StatsRow(icon = "⏱️", label = "وقت القراءة", value = formatMinutes(stats.totalReadingMinutes))
+        StatsRow(icon = "⏱️", label = stringResource(com.exapps.mangaworld.R.string.widget_reading_time), value = formatMinutes(stats.totalReadingMinutes))
     }
 }
 

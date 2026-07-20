@@ -1,3 +1,4 @@
+import androidx.glance.appwidget.stringResource
 package com.exapps.mangaworld.widgets
 
 import android.content.Context
@@ -68,16 +69,16 @@ private fun ContinueReadingContent(
     val transparentBg = settings.isTransparentBg()
 
     WidgetCard(
-        title = "تابع القراءة",
+        title = stringResource(com.exapps.mangaworld.R.string.widget_tab_continue),
         showTitle = showTitles,
         transparentBg = transparentBg
     ) {
         if (data == null) {
             WidgetEmptyState(
-                title = "لا توجد قراءة حالية",
-                subtitle = "ابدأ قراءة مانجا لتظهر هنا",
+                title = stringResource(com.exapps.mangaworld.R.string.widget_empty_reading),
+                subtitle = stringResource(com.exapps.mangaworld.R.string.widget_empty_reading_hint),
                 intent = AppLaunchIntents.home(context),
-                actionLabel = "افتح التطبيق",
+                actionLabel = stringResource(com.exapps.mangaworld.R.string.widget_open_app),
                 retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
@@ -144,7 +145,7 @@ private fun ContinueReadingContent(
         }
 
         WidgetPrimaryButton(
-            label = "متابعة القراءة",
+            label = stringResource(com.exapps.mangaworld.R.string.widget_action_read),
             intent = AppLaunchIntents.reader(context, data.sourceId, data.mangaId, data.chapterUrl)
         )
     }

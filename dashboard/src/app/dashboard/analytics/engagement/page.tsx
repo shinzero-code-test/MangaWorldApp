@@ -2,35 +2,48 @@
 
 import { useEffect, useState } from "react";
 
+interface DailyActive {
+  date: string;
+  users: number;
+}
+
+interface TopManga {
+  name: string;
+  reads: number;
+}
+
+interface ReadingDistribution {
+  time: string;
+  pct: number;
+}
+
+interface EngagementData {
+  dailyActive: DailyActive[];
+  topManga: TopManga[];
+  readingDistribution: ReadingDistribution[];
+}
+
 export default function EngagementPage() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<EngagementData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<"7d" | "30d" | "90d">("7d");
 
   useEffect(() => {
-    fetch("/api/analytics/summary")
+    setLoading(true);
+    const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
+    fetch(`/api/analytics/engagement?days=${days}`)
       .then((r) => r.json())
       .then((d) => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+  }, [period]);
 
-  // Mock engagement data for demonstration
-  const retentionData = [
-    { day: "السبت", users: 85, pct: 85 },
-    { day: "الأحد", users: 72, pct: 72 },
-    { day: "الاثنين", users: 91, pct: 91 },
-    { day: "الثلاثاء", users: 68, pct: 68 },
-    { day: "الأربعاء", users: 79, pct: 79 },
-    { day: "الخميس", users: 95, pct: 95 },
-    { day: "الجمعة", users: 88, pct: 88 },
-  ];
-
-  const readingStats = [
-    { label: "متوسط صفحات/جلسة", value: "42", icon: "📄" },
-    { label: "متوسط وقت القراءة", value: "23 دقيقة", icon: "⏱️" },
-    { label: "معدل إتمام الفصل", value: "78%", icon: "✅" },
-    { label: "معدل العودة يومياً", value: "65%", icon: "🔄" },
-  ];
+  if (loading || !data) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-[var(--muted-foreground)]">جاري التحميل...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -51,52 +64,31 @@ export default function EngagementPage() {
         </div>
       </div>
 
-      {/* Reading Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {readingStats.map((stat) => (
-          <div key={stat.label} className="p-5 bg-[var(--card)] rounded-xl border border-[var(--border)]">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">{stat.icon}</span>
-              <div>
-                <p className="text-sm text-[var(--muted-foreground)]">{stat.label}</p>
-                <p className="text-xl font-bold">{stat.value}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
       {/* Retention Chart */}
       <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-6">
-        <h4 className="font-medium mb-4">معدل الاحتفاظ اليومي</h4>
-        <div className="flex items-end gap-2 h-48">
-          {retentionData.map((d, i) => (
-            <div key={i} className="flex-1 flex flex-col items-center gap-1">
-              <span className="text-xs text-[var(--muted-foreground)]">{d.users}</span>
-              <div
-                className={`w-full rounded-t-md transition-all duration-500 ${
-                  d.pct >= 80 ? "bg-green-500/50" : d.pct >= 60 ? "bg-yellow-500/50" : "bg-red-500/50"
-                }`}
-                style={{ height: `${d.pct}%` }}
-              />
-              <span className="text-[10px] text-[var(--muted-foreground)]">{d.day}</span>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center justify-center gap-6 mt-4 text-xs text-[var(--muted-foreground)]">
-          <div className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded bg-green-500/50" />
-            <span>≥ 80%</span>
+        <h4 className="font-medium mb-4">المستخدمون النشطون يومياً</h4>
+        {data.dailyActive.length > 0 ? (
+          <div className="flex items-end gap-2 h-48">
+            {data.dailyActive.map((d, i) => {
+              const maxUsers = Math.max(...data.dailyActive.map((x) => x.users), 1);
+              const pct = Math.round((d.users / maxUsers) * 100);
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                  <span className="text-xs text-[var(--muted-foreground)]">{d.users}</span>
+                  <div
+                    className={`w-full rounded-t-md transition-all duration-500 ${
+                      pct >= 80 ? "bg-green-500/50" : pct >= 60 ? "bg-yellow-500/50" : "bg-red-500/50"
+                    }`}
+                    style={{ height: `${pct}%` }}
+                  />
+                  <span className="text-[10px] text-[var(--muted-foreground)]">{d.date}</span>
+                </div>
+              );
+            })}
           </div>
-          <div className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded bg-yellow-500/50" />
-            <span>60-79%</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded bg-red-500/50" />
-            <span>&lt; 60%</span>
-          </div>
-        </div>
+        ) : (
+          <p className="text-sm text-[var(--muted-foreground)]">لا توجد بيانات متاحة</p>
+        )}
       </div>
 
       {/* Reading Time Distribution */}
@@ -104,12 +96,7 @@ export default function EngagementPage() {
         <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-6">
           <h4 className="font-medium mb-4">توزيع أوقات القراءة</h4>
           <div className="space-y-3">
-            {[
-              { time: "6 صباحاً - 12 ظهراً", pct: 15 },
-              { time: "12 ظهراً - 6 مساءً", pct: 35 },
-              { time: "6 مساءً - 12 ليلاً", pct: 40 },
-              { time: "12 ليلاً - 6 صباحاً", pct: 10 },
-            ].map((t) => (
+            {data.readingDistribution.map((t) => (
               <div key={t.time}>
                 <div className="flex items-center justify-between text-sm mb-1">
                   <span>{t.time}</span>
@@ -127,32 +114,30 @@ export default function EngagementPage() {
         </div>
 
         <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-6">
-          <h4 className="font-medium mb-4">أكثر المانجا قراءة</h4>
-          <div className="space-y-3">
-            {[
-              { name: "One Piece", reads: 245 },
-              { name: "Naruto", reads: 189 },
-              { name: "Attack on Titan", reads: 156 },
-              { name: "Jujutsu Kaisen", reads: 134 },
-              { name: "Demon Slayer", reads: 98 },
-            ].map((m, i) => (
-              <div key={m.name} className="flex items-center gap-3">
-                <span className="text-sm font-bold text-[var(--muted-foreground)] w-5">{i + 1}</span>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span>{m.name}</span>
-                    <span className="text-[var(--muted-foreground)]">{m.reads}</span>
-                  </div>
-                  <div className="h-1.5 bg-[var(--accent)] rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-[var(--primary)]/50 rounded-full"
-                      style={{ width: `${(m.reads / 245) * 100}%` }}
-                    />
+          <h4 className="font-medium mb-4">أكثر المانجا تفاعلاً</h4>
+          {data.topManga.length > 0 ? (
+            <div className="space-y-3">
+              {data.topManga.map((m, i) => (
+                <div key={m.name} className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-[var(--muted-foreground)] w-5">{i + 1}</span>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span>{m.name}</span>
+                      <span className="text-[var(--muted-foreground)]">{m.reads}</span>
+                    </div>
+                    <div className="h-1.5 bg-[var(--accent)] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[var(--primary)]/50 rounded-full"
+                        style={{ width: `${data.topManga[0]?.reads ? (m.reads / data.topManga[0].reads) * 100 : 0}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--muted-foreground)]">لا توجد بيانات متاحة</p>
+          )}
         </div>
       </div>
     </div>

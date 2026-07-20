@@ -1,3 +1,4 @@
+import androidx.glance.appwidget.stringResource
 package com.exapps.mangaworld.widgets
 
 import android.content.Intent
@@ -216,7 +217,7 @@ internal fun WidgetEmptyState(title: String, subtitle: String, intent: Intent? =
         }
         if (retryIntent != null) {
             Spacer(GlanceModifier.height(6.dp))
-            WidgetPrimaryButton(label = "إعادة المحاولة", intent = retryIntent)
+            WidgetPrimaryButton(label = stringResource(com.exapps.mangaworld.R.string.widget_retry), intent = retryIntent)
         }
     }
 }

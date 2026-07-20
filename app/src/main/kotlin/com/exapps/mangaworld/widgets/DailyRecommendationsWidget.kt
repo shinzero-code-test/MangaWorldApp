@@ -1,3 +1,4 @@
+import androidx.glance.appwidget.stringResource
 package com.exapps.mangaworld.widgets
 
 import android.content.Context
@@ -52,16 +53,16 @@ private fun DailyRecommendationsContent(
     val visibleCount = settings.getVisibleItemCount(size.height.value.toInt())
 
     WidgetCard(
-        title = "اقتراحات اليوم",
+        title = stringResource(com.exapps.mangaworld.R.string.widget_today_recommendations),
         showTitle = showTitles,
         transparentBg = transparentBg
     ) {
         if (snapshot.recommendation == null && snapshot.trending == null && snapshot.latestUpdates.isEmpty()) {
             WidgetEmptyState(
-                title = "لا توجد اقتراحات حالياً",
-                subtitle = "سيتم تحديثها تلقائياً",
+                title = stringResource(com.exapps.mangaworld.R.string.widget_empty_recommendations),
+                subtitle = stringResource(com.exapps.mangaworld.R.string.widget_empty_recommendations_hint),
                 intent = AppLaunchIntents.home(context),
-                actionLabel = "افتح التطبيق",
+                actionLabel = stringResource(com.exapps.mangaworld.R.string.widget_open_app),
                 retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
@@ -73,8 +74,8 @@ private fun DailyRecommendationsContent(
             if (itemCount < visibleCount) {
                 WidgetListItem(
                     title = recommendation.title,
-                    subtitle = if (showTitles) recommendation.subtitle ?: "موصى بها لك" else null,
-                    trailing = if (showBadge) "اقتراح" else null,
+                    subtitle = if (showTitles) recommendation.subtitle ?: stringResource(com.exapps.mangaworld.R.string.widget_recommended_for_you) else null,
+                    trailing = if (showBadge) stringResource(com.exapps.mangaworld.R.string.widget_recommendation_badge) else null,
                     showTitle = showTitles,
                     showBadge = showBadge,
                     intent = AppLaunchIntents.detail(context, recommendation.sourceId, recommendation.slug)
@@ -88,8 +89,8 @@ private fun DailyRecommendationsContent(
             if (itemCount < visibleCount) {
                 WidgetListItem(
                     title = trending.title,
-                    subtitle = if (showTitles) trending.subtitle ?: "الأكثر رواجاً" else null,
-                    trailing = if (showBadge) "ترند" else null,
+                    subtitle = if (showTitles) trending.subtitle ?: stringResource(com.exapps.mangaworld.R.string.widget_trending) else null,
+                    trailing = if (showBadge) stringResource(com.exapps.mangaworld.R.string.widget_trending_badge) else null,
                     showTitle = showTitles,
                     showBadge = showBadge,
                     intent = AppLaunchIntents.detail(context, trending.sourceId, trending.slug)

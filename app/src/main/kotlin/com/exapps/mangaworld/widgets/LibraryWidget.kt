@@ -1,3 +1,4 @@
+import androidx.glance.appwidget.stringResource
 package com.exapps.mangaworld.widgets
 
 import android.content.Context
@@ -52,16 +53,16 @@ private fun LibraryWidgetContent(
     val visibleCount = settings.getVisibleItemCount(size.height.value.toInt())
 
     WidgetCard(
-        title = "مكتبتي",
+        title = stringResource(com.exapps.mangaworld.R.string.widget_library_title),
         showTitle = showTitles,
         transparentBg = transparentBg
     ) {
         if (entries.isEmpty()) {
             WidgetEmptyState(
-                title = "لا توجد عناصر في المكتبة",
-                subtitle = "أضف مانجا للمفضلة لتظهر هنا",
+                title = stringResource(com.exapps.mangaworld.R.string.widget_empty_library),
+                subtitle = stringResource(com.exapps.mangaworld.R.string.widget_empty_library_hint),
                 intent = AppLaunchIntents.home(context),
-                actionLabel = "تصفح",
+                actionLabel = stringResource(com.exapps.mangaworld.R.string.widget_browse),
                 retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
@@ -70,7 +71,7 @@ private fun LibraryWidgetContent(
         entries.take(visibleCount).forEachIndexed { index, entry ->
             WidgetListItem(
                 title = entry.title,
-                subtitle = if (showTitles) "آخر فتح من المكتبة" else null,
+                subtitle = if (showTitles) stringResource(com.exapps.mangaworld.R.string.widget_library_hint) else null,
                 trailing = if (showBadge && entry.newChapterCount > 0) "+${entry.newChapterCount}" else null,
                 showTitle = showTitles,
                 showBadge = showBadge,

@@ -1,3 +1,4 @@
+import androidx.glance.appwidget.stringResource
 package com.exapps.mangaworld.widgets
 
 import android.content.Context
@@ -51,16 +52,16 @@ private fun LatestUpdatesContent(
     val visibleCount = settings.getVisibleItemCount(size.height.value.toInt())
 
     WidgetCard(
-        title = "أحدث التحديثات",
+        title = stringResource(com.exapps.mangaworld.R.string.widget_latest_title),
         showTitle = showTitles,
         transparentBg = transparentBg
     ) {
         if (updates.isEmpty()) {
             WidgetEmptyState(
-                title = "لا توجد تحديثات حالياً",
-                subtitle = "سيتم جلبها تلقائياً",
+                title = stringResource(com.exapps.mangaworld.R.string.widget_empty_latest),
+                subtitle = stringResource(com.exapps.mangaworld.R.string.widget_empty_latest_hint),
                 intent = AppLaunchIntents.latestUpdates(context),
-                actionLabel = "عرض التحديثات",
+                actionLabel = stringResource(com.exapps.mangaworld.R.string.widget_view_updates),
                 retryIntent = AppLaunchIntents.latestUpdates(context)
             )
             return@WidgetCard

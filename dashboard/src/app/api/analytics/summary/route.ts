@@ -70,9 +70,9 @@ export async function GET(request: NextRequest) {
       engagement: {
         dailyActive,
         sourceUsage,
-        avgReadingTime: 23,
-        retentionRate: 68,
-        avgPagesPerSession: 42,
+        avgReadingTime: 0,
+        retentionRate: 0,
+        avgPagesPerSession: 0,
       },
     });
   } catch (error: any) {

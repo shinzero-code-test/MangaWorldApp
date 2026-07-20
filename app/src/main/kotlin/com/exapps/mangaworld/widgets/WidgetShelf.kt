@@ -1,3 +1,4 @@
+import androidx.glance.appwidget.stringResource
 package com.exapps.mangaworld.widgets
 
 import android.content.Context
@@ -75,7 +76,7 @@ private fun WidgetShelfContent(
             ) {}
             Spacer(GlanceModifier.width(6.dp))
             Text(
-                text = "الوصول السريع",
+                text = stringResource(com.exapps.mangaworld.R.string.accessibility_back),
                 style = TextStyle(
                     color = GlanceTheme.colors.onBackground,
                     fontWeight = FontWeight.Bold,
@@ -89,13 +90,13 @@ private fun WidgetShelfContent(
             modifier = GlanceModifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            ShelfButton(action = ShelfAction("🏠", "الرئيسية"), intent = AppLaunchIntents.home(context))
+            ShelfButton(action = ShelfAction("🏠", stringResource(com.exapps.mangaworld.R.string.widget_shelf_home)), intent = AppLaunchIntents.home(context))
             Spacer(GlanceModifier.width(6.dp))
-            ShelfButton(action = ShelfAction("🔍", "البحث"), intent = AppLaunchIntents.search(context))
+            ShelfButton(action = ShelfAction("🔍", stringResource(com.exapps.mangaworld.R.string.widget_shelf_search)), intent = AppLaunchIntents.search(context))
             Spacer(GlanceModifier.width(6.dp))
-            ShelfButton(action = ShelfAction("📚", "المكتبة"), intent = AppLaunchIntents.library(context))
+            ShelfButton(action = ShelfAction("📚", stringResource(com.exapps.mangaworld.R.string.widget_shelf_library)), intent = AppLaunchIntents.library(context))
             Spacer(GlanceModifier.width(6.dp))
-            ShelfButton(action = ShelfAction("⬇️", "التنزيلات"), intent = AppLaunchIntents.downloads(context))
+            ShelfButton(action = ShelfAction("⬇️", stringResource(com.exapps.mangaworld.R.string.widget_shelf_downloads)), intent = AppLaunchIntents.downloads(context))
         }
     }
 }
