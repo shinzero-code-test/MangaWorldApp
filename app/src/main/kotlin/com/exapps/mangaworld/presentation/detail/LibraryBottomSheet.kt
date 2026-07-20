@@ -1,10 +1,13 @@
 package com.exapps.mangaworld.presentation.detail
+
+import android.content.Context
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoStories
@@ -50,13 +53,13 @@ fun LibraryBottomSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    stringResource(R.string.library_section_title),
+                    context.getString(R.string.library_section_title),
                     style = MaterialTheme.typography.titleLarge,
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold
                 )
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Filled.Close, stringResource(R.string.close), tint = MangaColors.Muted)
+                    Icon(Icons.Filled.Close, context.getString(R.string.close), tint = MangaColors.Muted)
                 }
             }
 
@@ -88,13 +91,13 @@ fun LibraryBottomSheet(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        if (isFavourite) stringResource(R.string.in_favorites) else stringResource(R.string.add_to_favorites),
+                        if (isFavourite) context.getString(R.string.in_favorites) else context.getString(R.string.add_to_favorites),
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        if (isFavourite) stringResource(R.string.tap_remove_favorite) else stringResource(R.string.tap_to_add),
+                        if (isFavourite) context.getString(R.string.tap_remove_favorite) else context.getString(R.string.tap_to_add),
                         color = MangaColors.Muted,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -110,7 +113,7 @@ fun LibraryBottomSheet(
 
             // Status label
             Text(
-                stringResource(R.string.reading_list),
+                context.getString(R.string.reading_list),
                 color = MangaColors.OnSurface,
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.bodyMedium
@@ -120,11 +123,11 @@ fun LibraryBottomSheet(
 
             // Status buttons in 2-column grid
             val statuses = listOf(
-                ReadingListStatus.READING to Pair(Icons.Filled.AutoStories, stringResource(R.string.library_reading)),
-                ReadingListStatus.COMPLETED to Pair(Icons.Filled.CheckCircle, stringResource(R.string.library_read)),
-                ReadingListStatus.PLAN_TO_READ to Pair(Icons.Filled.Schedule, stringResource(R.string.library_plan_to_read)),
-                ReadingListStatus.ON_HOLD to Pair(Icons.Filled.PauseCircle, stringResource(R.string.library_on_hold)),
-                ReadingListStatus.DROPPED to Pair(Icons.Filled.Cancel, stringResource(R.string.library_dropped))
+                ReadingListStatus.READING to Pair(Icons.Filled.AutoStories, context.getString(R.string.library_reading)),
+                ReadingListStatus.COMPLETED to Pair(Icons.Filled.CheckCircle, context.getString(R.string.library_read)),
+                ReadingListStatus.PLAN_TO_READ to Pair(Icons.Filled.Schedule, context.getString(R.string.library_plan_to_read)),
+                ReadingListStatus.ON_HOLD to Pair(Icons.Filled.PauseCircle, context.getString(R.string.library_on_hold)),
+                ReadingListStatus.DROPPED to Pair(Icons.Filled.Cancel, context.getString(R.string.library_dropped))
             )
 
             val rows = statuses.chunked(2)

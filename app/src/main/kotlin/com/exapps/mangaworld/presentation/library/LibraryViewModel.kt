@@ -1,4 +1,6 @@
 package com.exapps.mangaworld.presentation.library
+
+import android.content.Context
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
@@ -15,7 +17,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.Stable
 import javax.inject.Inject
 
-enum class LibraryTab(val label: String) { FAVORITES(stringResource(R.string.favorites)), HISTORY(stringResource(R.string.history)) }
+enum class LibraryTab(val label: String) { FAVORITES(context.getString(R.string.favorites)), HISTORY(context.getString(R.string.history)) }
 
 @Stable
 data class LibraryUiState(
@@ -27,6 +29,7 @@ data class LibraryUiState(
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
     private val repo: LibraryRepository,
     private val firebaseSyncManager: FirebaseSyncManager,
     private val firebaseTopicManager: FirebaseTopicManager,

@@ -1,4 +1,6 @@
 package com.exapps.mangaworld.presentation.sources
+
+import android.content.Context
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
@@ -35,6 +37,7 @@ data class SourceBrowseUiState(
 
 @HiltViewModel
 class SourceBrowseViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
     private val mangaRepository: MangaRepository,
     private val settingsRepository: SettingsRepository,
     savedStateHandle: SavedStateHandle
@@ -149,7 +152,7 @@ class SourceBrowseViewModel @Inject constructor(
                 )
             }
             else -> {
-                _uiState.value = _uiState.value.copy(errorText = e.message ?: stringResource(R.string.unknown_error), isLoading = false)
+                _uiState.value = _uiState.value.copy(errorText = e.message ?: context.getString(R.string.unknown_error), isLoading = false)
             }
         }
     }

@@ -1,4 +1,6 @@
 package com.exapps.mangaworld.presentation.browse
+
+import android.content.Context
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
@@ -26,7 +28,7 @@ data class BrowseUiState(
     val isGridView: Boolean = true,
     val enabledSourceIds: Set<String> = MangaSource.entries.map { it.id }.toSet(),
     val blockedKeywords: Set<String> = emptySet(),
-    val genres: List<String> = listOf(stringResource(R.string.browse_all))
+    val genres: List<String> = listOf(context.getString(R.string.browse_all))
 ) {
     val filters get() = SearchFilters(
         query = query,
@@ -42,6 +44,7 @@ data class BrowseUiState(
 
 @HiltViewModel
 class BrowseViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
     private val repo: MangaRepository,
     settingsRepo: SettingsRepository
 ) : ViewModel() {
@@ -60,7 +63,7 @@ class BrowseViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collectLatest { (enabledSources, blacklist, selectedSource) ->
                     val loaded = repo.getGenres(source = selectedSource, enabledSourceIds = enabledSources)
-                    val availableGenres = listOf(stringResource(R.string.browse_all)) + loaded
+                    val availableGenres = listOf(context.getString(R.string.browse_all)) + loaded
                     _uiState.update {
                         it.copy(
                             enabledSourceIds = enabledSources,

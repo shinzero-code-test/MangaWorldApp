@@ -80,7 +80,7 @@ class LoginViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.auth_error_login_failed)) }
                 }
             } catch (error: AccountMergeRequiredException) {
-                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
+                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(context, error.reason)) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
             }
@@ -123,7 +123,7 @@ class LoginViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.auth_error_signup_failed)) }
                 }
             } catch (error: AccountMergeRequiredException) {
-                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
+                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(context, error.reason)) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
             }
@@ -143,7 +143,7 @@ class LoginViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.str_335)) }
                 }
             } catch (error: AccountMergeRequiredException) {
-                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
+                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(context, error.reason)) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
             }
@@ -163,7 +163,7 @@ class LoginViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.str_334)) }
                 }
             } catch (error: AccountMergeRequiredException) {
-                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
+                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(context, error.reason)) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
             }
@@ -237,5 +237,5 @@ class LoginViewModel @Inject constructor(
         _uiState.update { it.copy(error = null) }
     }
 
-    private fun mapAuthError(error: Exception): String = firebaseAuthErrorMessage(error)
+    private fun mapAuthError(error: Exception): String = firebaseAuthErrorMessage(context, error)
 }

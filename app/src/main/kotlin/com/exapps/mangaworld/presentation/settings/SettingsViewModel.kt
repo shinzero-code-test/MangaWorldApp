@@ -1,4 +1,6 @@
 package com.exapps.mangaworld.presentation.settings
+
+import android.content.Context
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
@@ -18,6 +20,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
     private val repo: SettingsRepository,
     private val cacheManager: CacheManager,
     private val localBackupManager: LocalBackupManager,
@@ -81,8 +84,8 @@ class SettingsViewModel @Inject constructor(
 
     fun exportBackup(uri: android.net.Uri) = viewModelScope.launch {
         runCatching { localBackupManager.exportTo(uri) }
-            .onSuccess { _backupMessage.value = stringResource(R.string.str_240) }
-            .onFailure { _backupMessage.value = it.message ?: stringResource(R.string.str_336) }
+            .onSuccess { _backupMessage.value = context.getString(R.string.str_240) }
+            .onFailure { _backupMessage.value = it.message ?: context.getString(R.string.str_336) }
     }
 
     fun importBackup(uri: android.net.Uri) = viewModelScope.launch {
@@ -90,9 +93,9 @@ class SettingsViewModel @Inject constructor(
             localBackupManager.importFrom(uri)
             firebaseSyncManager.pushLocalSnapshot()
         }.onSuccess {
-            _backupMessage.value = stringResource(R.string.str_238)
+            _backupMessage.value = context.getString(R.string.str_238)
         }.onFailure {
-            _backupMessage.value = it.message ?: stringResource(R.string.str_332)
+            _backupMessage.value = it.message ?: context.getString(R.string.str_332)
         }
     }
 

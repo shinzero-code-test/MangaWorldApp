@@ -1,4 +1,6 @@
 package com.exapps.mangaworld.presentation.components
+
+import android.content.Context
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
@@ -6,6 +8,7 @@ import android.graphics.Bitmap
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,6 +22,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -85,7 +89,7 @@ fun MangaCard(
             // New badge
             if (manga.isNew) {
                 Text(
-                    stringResource(R.string.new_label),
+                    context.getString(R.string.new_label),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                     modifier = Modifier
@@ -163,9 +167,9 @@ fun MangaCover(
 @Composable
 fun TypeBadge(type: MangaType, modifier: Modifier = Modifier) {
     val (bg, text) = when (type) {
-        MangaType.MANGA  -> Color(0xCC000033) to stringResource(R.string.manga)    // 80% alpha for contrast
-        MangaType.MANHWA -> Color(0xCC001133) to stringResource(R.string.manhwa)
-        MangaType.MANHUA -> Color(0xCC330011) to stringResource(R.string.manhwa)
+        MangaType.MANGA  -> Color(0xCC000033) to context.getString(R.string.manga)    // 80% alpha for contrast
+        MangaType.MANHWA -> Color(0xCC001133) to context.getString(R.string.manhwa)
+        MangaType.MANHUA -> Color(0xCC330011) to context.getString(R.string.manhwa)
         else             -> return
     }
     Text(
@@ -235,7 +239,7 @@ fun SectionHeader(
         if (onSeeAll != null) {
             TextButton(onClick = onSeeAll) {
                 Text(
-                    stringResource(R.string.see_all),
+                    context.getString(R.string.see_all),
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.Cyan
                 )

@@ -1,4 +1,6 @@
 package com.exapps.mangaworld.presentation.reader
+
+import android.content.Context
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
@@ -80,6 +82,7 @@ data class ReaderUiState(
 
 @HiltViewModel
 class ReaderViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
     private val app: Application,
     private val mangaRepo: MangaRepository,
     private val libraryRepo: LibraryRepository,
@@ -179,12 +182,12 @@ class ReaderViewModel @Inject constructor(
                             totalPages = localPages.size,
                             currentPage = 0,
                             chapterNumber = parseFallbackChapterNumber(chapterUrl),
-                            downloadMessage = stringResource(R.string.read_offline)
+                            downloadMessage = context.getString(R.string.read_offline)
                         )
                     }
                     beginSession(mangaId, chapterUrl)
                 } else {
-                    _state.update { it.copy(isLoading = false, error = stringResource(R.string.no_pages_loaded)) }
+                    _state.update { it.copy(isLoading = false, error = context.getString(R.string.no_pages_loaded)) }
                 }
             }
             return
@@ -207,7 +210,7 @@ class ReaderViewModel @Inject constructor(
                         currentPage = 0,
                         chapterNumber = currentChapterNumber,
                         chapterTitle = chapterMeta?.title,
-                        downloadMessage = stringResource(R.string.read_offline)
+                        downloadMessage = context.getString(R.string.read_offline)
                     )
                 }
                 observeAnnotations(mangaId, chapterUrl)
@@ -339,7 +342,7 @@ class ReaderViewModel @Inject constructor(
                     ?: resolveDetailForChapter(st.mangaId, currentSource)?.title
                     ?: st.mangaId.substringAfter("_").ifBlank { st.mangaId }
             }
-            _state.update { it.copy(downloadInProgress = true, downloadProgress = 0f, downloadMessage = stringResource(R.string.starting_download), activeDownloadTaskId = taskId) }
+            _state.update { it.copy(downloadInProgress = true, downloadProgress = 0f, downloadMessage = context.getString(R.string.starting_download), activeDownloadTaskId = taskId) }
             downloadQueueManager.enqueueAndRun(
                 taskId = taskId,
                 mangaId = st.mangaId,
@@ -492,11 +495,11 @@ class ReaderViewModel @Inject constructor(
                         resolver.update(it, contentValues, null, null)
                     }
                 }
-                _state.update { it.copy(downloadMessage = stringResource(R.string.reader_page_saved)) }
+                _state.update { it.copy(downloadMessage = context.getString(R.string.reader_page_saved)) }
                 kotlinx.coroutines.delay(2000)
                 _state.update { it.copy(downloadMessage = null) }
             } catch (_: Exception) {
-                _state.update { it.copy(downloadMessage = stringResource(R.string.str_337)) }
+                _state.update { it.copy(downloadMessage = context.getString(R.string.str_337)) }
                 kotlinx.coroutines.delay(2000)
                 _state.update { it.copy(downloadMessage = null) }
             }

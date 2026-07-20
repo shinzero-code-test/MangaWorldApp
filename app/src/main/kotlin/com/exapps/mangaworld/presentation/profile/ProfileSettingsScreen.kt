@@ -11,12 +11,15 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -77,7 +80,8 @@ class ProfileSettingsViewModel @Inject constructor(
     private val readChapterDao: ReadChapterDao,
     private val cloudinaryUploader: CloudinaryUploader,
     private val auth: com.google.firebase.auth.FirebaseAuth,
-    private val firestore: com.google.firebase.firestore.FirebaseFirestore
+    private val firestore: com.google.firebase.firestore.FirebaseFirestore,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
 
     private val _userEmail = MutableStateFlow<String?>(auth.currentUser?.email)
@@ -289,7 +293,7 @@ class ProfileSettingsViewModel @Inject constructor(
         try {
             action()
         } catch (error: AccountMergeRequiredException) {
-            _providerLinkError.value = accountMergeMessage(error.reason)
+            _providerLinkError.value = accountMergeMessage(context, error.reason)
         } catch (error: ProviderManagementRequiresSignInException) {
             _providerLinkError.value = if (error.isGuestSession) {
                 stringResource(R.string.settings_provider_guest_error)

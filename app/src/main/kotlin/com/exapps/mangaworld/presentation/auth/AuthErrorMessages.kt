@@ -9,17 +9,16 @@ import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.FirebaseTooManyRequestsException
 import com.google.firebase.auth.FirebaseAuthException
 
-@Composable
-internal fun accountMergeMessage(reason: AccountMergeReason): String =
+internal fun accountMergeMessage(context: Context, reason: AccountMergeReason): String =
     when (reason) {
         AccountMergeReason.ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL ->
-            stringResource(R.string.str_456)
+            context.getString(R.string.str_456)
         AccountMergeReason.CREDENTIAL_ALREADY_IN_USE ->
-            stringResource(R.string.str_209)
+            context.getString(R.string.str_209)
         AccountMergeReason.EMAIL_ALREADY_IN_USE ->
-            stringResource(R.string.str_433)
+            context.getString(R.string.str_433)
         AccountMergeReason.UNKNOWN ->
-            stringResource(R.string.auth_error_provider_linked)
+            context.getString(R.string.auth_error_provider_linked)
     }
 
 internal fun firebaseAuthErrorMessage(context: Context, error: Exception): String =

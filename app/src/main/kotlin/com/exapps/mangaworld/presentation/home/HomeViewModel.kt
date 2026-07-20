@@ -1,4 +1,6 @@
 package com.exapps.mangaworld.presentation.home
+
+import android.content.Context
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
@@ -33,6 +35,7 @@ data class HomeUiState(
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
     private val repo: MangaRepository,
     private val settingsRepo: SettingsRepository,
     private val remoteConfigManager: FirebaseRemoteConfigManager,
@@ -63,7 +66,7 @@ class HomeViewModel @Inject constructor(
                                 featured = emptyList(),
                                 latestChapters = emptyList(),
                                 trending = emptyList(),
-                                error = stringResource(R.string.str_341)
+                                error = context.getString(R.string.str_341)
                             )
                         }
                     } else {

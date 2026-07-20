@@ -5,6 +5,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -127,7 +128,7 @@ fun LocalStorageScreen(
                     color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onImportManga) {
-                    Icon(Icons.Filled.FileUpload, stringResource(R.string.import), tint = MangaColors.Cyan)
+                    Icon(Icons.Filled.FileUpload, stringResource(R.string.import_label), tint = MangaColors.Cyan)
                 }
                 if (mangas.isNotEmpty()) {
                     Text(stringResource(R.string.fmt_034, mangas.size), style = MaterialTheme.typography.bodySmall,

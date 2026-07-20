@@ -1,4 +1,6 @@
 package com.exapps.mangaworld.presentation.detail
+
+import android.content.Context
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
@@ -50,6 +52,7 @@ data class DetailUiState(
 
 @HiltViewModel
 class MangaDetailViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
     private val mangaRepo: MangaRepository,
     private val libraryRepo: LibraryRepository,
     private val communityRepository: CommunityRepository,
@@ -171,7 +174,7 @@ class MangaDetailViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             isLoading = false,
-                            error = if (it.manga == null) (e.message ?: stringResource(R.string.download_error)) else null,
+                            error = if (it.manga == null) (e.message ?: context.getString(R.string.download_error)) else null,
                             cloudflareUrl = if (e is CloudflareChallengeException) e.targetUrl else null,
                             cloudflareDomain = if (e is CloudflareChallengeException) e.domain else null
                         )
@@ -197,7 +200,7 @@ class MangaDetailViewModel @Inject constructor(
                 val mangaDirPath = downloadQueueManager.getMangaDirPath(currentMangaId)
                 val mangaDir = File(mangaDirPath)
                 if (!mangaDir.exists()) {
-                    _state.update { it.copy(isLoading = false, error = stringResource(R.string.local_folder_missing)) }
+                    _state.update { it.copy(isLoading = false, error = context.getString(R.string.local_folder_missing)) }
                     return@launch
                 }
 
@@ -278,7 +281,7 @@ class MangaDetailViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, error = e.message ?: stringResource(R.string.local_manga_load_error)) }
+                _state.update { it.copy(isLoading = false, error = e.message ?: context.getString(R.string.local_manga_load_error)) }
             }
         }
     }
@@ -401,7 +404,7 @@ class MangaDetailViewModel @Inject constructor(
                         SourceComparison(
                             source = source,
                             match = null,
-                            error = e.message ?: stringResource(R.string.unknown_error)
+                            error = e.message ?: context.getString(R.string.unknown_error)
                         )
                     }
                 }
