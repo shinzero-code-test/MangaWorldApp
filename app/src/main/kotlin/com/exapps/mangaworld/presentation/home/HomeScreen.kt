@@ -332,7 +332,7 @@ private fun LatestChapterRow(item: LatestChapterItem, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                stringResource(R.string.fmt_058, item.chapterNumber.let { if (it == it.toInt().toFloat()) it.toInt() else it ),
+                stringResource(R.string.fmt_058, item.chapterNumber.let { if (it == it.toInt().toFloat()) it.toInt() else it }),
                 style = MaterialTheme.typography.bodySmall,
                 color = MangaColors.PrimaryLight
             )
@@ -421,7 +421,7 @@ private fun LatestChapterGridCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    stringResource(R.string.fmt_058, item.chapterNumber.let { if (it == it.toInt().toFloat()) it.toInt() else it ),
+                    stringResource(R.string.fmt_058, item.chapterNumber.let { if (it == it.toInt().toFloat()) it.toInt() else it }),
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.PrimaryLight
                 )

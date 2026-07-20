@@ -234,7 +234,7 @@ private fun HistoryItem(item: ReadingHistoryItem, onClick: () -> Unit, onRemove:
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(4.dp))
             Text(
-                stringResource(R.string.fmt_058, item.lastChapterNumber.let { if (it == it.toInt().toFloat()) it.toInt().toString() else it.toString() ),
+                stringResource(R.string.fmt_058, item.lastChapterNumber.let { if (it == it.toInt().toFloat()) it.toInt().toString() else it.toString() }),
                 style = MaterialTheme.typography.bodySmall, color = MangaColors.PrimaryLight
             )
             if (item.totalChapters > 0) {
