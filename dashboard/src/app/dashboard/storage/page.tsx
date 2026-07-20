@@ -59,7 +59,7 @@ export default function StoragePage() {
     <div className="space-y-6">
       <PageHeader
         title="التخزين"
-        subtitle="Firebase Storage — إحصاءات مساحة التخزين"
+        subtitle="Cloudinary — إحصاءات مساحة التخزين"
         icon={HardDrive}
       />
 

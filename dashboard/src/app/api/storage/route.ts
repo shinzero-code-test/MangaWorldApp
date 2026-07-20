@@ -1,63 +1,68 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
-import { getAdminStorage } from "@/lib/firebase-admin";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+
+const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME || "mangaworld";
+const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY || "";
+const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET || "";
+
+interface CloudinaryUsage {
+  created_bytes: number;
+  count: number;
+}
+
+interface CloudinaryUsageResponse {
+  storage: { used: number; limit: number };
+  bandwidth: { used: number; limit: number };
+  resources: CloudinaryUsage;
+}
+
+async function fetchCloudinaryUsage(): Promise<CloudinaryUsageResponse> {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = require("crypto")
+    .createHash("sha1")
+    .update(`usage${timestamp}${CLOUDINARY_API_SECRET}`)
+    .digest("hex");
+
+  const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/usage?timestamp=${timestamp}&api_key=${CLOUDINARY_API_KEY}&signature=${signature}`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Cloudinary API error: ${response.status}`);
+  return response.json();
+}
 
 export async function GET() {
   try {
     await requireRole("super-admin");
 
-    try {
-      const bucket = getAdminStorage().bucket();
-      const [files] = await bucket.getFiles({ maxResults: 1000 });
-
-      let totalBytes = 0;
-      const breakdown: Record<string, { bytes: number; count: number }> = {
-        images:    { bytes: 0, count: 0 },
-        documents: { bytes: 0, count: 0 },
-        cache:     { bytes: 0, count: 0 },
-        other:     { bytes: 0, count: 0 },
-      };
-
-      for (const file of files) {
-        const size = parseInt(file.metadata.size as string ?? "0");
-        totalBytes += size;
-        const name = file.name.toLowerCase();
-        if (name.match(/\.(jpg|jpeg|png|gif|webp|avif|svg)$/)) {
-          breakdown.images.bytes += size;
-          breakdown.images.count++;
-        } else if (name.match(/\.(pdf|doc|docx|txt)$/)) {
-          breakdown.documents.bytes += size;
-          breakdown.documents.count++;
-        } else if (name.includes("cache/") || name.includes("temp/")) {
-          breakdown.cache.bytes += size;
-          breakdown.cache.count++;
-        } else {
-          breakdown.other.bytes += size;
-          breakdown.other.count++;
-        }
-      }
-
+    if (!CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
       return NextResponse.json({
-        totalBytes,
-        bucketName: bucket.name,
-        breakdown: Object.entries(breakdown).map(([id, v]) => ({
-          id,
-          label:     id === "images" ? "الصور" : id === "documents" ? "المستندات" : id === "cache" ? "الذاكرة المؤقتة" : "أخرى",
-          bytes:     v.bytes,
-          fileCount: v.count,
-        })),
-      });
-    } catch {
-      // Return empty data if storage isn't configured
-      return NextResponse.json({
-        totalBytes:  0,
-        bucketName:  process.env.FIREBASE_STORAGE_BUCKET ?? "",
+        totalBytes: 0,
+        bucketName: CLOUDINARY_CLOUD_NAME,
         breakdown: [],
+        error: "Cloudinary credentials not configured",
       });
     }
+
+    const usage = await fetchCloudinaryUsage();
+
+    // Cloudinary doesn't provide file-level breakdown in the usage API
+    // Return total storage from usage data
+    const totalBytes = usage.resources?.created_bytes ?? 0;
+
+    return NextResponse.json({
+      totalBytes,
+      bucketName: CLOUDINARY_CLOUD_NAME,
+      breakdown: [
+        { id: "images", label: "الصور", bytes: totalBytes, fileCount: usage.resources?.count ?? 0 },
+      ],
+    });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Storage API error:", error);
+    return NextResponse.json({
+      totalBytes: 0,
+      bucketName: CLOUDINARY_CLOUD_NAME,
+      breakdown: [],
+    });
   }
 }
