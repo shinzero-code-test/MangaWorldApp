@@ -56,6 +56,9 @@ interface ReadingHistoryDao {
     @Query("DELETE FROM reading_history WHERE mangaId = :mangaId AND lastReadAt <= :olderThan")
     suspend fun deleteIfOlder(mangaId: String, olderThan: Long)
 
+    @Query("SELECT mangaId FROM reading_history")
+    suspend fun getAllMangaIds(): List<String>
+
     @Query("DELETE FROM reading_history")
     suspend fun clearAll()
 

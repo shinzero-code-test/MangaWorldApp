@@ -352,7 +352,7 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun clearHistory() {
-        historyDao.getAll().forEach { prefs.markSyncTombstone("readingHistory", it.mangaId) }
+        historyDao.getAllMangaIds().forEach { mangaId -> prefs.markSyncTombstone("readingHistory", mangaId) }
         historyDao.clearAll()
     }
     override suspend fun removeFromHistory(mangaId: String) {

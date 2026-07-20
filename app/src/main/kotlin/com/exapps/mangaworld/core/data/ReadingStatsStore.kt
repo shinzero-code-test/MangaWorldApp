@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.core.data
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -48,17 +49,17 @@ class ReadingStatsStore @Inject constructor(
     suspend fun addReadingTime(durationMs: Long) {
         if (durationMs <= 0L) return
         val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-        // Read the previous date BEFORE writing today's date
-        val previousDate = dataStore.data.first()[lastReadDateKey]
+        // Read previousDate AND update atomically inside dataStore.edit
         dataStore.edit { prefs ->
+            val previousDate = prefs[lastReadDateKey]
             prefs[totalReadingTimeKey] = (prefs[totalReadingTimeKey] ?: 0L) + durationMs
             prefs[lastReadDateKey] = today
             // Also record daily reading time for the stats chart (use Long to avoid truncation)
             val timeMap = parseLongMap(prefs[dailyTimeKey] ?: "{}")
             timeMap[today] = (timeMap[today] ?: 0L) + durationMs
             prefs[dailyTimeKey] = longMapToJson(timeMap)
+            updateStreakInPlace(prefs, today, previousDate)
         }
-        updateStreak(today, previousDate)
     }
 
     suspend fun recordPageRead(pagesRead: Int) {
@@ -77,32 +78,27 @@ class ReadingStatsStore @Inject constructor(
         }
     }
 
-    private suspend fun updateStreak(today: String, previousDate: String?) {
-        dataStore.edit { prefs ->
-            val currentStreak = prefs[currentStreakKey] ?: 0
-            val longestStreak = prefs[longestStreakKey] ?: 0
+    private fun updateStreakInPlace(prefs: MutablePreferences, today: String, previousDate: String?) {
+        val currentStreak = prefs[currentStreakKey] ?: 0
+        val longestStreak = prefs[longestStreakKey] ?: 0
 
-            if (previousDate == null || previousDate == today) {
-                // First read or same day
-                if (currentStreak == 0) {
-                    prefs[currentStreakKey] = 1
-                }
-            } else {
-                val lastLocalDate = LocalDate.parse(previousDate, DateTimeFormatter.ISO_LOCAL_DATE)
-                val todayLocalDate = LocalDate.parse(today, DateTimeFormatter.ISO_LOCAL_DATE)
-                val daysDiff = java.time.temporal.ChronoUnit.DAYS.between(lastLocalDate, todayLocalDate)
+        if (previousDate == null || previousDate == today) {
+            if (currentStreak == 0) {
+                prefs[currentStreakKey] = 1
+            }
+        } else {
+            val lastLocalDate = LocalDate.parse(previousDate, DateTimeFormatter.ISO_LOCAL_DATE)
+            val todayLocalDate = LocalDate.parse(today, DateTimeFormatter.ISO_LOCAL_DATE)
+            val daysDiff = java.time.temporal.ChronoUnit.DAYS.between(lastLocalDate, todayLocalDate)
 
-                if (daysDiff == 1L) {
-                    // Consecutive day
-                    val newStreak = currentStreak + 1
-                    prefs[currentStreakKey] = newStreak
-                    if (newStreak > longestStreak) {
-                        prefs[longestStreakKey] = newStreak
-                    }
-                } else if (daysDiff > 1L) {
-                    // Streak broken
-                    prefs[currentStreakKey] = 1
+            if (daysDiff == 1L) {
+                val newStreak = currentStreak + 1
+                prefs[currentStreakKey] = newStreak
+                if (newStreak > longestStreak) {
+                    prefs[longestStreakKey] = newStreak
                 }
+            } else if (daysDiff > 1L) {
+                prefs[currentStreakKey] = 1
             }
         }
     }
@@ -141,7 +137,8 @@ class ReadingStatsStore @Inject constructor(
         return try {
             val obj = JSONObject(json)
             obj.keys().asSequence().associateWith { key -> obj.getInt(key) }.toMutableMap()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w("ReadingStatsStore", "Failed to parse page stats JSON: ${e.message}")
             mutableMapOf()
         }
     }
@@ -151,11 +148,11 @@ class ReadingStatsStore @Inject constructor(
         return try {
             val obj = JSONObject(json)
             obj.keys().asSequence().associateWith { key -> obj.getLong(key) }.toMutableMap()
-        } catch (_: Exception) {
-            // Backward compat: handle old Int-based format
+        } catch (e: Exception) {
             try {
                 parseMap(json).mapValues { it.value.toLong() }.toMutableMap()
-            } catch (_: Exception) {
+            } catch (e2: Exception) {
+                Log.w("ReadingStatsStore", "Failed to parse reading time JSON: ${e2.message}")
                 mutableMapOf()
             }
         }
