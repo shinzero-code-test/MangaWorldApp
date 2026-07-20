@@ -10,7 +10,9 @@ import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
@@ -67,12 +69,36 @@ class AchievementManager @Inject constructor(
     private val totalPagesReadKey = intPreferencesKey("total_pages_read")
     private val totalChaptersReadKey = intPreferencesKey("total_chapters_read")
     private val lastFirestoreSyncKey = longPreferencesKey("last_firestore_sync")
+
+    @Volatile private var lastAchievementCheckMs: Long = 0L
+
+    /** Emits newly unlocked achievements for UI notification. */
+    private val _achievementUnlocked = MutableSharedFlow<Achievement>(extraBufferCapacity = 5, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val achievementUnlocked: Flow<Achievement> = _achievementUnlocked
+
+    /** Collect pending achievement unlocks and show notification. */
+    suspend fun collectAndNotifyUnlocks() {
+        achievementUnlocked.collect { achievement ->
+            android.util.Log.i("AchievementManager", "Achievement unlocked: ${achievement.title} (${achievement.icon})")
+        }
+    }
     private val firestore = FirebaseFirestore.getInstance()
 
     // Throttle Firestore syncs to max once every 30 minutes
     private val FIRESTORE_SYNC_INTERVAL_MS = 30 * 60 * 1000L
 
     val goals: Flow<List<ReadingGoal>> = dataStore.data.map { prefs ->
+        parseGoals(prefs[goalsKey] ?: "[]")
+    }
+
+    /** Count of unlocked achievements, read from DataStore. */
+    suspend fun getUnlockedAchievementCount(): Int {
+        val prefs = dataStore.data.first()
+        val achievements = parseAchievements(prefs[achievementsKey] ?: "[]")
+        val defaults = getDefaultAchievements()
+        val merged = defaults.map { default -> achievements.find { it.id == default.id } ?: default }
+        return merged.count { it.isUnlocked }
+    }
         parseGoals(prefs[goalsKey] ?: "[]")
     }
 
@@ -104,18 +130,6 @@ class AchievementManager @Inject constructor(
         return goal
     }
 
-    suspend fun updateGoalProgress(goalId: String, increment: Int) {
-        dataStore.edit { prefs ->
-            val goals = parseGoals(prefs[goalsKey] ?: "[]").toMutableList()
-            val index = goals.indexOfFirst { it.id == goalId }
-            if (index >= 0) {
-                val goal = goals[index]
-                goals[index] = goal.copy(currentValue = goal.currentValue + increment)
-                prefs[goalsKey] = goalsToJson(goals)
-            }
-        }
-    }
-
     suspend fun deleteGoal(goalId: String) {
         dataStore.edit { prefs ->
             val goals = parseGoals(prefs[goalsKey] ?: "[]").toMutableList()
@@ -128,6 +142,10 @@ class AchievementManager @Inject constructor(
         dataStore.edit { prefs ->
             prefs[totalPagesReadKey] = (prefs[totalPagesReadKey] ?: 0) + pages
         }
+        // Throttle: only check achievements every 5 seconds to avoid per-page overhead
+        val now = System.currentTimeMillis()
+        if (now - lastAchievementCheckMs < 5_000L) return
+        lastAchievementCheckMs = now
         checkAchievements()
     }
 
@@ -172,6 +190,7 @@ class AchievementManager @Inject constructor(
                 if (shouldUnlock) {
                     mergedAchievements[index] = achievement.copy(isUnlocked = true, unlockedAt = now)
                     changed = true
+                    _achievementUnlocked.tryEmit(achievement)
                 }
             }
         }

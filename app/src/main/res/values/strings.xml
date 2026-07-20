@@ -277,6 +277,7 @@
     <string name="accessibility_back">رجوع</string>
     <string name="accessibility_send">إرسال</string>
     <string name="suggestion_notif_title">مانجا قد تعجبك</string>
+    <string name="achievements">الإنجازات</string>
 
     <!-- ─── User List Dialog ───────────────────────────────────────────────── -->
     <string name="dialog_no_users">لا يوجد مستخدمون حالياً</string>

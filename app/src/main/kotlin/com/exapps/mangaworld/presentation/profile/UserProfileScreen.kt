@@ -99,6 +99,7 @@ class UserProfileViewModel @Inject constructor(
     private val communityRepository: CommunityRepository,
     private val libraryRepository: LibraryRepository,
     private val readingStatsStore: ReadingStatsStore,
+    private val achievementManager: com.exapps.mangaworld.core.data.AchievementManager,
     private val cloudinaryUploader: com.exapps.mangaworld.core.firebase.CloudinaryUploader
 ) : ViewModel() {
     private val _isLoading = MutableStateFlow(true)
@@ -120,6 +121,15 @@ class UserProfileViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
     val currentStreak = readingStatsStore.currentStreak
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    /** Count of unlocked achievements (out of 6 total). */
+    val achievementsUnlocked = MutableStateFlow(0)
+
+    init {
+        viewModelScope.launch {
+            achievementsUnlocked.value = achievementManager.getUnlockedAchievementCount()
+        }
+    }
 
     var avatarUri by mutableStateOf<Uri?>(null)
         private set
@@ -227,6 +237,7 @@ fun UserProfileScreen(
     val totalReadingTimeMs by viewModel.totalReadingTimeMs.collectAsStateWithLifecycle()
     val totalMangaRead by viewModel.totalMangaRead.collectAsStateWithLifecycle()
     val currentStreak by viewModel.currentStreak.collectAsStateWithLifecycle()
+    val achievementsUnlocked by viewModel.achievementsUnlocked.collectAsStateWithLifecycle()
     val avatarUri = viewModel.avatarUri
     val bannerUri = viewModel.bannerUri
 
@@ -266,6 +277,8 @@ fun UserProfileScreen(
             chaptersRead = totalMangaRead,
             streak = currentStreak
         )
+
+        AchievementsPreview(unlockedCount = achievementsUnlocked, totalAchievements = 6)
 
         QuickActionsGrid(
             unreadNotifications = unreadNotifications,
@@ -518,6 +531,57 @@ private fun StatCard(modifier: Modifier, icon: ImageVector, tint: Color, value: 
         Spacer(Modifier.height(6.dp))
         Text(text = value, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
         Text(text = label, color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+// =====================================================================================
+// Achievements preview
+// =====================================================================================
+
+@Composable
+private fun AchievementsPreview(unlockedCount: Int, totalAchievements: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.EmojiEvents, contentDescription = null, tint = MangaColors.Yellow, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                stringResource(R.string.achievements),
+                color = MangaColors.OnSurface,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        Text(
+            "$unlockedCount/$totalAchievements",
+            color = MangaColors.OnSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+    // Achievement progress dots
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        repeat(totalAchievements) { index ->
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(
+                        if (index < unlockedCount) MangaColors.Yellow
+                        else MangaColors.SurfaceContainer
+                    )
+            )
+        }
     }
 }
 
