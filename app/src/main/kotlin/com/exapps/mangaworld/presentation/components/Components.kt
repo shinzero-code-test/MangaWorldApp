@@ -89,7 +89,7 @@ fun MangaCard(
             // New badge
             if (manga.isNew) {
                 Text(
-                    context.getString(R.string.new_label),
+                    LocalContext.current.getString(R.string.new_label),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                     modifier = Modifier
@@ -167,9 +167,9 @@ fun MangaCover(
 @Composable
 fun TypeBadge(type: MangaType, modifier: Modifier = Modifier) {
     val (bg, text) = when (type) {
-        MangaType.MANGA  -> Color(0xCC000033) to context.getString(R.string.manga)    // 80% alpha for contrast
-        MangaType.MANHWA -> Color(0xCC001133) to context.getString(R.string.manhwa)
-        MangaType.MANHUA -> Color(0xCC330011) to context.getString(R.string.manhwa)
+        MangaType.MANGA  -> Color(0xCC000033) to LocalContext.current.getString(R.string.manga)    // 80% alpha for contrast
+        MangaType.MANHWA -> Color(0xCC001133) to LocalContext.current.getString(R.string.manhwa)
+        MangaType.MANHUA -> Color(0xCC330011) to LocalContext.current.getString(R.string.manhwa)
         else             -> return
     }
     Text(
@@ -239,7 +239,7 @@ fun SectionHeader(
         if (onSeeAll != null) {
             TextButton(onClick = onSeeAll) {
                 Text(
-                    context.getString(R.string.see_all),
+                    LocalContext.current.getString(R.string.see_all),
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.Cyan
                 )

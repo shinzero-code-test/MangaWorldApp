@@ -77,8 +77,8 @@ fun SourceSettingsSheet(
             // Enable/disable source
             SourceSettingToggle(
                 icon = Icons.Filled.PowerSettingsNew,
-                label = context.getString(R.string.enable_source),
-                subtitle = if (isEnabled) context.getString(R.string.enabled_alt) else context.getString(R.string.disabled_alt),
+                label = LocalContext.current.getString(R.string.enable_source),
+                subtitle = if (isEnabled) LocalContext.current.getString(R.string.enabled_alt) else LocalContext.current.getString(R.string.disabled_alt),
                 checked = isEnabled,
                 onCheckedChange = onToggleEnabled
             )
@@ -86,8 +86,8 @@ fun SourceSettingsSheet(
             // Enable/disable notifications
             SourceSettingToggle(
                 icon = Icons.Filled.Notifications,
-                label = context.getString(R.string.notifications_source),
-                subtitle = if (isNotificationEnabled) context.getString(R.string.auto_new_chapters) else context.getString(R.string.silent),
+                label = LocalContext.current.getString(R.string.notifications_source),
+                subtitle = if (isNotificationEnabled) LocalContext.current.getString(R.string.auto_new_chapters) else LocalContext.current.getString(R.string.silent),
                 checked = isNotificationEnabled,
                 onCheckedChange = onToggleNotification
             )
@@ -97,7 +97,7 @@ fun SourceSettingsSheet(
             // Open in browser
             SourceSettingAction(
                 icon = Icons.Filled.Language,
-                label = context.getString(R.string.open_in_browser),
+                label = LocalContext.current.getString(R.string.open_in_browser),
                 subtitle = source.baseUrl,
                 onClick = {
                     onDismiss()
@@ -109,16 +109,16 @@ fun SourceSettingsSheet(
             // Clear cookies
             SourceSettingAction(
                 icon = Icons.Filled.DeleteSweep,
-                label = context.getString(R.string.clear_cookies),
-                subtitle = context.getString(R.string.str_051),
+                label = LocalContext.current.getString(R.string.clear_cookies),
+                subtitle = LocalContext.current.getString(R.string.str_051),
                 onClick = { showClearConfirm = true }
             )
 
             // Create home screen shortcut
             SourceSettingAction(
                 icon = Icons.Filled.Star,
-                label = context.getString(R.string.add_home_shortcut),
-                subtitle = context.getString(R.string.str_441),
+                label = LocalContext.current.getString(R.string.add_home_shortcut),
+                subtitle = LocalContext.current.getString(R.string.str_441),
                 onClick = {
                     onDismiss()
                     createSourceShortcut(context, source)
@@ -133,10 +133,10 @@ fun SourceSettingsSheet(
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
             containerColor = MangaColors.Surface,
-            title = { Text(context.getString(R.string.clear_cookies), color = MangaColors.OnSurface) },
+            title = { Text(LocalContext.current.getString(R.string.clear_cookies), color = MangaColors.OnSurface) },
             text = {
                 Text(
-                    stringResource(R.string.str_296, source.displayName) + context.getString(R.string.str_006),
+                    stringResource(R.string.str_296, source.displayName) + LocalContext.current.getString(R.string.str_006),
                     color = MangaColors.OnSurfaceVariant
                 )
             },
@@ -147,11 +147,11 @@ fun SourceSettingsSheet(
                         onClearCookies()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Error)
-                ) { Text(context.getString(R.string.clear)) }
+                ) { Text(LocalContext.current.getString(R.string.clear)) }
             },
             dismissButton = {
                 TextButton(onClick = { showClearConfirm = false }) {
-                    Text(context.getString(R.string.cancel), color = MangaColors.Muted)
+                    Text(LocalContext.current.getString(R.string.cancel), color = MangaColors.Muted)
                 }
             }
         )

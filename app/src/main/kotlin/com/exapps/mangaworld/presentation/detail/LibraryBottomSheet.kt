@@ -2,6 +2,7 @@ package com.exapps.mangaworld.presentation.detail
 
 import android.content.Context
 import com.exapps.mangaworld.R
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.background
@@ -53,13 +54,13 @@ fun LibraryBottomSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    context.getString(R.string.library_section_title),
+                    LocalContext.current.getString(R.string.library_section_title),
                     style = MaterialTheme.typography.titleLarge,
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold
                 )
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Filled.Close, context.getString(R.string.close), tint = MangaColors.Muted)
+                    Icon(Icons.Filled.Close, LocalContext.current.getString(R.string.close), tint = MangaColors.Muted)
                 }
             }
 
@@ -91,13 +92,13 @@ fun LibraryBottomSheet(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        if (isFavourite) context.getString(R.string.in_favorites) else context.getString(R.string.add_to_favorites),
+                        if (isFavourite) LocalContext.current.getString(R.string.in_favorites) else LocalContext.current.getString(R.string.add_to_favorites),
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        if (isFavourite) context.getString(R.string.tap_remove_favorite) else context.getString(R.string.tap_to_add),
+                        if (isFavourite) LocalContext.current.getString(R.string.tap_remove_favorite) else LocalContext.current.getString(R.string.tap_to_add),
                         color = MangaColors.Muted,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -113,7 +114,7 @@ fun LibraryBottomSheet(
 
             // Status label
             Text(
-                context.getString(R.string.reading_list),
+                LocalContext.current.getString(R.string.reading_list),
                 color = MangaColors.OnSurface,
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.bodyMedium
@@ -123,11 +124,11 @@ fun LibraryBottomSheet(
 
             // Status buttons in 2-column grid
             val statuses = listOf(
-                ReadingListStatus.READING to Pair(Icons.Filled.AutoStories, context.getString(R.string.library_reading)),
-                ReadingListStatus.COMPLETED to Pair(Icons.Filled.CheckCircle, context.getString(R.string.library_read)),
-                ReadingListStatus.PLAN_TO_READ to Pair(Icons.Filled.Schedule, context.getString(R.string.library_plan_to_read)),
-                ReadingListStatus.ON_HOLD to Pair(Icons.Filled.PauseCircle, context.getString(R.string.library_on_hold)),
-                ReadingListStatus.DROPPED to Pair(Icons.Filled.Cancel, context.getString(R.string.library_dropped))
+                ReadingListStatus.READING to Pair(Icons.Filled.AutoStories, LocalContext.current.getString(R.string.library_reading)),
+                ReadingListStatus.COMPLETED to Pair(Icons.Filled.CheckCircle, LocalContext.current.getString(R.string.library_read)),
+                ReadingListStatus.PLAN_TO_READ to Pair(Icons.Filled.Schedule, LocalContext.current.getString(R.string.library_plan_to_read)),
+                ReadingListStatus.ON_HOLD to Pair(Icons.Filled.PauseCircle, LocalContext.current.getString(R.string.library_on_hold)),
+                ReadingListStatus.DROPPED to Pair(Icons.Filled.Cancel, LocalContext.current.getString(R.string.library_dropped))
             )
 
             val rows = statuses.chunked(2)

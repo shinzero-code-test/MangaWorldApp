@@ -114,11 +114,11 @@ sealed class Screen(val route: String) {
 }
 
 val bottomNavItems: List<Triple<Screen, String, ImageVector>> = listOf(
-    Triple(Screen.Home,         context.getString(R.string.home),     Icons.Filled.Home),
-    Triple(Screen.Browse,       context.getString(R.string.browse),         Icons.Filled.GridView),
-    Triple(Screen.Search,       context.getString(R.string.search),          Icons.Filled.Search),
-    Triple(Screen.Library,      context.getString(R.string.library_section_title),      Icons.Filled.BookmarkBorder),
-    Triple(Screen.More,         context.getString(R.string.more_title),       Icons.Filled.MoreHoriz),
+    Triple(Screen.Home,         LocalContext.current.getString(R.string.home),     Icons.Filled.Home),
+    Triple(Screen.Browse,       LocalContext.current.getString(R.string.browse),         Icons.Filled.GridView),
+    Triple(Screen.Search,       LocalContext.current.getString(R.string.search),          Icons.Filled.Search),
+    Triple(Screen.Library,      LocalContext.current.getString(R.string.library_section_title),      Icons.Filled.BookmarkBorder),
+    Triple(Screen.More,         LocalContext.current.getString(R.string.more_title),       Icons.Filled.MoreHoriz),
 )
 
 @Composable
@@ -207,7 +207,7 @@ fun MangaNavGraph(
             route = Screen.CommunityChat.route,
             arguments = listOf(
                 navArgument("roomId") { type = NavType.StringType; defaultValue = "global" },
-                navArgument("title") { type = NavType.StringType; defaultValue = context.getString(R.string.live_chat) }
+                navArgument("title") { type = NavType.StringType; defaultValue = LocalContext.current.getString(R.string.live_chat) }
             )
         ) { back ->
             // NavType.StringType does NOT auto-decode URL-encoded query params
@@ -615,7 +615,7 @@ fun MangaNavGraph(
             )
         ) {
             val mangaId = it.arguments?.getString("mangaId") ?: "global"
-            val slug = it.arguments?.getString("slug") ?: context.getString(R.string.chat)
+            val slug = it.arguments?.getString("slug") ?: LocalContext.current.getString(R.string.chat)
             CommunityScreen(
                 onBack = { navController.popBackStack() },
                 onOpenChat = { navController.navigate(Screen.CommunityChat.createRoute(mangaId, slug)) },

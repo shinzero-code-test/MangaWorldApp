@@ -2,31 +2,32 @@ package com.exapps.mangaworld.presentation.reader
 
 import android.content.Context
 import com.exapps.mangaworld.R
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.runtime.Immutable
 
 enum class TapZone(val label: String) {
-    TOP_LEFT(context.getString(R.string.str_025)),
-    TOP_CENTER(context.getString(R.string.str_024)),
-    TOP_RIGHT(context.getString(R.string.str_026)),
-    CENTER_LEFT(context.getString(R.string.str_439)),
-    CENTER(context.getString(R.string.center)),
-    CENTER_RIGHT(context.getString(R.string.str_440)),
-    BOTTOM_LEFT(context.getString(R.string.str_019)),
-    BOTTOM_CENTER(context.getString(R.string.str_018)),
-    BOTTOM_RIGHT(context.getString(R.string.str_020))
+    TOP_LEFT(LocalContext.current.getString(R.string.str_025)),
+    TOP_CENTER(LocalContext.current.getString(R.string.str_024)),
+    TOP_RIGHT(LocalContext.current.getString(R.string.str_026)),
+    CENTER_LEFT(LocalContext.current.getString(R.string.str_439)),
+    CENTER(LocalContext.current.getString(R.string.center)),
+    CENTER_RIGHT(LocalContext.current.getString(R.string.str_440)),
+    BOTTOM_LEFT(LocalContext.current.getString(R.string.str_019)),
+    BOTTOM_CENTER(LocalContext.current.getString(R.string.str_018)),
+    BOTTOM_RIGHT(LocalContext.current.getString(R.string.str_020))
 }
 
 enum class TapAction(val label: String) {
-    PAGE_NEXT(context.getString(R.string.next_page)),
-    PAGE_PREV(context.getString(R.string.previous_page)),
-    CHAPTER_NEXT(context.getString(R.string.reader_next)),
-    CHAPTER_PREV(context.getString(R.string.reader_previous)),
-    TOGGLE_UI(context.getString(R.string.str_071)),
-    SHOW_MENU(context.getString(R.string.show_list)),
-    BOOKMARK(context.getString(R.string.reference_mark)),
-    NONE(context.getString(R.string.none))
+    PAGE_NEXT(LocalContext.current.getString(R.string.next_page)),
+    PAGE_PREV(LocalContext.current.getString(R.string.previous_page)),
+    CHAPTER_NEXT(LocalContext.current.getString(R.string.reader_next)),
+    CHAPTER_PREV(LocalContext.current.getString(R.string.reader_previous)),
+    TOGGLE_UI(LocalContext.current.getString(R.string.str_071)),
+    SHOW_MENU(LocalContext.current.getString(R.string.show_list)),
+    BOOKMARK(LocalContext.current.getString(R.string.reference_mark)),
+    NONE(LocalContext.current.getString(R.string.none))
 }
 
 @Immutable

@@ -2,6 +2,7 @@ package com.exapps.mangaworld.presentation.webview
 
 import android.content.Context
 import com.exapps.mangaworld.R
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 
 import android.annotation.SuppressLint
@@ -102,14 +103,14 @@ private fun CloudflareWebView(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, context.getString(R.string.close), tint = Color.White)
+                Icon(Icons.Filled.Close, LocalContext.current.getString(R.string.close), tint = Color.White)
             }
             Text(stringResource(R.string.fmt_067, domain),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MangaColors.OnSurface,
                 modifier = Modifier.weight(1f))
             IconButton(onClick = { webViewRef?.reload() }) {
-                Icon(Icons.Filled.Refresh, context.getString(R.string.reload_alt), tint = MangaColors.Cyan)
+                Icon(Icons.Filled.Refresh, LocalContext.current.getString(R.string.reload_alt), tint = MangaColors.Cyan)
             }
         }
 

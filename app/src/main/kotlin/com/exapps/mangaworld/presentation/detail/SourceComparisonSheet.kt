@@ -2,6 +2,7 @@ package com.exapps.mangaworld.presentation.detail
 
 import android.content.Context
 import com.exapps.mangaworld.R
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.background
@@ -56,7 +57,7 @@ fun SourceComparisonSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    context.getString(R.string.compare_sources),
+                    LocalContext.current.getString(R.string.compare_sources),
                     style = MaterialTheme.typography.titleLarge,
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold
@@ -69,7 +70,7 @@ fun SourceComparisonSheet(
             }
 
             Text(
-                context.getString(R.string.choose_source_to_read),
+                LocalContext.current.getString(R.string.choose_source_to_read),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MangaColors.OnSurfaceVariant
             )
@@ -143,7 +144,7 @@ private fun SourceCard(
                     )
                     if (isCurrentSource) {
                         Text(
-                            context.getString(R.string.str_005),
+                            LocalContext.current.getString(R.string.str_005),
                             style = MaterialTheme.typography.labelSmall,
                             color = MangaColors.Cyan
                         )
@@ -183,7 +184,7 @@ private fun SourceCard(
                         if (onClick != null) {
                             Icon(
                                 Icons.Filled.CheckCircle,
-                                contentDescription = context.getString(R.string.select),
+                                contentDescription = LocalContext.current.getString(R.string.select),
                                 tint = MangaColors.Cyan,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -192,7 +193,7 @@ private fun SourceCard(
                 }
                 else -> {
                     Text(
-                        context.getString(R.string.unavailable),
+                        LocalContext.current.getString(R.string.unavailable),
                         style = MaterialTheme.typography.labelSmall,
                         color = MangaColors.Muted
                     )
