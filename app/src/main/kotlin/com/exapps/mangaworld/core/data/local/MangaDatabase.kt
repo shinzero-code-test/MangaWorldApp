@@ -18,7 +18,7 @@ import com.exapps.mangaworld.core.data.local.entity.*
         DownloadTaskEntity::class,
         DownloadedMangaEntity::class,
     ],
-    version = 11,         // v11: add readingStatus to favorites
+    version = 12,         // v12: add durationMs to reading_history
     exportSchema = false
 )
 abstract class MangaDatabase : RoomDatabase() {
@@ -64,6 +64,12 @@ abstract class MangaDatabase : RoomDatabase() {
         val MIGRATION_10_11 = object : Migration(10, 11) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE favorites ADD COLUMN readingStatus TEXT DEFAULT NULL")
+            }
+        }
+
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reading_history ADD COLUMN durationMs INTEGER NOT NULL DEFAULT 0")
             }
         }
 

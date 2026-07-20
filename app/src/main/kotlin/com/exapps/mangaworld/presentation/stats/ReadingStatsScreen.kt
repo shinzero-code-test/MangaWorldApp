@@ -115,18 +115,42 @@ fun ReadingStatsScreen(
 
             // Daily chart (simple bar chart)
             if (state.dailyStats.isNotEmpty()) {
+                var showReadingTimeChart by remember { mutableStateOf(false) }
+
                 item {
                     Text(
-                        stringResource(R.string.str_194),
+                        stringResource(R.string.daily_details),
                         style = MaterialTheme.typography.titleMedium,
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
+                // Toggle between pages and reading time
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = !showReadingTimeChart,
+                            onClick = { showReadingTimeChart = false },
+                            label = { Text(stringResource(R.string.total_pages), style = MaterialTheme.typography.labelSmall) },
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        FilterChip(
+                            selected = showReadingTimeChart,
+                            onClick = { showReadingTimeChart = true },
+                            label = { Text(stringResource(R.string.reading_time), style = MaterialTheme.typography.labelSmall) },
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+                }
+
                 item {
                     SimpleBarChart(
                         data = state.dailyStats,
+                        useReadingTime = showReadingTimeChart,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(120.dp)
@@ -233,9 +257,14 @@ private fun StreakCard(
 @Composable
 private fun SimpleBarChart(
     data: List<com.exapps.mangaworld.core.data.DailyStat>,
+    useReadingTime: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val maxPages = data.maxOfOrNull { it.pagesRead }?.coerceAtLeast(1) ?: 1
+    val maxValue = if (useReadingTime) {
+        data.maxOfOrNull { it.readingTimeMs }?.coerceAtLeast(1) ?: 1
+    } else {
+        data.maxOfOrNull { it.pagesRead }?.coerceAtLeast(1) ?: 1
+    }
 
     Row(
         modifier = modifier
@@ -246,7 +275,8 @@ private fun SimpleBarChart(
         verticalAlignment = Alignment.Bottom
     ) {
         data.forEach { stat ->
-            val heightFraction = if (maxPages > 0) stat.pagesRead.toFloat() / maxPages else 0f
+            val value = if (useReadingTime) stat.readingTimeMs else stat.pagesRead.toLong()
+            val heightFraction = if (maxValue > 0) value.toFloat() / maxValue else 0f
             Box(
                 modifier = Modifier
                     .weight(1f)
