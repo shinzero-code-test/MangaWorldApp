@@ -124,7 +124,7 @@ private fun ContinueReadingContent(
                 ) {
                     Box(
                         modifier = GlanceModifier
-                            .fillMaxWidth(progressFraction)
+                            .fillMaxWidth()
                             .height(6.dp)
                             .cornerRadius(3.dp)
                             .background(GlanceTheme.colors.primary)

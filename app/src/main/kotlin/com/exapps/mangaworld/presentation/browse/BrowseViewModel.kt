@@ -28,7 +28,7 @@ data class BrowseUiState(
     val isGridView: Boolean = true,
     val enabledSourceIds: Set<String> = MangaSource.entries.map { it.id }.toSet(),
     val blockedKeywords: Set<String> = emptySet(),
-    val genres: List<String> = listOf(context.getString(R.string.browse_all))
+    val genres: List<String> = emptyList()
 ) {
     val filters get() = SearchFilters(
         query = query,

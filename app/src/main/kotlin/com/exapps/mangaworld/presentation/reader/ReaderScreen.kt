@@ -1,5 +1,5 @@
 package com.exapps.mangaworld.presentation.reader
-import androidx.compose.ui.semantics.announceForAccessibility
+import androidx.compose.ui.platform.announceForAccessibility
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 

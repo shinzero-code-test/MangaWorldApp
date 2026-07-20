@@ -17,7 +17,10 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.Stable
 import javax.inject.Inject
 
-enum class LibraryTab(val label: String) { FAVORITES(context.getString(R.string.favorites)), HISTORY(context.getString(R.string.history)) }
+enum class LibraryTab(@androidx.annotation.StringRes val labelRes: Int) {
+    FAVORITES(R.string.favorites), HISTORY(R.string.history);
+    fun getLabel(context: android.content.Context): String = context.getString(labelRes)
+}
 
 @Stable
 data class LibraryUiState(

@@ -29,9 +29,15 @@ class DailyRecommendationsWidget : GlanceAppWidget() {
         val entryPoint = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
         val settings = entryPoint.widgetSettingsManager()
         val snapshot = try { entryPoint.widgetDataRepository().getRemoteSnapshot() } catch (_: Exception) { null }
+        if (snapshot == null) {
+            provideContent {
+                Text(text = "Loading...")
+            }
+            return
+        }
         provideContent {
             MangaWidgetTheme(context, settings.getWidgetTheme()) {
-                DailyRecommendationsContent(snapshot, settings, context)
+                DailyRecommendationsContent(snapshot!!, settings, context)
             }
         }
     }
