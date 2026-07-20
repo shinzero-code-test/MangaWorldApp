@@ -115,11 +115,19 @@ class AchievementManager @Inject constructor(
     val totalPagesRead: Flow<Int> = dataStore.data.map { it[totalPagesReadKey] ?: 0 }
     val totalChaptersRead: Flow<Int> = dataStore.data.map { it[totalChaptersReadKey] ?: 0 }
 
+    /** Maximum target values per goal type to prevent unachievable goals. */
+    private val maxTargetValues = mapOf(
+        GoalType.PAGES_READ to 10_000,
+        GoalType.CHAPTERS_READ to 1_000,
+        GoalType.READING_TIME to 50_000  // 50,000 minutes ≈ 833 hours
+    )
+
     suspend fun createGoal(type: GoalType, targetValue: Int, period: GoalPeriod): ReadingGoal {
+        val cappedTarget = targetValue.coerceIn(1, maxTargetValues[type] ?: 10_000)
         val goal = ReadingGoal(
             id = "goal_${System.currentTimeMillis()}",
             type = type,
-            targetValue = targetValue,
+            targetValue = cappedTarget,
             period = period
         )
         dataStore.edit { prefs ->
@@ -199,13 +207,17 @@ class AchievementManager @Inject constructor(
         val goals = parseGoals(prefs[goalsKey] ?: "[]").toMutableList()
         var goalsChanged = false
         goals.forEachIndexed { index, goal ->
-            if (goal.isActive && !goal.isCompleted) {
+            if (goal.isActive) {
                 val newValue = when (goal.type) {
                     GoalType.PAGES_READ -> getPeriodPages(goal.period)
                     GoalType.CHAPTERS_READ -> getPeriodChapters(goal.period)
                     GoalType.READING_TIME -> getPeriodReadingTimeMinutes(goal.period)
                 }
-                if (newValue != goal.currentValue) {
+                if (goal.isCompleted) {
+                    // Auto-archive: mark completed goals as inactive so they stop being re-checked
+                    goals[index] = goal.copy(isActive = false)
+                    goalsChanged = true
+                } else if (newValue != goal.currentValue) {
                     goals[index] = goal.copy(currentValue = newValue)
                     goalsChanged = true
                 }
@@ -236,6 +248,13 @@ class AchievementManager @Inject constructor(
     /**
      * Calculate badge based on reading progress and achievements.
      * Used by FirebaseCommunityRepository to update the user's badge.
+     *
+     * Badge tiers (7 levels): Beginner → Page Turner → Chapter Hunter →
+     * Manga Enthusiast → Shonen Specialist → Avid Reader → Pirate King
+     *
+     * NOTE: These are distinct from FirebaseUserInsightsCoordinator's engagement
+     * tiers (new/warming/active/avid), which are analytics-only user properties
+     * for cohort analysis. Badge tiers are profile-facing achievement indicators.
      */
     suspend fun calculateBadge(): String {
         val prefs = dataStore.data.first()
