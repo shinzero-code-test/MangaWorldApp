@@ -246,6 +246,33 @@ class AchievementManager @Inject constructor(
     }
 
     /**
+     * Import achievements and goals from Firestore data.
+     * Used during pullRemoteSnapshot to restore data after device switch or data clear.
+     * Only overwrites local data if remote data is newer or local is empty.
+     */
+    suspend fun importFromFirestore(totalPagesRead: Int, totalChaptersRead: Int, goalsJson: String, achievementsJson: String) {
+        dataStore.edit { prefs ->
+            val localPages = prefs[totalPagesReadKey] ?: 0
+            val localChapters = prefs[totalChaptersReadKey] ?: 0
+            if (totalPagesRead > localPages) prefs[totalPagesReadKey] = totalPagesRead
+            if (totalChaptersRead > localChapters) prefs[totalChaptersReadKey] = totalChaptersRead
+            val localGoals = prefs[goalsKey] ?: "[]"
+            if (localGoals == "[]" && goalsJson != "[]") prefs[goalsKey] = goalsJson
+            val localAchievements = parseAchievements(prefs[achievementsKey] ?: "[]")
+            val remoteAchievements = parseAchievements(achievementsJson)
+            val merged = mutableListOf<Achievement>()
+            val mergedIds = mutableSetOf<String>()
+            for (a in remoteAchievements) { if (a.isUnlocked) { merged.add(a); mergedIds.add(a.id) } }
+            for (a in localAchievements) {
+                if (a.id !in mergedIds) merged.add(a)
+                else if (a.isUnlocked) { val ex = merged.first { it.id == a.id }; if ((a.unlockedAt ?: 0L) > (ex.unlockedAt ?: 0L)) { merged.remove(ex); merged.add(a) } }
+            }
+            val defaults = getDefaultAchievements()
+            prefs[achievementsKey] = achievementsToJson(defaults.map { d -> merged.find { it.id == d.id } ?: d })
+        }
+    }
+
+    /**
      * Calculate badge based on reading progress and achievements.
      * Used by FirebaseCommunityRepository to update the user's badge.
      *

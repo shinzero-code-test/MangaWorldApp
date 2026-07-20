@@ -103,9 +103,7 @@ class FirebaseSyncManager @Inject constructor(
             // Sync achievements and goals
             runCatching {
                 val achievementsData = achievementManager.syncToFirestoreMap()
-                if (achievementsData.isNotEmpty()) {
-                    writes += userRef.collection("preferences").document("achievements") to achievementsData
-                }
+                writes += userRef.collection("preferences").document("achievements") to achievementsData
             }
 
             commitChunked(writes)
@@ -208,6 +206,19 @@ class FirebaseSyncManager @Inject constructor(
             readerPrefs.getString("imageFilter")?.let { name ->
                 com.exapps.mangaworld.domain.model.ReaderImageFilter.entries.firstOrNull { it.name == name }?.let { filter ->
                     settingsRepository.updateImageFilter(filter)
+                }
+            }
+
+            // Pull achievements and goals from Firestore
+            runCatching {
+                val achievementsDoc = userRef.collection("preferences").document("achievements").get().await()
+                if (achievementsDoc.exists()) {
+                    achievementManager.importFromFirestore(
+                        totalPagesRead = achievementsDoc.getLong("totalPagesRead")?.toInt() ?: 0,
+                        totalChaptersRead = achievementsDoc.getLong("totalChaptersRead")?.toInt() ?: 0,
+                        goalsJson = achievementsDoc.getString("goals") ?: "[]",
+                        achievementsJson = achievementsDoc.getString("achievements") ?: "[]"
+                    )
                 }
             }
         }
