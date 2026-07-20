@@ -120,7 +120,7 @@ fun SourceSettingsSheet(
             title = { Text(stringResource(R.string.clear_cookies), color = MangaColors.OnSurface) },
             text = {
                 Text(
-                    stringResource(R.string.str_296)${source.displayName}\stringResource(R.string.str_006),
+                    stringResource(R.string.str_296, source.displayName) + stringResource(R.string.str_006),
                     color = MangaColors.OnSurfaceVariant
                 )
             },

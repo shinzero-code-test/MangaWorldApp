@@ -201,7 +201,7 @@ private fun CollectionMangaCard(
             onDismissRequest = { showRemoveConfirm = false },
             containerColor = MangaColors.Surface,
             title = { Text(stringResource(R.string.remove_from_list), color = MangaColors.OnSurface) },
-            text = { Text(stringResource(R.string.str_049)$title\stringResource(R.string.str_004), color = MangaColors.OnSurfaceVariant) },
+            text = { Text(stringResource(R.string.str_049) + title + stringResource(R.string.str_004), color = MangaColors.OnSurfaceVariant) },
             confirmButton = {
                 Button(
                     onClick = { showRemoveConfirm = false; onRemove() },

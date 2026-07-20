@@ -108,7 +108,7 @@ fun ForgotPasswordScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            stringResource(R.string.str_216)$email\stringResource(R.string.str_007),
+                            stringResource(R.string.str_216, email) + stringResource(R.string.str_007),
                             modifier = Modifier.weight(1f),
                             color = MangaColors.OnSurface,
                             textAlign = TextAlign.Center,

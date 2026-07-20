@@ -464,7 +464,7 @@ private fun DeleteConfirmDialog(list: CustomUserList, onConfirm: () -> Unit, onD
             Text(stringResource(R.string.delete_list_confirm), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Text(
-                stringResource(R.string.str_295)${list.name}\stringResource(R.string.fmt_000, list.itemCount),
+                stringResource(R.string.str_295, list.name) + stringResource(R.string.fmt_000, list.itemCount),
                 color = MangaColors.OnSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center

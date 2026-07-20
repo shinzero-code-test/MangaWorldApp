@@ -341,7 +341,7 @@
     <string name="str_046">إدارة مصادر المانجا</string>
     <string name="str_047">إرسال رابط الاستعادة</string>
     <string name="remove">إزالة</string>
-    <string name="str_049">إزالة \</string>
+    <string name="str_049">إزالة %s</string>
     <string name="str_050">إزالة الفراغات بين الصور في وضع الويب تون</string>
     <string name="str_051">إزالة بيانات التحقق المحفوظة</string>
     <string name="remove_from_list">إزالة من القائمة</string>
@@ -508,7 +508,7 @@
     <string name="track_progress">تتبع التقدم</string>
     <string name="update">تحديث</string>
     <string name="str_215">تحقق من اتصال الإنترنت</string>
-    <string name="str_216">تحقق من بريدك الإلكتروني\nلقد أرسلنا رابطًا لإعادة تعيين كلمة المرور إلى \</string>
+    <string name="str_216">تحقق من بريدك الإلكتروني\nلقد أرسلنا رابطًا لإعادة تعيين كلمة المرور إلى %s</string>
     <string name="customize_app">تخصيص التطبيق</string>
     <string name="sort">ترتيب</string>
     <string name="user_rank">ترتيب المستخدم</string>
@@ -587,9 +587,9 @@
     <string name="genre_supernatural">سحر</string>
     <string name="reading_sequence">سلسلة القراءة</string>
     <string name="ok_alt">سليم</string>
-    <string name="str_295">سيتم حذف \</string>
-    <string name="str_296">سيتم حذف بيانات التحقق المحفوظة لـ \</string>
-    <string name="str_297">سيتم حذف جميع فصول \</string>
+    <string name="str_295">سيتم حذف %s</string>
+    <string name="str_296">سيتم حذف بيانات التحقق المحفوظة لـ %s</string>
+    <string name="str_297">سيتم حذف جميع فصول %s</string>
     <string name="downloaded_chapters_appear_here">سيظهر هنا أي فصل تقوم بتنزيله</string>
     <string name="genre_seinen">سينين</string>
     <string name="genre_shoujo">شوجو</string>
@@ -662,7 +662,7 @@
     <string name="str_367">لا توجد مانجا كافية للتوصيات. قم بتصفح المانجا أولاً.</string>
     <string name="no_manga_loaded">لا توجد مانجا محملة</string>
     <string name="no_bio">لا توجد نبذة</string>
-    <string name="str_370">لا توجد نتائج لـ \</string>
+    <string name="str_370">لا توجد نتائج لـ %s</string>
     <string name="str_371">لا يحفظ التقدم أو السجل أثناء القراءة</string>
     <string name="cannot_make_change">لا يمكن إجراء هذا التغيير</string>
     <string name="none_alt">لا يوجد</string>
@@ -729,7 +729,7 @@
     <string name="str_433">هذا البريد الإلكتروني مستخدم بالفعل في حساب آخر. سجّل الدخول بالحساب الحالي أو استخدم بريداً آخر.</string>
     <string name="str_434">هذا المصدر يحتاج إلى التحقق من Cloudflare. </string>
     <string name="str_435">هذا الملف لا يحتوي على محتوى عام</string>
-    <string name="str_436">هل أنت متأكد من حذف \</string>
+    <string name="str_436">هل أنت متأكد من حذف %s</string>
     <string name="str_437">هل تريد إلغاء جميع التنزيلات الجارية وفي الانتظار؟</string>
     <string name="center">وسط</string>
     <string name="str_439">وسط يسار</string>

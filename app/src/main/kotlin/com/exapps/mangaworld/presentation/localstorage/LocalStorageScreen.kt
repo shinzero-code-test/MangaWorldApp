@@ -153,7 +153,7 @@ fun LocalStorageScreen(
                 },
                 title = { Text(stringResource(R.string.settings_delete_account_empty), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
                 text = {
-                    Text(stringResource(R.string.str_297)${confirmDelete!!.title}\stringResource(R.string.str_003),
+                    Text(stringResource(R.string.str_297, confirmDelete!!.title) + stringResource(R.string.str_003),
                         color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 },
                 confirmButton = {

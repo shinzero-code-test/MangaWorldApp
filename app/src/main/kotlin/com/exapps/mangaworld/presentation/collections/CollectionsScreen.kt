@@ -157,7 +157,7 @@ private fun CollectionCard(
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text(stringResource(R.string.delete_list)) },
-            text = { Text(stringResource(R.string.str_436)${collection.name}\"؟") },
+            text = { Text(stringResource(R.string.str_436, collection.name) + "؟") },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete()
