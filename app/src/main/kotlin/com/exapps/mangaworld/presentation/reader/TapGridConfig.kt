@@ -2,32 +2,35 @@ package com.exapps.mangaworld.presentation.reader
 
 import android.content.Context
 import com.exapps.mangaworld.R
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
 
 import androidx.compose.runtime.Immutable
 
-enum class TapZone(val label: String) {
-    TOP_LEFT(LocalContext.current.getString(R.string.str_025)),
-    TOP_CENTER(LocalContext.current.getString(R.string.str_024)),
-    TOP_RIGHT(LocalContext.current.getString(R.string.str_026)),
-    CENTER_LEFT(LocalContext.current.getString(R.string.str_439)),
-    CENTER(LocalContext.current.getString(R.string.center)),
-    CENTER_RIGHT(LocalContext.current.getString(R.string.str_440)),
-    BOTTOM_LEFT(LocalContext.current.getString(R.string.str_019)),
-    BOTTOM_CENTER(LocalContext.current.getString(R.string.str_018)),
-    BOTTOM_RIGHT(LocalContext.current.getString(R.string.str_020))
+enum class TapZone(@StringRes val labelRes: Int) {
+    TOP_LEFT(R.string.str_025),
+    TOP_CENTER(R.string.str_024),
+    TOP_RIGHT(R.string.str_026),
+    CENTER_LEFT(R.string.str_439),
+    CENTER(R.string.center),
+    CENTER_RIGHT(R.string.str_440),
+    BOTTOM_LEFT(R.string.str_019),
+    BOTTOM_CENTER(R.string.str_018),
+    BOTTOM_RIGHT(R.string.str_020);
+
+    fun getLabel(context: Context): String = context.getString(labelRes)
 }
 
-enum class TapAction(val label: String) {
-    PAGE_NEXT(LocalContext.current.getString(R.string.next_page)),
-    PAGE_PREV(LocalContext.current.getString(R.string.previous_page)),
-    CHAPTER_NEXT(LocalContext.current.getString(R.string.reader_next)),
-    CHAPTER_PREV(LocalContext.current.getString(R.string.reader_previous)),
-    TOGGLE_UI(LocalContext.current.getString(R.string.str_071)),
-    SHOW_MENU(LocalContext.current.getString(R.string.show_list)),
-    BOOKMARK(LocalContext.current.getString(R.string.reference_mark)),
-    NONE(LocalContext.current.getString(R.string.none))
+enum class TapAction(@StringRes val labelRes: Int) {
+    PAGE_NEXT(R.string.next_page),
+    PAGE_PREV(R.string.previous_page),
+    CHAPTER_NEXT(R.string.reader_next),
+    CHAPTER_PREV(R.string.reader_previous),
+    TOGGLE_UI(R.string.str_071),
+    SHOW_MENU(R.string.show_list),
+    BOOKMARK(R.string.reference_mark),
+    NONE(R.string.none);
+
+    fun getLabel(context: Context): String = context.getString(labelRes)
 }
 
 @Immutable
