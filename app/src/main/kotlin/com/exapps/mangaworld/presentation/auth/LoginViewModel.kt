@@ -1,20 +1,9 @@
-import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 package com.exapps.mangaworld.presentation.auth
+import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.R
 
-import androidx.compose.runtime.Immutable
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.exapps.mangaworld.core.firebase.AccountMergeRequiredException
-import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
-import javax.inject.Inject
+
 
 @Immutable
 data class AuthUiState(
@@ -237,3 +226,4 @@ class LoginViewModel @Inject constructor(
 
     private fun mapAuthError(error: Exception): String = firebaseAuthErrorMessage(error)
 }
+

@@ -1,35 +1,9 @@
-import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 package com.exapps.mangaworld.presentation.image
+import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.R
 
-import android.content.ContentValues
-import android.content.Context
-import android.graphics.BitmapFactory
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
-import android.widget.Toast
-import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import com.exapps.mangaworld.presentation.theme.MangaColors
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.net.URL
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -144,3 +118,4 @@ private suspend fun saveImage(context: Context, imageUrl: String) {
         }
     }
 }
+

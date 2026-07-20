@@ -1,27 +1,9 @@
-import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 package com.exapps.mangaworld.presentation.detail
+import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.R
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CompareArrows
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import com.exapps.mangaworld.domain.model.MangaItem
-import com.exapps.mangaworld.domain.model.MangaSource
-import com.exapps.mangaworld.presentation.theme.MangaColors
+
 
 data class SourceComparison(
     val source: MangaSource,
@@ -199,3 +181,4 @@ private fun SourceCard(
         }
     }
 }
+

@@ -1,21 +1,9 @@
-import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 package com.exapps.mangaworld.presentation.settings
+import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.R
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.exapps.mangaworld.core.data.CacheManager
-import com.exapps.mangaworld.core.data.LocalBackupManager
-import com.exapps.mangaworld.core.data.WidgetDataRepository
-import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
-import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
-import com.exapps.mangaworld.domain.model.*
-import com.exapps.mangaworld.domain.repository.SettingsRepository
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
-import javax.inject.Inject
+
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -104,3 +92,4 @@ class SettingsViewModel @Inject constructor(
         runCatching { firebaseSyncManager.pushLocalSnapshot() }
     }
 }
+

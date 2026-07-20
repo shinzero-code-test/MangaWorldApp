@@ -1,30 +1,9 @@
-import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 package com.exapps.mangaworld.presentation.webview
+import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.R
 
-import android.annotation.SuppressLint
-import android.content.Intent
-import android.os.Bundle
-import android.webkit.*
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import com.exapps.mangaworld.core.data.remote.scraper.BaseScraperImpl
-import com.exapps.mangaworld.domain.model.MangaSource
-import com.exapps.mangaworld.presentation.theme.MangaColors
-import com.exapps.mangaworld.presentation.theme.MangaWorldTheme
+
 
 class WebViewSolverActivity : ComponentActivity() {
 
@@ -180,3 +159,4 @@ private fun CloudflareWebView(
         )
     }
 }
+

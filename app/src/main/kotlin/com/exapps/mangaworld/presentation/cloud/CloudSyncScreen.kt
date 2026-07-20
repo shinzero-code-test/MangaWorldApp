@@ -1,54 +1,9 @@
-import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 package com.exapps.mangaworld.presentation.cloud
+import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.R
 
-import android.app.Activity
-import android.content.Intent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
-import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
-import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
-import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
-import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
-import com.exapps.mangaworld.domain.model.CloudRestorePreview
-import com.exapps.mangaworld.domain.model.CloudRestoreStrategy
-import com.exapps.mangaworld.domain.repository.CommunityRepository
-import com.exapps.mangaworld.presentation.theme.MangaColors
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.launch
-import javax.inject.Inject
+
 
 @Stable
 data class CloudSyncUiState(
@@ -598,3 +553,4 @@ private fun NotificationsCard(
         }
     }
 }
+

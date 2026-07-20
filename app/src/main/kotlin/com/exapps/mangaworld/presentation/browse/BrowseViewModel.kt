@@ -1,20 +1,9 @@
-import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 package com.exapps.mangaworld.presentation.browse
+import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.R
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import androidx.paging.PagingData
-import androidx.paging.cachedIn
-import com.exapps.mangaworld.domain.model.*
-import com.exapps.mangaworld.domain.repository.MangaRepository
-import com.exapps.mangaworld.domain.repository.SettingsRepository
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.*
-import androidx.compose.runtime.Stable
-import javax.inject.Inject
+
 
 @Stable
 data class BrowseUiState(
@@ -83,3 +72,4 @@ class BrowseViewModel @Inject constructor(
     fun setSortBy(sort: SortBy) = _uiState.update { it.copy(sortBy = sort) }
     fun toggleView() = _uiState.update { it.copy(isGridView = !it.isGridView) }
 }
+

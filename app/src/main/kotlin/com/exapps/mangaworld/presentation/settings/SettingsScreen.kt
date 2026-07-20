@@ -1,35 +1,9 @@
-import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 package com.exapps.mangaworld.presentation.settings
+import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.R
 
-import android.app.Activity
-import android.content.Intent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.exapps.mangaworld.core.data.CookieCache
-import com.exapps.mangaworld.domain.model.*
-import com.exapps.mangaworld.presentation.webview.WebViewSolverActivity
-import com.exapps.mangaworld.presentation.components.GradientDivider
-import com.exapps.mangaworld.presentation.theme.MangaColors
-import com.exapps.mangaworld.presentation.utils.formatDiagnosticBytes
-import com.exapps.mangaworld.presentation.utils.normalizeBlacklistInput
+
 
 @Composable
 fun SettingsScreen(
@@ -577,3 +551,4 @@ private fun SwitchItem(
         )
     }
 }
+

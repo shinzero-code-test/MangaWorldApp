@@ -1,37 +1,9 @@
-import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 package com.exapps.mangaworld.presentation.reader
+import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.R
 
-import android.app.Application
-import androidx.work.Data
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.compose.runtime.Immutable
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.exapps.mangaworld.core.data.ImagePrefetcher
-import com.exapps.mangaworld.core.data.ReadingPositionSyncManager
-import com.exapps.mangaworld.core.data.ReadingStatsStore
-import com.exapps.mangaworld.core.data.AchievementManager
-import com.exapps.mangaworld.core.data.toDetail
-import com.exapps.mangaworld.core.data.download.DownloadQueueManager
-import com.exapps.mangaworld.core.data.download.ChapterCleanupWorker
-import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
-import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
-import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
-import com.exapps.mangaworld.domain.repository.CommunityRepository
-import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
-import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
-import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
-import com.exapps.mangaworld.domain.model.*
-import com.exapps.mangaworld.domain.repository.*
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
-import java.util.concurrent.TimeUnit
-import javax.inject.Inject
+
 
 @Immutable
 data class ReaderUiState(
@@ -704,3 +676,4 @@ class ReaderViewModel @Inject constructor(
         }
     }
 }
+

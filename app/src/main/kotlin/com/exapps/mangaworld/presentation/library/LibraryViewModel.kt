@@ -1,20 +1,9 @@
-import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 package com.exapps.mangaworld.presentation.library
+import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.R
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
-import com.exapps.mangaworld.core.firebase.FirebaseTopicManager
-import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
-import com.exapps.mangaworld.domain.model.*
-import com.exapps.mangaworld.domain.repository.LibraryRepository
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.Stable
-import javax.inject.Inject
+
 
 enum class LibraryTab(val label: String) { FAVORITES(stringResource(R.string.favorites)), HISTORY(stringResource(R.string.history)) }
 
@@ -70,3 +59,4 @@ class LibraryViewModel @Inject constructor(
         widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
     }
 }
+

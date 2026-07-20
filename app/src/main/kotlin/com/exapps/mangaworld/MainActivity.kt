@@ -1,6 +1,6 @@
-import com.exapps.mangaworld.R
 package com.exapps.mangaworld
 
+import com.exapps.mangaworld.R
 import android.Manifest
 import android.content.Intent
 import android.os.Bundle

@@ -1,37 +1,9 @@
-import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 package com.exapps.mangaworld.presentation.home
+import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.R
 
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.pager.*
-import androidx.compose.foundation.shape.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.*
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
-import coil.imageLoader
-import coil.request.ImageRequest
-import com.exapps.mangaworld.core.firebase.withFirebaseTrace
-import com.exapps.mangaworld.domain.model.*
-import com.exapps.mangaworld.presentation.components.*
-import com.exapps.mangaworld.presentation.theme.MangaColors
-import kotlinx.coroutines.delay
+
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -502,3 +474,4 @@ private fun HomeShimmer() {
         }
     }
 }
+

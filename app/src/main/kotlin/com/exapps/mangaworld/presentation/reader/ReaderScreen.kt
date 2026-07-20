@@ -1,52 +1,9 @@
-import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 package com.exapps.mangaworld.presentation.reader
+import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.R
 
-import android.app.Activity
-import android.content.Intent
-import android.view.KeyEvent
-import android.view.WindowManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
-import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.pager.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.key.*
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
-import coil.transform.Transformation
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
-import coil.imageLoader
-import coil.request.ImageRequest
-import coil.size.Precision
-import com.exapps.mangaworld.core.firebase.withFirebaseTrace
-import com.exapps.mangaworld.domain.model.*
-import com.exapps.mangaworld.presentation.components.*
-import com.exapps.mangaworld.presentation.theme.MangaColors
-import com.exapps.mangaworld.presentation.webview.WebViewSolverActivity
+
 
 @Composable
 fun ReaderScreen(
@@ -1189,3 +1146,4 @@ private fun ReaderCloudflareError(domain: String, onBack: () -> Unit, onSolve: (
         }
     }
 }
+

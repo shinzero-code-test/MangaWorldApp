@@ -1,69 +1,9 @@
-import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 package com.exapps.mangaworld.presentation.profile
+import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.R
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
-import coil.compose.AsyncImage
-import com.exapps.mangaworld.core.data.ReadingStatsStore
-import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
-import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
-import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
-import com.exapps.mangaworld.core.firebase.CloudinaryUploader
-import com.exapps.mangaworld.core.firebase.AccountMergeRequiredException
-import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
-import com.exapps.mangaworld.core.firebase.ProviderManagementRequiresSignInException
-import com.exapps.mangaworld.domain.model.AppSettings
-import com.exapps.mangaworld.domain.model.CommunityProfile
-import com.exapps.mangaworld.domain.model.UserFollow
-import com.exapps.mangaworld.domain.repository.CommunityRepository
-import com.exapps.mangaworld.domain.repository.SettingsRepository
-import com.exapps.mangaworld.BuildConfig
-import com.exapps.mangaworld.presentation.auth.accountMergeMessage
-import com.exapps.mangaworld.presentation.theme.MangaColors
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import javax.inject.Inject
+
 
 // ─── ViewModel ──────────────────────────────────────────────────────────────
 
@@ -856,3 +796,4 @@ private val AVAILABLE_GENRES = listOf(
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close), color = MangaColors.Muted) } }
     )
 }
+
