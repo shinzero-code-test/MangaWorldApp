@@ -9,4 +9,5 @@
     android:targetCellWidth="2"
     android:targetCellHeight="2"
     android:updatePeriodMillis="0"
+    android:description="@string/widget_continue_reading_desc"
     android:widgetCategory="home_screen" />

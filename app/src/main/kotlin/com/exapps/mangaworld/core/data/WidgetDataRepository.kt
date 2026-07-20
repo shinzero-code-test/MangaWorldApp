@@ -3,7 +3,6 @@ package com.exapps.mangaworld.core.data
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.core.graphics.drawable.toBitmap
-import coil.disk.DiskCache
 import coil.ImageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
@@ -26,10 +25,8 @@ import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
-import okhttp3.OkHttpClient
 
 @Singleton
 class WidgetDataRepository @Inject constructor(
@@ -41,22 +38,8 @@ class WidgetDataRepository @Inject constructor(
     private val mangaRepository: MangaRepository,
     private val settingsRepository: SettingsRepository,
     private val snapshotStore: WidgetSnapshotStore,
-    private val readingStatsStore: ReadingStatsStore,
-    okHttpClient: OkHttpClient
+    private val readingStatsStore: ReadingStatsStore
 ) {
-
-    private val imageLoader by lazy {
-        ImageLoader.Builder(context)
-            .okHttpClient(okHttpClient)
-            .diskCache {
-                DiskCache.Builder()
-                    .directory(File(context.cacheDir, "coil_image_cache"))
-                    .maxSizeBytes(DEFAULT_WIDGET_IMAGE_CACHE_MB.toLong() * 1024L * 1024L)
-                    .build()
-            }
-            .crossfade(true)
-            .build()
-    }
 
     suspend fun getContinueReading(): ContinueReadingWidgetData? {
         val latest = historyDao.getLatest() ?: return null
@@ -198,6 +181,9 @@ class WidgetDataRepository @Inject constructor(
         if (url.isNullOrBlank()) return null
         return withContext(Dispatchers.IO) {
             runCatching {
+                val imageLoader = (context.applicationContext as android.app.Application)
+                    .let { it as? com.exapps.mangaworld.MangaWorldApp }
+                    ?.imageLoader ?: ImageLoader(context)
                 val request = ImageRequest.Builder(context)
                     .data(url)
                     .size(width, height)
@@ -283,5 +269,3 @@ class WidgetDataRepository @Inject constructor(
     private fun formatChapterNumber(number: Float): String =
         if (number == number.toInt().toFloat()) number.toInt().toString() else number.toString()
 }
-
-private const val DEFAULT_WIDGET_IMAGE_CACHE_MB = 32

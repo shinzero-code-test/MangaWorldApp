@@ -25,9 +25,8 @@ class DailyRecommendationsWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val entryPoint = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
-        val repo = entryPoint.widgetDataRepository()
         val settings = entryPoint.widgetSettingsManager()
-        val snapshot = repo.getRemoteSnapshot()
+        val snapshot = try { entryPoint.widgetDataRepository().getRemoteSnapshot() } catch (_: Exception) { null }
         provideContent {
             MangaWidgetTheme(context, settings.getWidgetTheme()) {
                 DailyRecommendationsContent(snapshot, settings, context)

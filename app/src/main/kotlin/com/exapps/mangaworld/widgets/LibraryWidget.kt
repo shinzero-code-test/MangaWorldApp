@@ -24,9 +24,8 @@ class LibraryWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val entryPoint = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
-        val repo = entryPoint.widgetDataRepository()
         val settings = entryPoint.widgetSettingsManager()
-        val entries = repo.getLibraryEntries(limit = 6)
+        val entries = try { entryPoint.widgetDataRepository().getLibraryEntries(limit = 6) } catch (_: Exception) { emptyList() }
         provideContent {
             MangaWidgetTheme(context, settings.getWidgetTheme()) {
                 LibraryWidgetContent(entries, settings, context)

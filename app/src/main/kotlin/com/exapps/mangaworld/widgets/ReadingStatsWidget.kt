@@ -37,9 +37,8 @@ class ReadingStatsWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val entryPoint = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
-        val repo = entryPoint.widgetDataRepository()
         val settings = entryPoint.widgetSettingsManager()
-        val stats = repo.getReadingStats()
+        val stats = try { entryPoint.widgetDataRepository().getReadingStats() } catch (_: Exception) { ReadingStatsWidgetData(0, 0, 0) }
         provideContent {
             MangaWidgetTheme(context, settings.getWidgetTheme()) {
                 ReadingStatsContent(stats, settings, context)

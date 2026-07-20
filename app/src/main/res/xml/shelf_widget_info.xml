@@ -8,4 +8,5 @@
     android:targetCellWidth="4"
     android:targetCellHeight="1"
     android:updatePeriodMillis="0"
+    android:description="@string/shelf_widget_desc"
     android:widgetCategory="home_screen" />

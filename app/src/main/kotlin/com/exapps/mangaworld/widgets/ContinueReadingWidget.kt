@@ -39,10 +39,9 @@ class ContinueReadingWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: androidx.glance.GlanceId) {
         val entryPoint = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
-        val repo = entryPoint.widgetDataRepository()
         val settings = entryPoint.widgetSettingsManager()
-        val data = repo.getContinueReading()
-        val cover = repo.loadCoverBitmap(data?.coverUrl, width = 320, height = 440)
+        val data = try { entryPoint.widgetDataRepository().getContinueReading() } catch (_: Exception) { null }
+        val cover = try { entryPoint.widgetDataRepository().loadCoverBitmap(data?.coverUrl, width = 320, height = 440) } catch (_: Exception) { null }
         provideContent {
             MangaWidgetTheme(context, settings.getWidgetTheme()) {
                 ContinueReadingContent(data = data, cover = cover, settings = settings, context = context)

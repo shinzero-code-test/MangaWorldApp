@@ -9,4 +9,5 @@
     android:targetCellWidth="3"
     android:targetCellHeight="2"
     android:updatePeriodMillis="0"
+    android:description="@string/latest_updates_widget_desc"
     android:widgetCategory="home_screen" />

@@ -7,6 +7,7 @@ import com.exapps.mangaworld.widgets.DailyRecommendationsWidget
 import com.exapps.mangaworld.widgets.LatestUpdatesWidget
 import com.exapps.mangaworld.widgets.LibraryWidget
 import com.exapps.mangaworld.widgets.ReadingStatsWidget
+import com.exapps.mangaworld.widgets.WidgetShelf
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -22,6 +23,7 @@ class WidgetShortcutCoordinator @Inject constructor(
         LibraryWidget().updateAll(context)
         LatestUpdatesWidget().updateAll(context)
         ReadingStatsWidget().updateAll(context)
+        WidgetShelf().updateAll(context)
     }
 
     suspend fun refreshWidgetsAndShortcuts() {
