@@ -389,7 +389,7 @@
     <string name="resume_all">استئناف الكل</string>
     <string name="restore">استرجاع</string>
     <string name="reset_password">استعادة كلمة المرور</string>
-    <string name="import">استيراد</string>
+    <string name="import_label">استيراد</string>
     <string name="import_manga">استيراد المانجا</string>
     <string name="import_external_manga">استيراد مانجا خارجية</string>
     <string name="import_backup">استيراد نسخة احتياطية</string>
