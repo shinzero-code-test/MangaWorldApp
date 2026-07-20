@@ -50,7 +50,3 @@ private fun ModerationReportCard(report: ModerationReport) {
             Text(stringResource(R.string.fmt_065, report.id.take(6)), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
             Text(report.reason, color = MangaColors.OnSurfaceVariant)
             Text(stringResource(R.string.fmt_049, report.status), color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
-        }
-    }
-}
-

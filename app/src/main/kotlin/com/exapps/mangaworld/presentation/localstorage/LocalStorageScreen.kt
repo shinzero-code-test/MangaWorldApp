@@ -250,7 +250,3 @@ private fun LocalMangaCard(
                 Icon(Icons.Filled.Delete, stringResource(R.string.delete), modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.error)
             }
-        }
-    }
-}
-

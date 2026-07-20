@@ -469,9 +469,3 @@ private fun HomeShimmer() {
                     ShimmerBox(Modifier.fillMaxWidth(0.4f).height(12.dp), RoundedCornerShape(4.dp))
                     Spacer(Modifier.height(6.dp))
                     ShimmerBox(Modifier.width(70.dp).height(18.dp), RoundedCornerShape(4.dp))
-                }
-            }
-        }
-    }
-}
-

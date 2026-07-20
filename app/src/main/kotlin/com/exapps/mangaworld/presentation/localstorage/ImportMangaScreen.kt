@@ -513,7 +513,3 @@ private suspend fun importManga(
         } catch (e: Exception) {
             onProgress(ImportProgress(error = e.message ?: stringResource(R.string.unknown_error)))
             null
-        }
-    }
-}
-

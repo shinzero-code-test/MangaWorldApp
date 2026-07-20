@@ -92,7 +92,3 @@ private fun ShelfButton(action: ShelfAction, intent: android.content.Intent) {
                     fontWeight = FontWeight.Medium
                 )
             )
-        }
-    }
-}
-

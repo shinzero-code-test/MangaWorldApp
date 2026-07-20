@@ -454,10 +454,3 @@ private fun CompletedChaptersSummary(count: Int, onCancelAll: () -> Unit) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MangaColors.Muted
                 )
-            }
-        }
-    }
-}
-
-
-

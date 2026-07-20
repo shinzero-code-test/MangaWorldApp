@@ -246,8 +246,3 @@ private fun SuggestionCard(manga: MangaItem, onClick: () -> Unit) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MangaColors.Muted
                 )
-            }
-        }
-    }
-}
-

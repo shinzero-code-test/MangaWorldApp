@@ -65,8 +65,3 @@ private fun LatestUpdatesContent(
             )
             if (index < visibleCount - 1) {
                 Spacer(GlanceModifier.height(8.dp))
-            }
-        }
-    }
-}
-

@@ -422,7 +422,3 @@ private fun ReviewCard(review: MangaReview, onProfileClick: () -> Unit) {
             }
             if (review.title.isNotBlank()) Text(review.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
             if (review.body.isNotBlank()) Text(review.body, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-

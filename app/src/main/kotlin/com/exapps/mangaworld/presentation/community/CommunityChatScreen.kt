@@ -94,7 +94,3 @@ private fun ChatBubble(message: CommunityChatMessage) {
             Text(message.authorName, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
             Text(message.authorBadge, color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
             Text(message.text, color = MangaColors.OnSurfaceVariant)
-        }
-    }
-}
-

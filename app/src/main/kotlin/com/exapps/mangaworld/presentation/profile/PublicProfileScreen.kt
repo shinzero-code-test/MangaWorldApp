@@ -853,7 +853,3 @@ private fun EmptyPublicContent() {
             color = MangaColors.Muted,
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center
-        )
-    }
-}
-

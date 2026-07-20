@@ -115,7 +115,3 @@ private suspend fun saveImage(context: Context, imageUrl: String) {
     } catch (e: Exception) {
         withContext(Dispatchers.Main) {
             Toast.makeText(context, stringResource(R.string.fmt_077, e.message), Toast.LENGTH_SHORT).show()
-        }
-    }
-}
-

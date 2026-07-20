@@ -319,8 +319,3 @@ private fun SourceMangaCard(manga: MangaItem, onClick: () -> Unit) {
                         maxLines = 1
                     )
                 }
-            }
-        }
-    }
-}
-

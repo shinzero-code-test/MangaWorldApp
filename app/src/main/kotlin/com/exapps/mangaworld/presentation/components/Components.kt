@@ -378,7 +378,3 @@ fun MangaLoadingIndicator(modifier: Modifier = Modifier) {
             color = MangaColors.Primary,
             strokeWidth = 2.dp,
             modifier = Modifier.size(32.dp)
-        )
-    }
-}
-

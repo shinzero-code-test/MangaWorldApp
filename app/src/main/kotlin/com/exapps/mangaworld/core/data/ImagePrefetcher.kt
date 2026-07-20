@@ -21,35 +21,3 @@ import javax.inject.Singleton
 class ImagePrefetcher @Inject constructor(
     @ApplicationContext private val context: Context,
     private val imageLoader: Lazy<ImageLoader>
-) {
-    private val pendingJobs = mutableListOf<Job>()
-
-    fun cancelAll() {
-        pendingJobs.forEach { it.cancel() }
-        pendingJobs.clear()
-        imageLoader.get().memoryCache?.clear()
-    }
-
-    suspend fun prefetchPages(pages: List<ChapterPage>, count: Int = pages.size.coerceAtMost(6)) {
-        cancelAll()
-        coroutineScope {
-            pages.take(count).forEach { page ->
-                val job = launch {
-                    val request = ImageRequest.Builder(context)
-                        .data(page.url)
-                        .allowHardware(false)
-                        .bitmapConfig(Bitmap.Config.RGB_565)
-                        .precision(Precision.INEXACT)
-                        .size(Size.ORIGINAL)
-                        .diskCachePolicy(CachePolicy.ENABLED)
-                        .memoryCachePolicy(CachePolicy.ENABLED)
-                        .withFirebaseTrace("prefetch_page")
-                        .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
-                        .build()
-                    imageLoader.get().enqueue(request)
-                }
-                pendingJobs.add(job)
-            }
-        }
-    }
-}

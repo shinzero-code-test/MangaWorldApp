@@ -178,7 +178,3 @@ private fun SourceCard(
                     )
                 }
             }
-        }
-    }
-}
-

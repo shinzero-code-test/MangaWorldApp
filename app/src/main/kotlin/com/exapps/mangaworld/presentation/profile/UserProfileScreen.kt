@@ -978,7 +978,3 @@ private fun ModerationEntryCard(onClick: () -> Unit) {
             contentDescription = null,
             tint = MangaColors.Muted,
             modifier = Modifier.size(16.dp)
-        )
-    }
-}
-

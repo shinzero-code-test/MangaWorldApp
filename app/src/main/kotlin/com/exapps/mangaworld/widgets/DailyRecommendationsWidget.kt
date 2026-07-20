@@ -93,8 +93,3 @@ private fun DailyRecommendationsContent(
                     showBadge = showBadge,
                     intent = AppLaunchIntents.reader(context, update.sourceId, update.mangaId, update.chapterUrl)
                 )
-            }
-        }
-    }
-}
-

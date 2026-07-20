@@ -167,8 +167,3 @@ fun LocalMangaDetailScreen(
                         }
                     }
                 }
-            }
-        }
-    }
-}
-

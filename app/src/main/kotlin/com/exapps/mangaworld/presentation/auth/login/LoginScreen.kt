@@ -326,7 +326,3 @@ fun MangaTextField(
                 modifier = Modifier
                     .size(20.dp)
                     .clickable { onTogglePasswordVisibility() }
-            )
-        }
-    }
-}

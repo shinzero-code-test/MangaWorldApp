@@ -839,7 +839,3 @@ private fun VisibilityOption(
         }
         if (selected) {
             Icon(Icons.Filled.Check, contentDescription = null, tint = MangaColors.Cyan, modifier = Modifier.size(20.dp))
-        }
-    }
-}
-

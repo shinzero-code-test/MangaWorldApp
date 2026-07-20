@@ -261,8 +261,3 @@ private fun HistoryItem(item: ReadingHistoryItem, onClick: () -> Unit, onRemove:
                     leadingIcon = { Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.error) },
                     onClick = { onRemove(); showMenu = false }
                 )
-            }
-        }
-    }
-}
-

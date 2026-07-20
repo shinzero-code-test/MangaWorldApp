@@ -787,13 +787,3 @@ private val AVAILABLE_GENRES = listOf(
                             }
                             Spacer(Modifier.width(12.dp))
                             Text(user.username, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close), color = MangaColors.Muted) } }
-    )
-}
-

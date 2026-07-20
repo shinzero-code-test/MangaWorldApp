@@ -332,7 +332,3 @@ private fun FilterBottomSheet(
             ) {
                 Text(stringResource(R.string.browse_filter_reset))
             }
-        }
-    }
-}
-

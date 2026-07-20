@@ -129,7 +129,3 @@ private fun MoreGridCard(item: MoreGridItem) {
                 textAlign = TextAlign.Center,
                 lineHeight = 16.sp
             )
-        }
-    }
-}
-
