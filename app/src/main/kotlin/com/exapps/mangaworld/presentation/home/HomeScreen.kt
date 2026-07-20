@@ -372,7 +372,7 @@ private fun LatestChapterRow(item: LatestChapterItem, onClick: () -> Unit) {
             if (item.isNew) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    stringResource(R.string.new),
+                    stringResource(R.string.new_label),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                     modifier = Modifier

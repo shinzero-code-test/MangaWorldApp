@@ -86,7 +86,7 @@ fun MangaCard(
             // New badge
             if (manga.isNew) {
                 Text(
-                    stringResource(R.string.new),
+                    stringResource(R.string.new_label),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                     modifier = Modifier

@@ -867,14 +867,14 @@ private fun VisibilityTab(isPublic: Boolean, onPublicChange: (Boolean) -> Unit) 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         VisibilityOption(
             icon = Icons.Filled.Public,
-            title = stringResource(R.string.public),
+            title = stringResource(R.string.public_label),
             description = stringResource(R.string.str_454),
             selected = isPublic,
             onClick = { onPublicChange(true) }
         )
         VisibilityOption(
             icon = Icons.Filled.Lock,
-            title = stringResource(R.string.private),
+            title = stringResource(R.string.private_label),
             description = stringResource(R.string.str_031),
             selected = !isPublic,
             onClick = { onPublicChange(false) }

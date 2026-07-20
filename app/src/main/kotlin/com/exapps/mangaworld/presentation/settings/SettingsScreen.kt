@@ -380,7 +380,7 @@ fun SettingsScreen(
                 title = stringResource(R.string.import_backup),
                 subtitle = stringResource(R.string.merge_local_imported)
             ) {
-                OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json")) }) { Text(stringResource(R.string.import)) }
+                OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json")) }) { Text(stringResource(R.string.import_label)) }
             }
         }
 
