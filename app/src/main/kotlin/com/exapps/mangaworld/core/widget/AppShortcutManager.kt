@@ -42,7 +42,7 @@ class AppShortcutManager @Inject constructor(
             .build()
 
     private fun buildRecentShortcut(index: Int, item: ContinueReadingWidgetData): ShortcutInfoCompat =
-        ShortcutInfoCompat.Builder(context, "recent_${item.mangaId}")
+        ShortcutInfoCompat.Builder(context, "recent_${item.mangaId.take(60)}")
             .setShortLabel(item.title.take(30))
             .setLongLabel("${item.title} - ${item.chapterLabel}")
             .setIcon(IconCompat.createWithResource(context, R.drawable.ic_shortcut_recent))

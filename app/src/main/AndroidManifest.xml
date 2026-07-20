@@ -51,7 +51,7 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:noHistory="true"
-            android:theme="@style/Theme.MangaWorld.Splash" />
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <!-- Cloudflare WebView Activity -->
         <activity
