@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.presentation.auth
 import com.exapps.mangaworld.R
 import android.content.Context
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 
 import com.exapps.mangaworld.core.firebase.AccountMergeReason

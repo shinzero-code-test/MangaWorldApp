@@ -1,4 +1,5 @@
 package com.exapps.mangaworld.widgets
+import com.exapps.mangaworld.R
 
 import android.content.Context
 import androidx.compose.runtime.Composable
