@@ -346,3 +346,4 @@ private fun NotificationCard(
             }
         }
     }
+}

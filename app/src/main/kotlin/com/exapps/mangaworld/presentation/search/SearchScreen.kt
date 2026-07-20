@@ -231,7 +231,7 @@ private fun SearchResults(
             if (pagingItems.itemCount == 0 && pagingItems.loadState.refresh !is LoadState.Loading) {
                 EmptyState(
                     icon = Icons.Filled.SearchOff,
-                    title = stringResource(R.string.str_370)$query\"",
+                    title = stringResource(R.string.str_370, query),
                     subtitle = stringResource(R.string.try_different_keywords),
                     modifier = Modifier.fillMaxSize()
                 )

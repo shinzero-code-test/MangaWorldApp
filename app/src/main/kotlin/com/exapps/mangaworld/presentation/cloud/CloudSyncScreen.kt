@@ -591,3 +591,9 @@ private fun NotificationsCard(
                     Column(Modifier.padding(12.dp)) {
                         Text(item.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
                         Text(item.body, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 2)
+                    }
+                }
+            }
+        }
+    }
+}

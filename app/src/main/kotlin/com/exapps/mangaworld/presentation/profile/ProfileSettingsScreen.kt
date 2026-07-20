@@ -849,3 +849,9 @@ private val AVAILABLE_GENRES = listOf(
                         }
                     }
                 }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close), color = MangaColors.Muted) } }
+    )
+}

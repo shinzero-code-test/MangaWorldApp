@@ -324,3 +324,9 @@ private fun DailyStatRow(stat: com.exapps.mangaworld.core.data.DailyStat) {
                 Text(
                     stringResource(R.string.fmt_039, stat.readingTimeMinutes),
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MangaColors.OnSurfaceVariant
+                )
+            }
+        }
+    }
+}
