@@ -21,7 +21,9 @@ data class ReadingStatsUiState(
     val averagePagesPerDay: Int get() {
         if (dailyStats.isEmpty()) return 0
         val totalPages = dailyStats.sumOf { it.pagesRead }
-        return totalPages / dailyStats.size
+        // Use 30 days as denominator (or actual days if less data), not active days
+        val days = dailyStats.size.coerceAtMost(30)
+        return totalPages / days
     }
     val todayPages: Int get() {
         val today = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)

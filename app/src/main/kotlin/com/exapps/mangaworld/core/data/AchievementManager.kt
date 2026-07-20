@@ -138,40 +138,6 @@ class AchievementManager @Inject constructor(
         checkAchievements()
     }
 
-    suspend fun checkAndUnlockAchievements(pagesToday: Int, chaptersToday: Int, currentStreak: Int) {
-        dataStore.edit { prefs ->
-            val achievements = parseAchievements(prefs[achievementsKey] ?: "[]").toMutableList()
-            val now = System.currentTimeMillis()
-
-            // Check each achievement condition
-            val updates = mutableListOf<Achievement>()
-
-            achievements.forEach { achievement ->
-                if (!achievement.isUnlocked) {
-                    val shouldUnlock = when (achievement.id) {
-                        "first_chapter" -> chaptersToday >= 1
-                        "bookworm" -> (prefs[totalPagesReadKey] ?: 0) >= 100
-                        "speed_reader" -> pagesToday >= 50
-                        "streak_7" -> currentStreak >= 7
-                        "streak_30" -> currentStreak >= 30
-                        "manga_master" -> (prefs[totalChaptersReadKey] ?: 0) >= 100
-                        else -> false
-                    }
-                    if (shouldUnlock) {
-                        updates.add(achievement.copy(isUnlocked = true, unlockedAt = now))
-                    }
-                }
-            }
-
-            if (updates.isNotEmpty()) {
-                val updatedAchievements = achievements.map { stored ->
-                    updates.find { it.id == stored.id } ?: stored
-                }
-                prefs[achievementsKey] = achievementsToJson(updatedAchievements)
-            }
-        }
-    }
-
     private suspend fun checkAchievements() {
         val prefs = dataStore.data.first()
         val totalPages = prefs[totalPagesReadKey] ?: 0
@@ -194,7 +160,7 @@ class AchievementManager @Inject constructor(
                     "first_chapter" -> totalChapters >= 1
                     "bookworm" -> totalPages >= 100
                     "speed_reader" -> totalPages >= 50
-                    "streak_7" -> false // streak checked separately via checkAndUnlockAchievements
+                    "streak_7" -> false, // checked in checkAchievements below
                     "streak_30" -> false
                     "manga_master" -> totalChapters >= 100
                     else -> false

@@ -121,6 +121,21 @@ class ReadingStatsStore @Inject constructor(
         }
     }
 
+    /** Prune old daily stats to keep DataStore strings bounded. Called periodically. */
+    suspend fun pruneOldStats(keepDays: Int = 60) {
+        dataStore.edit { prefs ->
+            val cutoff = java.time.LocalDate.now().minusDays(keepDays.toLong()).toString()
+            val pagesMap = parseMap(prefs[dailyPagesKey] ?: "{}")
+            val timeMap = parseLongMap(prefs[dailyTimeKey] ?: "{}")
+
+            val prunedPages = pagesMap.filterKeys { it >= cutoff }
+            val prunedTime = timeMap.filterKeys { it >= cutoff }
+
+            prefs[dailyPagesKey] = mapToJson(prunedPages)
+            prefs[dailyTimeKey] = longMapToJson(prunedTime)
+        }
+    }
+
     /** Parse a JSON object into a mutable Int map (used for page counts). */
     private fun parseMap(json: String): MutableMap<String, Int> {
         return try {
