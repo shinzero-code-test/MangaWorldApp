@@ -537,7 +537,7 @@
     <string name="auto_download_new_chapters">تنزيل تلقائي للفصول الجديدة</string>
     <string name="str_248">توفير البيانات الخلوية</string>
     <string name="loading_chapter">جاري تحميل الفصل...</string>
-    <string name="new">جديد</string>
+    <string name="new_label">جديد</string>
     <string name="new_female">جديدة</string>
     <string name="try_different_keywords">جرب كلمات مختلفة أو مصدراً آخر</string>
     <string name="try_later">جرّب التحديث لاحقاً</string>
@@ -553,7 +553,7 @@
     <string name="save_changes">حفظ التغييرات</string>
     <string name="solve_cloudflare">حل تحدي Cloudflare</string>
     <string name="str_265">حل حماية Cloudflare</string>
-    <string name="private">خاصة</string>
+    <string name="private_label">خاصة</string>
     <string name="logout">خروج</string>
     <string name="unknown_error">خطأ غير معروف</string>
     <string name="search_error">خطأ في البحث</string>
@@ -596,7 +596,7 @@
     <string name="local_guest">ضيف محلي</string>
     <string name="str_307">طريقة تسجيل الدخول هذه غير مفعّلة حالياً.</string>
     <string name="collapse">طي</string>
-    <string name="public">عامة</string>
+    <string name="public_label">عامة</string>
     <string name="show_alt">عرض</string>
     <string name="show_less">عرض أقل</string>
     <string name="view_image">عرض الصورة</string>
