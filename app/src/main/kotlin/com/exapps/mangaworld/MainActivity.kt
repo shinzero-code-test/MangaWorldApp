@@ -326,7 +326,7 @@ private fun MangaApp(
                         onClick = { showPostOnboardingLogin = false },
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp)
                     ) {
-                        Text(getString(R.string.skip_guest_login), color = MangaColors.Muted, fontSize = 14.sp)
+                        Text(LocalContext.current.getString(R.string.skip_guest_login), color = MangaColors.Muted, fontSize = 14.sp)
                     }
                 }
                 !settings.onboardingCompleted -> {
@@ -496,8 +496,8 @@ private fun BiometricLockOverlay(onUnlocked: () -> Unit) {
         )
 
         val info = BiometricPrompt.PromptInfo.Builder()
-            .setTitle(getString(R.string.open_mangaworld))
-            .setSubtitle(getString(R.string.use_biometric_continue))
+            .setTitle(LocalContext.current.getString(R.string.open_mangaworld))
+            .setSubtitle(LocalContext.current.getString(R.string.use_biometric_continue))
             .setAllowedAuthenticators(
                 BiometricManager.Authenticators.BIOMETRIC_STRONG or
                     BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -521,9 +521,9 @@ private fun BiometricLockOverlay(onUnlocked: () -> Unit) {
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(getString(R.string.app_locked), style = MaterialTheme.typography.titleLarge, color = MangaColors.OnSurface)
+                Text(LocalContext.current.getString(R.string.app_locked), style = MaterialTheme.typography.titleLarge, color = MangaColors.OnSurface)
                 Text(
-                    errorMessage ?: getString(R.string.unlock_app_biometric),
+                    errorMessage ?: LocalContext.current.getString(R.string.unlock_app_biometric),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MangaColors.OnSurfaceVariant
                 )

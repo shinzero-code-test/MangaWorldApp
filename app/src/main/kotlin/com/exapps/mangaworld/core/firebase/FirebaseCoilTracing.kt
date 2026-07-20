@@ -33,7 +33,7 @@ fun ImageRequest.Builder.withFirebaseTrace(surface: String): ImageRequest.Builde
         onSuccess = { _, _ -> sharedTrace.incrementMetric("success_count", 1) },
         onError = { _, throwable ->
             sharedTrace.incrementMetric("failure_count", 1)
-            Log.w(TAG, "Image load failed: ${throwable.message}")
+            Log.w(TAG, "Image load failed: ${throwable.toString()}")
         },
         onCancel = { _ -> sharedTrace.incrementMetric("cancel_count", 1) }
     )

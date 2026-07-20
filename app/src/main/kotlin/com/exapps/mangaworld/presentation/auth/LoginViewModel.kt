@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.presentation.auth
 import com.exapps.mangaworld.R
+import android.content.Context
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.runtime.Immutable
@@ -8,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.firebase.AccountMergeRequiredException
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +31,7 @@ data class AuthUiState(
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val sessionManager: FirebaseSessionManager,
     private val communityRepository: com.exapps.mangaworld.domain.repository.CommunityRepository
 ) : ViewModel() {
@@ -64,7 +67,7 @@ class LoginViewModel @Inject constructor(
         val normalizedEmail = email.trim()
         _uiState.update { it.copy(email = normalizedEmail) }
         if (normalizedEmail.isBlank() || password.isBlank()) {
-            _uiState.update { it.copy(error = stringResource(R.string.auth_error_empty_fields)) }
+            _uiState.update { it.copy(error = context.getString(R.string.auth_error_empty_fields)) }
             return
         }
         viewModelScope.launch {
@@ -74,7 +77,7 @@ class LoginViewModel @Inject constructor(
                 if (uid != null) {
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
-                    _uiState.update { it.copy(isLoading = false, error = stringResource(R.string.auth_error_login_failed)) }
+                    _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.auth_error_login_failed)) }
                 }
             } catch (error: AccountMergeRequiredException) {
                 _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
@@ -87,20 +90,20 @@ class LoginViewModel @Inject constructor(
     fun signUpWithEmail(email: String, password: String, displayName: String = "", username: String = "") {
         val normalizedEmail = email.trim()
         if (normalizedEmail.isBlank() || password.isBlank()) {
-            _uiState.update { it.copy(error = stringResource(R.string.auth_error_empty_fields)) }
+            _uiState.update { it.copy(error = context.getString(R.string.auth_error_empty_fields)) }
             return
         }
         if (displayName.isBlank()) {
-            _uiState.update { it.copy(error = stringResource(R.string.auth_error_display_name_required)) }
+            _uiState.update { it.copy(error = context.getString(R.string.auth_error_display_name_required)) }
             return
         }
         if (username.isBlank()) {
-            _uiState.update { it.copy(error = stringResource(R.string.enter_username)) }
+            _uiState.update { it.copy(error = context.getString(R.string.enter_username)) }
             return
         }
         val normalizedUsername = username.trim().lowercase()
         if (normalizedUsername.length !in 3..20 || !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$"))) {
-            _uiState.update { it.copy(error = stringResource(R.string.str_108)) }
+            _uiState.update { it.copy(error = context.getString(R.string.str_108)) }
             return
         }
         viewModelScope.launch {
@@ -117,7 +120,7 @@ class LoginViewModel @Inject constructor(
                     )
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
-                    _uiState.update { it.copy(isLoading = false, error = stringResource(R.string.auth_error_signup_failed)) }
+                    _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.auth_error_signup_failed)) }
                 }
             } catch (error: AccountMergeRequiredException) {
                 _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
@@ -137,7 +140,7 @@ class LoginViewModel @Inject constructor(
                     ensureProfileExists(uid)
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
-                    _uiState.update { it.copy(isLoading = false, error = stringResource(R.string.str_335)) }
+                    _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.str_335)) }
                 }
             } catch (error: AccountMergeRequiredException) {
                 _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
@@ -157,7 +160,7 @@ class LoginViewModel @Inject constructor(
                     ensureProfileExists(uid)
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
-                    _uiState.update { it.copy(isLoading = false, error = stringResource(R.string.str_334)) }
+                    _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.str_334)) }
                 }
             } catch (error: AccountMergeRequiredException) {
                 _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(error.reason)) }
@@ -208,11 +211,11 @@ class LoginViewModel @Inject constructor(
     fun sendPasswordReset(email: String) {
         val normalizedEmail = email.trim()
         if (normalizedEmail.isBlank()) {
-            _uiState.update { it.copy(error = stringResource(R.string.enter_email)) }
+            _uiState.update { it.copy(error = context.getString(R.string.enter_email)) }
             return
         }
         if (!android.util.Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()) {
-            _uiState.update { it.copy(error = stringResource(R.string.invalid_email)) }
+            _uiState.update { it.copy(error = context.getString(R.string.invalid_email)) }
             return
         }
         viewModelScope.launch {

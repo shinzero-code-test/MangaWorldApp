@@ -110,7 +110,7 @@ class ChapterUpdateChecker @Inject constructor(
                                 coverUrl = favorite.coverUrl
                             )
                         )
-                        prefs.edit().putFloat("max_chapter_${favorite.mangaId}", currentMaxChapter).apply()
+                        prefs.edit().putFloat("max_chapter_${favorite.mangaId}", currentMaxChapter.toFloat()).apply()
                     }
                 }
             } catch (e: Exception) {

@@ -124,9 +124,9 @@ class FirebaseSyncManager @Inject constructor(
             val pageSize = minOf(1000, maxDocs - result.size)
             val query = if (lastDocId != null) {
                 ref.orderBy(com.google.firebase.firestore.FieldPath.documentId())
-                    .startAfter(lastDocId).limit(pageSize)
+                    .startAfter(lastDocId).limit(pageSize.toLong())
             } else {
-                ref.orderBy(com.google.firebase.firestore.FieldPath.documentId()).limit(pageSize)
+                ref.orderBy(com.google.firebase.firestore.FieldPath.documentId()).limit(pageSize.toLong())
             }
             val snap = query.get().await()
             if (snap.isEmpty) break

@@ -935,11 +935,11 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun getFollowingCount(userId: String): Int = runCatching {
-        firestore.collection("relationships").document(userId).collection("following").count().get().await().count.toInt()
+        firestore.collection("relationships").document(userId).collection("following").count().get().await().data?.count?.toInt() ?: 0
     }.getOrDefault(0)
 
     override suspend fun getFollowersCount(userId: String): Int = runCatching {
-        firestore.collection("relationships").document(userId).collection("followers").count().get().await().count.toInt()
+        firestore.collection("relationships").document(userId).collection("followers").count().get().await().data?.count?.toInt() ?: 0
     }.getOrDefault(0)
 
     override suspend fun blockUser(uid: String) {
