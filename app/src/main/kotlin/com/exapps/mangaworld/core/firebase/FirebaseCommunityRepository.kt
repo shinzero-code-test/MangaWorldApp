@@ -565,6 +565,8 @@ class FirebaseCommunityRepository @Inject constructor(
                 readCount >= 1000 -> "Pirate King"
                 readCount >= 400 -> "Avid Reader"
                 readCount >= 150 -> "Shonen Specialist"
+                readCount >= 50 -> "Manga Enthusiast"
+                readCount >= 10 -> "Chapter Hunter"
                 else -> "Beginner"
             }
         }
@@ -618,6 +620,7 @@ class FirebaseCommunityRepository @Inject constructor(
         "displayName" to displayName,
         "avatarUrl" to avatarUrl,
         "bannerUrl" to bannerUrl,
+        "badgeLabel" to badgeLabel,
         "isPublic" to isPublic,
         "showListsPublic" to showListsPublic,
         "showActivityPublic" to showActivityPublic,

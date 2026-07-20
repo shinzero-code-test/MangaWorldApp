@@ -154,14 +154,18 @@ class AchievementManager @Inject constructor(
         }.toMutableList()
 
         // Check unlock conditions
+        val currentStreak = readingStatsStore.currentStreak.first()
         mergedAchievements.forEachIndexed { index, achievement ->
             if (!achievement.isUnlocked) {
                 val shouldUnlock = when (achievement.id) {
                     "first_chapter" -> totalChapters >= 1
                     "bookworm" -> totalPages >= 100
-                    "speed_reader" -> totalPages >= 50
-                    "streak_7" -> false, // checked in checkAchievements below
-                    "streak_30" -> false
+                    "speed_reader" -> {
+                        // 50 pages in a single day
+                        readingStatsStore.dailyStats.first().any { it.pagesRead >= 50 }
+                    }
+                    "streak_7" -> currentStreak >= 7
+                    "streak_30" -> currentStreak >= 30
                     "manga_master" -> totalChapters >= 100
                     else -> false
                 }
@@ -203,8 +207,10 @@ class AchievementManager @Inject constructor(
         // Throttled Firestore sync — max once every 30 minutes
         val lastSync = prefs[lastFirestoreSyncKey] ?: 0L
         if (now - lastSync > FIRESTORE_SYNC_INTERVAL_MS) {
-            dataStore.edit { it[lastFirestoreSyncKey] = now }
-            syncToFirestore()
+            val syncSuccess = syncToFirestore()
+            if (syncSuccess) {
+                dataStore.edit { it[lastFirestoreSyncKey] = now }
+            }
         }
     }
 
@@ -244,9 +250,9 @@ class AchievementManager @Inject constructor(
         )
     }
 
-    private suspend fun syncToFirestore() {
-        try {
-            val uid = sessionManager.ensureFirebaseSession() ?: return
+    private suspend fun syncToFirestore(): Boolean {
+        return try {
+            val uid = sessionManager.ensureFirebaseSession() ?: return false
             val prefs = dataStore.data.first()
             val data = mapOf(
                 "totalPagesRead" to (prefs[totalPagesReadKey] ?: 0),
@@ -259,8 +265,9 @@ class AchievementManager @Inject constructor(
                 .document(uid)
                 .set(data, SetOptions.merge())
                 .await()
+            true
         } catch (_: Exception) {
-            // Silently fail — Firestore sync is best-effort
+            false
         }
     }
 
