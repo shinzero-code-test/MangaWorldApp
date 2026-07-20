@@ -99,8 +99,6 @@ class AchievementManager @Inject constructor(
         val merged = defaults.map { default -> achievements.find { it.id == default.id } ?: default }
         return merged.count { it.isUnlocked }
     }
-        parseGoals(prefs[goalsKey] ?: "[]")
-    }
 
     val achievements: Flow<List<Achievement>> = dataStore.data.map { prefs ->
         val stored = parseAchievements(prefs[achievementsKey] ?: "[]")
