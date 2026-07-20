@@ -1,7 +1,7 @@
+package com.exapps.mangaworld.presentation.notifications
+
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
-
-package com.exapps.mangaworld.presentation.notifications
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,18 +41,78 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** Unified notification item — covers both community and local notifications. */
+data class UnifiedNotification(
+    val id: String,
+    val title: String,
+    val body: String,
+    val type: String,           // "community", "chapter_update", "suggestion", "reminder"
+    val mangaId: String? = null,
+    val read: Boolean = false,
+    val timestamp: Long = 0L,
+    val icon: String = "notifications"  // icon key for display
+)
+
 @HiltViewModel
 class NotificationCenterViewModel @Inject constructor(
-    private val communityRepository: CommunityRepository
+    private val communityRepository: CommunityRepository,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
     private val _unreadOnly = MutableStateFlow(false)
     val unreadOnly: StateFlow<Boolean> = _unreadOnly.asStateFlow()
-    val notifications = combine(communityRepository.observeNotifications(100), _unreadOnly) { items, unread ->
-        if (unread) items.filter { !it.read } else items
+
+    /** Community notifications from Firestore */
+    private val communityNotifications = communityRepository.observeNotifications(100)
+        .map { items ->
+            items.map { notif ->
+                UnifiedNotification(
+                    id = notif.id,
+                    title = notif.title,
+                    body = notif.body,
+                    type = when (notif.type) {
+                        CommunityNotificationType.REPLY -> "reply"
+                        CommunityNotificationType.MENTION -> "mention"
+                        CommunityNotificationType.REVIEW_REACTION -> "reaction"
+                        CommunityNotificationType.COMMENT_THREAD -> "thread"
+                        CommunityNotificationType.CHAT_MENTION -> "chat"
+                        CommunityNotificationType.SYSTEM_ALERT -> "system"
+                    },
+                    mangaId = notif.mangaId,
+                    read = notif.read,
+                    timestamp = notif.createdAt
+                )
+            }
+        }
+
+    /** Local notifications from SharedPreferences (chapter updates, suggestions, reminders) */
+    private val localNotifications = kotlinx.coroutines.flow.flow {
+        val prefs = context.getSharedPreferences("local_notifications", android.content.Context.MODE_PRIVATE)
+        val json = prefs.getString("notifications", "[]") ?: "[]"
+        val items = try {
+            val arr = org.json.JSONArray(json)
+            (0 until arr.length()).mapNotNull { i ->
+                val obj = arr.optJSONObject(i) ?: return@mapNotNull null
+                UnifiedNotification(
+                    id = obj.optString("id", ""),
+                    title = obj.optString("title", ""),
+                    body = obj.optString("body", ""),
+                    type = obj.optString("type", "system"),
+                    mangaId = obj.optString("mangaId", null),
+                    read = obj.optBoolean("read", false),
+                    timestamp = obj.optLong("timestamp", 0L)
+                )
+            }
+        } catch (_: Exception) { emptyList() }
+        emit(items)
+    }
+
+    val notifications = combine(communityNotifications, localNotifications, _unreadOnly) { community, local, unread ->
+        val all = (community + local).sortedByDescending { it.timestamp }
+        if (unread) all.filter { !it.read } else all
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val unreadCount = communityRepository.observeNotifications(100)
-        .combine(_unreadOnly) { items, _ -> items.count { !it.read } }
+    val unreadCount = notifications
+        .map { items -> items.count { !it.read } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     fun toggleUnreadOnly() { _unreadOnly.value = !_unreadOnly.value }
@@ -74,7 +134,7 @@ class NotificationCenterViewModel @Inject constructor(
 @Composable
 fun NotificationCenterScreen(
     onBack: () -> Unit,
-    onOpenThread: (CommunityNotification) -> Unit,
+    onNotificationClick: (UnifiedNotification) -> Unit,
     viewModel: NotificationCenterViewModel = hiltViewModel()
 ) {
     val items by viewModel.notifications.collectAsStateWithLifecycle()
@@ -171,7 +231,7 @@ fun NotificationCenterScreen(
                             notification = item,
                             onClick = {
                                 viewModel.markRead(item.id)
-                                onOpenThread(item)
+                                onNotificationClick(item)
                             }
                         )
                     }
@@ -183,34 +243,46 @@ fun NotificationCenterScreen(
 
 @Composable
 private fun NotificationCard(
-    notification: CommunityNotification,
+    notification: UnifiedNotification,
     onClick: () -> Unit
 ) {
     val typeIcon = when (notification.type) {
-        CommunityNotificationType.REPLY -> Icons.Filled.Reply
-        CommunityNotificationType.MENTION -> Icons.Filled.AlternateEmail
-        CommunityNotificationType.REVIEW_REACTION -> Icons.Filled.Star
-        CommunityNotificationType.COMMENT_THREAD -> Icons.Filled.Forum
-        CommunityNotificationType.CHAT_MENTION -> Icons.Filled.Chat
-        CommunityNotificationType.SYSTEM_ALERT -> Icons.Filled.Info
+        "reply" -> Icons.Filled.Reply
+        "mention" -> Icons.Filled.AlternateEmail
+        "reaction" -> Icons.Filled.Star
+        "thread" -> Icons.Filled.Forum
+        "chat" -> Icons.Filled.Chat
+        "system" -> Icons.Filled.Info
+        "chapter_update" -> Icons.Filled.NewReleases
+        "suggestion" -> Icons.Filled.AutoAwesome
+        "reminder" -> Icons.Filled.Timer
+        else -> Icons.Filled.Notifications
     }
 
     val typeColor = when (notification.type) {
-        CommunityNotificationType.REPLY -> MangaColors.Cyan
-        CommunityNotificationType.MENTION -> MangaColors.Primary
-        CommunityNotificationType.REVIEW_REACTION -> MangaColors.Yellow
-        CommunityNotificationType.COMMENT_THREAD -> MangaColors.Green
-        CommunityNotificationType.CHAT_MENTION -> MangaColors.Orange
-        CommunityNotificationType.SYSTEM_ALERT -> MangaColors.Muted
+        "reply" -> MangaColors.Cyan
+        "mention" -> MangaColors.Primary
+        "reaction" -> MangaColors.Yellow
+        "thread" -> MangaColors.Green
+        "chat" -> MangaColors.Orange
+        "system" -> MangaColors.Muted
+        "chapter_update" -> MangaColors.Cyan
+        "suggestion" -> MangaColors.Yellow
+        "reminder" -> MangaColors.Pink
+        else -> MangaColors.Muted
     }
 
     val typeLabel = when (notification.type) {
-        CommunityNotificationType.REPLY -> stringResource(R.string.community_reply)
-        CommunityNotificationType.MENTION -> stringResource(R.string.bookmark)
-        CommunityNotificationType.REVIEW_REACTION -> stringResource(R.string.interact)
-        CommunityNotificationType.COMMENT_THREAD -> stringResource(R.string.discussion_alt)
-        CommunityNotificationType.CHAT_MENTION -> stringResource(R.string.conversation)
-        CommunityNotificationType.SYSTEM_ALERT -> stringResource(R.string.alert)
+        "reply" -> stringResource(R.string.community_reply)
+        "mention" -> stringResource(R.string.bookmark)
+        "reaction" -> stringResource(R.string.interact)
+        "thread" -> stringResource(R.string.discussion_alt)
+        "chat" -> stringResource(R.string.conversation)
+        "system" -> stringResource(R.string.alert)
+        "chapter_update" -> stringResource(R.string.home_latest)
+        "suggestion" -> stringResource(R.string.more_suggestions)
+        "reminder" -> stringResource(R.string.settings_notifications)
+        else -> stringResource(R.string.notifications)
     }
 
     Card(
@@ -249,7 +321,6 @@ private fun NotificationCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    // Unread dot
                     if (!notification.read) {
                         Box(Modifier.size(8.dp).clip(CircleShape).background(MangaColors.Primary))
                     }
@@ -261,7 +332,6 @@ private fun NotificationCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                // Type badge + time
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -272,6 +342,11 @@ private fun NotificationCard(
                     ) {
                         Text(typeLabel, color = typeColor, style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
                     }
+                }
+            }
+        }
+    }
+}
                 }
             }
         }

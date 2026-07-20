@@ -189,8 +189,13 @@ fun MangaNavGraph(
         composable(Screen.Notifications.route) {
             NotificationCenterScreen(
                 onBack = { navController.popBackStack() },
-                onOpenThread = { item ->
-                    navController.navigate(Screen.Community.createRoute(item.sourceId, item.mangaId, item.slug, item.chapterUrl, item.commentId))
+                onNotificationClick = { item ->
+                    if (item.mangaId != null) {
+                        navController.navigate(Screen.Detail.createRoute(
+                            item.mangaId.substringBefore("_", "azora"),
+                            item.mangaId.substringAfter("_", item.mangaId)
+                        ))
+                    }
                 }
             )
         }
