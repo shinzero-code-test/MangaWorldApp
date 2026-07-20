@@ -1,9 +1,76 @@
-
 package com.exapps.mangaworld.presentation.profile
-import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 
-
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.ListAlt
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import coil.compose.AsyncImage
+import coil.imageLoader
+import coil.request.ImageRequest
+import com.exapps.mangaworld.core.firebase.CloudinaryUploader
+import com.exapps.mangaworld.domain.model.CustomUserList
+import com.exapps.mangaworld.domain.model.CustomUserListItem
+import com.exapps.mangaworld.domain.repository.CommunityRepository
+import com.exapps.mangaworld.presentation.theme.MangaColors
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlin.math.roundToInt
+import javax.inject.Inject
 
 // =====================================================================================
 // ViewModel — business logic is unchanged from the original implementation.
@@ -839,3 +906,6 @@ private fun VisibilityOption(
         }
         if (selected) {
             Icon(Icons.Filled.Check, contentDescription = null, tint = MangaColors.Cyan, modifier = Modifier.size(20.dp))
+        }
+    }
+}

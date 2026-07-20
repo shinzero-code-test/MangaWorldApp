@@ -1,9 +1,46 @@
-
 package com.exapps.mangaworld.presentation.localstorage
-import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 
-
+import android.content.Context
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import coil.compose.AsyncImage
+import com.exapps.mangaworld.core.data.download.DownloadQueueManager
+import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
+import com.exapps.mangaworld.presentation.theme.MangaColors
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.util.zip.ZipInputStream
+import javax.inject.Inject
 
 data class ImportedChapter(
     val number: Float,
@@ -513,3 +550,6 @@ private suspend fun importManga(
         } catch (e: Exception) {
             onProgress(ImportProgress(error = e.message ?: stringResource(R.string.unknown_error)))
             null
+        }
+    }
+}

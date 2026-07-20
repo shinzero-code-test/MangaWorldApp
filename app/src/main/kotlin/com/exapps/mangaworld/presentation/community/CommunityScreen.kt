@@ -1,9 +1,48 @@
-
 package com.exapps.mangaworld.presentation.community
-import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 
-
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import coil.compose.AsyncImage
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
+import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
+import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
+import com.exapps.mangaworld.core.firebase.filterMutedComments
+import com.exapps.mangaworld.domain.model.AppSettings
+import com.exapps.mangaworld.domain.model.CommunityComment
+import com.exapps.mangaworld.domain.model.CommunityProfile
+import com.exapps.mangaworld.domain.model.MangaReview
+import com.exapps.mangaworld.domain.repository.CommunityRepository
+import com.exapps.mangaworld.domain.repository.SettingsRepository
+import com.exapps.mangaworld.presentation.theme.MangaColors
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 enum class CommunityTab { COMMENTS, REVIEWS }
 
@@ -422,3 +461,6 @@ private fun ReviewCard(review: MangaReview, onProfileClick: () -> Unit) {
             }
             if (review.title.isNotBlank()) Text(review.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
             if (review.body.isNotBlank()) Text(review.body, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}

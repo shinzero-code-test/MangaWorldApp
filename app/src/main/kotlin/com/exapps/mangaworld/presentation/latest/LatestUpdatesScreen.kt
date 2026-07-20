@@ -1,9 +1,71 @@
-
 package com.exapps.mangaworld.presentation.latest
-import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 
-
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.data.isBlockedBy
+import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
+import com.exapps.mangaworld.domain.model.LatestChapterItem
+import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.repository.LibraryRepository
+import com.exapps.mangaworld.domain.repository.MangaRepository
+import com.exapps.mangaworld.domain.repository.SettingsRepository
+import com.exapps.mangaworld.presentation.components.EmptyState
+import com.exapps.mangaworld.presentation.components.MangaCover
+import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.utils.filterLatestUpdates
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.Stable
+import javax.inject.Inject
 
 @Stable
 data class LatestUpdatesUiState(
@@ -224,4 +286,3 @@ fun LatestUpdatesScreen(
         }
     }
 }
-

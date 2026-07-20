@@ -1,9 +1,54 @@
-
 package com.exapps.mangaworld.presentation.navigation
-import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 
-
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.navigation.*
+import androidx.navigation.compose.*
+import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.presentation.browse.BrowseScreen
+import com.exapps.mangaworld.presentation.cloud.CloudSyncScreen
+import com.exapps.mangaworld.presentation.community.CommunityChatScreen
+import com.exapps.mangaworld.presentation.community.ModerationDashboardScreen
+import com.exapps.mangaworld.presentation.community.CommunityScreen
+import com.exapps.mangaworld.presentation.detail.MangaDetailScreen
+import com.exapps.mangaworld.presentation.diagnostics.DiagnosticsScreen
+import com.exapps.mangaworld.presentation.downloads.DownloadsScreen
+import com.exapps.mangaworld.presentation.home.HomeScreen
+import com.exapps.mangaworld.presentation.library.LibraryScreen
+import com.exapps.mangaworld.presentation.latest.LatestUpdatesScreen
+import com.exapps.mangaworld.presentation.localstorage.LocalStorageScreen
+import com.exapps.mangaworld.presentation.notifications.NotificationCenterScreen
+import com.exapps.mangaworld.presentation.profile.PublicProfileScreen
+import com.exapps.mangaworld.presentation.profile.UserProfileScreen
+import com.exapps.mangaworld.presentation.profile.UserListsScreen
+import com.exapps.mangaworld.presentation.reader.ReaderScreen
+import com.exapps.mangaworld.presentation.search.SearchScreen
+import com.exapps.mangaworld.presentation.settings.SettingsScreen
+import com.exapps.mangaworld.presentation.stats.ReadingStatsScreen
+import com.exapps.mangaworld.presentation.collections.CollectionsScreen
+import com.exapps.mangaworld.presentation.goals.GoalsScreen
+import com.exapps.mangaworld.presentation.more.MoreScreen
+import com.exapps.mangaworld.presentation.sources.SourcesScreen
+import com.exapps.mangaworld.presentation.sources.SourceBrowseScreen
+import com.exapps.mangaworld.presentation.localstorage.LocalMangaDetailScreen
+import com.exapps.mangaworld.presentation.localstorage.ImportMangaScreen
+import com.exapps.mangaworld.presentation.suggestions.SuggestionsScreen
+import com.exapps.mangaworld.presentation.auth.login.LoginScreen
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
 
 sealed class Screen(val route: String) {
     object Home        : Screen("home")
@@ -577,4 +622,3 @@ fun MangaNavGraph(
         }
     }
 }
-

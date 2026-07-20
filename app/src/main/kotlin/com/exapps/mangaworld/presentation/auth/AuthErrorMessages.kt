@@ -1,9 +1,11 @@
-
 package com.exapps.mangaworld.presentation.auth
-import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 
-
+import com.exapps.mangaworld.core.firebase.AccountMergeReason
+import com.google.firebase.FirebaseNetworkException
+import com.google.firebase.FirebaseTooManyRequestsException
+import com.google.firebase.auth.FirebaseAuthException
 
 internal fun accountMergeMessage(reason: AccountMergeReason): String =
     when (reason) {
@@ -52,4 +54,3 @@ private const val ERROR_INVALID_EMAIL = "ERROR_INVALID_EMAIL"
 private const val ERROR_NETWORK_REQUEST_FAILED = "ERROR_NETWORK_REQUEST_FAILED"
 private const val ERROR_TOO_MANY_REQUESTS = "ERROR_TOO_MANY_REQUESTS"
 private const val ERROR_OPERATION_NOT_ALLOWED = "ERROR_OPERATION_NOT_ALLOWED"
-

@@ -1,9 +1,8 @@
-
 package com.exapps.mangaworld.presentation.reader
-import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 
-
+import androidx.compose.runtime.Immutable
 
 enum class TapZone(val label: String) {
     TOP_LEFT(stringResource(R.string.str_025)),
@@ -52,4 +51,3 @@ data class TapGridConfig(
         TapZone.BOTTOM_RIGHT -> bottomRight
     }
 }
-

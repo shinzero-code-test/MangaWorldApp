@@ -1,9 +1,29 @@
-
 package com.exapps.mangaworld.presentation.detail
-import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 
-
+import androidx.compose.runtime.Immutable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.exapps.mangaworld.core.data.CookieCache
+import com.exapps.mangaworld.core.data.download.DownloadQueueManager
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
+import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
+import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
+import com.exapps.mangaworld.core.firebase.FirebaseTopicManager
+import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
+import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
+import kotlinx.coroutines.flow.first
+import com.exapps.mangaworld.domain.model.*
+import com.exapps.mangaworld.domain.repository.*
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.util.UUID
+import javax.inject.Inject
 
 @Immutable
 data class DetailUiState(
@@ -611,4 +631,3 @@ class MangaDetailViewModel @Inject constructor(
         private const val MAX_SOURCE_COMPARISONS = 10
     }
 }
-

@@ -1,6 +1,38 @@
 package com.exapps.mangaworld.widgets
 import androidx.glance.appwidget.stringResource
 
+import android.content.Context
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.glance.GlanceId
+import androidx.glance.GlanceModifier
+import androidx.glance.GlanceTheme
+import androidx.glance.ImageProvider
+import androidx.glance.LocalSize
+import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.cornerRadius
+import androidx.glance.appwidget.provideContent
+import androidx.glance.background
+import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
+import androidx.glance.layout.Row
+import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
+import androidx.glance.layout.height
+import androidx.glance.layout.padding
+import androidx.glance.layout.width
+import androidx.glance.text.FontWeight
+import androidx.glance.text.Text
+import androidx.glance.text.TextStyle
+import com.exapps.mangaworld.core.data.ContinueReadingWidgetData
+import com.exapps.mangaworld.core.integration.AppLaunchIntents
+import com.exapps.mangaworld.core.widget.WidgetEntryPoint
+import dagger.hilt.android.EntryPointAccessors
 
 class ContinueReadingWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(
@@ -118,4 +150,3 @@ private fun ContinueReadingContent(
         )
     }
 }
-

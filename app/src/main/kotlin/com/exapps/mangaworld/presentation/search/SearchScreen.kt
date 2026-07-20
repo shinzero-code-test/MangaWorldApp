@@ -1,9 +1,39 @@
-
 package com.exapps.mangaworld.presentation.search
-import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 
-
+import android.app.Activity
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
+import com.exapps.mangaworld.core.data.CookieCache
+import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.presentation.components.*
+import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.webview.WebViewSolverActivity
 
 @Composable
 fun SearchScreen(
@@ -273,4 +303,3 @@ private fun SearchResultItem(
         Icon(Icons.Filled.ChevronRight, null, tint = MangaColors.OutlineVariant)
     }
 }
-

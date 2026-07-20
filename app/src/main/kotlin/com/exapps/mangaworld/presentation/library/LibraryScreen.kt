@@ -1,9 +1,28 @@
-
 package com.exapps.mangaworld.presentation.library
-import androidx.compose.ui.res.stringResource
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 
-
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.exapps.mangaworld.domain.model.*
+import com.exapps.mangaworld.presentation.components.*
+import com.exapps.mangaworld.presentation.theme.MangaColors
 
 @Composable
 fun LibraryScreen(
@@ -261,3 +280,7 @@ private fun HistoryItem(item: ReadingHistoryItem, onClick: () -> Unit, onRemove:
                     leadingIcon = { Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.error) },
                     onClick = { onRemove(); showMenu = false }
                 )
+            }
+        }
+    }
+}

@@ -1,6 +1,37 @@
 package com.exapps.mangaworld.widgets
 import androidx.glance.appwidget.stringResource
 
+import android.content.Intent
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.glance.Button
+import androidx.glance.ButtonDefaults
+import androidx.glance.GlanceModifier
+import androidx.glance.GlanceTheme
+import androidx.glance.Image
+import androidx.glance.ImageProvider
+import androidx.glance.background
+import androidx.glance.action.clickable
+import androidx.glance.appwidget.cornerRadius
+import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.color.ColorProvider
+import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
+import androidx.glance.layout.Column
+import androidx.glance.layout.Row
+import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
+import androidx.glance.layout.height
+import androidx.glance.layout.padding
+import androidx.glance.layout.size
+import androidx.glance.layout.width
+import androidx.glance.text.FontWeight
+import androidx.glance.text.Text
+import androidx.glance.text.TextStyle
+import com.exapps.mangaworld.R
 
 @Composable
 internal fun WidgetCard(
@@ -213,4 +244,3 @@ internal fun WidgetStatusDot(active: Boolean) {
             .cornerRadius(4.dp)
     ) {}
 }
-

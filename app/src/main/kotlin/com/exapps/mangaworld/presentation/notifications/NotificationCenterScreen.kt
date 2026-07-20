@@ -245,3 +245,105 @@ fun NotificationCenterScreen(
 private fun NotificationCard(
     notification: UnifiedNotification,
     onClick: () -> Unit
+) {
+    val typeIcon = when (notification.type) {
+        "reply" -> Icons.Filled.Reply
+        "mention" -> Icons.Filled.AlternateEmail
+        "reaction" -> Icons.Filled.Star
+        "thread" -> Icons.Filled.Forum
+        "chat" -> Icons.Filled.Chat
+        "system" -> Icons.Filled.Info
+        "chapter_update" -> Icons.Filled.NewReleases
+        "suggestion" -> Icons.Filled.AutoAwesome
+        "reminder" -> Icons.Filled.Timer
+        else -> Icons.Filled.Notifications
+    }
+
+    val typeColor = when (notification.type) {
+        "reply" -> MangaColors.Cyan
+        "mention" -> MangaColors.Primary
+        "reaction" -> MangaColors.Yellow
+        "thread" -> MangaColors.Green
+        "chat" -> MangaColors.Orange
+        "system" -> MangaColors.Muted
+        "chapter_update" -> MangaColors.Cyan
+        "suggestion" -> MangaColors.Yellow
+        "reminder" -> MangaColors.Pink
+        else -> MangaColors.Muted
+    }
+
+    val typeLabel = when (notification.type) {
+        "reply" -> stringResource(R.string.community_reply)
+        "mention" -> stringResource(R.string.bookmark)
+        "reaction" -> stringResource(R.string.interact)
+        "thread" -> stringResource(R.string.discussion_alt)
+        "chat" -> stringResource(R.string.conversation)
+        "system" -> stringResource(R.string.alert)
+        "chapter_update" -> stringResource(R.string.home_latest)
+        "suggestion" -> stringResource(R.string.more_suggestions)
+        "reminder" -> stringResource(R.string.settings_notifications)
+        else -> stringResource(R.string.notifications)
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (notification.read) MangaColors.SurfaceContainer else MangaColors.GlowPurple
+        )
+    ) {
+        Row(
+            Modifier.padding(14.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Type icon
+            Box(
+                Modifier.size(36.dp).clip(CircleShape).background(typeColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(typeIcon, null, tint = typeColor, modifier = Modifier.size(18.dp))
+            }
+
+            // Content
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        notification.title,
+                        color = MangaColors.OnSurface,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (!notification.read) {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(MangaColors.Primary))
+                    }
+                }
+                Text(
+                    notification.body,
+                    color = MangaColors.OnSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier.background(typeColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(typeLabel, color = typeColor, style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
+                    }
+                }
+            }
+        }
+    }
+}
