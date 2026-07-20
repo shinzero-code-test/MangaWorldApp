@@ -280,10 +280,15 @@
     <string name="achievements">الإنجازات</string>
     <string name="widget_continue_reading_desc">تابع القراءة من حيث توقفت</string>
     <string name="widget_recommendations_desc">اقتراحات مانجا مخصصة لك</string>
+    <string name="daily_recommendations_widget_desc">اقتراحات مانجا مخصصة لك</string>
     <string name="widget_latest_updates_desc">أحدث فصول المانجا المفضلة</string>
+    <string name="latest_updates_widget_desc">أحدث فصول المانجا المفضلة</string>
     <string name="widget_library_desc">quick access to your library</string>
+    <string name="library_widget_desc">quick access to your library</string>
     <string name="widget_reading_stats_desc">إحصائيات قراءتك اليومية</string>
+    <string name="reading_stats_widget_desc">إحصائيات قراءتك اليومية</string>
     <string name="widget_shelf_desc">shortcuts to app features</string>
+    <string name="shelf_widget_desc">shortcuts to app features</string>
 
     <!-- ─── User List Dialog ───────────────────────────────────────────────── -->
     <string name="dialog_no_users">لا يوجد مستخدمون حالياً</string>
