@@ -111,6 +111,7 @@ class ReaderViewModel @Inject constructor(
     private var commentsJob: Job? = null
     private var prefetchedNextChapterUrl: String? = null
     private var lastReadAnalyticsKey: String? = null
+    private var periodicSaveJob: kotlinx.coroutines.Job? = null
 
     init {
         viewModelScope.launch {
@@ -296,6 +297,7 @@ class ReaderViewModel @Inject constructor(
                 if (!st.incognitoMode) {
                     libraryRepo.markChapterRead(st.mangaId, chNum)
                     achievementManager.recordChapterRead()
+                    readingStatsStore.incrementMangaRead()
                     scheduleAutoCleanupIfNeeded(st.mangaId, st.chapterUrl)
                     runCatching { firebaseSyncManager.pushLocalSnapshot() }
                     val analyticsKey = "${st.mangaId}|${st.chapterUrl}|$chNum"
@@ -554,6 +556,14 @@ class ReaderViewModel @Inject constructor(
     private fun beginSession(mangaId: String, chapterUrl: String) {
         activeSessionKey = "$mangaId|$chapterUrl"
         sessionCheckpointAt = System.currentTimeMillis()
+        // Periodically save reading time to prevent data loss on force-kill (every 30 seconds)
+        periodicSaveJob?.cancel()
+        periodicSaveJob = viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(30_000L)
+                trackReadingTime()
+            }
+        }
     }
 
     private fun observeAnnotations(mangaId: String, chapterUrl: String) {
@@ -664,6 +674,8 @@ class ReaderViewModel @Inject constructor(
     }
 
     private fun finishSessionAsync() {
+        periodicSaveJob?.cancel()
+        periodicSaveJob = null
         if (_state.value.incognitoMode) {
             sessionCheckpointAt = null
             activeSessionKey = null

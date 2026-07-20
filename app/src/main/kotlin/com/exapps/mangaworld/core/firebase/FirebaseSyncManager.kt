@@ -30,6 +30,7 @@ class FirebaseSyncManager @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val sessionManager: FirebaseSessionManager,
     private val prefs: AppPreferences,
+    private val readingStatsStore: com.exapps.mangaworld.core.data.ReadingStatsStore,
     private val firebaseTelemetry: FirebaseTelemetry,
     private val achievementManager: com.exapps.mangaworld.core.data.AchievementManager
 ) {
@@ -68,7 +69,10 @@ class FirebaseSyncManager @Inject constructor(
                 "imageCacheLimitMb" to settings.imageCacheLimitMb,
                 "contentBlacklist" to settings.contentBlacklist.take(200).toList(),
                 "spoilerCollapseDefault" to settings.spoilerCollapseDefault,
-                "mutedUserIds" to settings.mutedUserIds.take(100).toList()
+                "mutedUserIds" to settings.mutedUserIds.take(100).toList(),
+                // Sync reading stats so they survive device switches
+                "totalReadingTimeMs" to readingStatsStore.totalReadingTimeMs.first(),
+                "totalMangaRead" to readingStatsStore.totalMangaRead.first()
             )
             writes += userRef.collection("preferences").document("reader") to mapOf(
                 "mode" to reader.mode.name,

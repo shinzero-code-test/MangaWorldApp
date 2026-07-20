@@ -212,14 +212,9 @@ class AchievementManager @Inject constructor(
         goals.forEachIndexed { index, goal ->
             if (goal.isActive && !goal.isCompleted) {
                 val newValue = when (goal.type) {
-                    GoalType.PAGES_READ -> totalPages
-                    GoalType.CHAPTERS_READ -> totalChapters
-                    GoalType.READING_TIME -> {
-                        // Read actual total reading time from ReadingStatsStore (ms → minutes)
-                        runCatching {
-                            (readingStatsStore.totalReadingTimeMs.first() / 60_000).toInt()
-                        }.getOrDefault(0)
-                    }
+                    GoalType.PAGES_READ -> getPeriodPages(goal.period)
+                    GoalType.CHAPTERS_READ -> getPeriodChapters(goal.period)
+                    GoalType.READING_TIME -> getPeriodReadingTimeMinutes(goal.period)
                 }
                 if (newValue != goal.currentValue) {
                     goals[index] = goal.copy(currentValue = newValue)
@@ -382,5 +377,46 @@ class AchievementManager @Inject constructor(
             arr.put(obj)
         }
         return arr.toString()
+    }
+
+    /** Get pages read in the current period (daily/weekly/monthly). */
+    private suspend fun getPeriodPages(period: GoalPeriod): Int {
+        val dailyStats = readingStatsStore.dailyStats.first()
+        val today = java.time.LocalDate.now()
+        return when (period) {
+            GoalPeriod.DAILY -> dailyStats.filter { it.date == today.toString() }.sumOf { it.pagesRead }
+            GoalPeriod.WEEKLY -> {
+                val weekStart = today.minusDays(today.dayOfWeek.value.toLong() - 1)
+                dailyStats.filter { java.time.LocalDate.parse(it.date) >= weekStart }.sumOf { it.pagesRead }
+            }
+            GoalPeriod.MONTHLY -> {
+                val monthStart = today.withDayOfMonth(1)
+                dailyStats.filter { java.time.LocalDate.parse(it.date) >= monthStart }.sumOf { it.pagesRead }
+            }
+        }
+    }
+
+    /** Get chapters read in the current period (estimated from pages). */
+    private suspend fun getPeriodChapters(period: GoalPeriod): Int {
+        // Chapters are tracked via daily stats pages — approximate by dividing avg pages per chapter
+        val pages = getPeriodPages(period)
+        return (pages / 20).coerceAtLeast(0) // ~20 pages per chapter estimate
+    }
+
+    /** Get reading time in minutes for the current period. */
+    private suspend fun getPeriodReadingTimeMinutes(period: GoalPeriod): Int {
+        val dailyStats = readingStatsStore.dailyStats.first()
+        val today = java.time.LocalDate.now()
+        return when (period) {
+            GoalPeriod.DAILY -> dailyStats.filter { it.date == today.toString() }.sumOf { it.readingTimeMinutes }
+            GoalPeriod.WEEKLY -> {
+                val weekStart = today.minusDays(today.dayOfWeek.value.toLong() - 1)
+                dailyStats.filter { java.time.LocalDate.parse(it.date) >= weekStart }.sumOf { it.readingTimeMinutes }
+            }
+            GoalPeriod.MONTHLY -> {
+                val monthStart = today.withDayOfMonth(1)
+                dailyStats.filter { java.time.LocalDate.parse(it.date) >= monthStart }.sumOf { it.readingTimeMinutes }
+            }
+        }
     }
 }
