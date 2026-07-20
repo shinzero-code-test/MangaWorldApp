@@ -47,6 +47,14 @@ class FirebaseRemoteConfigManager @Inject constructor() {
     private val _scraperRuntimeConfig = MutableStateFlow(ScraperRuntimeConfig())
     val scraperRuntimeConfig: StateFlow<ScraperRuntimeConfig> = _scraperRuntimeConfig.asStateFlow()
 
+    // Engagement tier thresholds (configurable via Remote Config)
+    private val _engagementWarmingMs = MutableStateFlow(900_000L)
+    val engagementWarmingMs: StateFlow<Long> = _engagementWarmingMs.asStateFlow()
+    private val _engagementActiveMs = MutableStateFlow(3_600_000L)
+    val engagementActiveMs: StateFlow<Long> = _engagementActiveMs.asStateFlow()
+    private val _engagementAvidMs = MutableStateFlow(36_000_000L)
+    val engagementAvidMs: StateFlow<Long> = _engagementAvidMs.asStateFlow()
+
     init {
         scope.launch {
             // Await both async operations so applyState() reads correct defaults
@@ -82,7 +90,10 @@ class FirebaseRemoteConfigManager @Inject constructor() {
                     "scraper_retry_count" to 1,
                     "home_layout_variant" to "default",
                     "community_banned_keywords" to "",
-                    "remote_alert_message" to ""
+                    "remote_alert_message" to "",
+                    "engagement_tier_warming_ms" to 900000L,
+                    "engagement_tier_active_ms" to 3600000L,
+                    "engagement_tier_avid_ms" to 36000000L
                 )
             ).await()
             applyState()
@@ -139,6 +150,9 @@ class FirebaseRemoteConfigManager @Inject constructor() {
             retryCount = remoteConfig.getLong("scraper_retry_count").toInt().coerceIn(0, 3)
         )
         RemoteSelectorOverridesStore.replaceAll(parseOverrides(overridesJson))
+        _engagementWarmingMs.value = remoteConfig.getLong("engagement_tier_warming_ms").coerceAtLeast(0)
+        _engagementActiveMs.value = remoteConfig.getLong("engagement_tier_active_ms").coerceAtLeast(0)
+        _engagementAvidMs.value = remoteConfig.getLong("engagement_tier_avid_ms").coerceAtLeast(0)
     }
 
     private fun parseOverrides(json: String): Map<String, Map<String, String>> = runCatching {

@@ -60,10 +60,16 @@ class FirebaseUserInsightsCoordinator @Inject constructor(
         }
     }
 
-    private fun engagementTier(totalMs: Long): String = when {
-        totalMs >= 10 * 60 * 60 * 1000L -> "avid"
-        totalMs >= 60 * 60 * 1000L -> "active"
-        totalMs >= 15 * 60 * 1000L -> "warming"
-        else -> "new"
+    private fun engagementTier(totalMs: Long): String {
+        // Thresholds from Remote Config (defaults: 15min, 1hr, 10hr)
+        val warmingMs = remoteConfigManager.engagementWarmingMs.value
+        val activeMs = remoteConfigManager.engagementActiveMs.value
+        val avidMs = remoteConfigManager.engagementAvidMs.value
+        return when {
+            totalMs >= avidMs -> "avid"
+            totalMs >= activeMs -> "active"
+            totalMs >= warmingMs -> "warming"
+            else -> "new"
+        }
     }
 }
