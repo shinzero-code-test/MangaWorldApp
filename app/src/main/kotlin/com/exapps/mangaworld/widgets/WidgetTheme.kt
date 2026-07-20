@@ -42,7 +42,7 @@ private object MangaColors {
 
     // Monochrome — pure grayscale, red swapped for a near-white accent so the
     // "أحادي اللون" preview swatch (grey pill) in the mock is honored.
-    val MonoAccent = Color(0xFFE6E6E6)
+    val MonoAccent = Color(0xFFB0B0B0)
     val MonoBackground = Color(0xFF121212)
     val MonoSurface = Color(0xFF1B1B1B)
     val MonoSurfaceVariant = Color(0xFF2A2A2A)
