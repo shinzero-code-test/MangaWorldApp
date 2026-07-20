@@ -52,7 +52,7 @@ export default function DashboardOverview() {
           totalReviews: d.totalReviews ?? 0, openReports: d.openReports ?? 0,
           recentSignUps: d.recentSignUps ?? 0, roleCounts: d.roleCounts ?? {},
         });
-        setSvcs({ auth:true, db:true, rc:true, fcm:true, crash:false });
+        setSvcs(d.services ?? { auth:true, db:true, rc:true, fcm:true, crash:false });
         setLoading(false);
       })
       .catch(() => { if (mounted.current) setLoading(false); });

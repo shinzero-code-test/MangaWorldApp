@@ -38,7 +38,7 @@ export default function CrashlyticsPage() {
     setExpanded(p => { const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n; });
 
   const filtered = issues.filter(i => filter==="all" ? true : i.state===filter);
-  const cfr      = stats?.crashFreeRate ?? 99.5;
+  const cfr      = stats?.crashFreeRate ?? 0;
   const cfrColor = cfr>=99?"var(--success)":cfr>=95?"var(--warning)":"var(--destructive)";
 
   const STAT_CARDS = [

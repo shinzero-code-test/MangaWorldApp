@@ -30,7 +30,7 @@ export async function GET() {
       parameters: params,
       template: {
         parameterCount: Object.keys(template.parameters).length,
-        conditionCount: 0,
+        conditionCount: Object.keys(template.conditions ?? {}).length,
         etag: template.etag,
       },
     });

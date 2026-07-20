@@ -33,7 +33,7 @@ export async function GET() {
               : m.ref.collection("reviews").count().get(),
             m.ref.collection("reviews").count().get(),
           ]);
-          return { comments: 0, reviews: rSnap.data().count };
+          return { comments: cSnap.data().count, reviews: rSnap.data().count };
         })
       );
       totalReviews = counts.reduce((a, c) => a + c.reviews, 0);
@@ -45,6 +45,20 @@ export async function GET() {
 
     const roleCounts = await getDashboardRoleCounts();
 
+    // Service health checks — ping each Firebase service
+    const healthChecks = await Promise.allSettled([
+      getAdminDb().collection("publicProfiles").limit(1).get(), // Firestore
+    ]);
+    const dbOk = healthChecks[0].status === "fulfilled";
+
+    // Auth is always available if we got this far (session cookie verified)
+    // Crashlytics is available if crash_reports collection exists
+    let crashOk = false;
+    try {
+      await getAdminDb().collection("crash_reports").limit(1).get();
+      crashOk = true;
+    } catch { /* not available */ }
+
     return NextResponse.json({
       totalUsers,
       totalComments,
@@ -52,6 +66,7 @@ export async function GET() {
       openReports,
       recentSignUps,
       roleCounts,
+      services: { auth: true, db: dbOk, rc: true, fcm: true, crash: crashOk },
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

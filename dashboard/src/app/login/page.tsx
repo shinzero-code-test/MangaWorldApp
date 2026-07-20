@@ -156,12 +156,12 @@ export default function LoginPage() {
             والتحليلات من مكان واحد.
           </p>
 
-          {/* Floating stat cards */}
+          {/* Feature highlights */}
           <div className="flex gap-4 justify-center mt-8 flex-wrap">
             {[
-              { label: "مستخدم", value: "٢٤ألف" },
-              { label: "فصل", value: "١٢ألف" },
-              { label: "تقييم", value: "٩٨%" },
+              { icon: "👥", label: "إدارة المستخدمين" },
+              { icon: "📊", label: "تحليلات مباشرة" },
+              { icon: "🛡️", label: "مراقبة المحتوى" },
             ].map((s) => (
               <div
                 key={s.label}
@@ -171,7 +171,7 @@ export default function LoginPage() {
                   border: "1px solid rgba(139,92,246,0.2)",
                 }}
               >
-                <p className="text-xl font-bold text-white">{s.value}</p>
+                <p className="text-xl">{s.icon}</p>
                 <p className="text-xs mt-0.5" style={{ color: "rgba(167,139,250,0.7)" }}>
                   {s.label}
                 </p>

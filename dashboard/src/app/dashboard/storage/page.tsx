@@ -42,10 +42,10 @@ export default function StoragePage() {
   }, []);
 
   const breakdown: StorageBreakdown[] = (data?.breakdown ?? [
-    { id: "images",    label: "الصور",         bytes: 4_500_000_000, fileCount: 12400 },
-    { id: "documents", label: "المستندات",     bytes: 800_000_000,  fileCount: 340 },
-    { id: "cache",     label: "الذاكرة المؤقتة",bytes: 200_000_000, fileCount: 89 },
-    { id: "other",     label: "أخرى",          bytes: 100_000_000,  fileCount: 12 },
+    { id: "images",    label: "الصور",         bytes: 0, fileCount: 0 },
+    { id: "documents", label: "المستندات",     bytes: 0, fileCount: 0 },
+    { id: "cache",     label: "الذاكرة المؤقتة",bytes: 0, fileCount: 0 },
+    { id: "other",     label: "أخرى",          bytes: 0, fileCount: 0 },
   ]).map((b: any, i: number) => ({
     ...b,
     icon:  ICONS[b.id] ?? Folder,
