@@ -344,8 +344,7 @@ fun ReaderScreen(
                             ) {
                                 Column(Modifier.fillMaxWidth().padding(14.dp)) {
                                     Text(
-                                        text = stringResource(R.string.fmt_052, page.index + 1) +
-                                            if (page.index in state.bookmarkedPages) " • محفوظة" else "",
+                                        text = stringResource(R.string.fmt_052, page.index + 1) + if (page.index in state.bookmarkedPages) " • محفوظة" else "",
                                         color = MangaColors.OnSurface,
                                         fontWeight = FontWeight.SemiBold
                                     )
