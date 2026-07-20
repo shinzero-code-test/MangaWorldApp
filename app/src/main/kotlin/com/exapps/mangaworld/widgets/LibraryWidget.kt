@@ -1,5 +1,4 @@
 package com.exapps.mangaworld.widgets
-import androidx.glance.appwidget.stringResource
 
 import android.content.Context
 import androidx.compose.runtime.Composable
@@ -17,6 +16,7 @@ import androidx.glance.layout.height
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.core.widget.WidgetEntryPoint
 import dagger.hilt.android.EntryPointAccessors
+import androidx.glance.LocalContext
 
 class LibraryWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(
@@ -53,16 +53,16 @@ private fun LibraryWidgetContent(
     val visibleCount = settings.getVisibleItemCount(size.height.value.toInt())
 
     WidgetCard(
-        title = stringResource(com.exapps.mangaworld.R.string.widget_library_title),
+        title = LocalContext.current.getString(R.string.widget_library_title),
         showTitle = showTitles,
         transparentBg = transparentBg
     ) {
         if (entries.isEmpty()) {
             WidgetEmptyState(
-                title = stringResource(com.exapps.mangaworld.R.string.widget_empty_library),
-                subtitle = stringResource(com.exapps.mangaworld.R.string.widget_empty_library_hint),
+                title = LocalContext.current.getString(R.string.widget_empty_library),
+                subtitle = LocalContext.current.getString(R.string.widget_empty_library_hint),
                 intent = AppLaunchIntents.home(context),
-                actionLabel = stringResource(com.exapps.mangaworld.R.string.widget_browse),
+                actionLabel = LocalContext.current.getString(R.string.widget_browse),
                 retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
@@ -71,7 +71,7 @@ private fun LibraryWidgetContent(
         entries.take(visibleCount).forEachIndexed { index, entry ->
             WidgetListItem(
                 title = entry.title,
-                subtitle = if (showTitles) stringResource(com.exapps.mangaworld.R.string.widget_library_hint) else null,
+                subtitle = if (showTitles) LocalContext.current.getString(R.string.widget_library_hint) else null,
                 trailing = if (showBadge && entry.newChapterCount > 0) "+${entry.newChapterCount}" else null,
                 showTitle = showTitles,
                 showBadge = showBadge,

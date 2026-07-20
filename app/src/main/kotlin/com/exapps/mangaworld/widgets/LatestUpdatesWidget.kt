@@ -1,5 +1,4 @@
 package com.exapps.mangaworld.widgets
-import androidx.glance.appwidget.stringResource
 
 import android.content.Context
 import androidx.compose.runtime.Composable
@@ -17,6 +16,7 @@ import androidx.glance.layout.height
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.core.widget.WidgetEntryPoint
 import dagger.hilt.android.EntryPointAccessors
+import androidx.glance.LocalContext
 
 class LatestUpdatesWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(
@@ -52,16 +52,16 @@ private fun LatestUpdatesContent(
     val visibleCount = settings.getVisibleItemCount(size.height.value.toInt())
 
     WidgetCard(
-        title = stringResource(com.exapps.mangaworld.R.string.widget_latest_title),
+        title = LocalContext.current.getString(R.string.widget_latest_title),
         showTitle = showTitles,
         transparentBg = transparentBg
     ) {
         if (updates.isEmpty()) {
             WidgetEmptyState(
-                title = stringResource(com.exapps.mangaworld.R.string.widget_empty_latest),
-                subtitle = stringResource(com.exapps.mangaworld.R.string.widget_empty_latest_hint),
+                title = LocalContext.current.getString(R.string.widget_empty_latest),
+                subtitle = LocalContext.current.getString(R.string.widget_empty_latest_hint),
                 intent = AppLaunchIntents.latestUpdates(context),
-                actionLabel = stringResource(com.exapps.mangaworld.R.string.widget_view_updates),
+                actionLabel = LocalContext.current.getString(R.string.widget_view_updates),
                 retryIntent = AppLaunchIntents.latestUpdates(context)
             )
             return@WidgetCard

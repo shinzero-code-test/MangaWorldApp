@@ -1,5 +1,4 @@
 package com.exapps.mangaworld.widgets
-import androidx.glance.appwidget.stringResource
 
 import android.content.Context
 import androidx.compose.runtime.Composable
@@ -33,6 +32,7 @@ import com.exapps.mangaworld.core.data.ContinueReadingWidgetData
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.core.widget.WidgetEntryPoint
 import dagger.hilt.android.EntryPointAccessors
+import androidx.glance.LocalContext
 
 class ContinueReadingWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(
@@ -69,16 +69,16 @@ private fun ContinueReadingContent(
     val transparentBg = settings.isTransparentBg()
 
     WidgetCard(
-        title = stringResource(com.exapps.mangaworld.R.string.widget_tab_continue),
+        title = LocalContext.current.getString(R.string.widget_tab_continue),
         showTitle = showTitles,
         transparentBg = transparentBg
     ) {
         if (data == null) {
             WidgetEmptyState(
-                title = stringResource(com.exapps.mangaworld.R.string.widget_empty_reading),
-                subtitle = stringResource(com.exapps.mangaworld.R.string.widget_empty_reading_hint),
+                title = LocalContext.current.getString(R.string.widget_empty_reading),
+                subtitle = LocalContext.current.getString(R.string.widget_empty_reading_hint),
                 intent = AppLaunchIntents.home(context),
-                actionLabel = stringResource(com.exapps.mangaworld.R.string.widget_open_app),
+                actionLabel = LocalContext.current.getString(R.string.widget_open_app),
                 retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
@@ -145,7 +145,7 @@ private fun ContinueReadingContent(
         }
 
         WidgetPrimaryButton(
-            label = stringResource(com.exapps.mangaworld.R.string.widget_action_read),
+            label = LocalContext.current.getString(R.string.widget_action_read),
             intent = AppLaunchIntents.reader(context, data.sourceId, data.mangaId, data.chapterUrl)
         )
     }

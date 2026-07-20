@@ -1,5 +1,4 @@
 package com.exapps.mangaworld.widgets
-import androidx.glance.appwidget.stringResource
 
 import android.content.Context
 import androidx.compose.runtime.Composable
@@ -18,6 +17,7 @@ import com.exapps.mangaworld.core.data.RemoteWidgetsSnapshot
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.core.widget.WidgetEntryPoint
 import dagger.hilt.android.EntryPointAccessors
+import androidx.glance.LocalContext
 
 class DailyRecommendationsWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(
@@ -53,16 +53,16 @@ private fun DailyRecommendationsContent(
     val visibleCount = settings.getVisibleItemCount(size.height.value.toInt())
 
     WidgetCard(
-        title = stringResource(com.exapps.mangaworld.R.string.widget_today_recommendations),
+        title = LocalContext.current.getString(R.string.widget_today_recommendations),
         showTitle = showTitles,
         transparentBg = transparentBg
     ) {
         if (snapshot.recommendation == null && snapshot.trending == null && snapshot.latestUpdates.isEmpty()) {
             WidgetEmptyState(
-                title = stringResource(com.exapps.mangaworld.R.string.widget_empty_recommendations),
-                subtitle = stringResource(com.exapps.mangaworld.R.string.widget_empty_recommendations_hint),
+                title = LocalContext.current.getString(R.string.widget_empty_recommendations),
+                subtitle = LocalContext.current.getString(R.string.widget_empty_recommendations_hint),
                 intent = AppLaunchIntents.home(context),
-                actionLabel = stringResource(com.exapps.mangaworld.R.string.widget_open_app),
+                actionLabel = LocalContext.current.getString(R.string.widget_open_app),
                 retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
@@ -74,8 +74,8 @@ private fun DailyRecommendationsContent(
             if (itemCount < visibleCount) {
                 WidgetListItem(
                     title = recommendation.title,
-                    subtitle = if (showTitles) recommendation.subtitle ?: stringResource(com.exapps.mangaworld.R.string.widget_recommended_for_you) else null,
-                    trailing = if (showBadge) stringResource(com.exapps.mangaworld.R.string.widget_recommendation_badge) else null,
+                    subtitle = if (showTitles) recommendation.subtitle ?: LocalContext.current.getString(R.string.widget_recommended_for_you) else null,
+                    trailing = if (showBadge) LocalContext.current.getString(R.string.widget_recommendation_badge) else null,
                     showTitle = showTitles,
                     showBadge = showBadge,
                     intent = AppLaunchIntents.detail(context, recommendation.sourceId, recommendation.slug)
@@ -89,8 +89,8 @@ private fun DailyRecommendationsContent(
             if (itemCount < visibleCount) {
                 WidgetListItem(
                     title = trending.title,
-                    subtitle = if (showTitles) trending.subtitle ?: stringResource(com.exapps.mangaworld.R.string.widget_trending) else null,
-                    trailing = if (showBadge) stringResource(com.exapps.mangaworld.R.string.widget_trending_badge) else null,
+                    subtitle = if (showTitles) trending.subtitle ?: LocalContext.current.getString(R.string.widget_trending) else null,
+                    trailing = if (showBadge) LocalContext.current.getString(R.string.widget_trending_badge) else null,
                     showTitle = showTitles,
                     showBadge = showBadge,
                     intent = AppLaunchIntents.detail(context, trending.sourceId, trending.slug)

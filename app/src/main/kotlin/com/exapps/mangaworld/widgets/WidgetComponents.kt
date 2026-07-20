@@ -1,5 +1,4 @@
 package com.exapps.mangaworld.widgets
-import androidx.glance.appwidget.stringResource
 
 import android.content.Intent
 import androidx.compose.runtime.Composable
@@ -32,6 +31,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.exapps.mangaworld.R
+import androidx.glance.LocalContext
 
 @Composable
 internal fun WidgetCard(
@@ -217,7 +217,7 @@ internal fun WidgetEmptyState(title: String, subtitle: String, intent: Intent? =
         }
         if (retryIntent != null) {
             Spacer(GlanceModifier.height(6.dp))
-            WidgetPrimaryButton(label = stringResource(com.exapps.mangaworld.R.string.widget_retry), intent = retryIntent)
+            WidgetPrimaryButton(label = LocalContext.current.getString(R.string.widget_retry), intent = retryIntent)
         }
     }
 }
