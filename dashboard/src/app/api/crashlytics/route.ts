@@ -1,52 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
-import { getAdminDb } from "@/lib/firebase-admin";
+import { getAccessToken } from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
+const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? "";
+
+export async function GET() {
   try {
     await requireRole("super-admin");
 
-    // Read crash reports from Firestore crash_reports collection
-    // (populated by a Cloud Function or app-side crash reporter)
+    const token = await getAccessToken();
+    const baseUrl = `https://fabriccrashlytics.googleapis.com/v1beta1/projects/${PROJECT_ID}/issues`;
+
+    // Fetch crash issues from Crashlytics REST API
     let issues: any[] = [];
     try {
-      const snap = await getAdminDb()
-        .collection("crash_reports")
-        .orderBy("lastOccurrence", "desc")
-        .limit(50)
-        .get();
-      issues = snap.docs.map((doc) => {
-        const d = doc.data();
-        return {
-          id: doc.id,
-          title: d.title || "Unknown crash",
-          subtitle: d.subtitle || "",
-          state: d.state || "open",
-          count: d.count || 0,
-          users: d.users || 0,
-          firstOccurrence: d.firstOccurrence
-            ? new Date(d.firstOccurrence).toISOString()
-            : null,
-          lastOccurrence: d.lastOccurrence
-            ? new Date(d.lastOccurrence).toISOString()
-            : null,
-          appVersions: d.appVersions || [],
-          osVersions: d.osVersions || [],
-          devices: d.devices || [],
-        };
+      const response = await fetch(`${baseUrl}?pageSize=50&state=OPEN`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
+      if (response.ok) {
+        const data = await response.json();
+        issues = (data.issues || []).map((issue: any) => ({
+          id: issue.issueId || issue.id || "",
+          title: issue.title || "Unknown crash",
+          subtitle: issue.subtitle || "",
+          state: issue.state?.toLowerCase() || "open",
+          count: issue.issueCount || 0,
+          users: issue.affectedUserCount || 0,
+          firstOccurrence: issue.firstOccurrence?.substring(0, 19) || null,
+          lastOccurrence: issue.latestOccurrence?.substring(0, 19) || null,
+          appVersions: issue.appVersionDisplay || [],
+          osVersions: issue.osVersionDisplay || [],
+          devices: issue.deviceModelDisplay || [],
+        }));
+      }
     } catch {
-      // crash_reports collection may not exist yet
+      // Crashlytics API may not be available
     }
 
     const totalIssues = issues.length;
     const openIssues = issues.filter((i) => i.state === "open").length;
     const totalCrashes = issues.reduce((sum, i) => sum + (i.count || 0), 0);
     const affectedUsers = issues.reduce((sum, i) => sum + (i.users || 0), 0);
-
-    // Crash-free rate is estimated from crash data (if no crashes, assume 100%)
     const crashFreeRate = totalCrashes === 0 ? 100 : Math.max(90, 100 - totalCrashes * 0.1);
 
     return NextResponse.json({

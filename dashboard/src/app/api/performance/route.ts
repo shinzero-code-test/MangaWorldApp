@@ -1,44 +1,43 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
-import { getAdminDb } from "@/lib/firebase-admin";
+import { getAccessToken } from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
+
+const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? "";
 
 export async function GET() {
   try {
     await requireRole("super-admin");
-    const db = getAdminDb();
 
-    // Read performance traces from Firestore performance_traces collection
-    // (populated by the app's FirebaseTelemetry.traceSuspend/trace calls)
+    const token = await getAccessToken();
+    const baseUrl = `https://firebaseperformance.googleapis.com/v1beta1/projects/${PROJECT_ID}`;
+
+    // Fetch performance traces from Performance Monitoring API
     let traces: any[] = [];
     try {
-      const snap = await db.collection("performance_traces")
-        .orderBy("startedAt", "desc")
-        .limit(100)
-        .get();
-      traces = snap.docs.map((doc) => {
-        const d = doc.data();
-        return {
-          id: doc.id,
-          name: d.name || "unknown",
-          duration: d.duration || 0,
-          networkType: d.networkType || "unknown",
-          metrics: d.metrics || {},
-          startedAt: d.startedAt || 0,
-        };
-      });
+      // List traces (custom traces from the app)
+      const response = await fetch(
+        `${baseUrl}/traces?pageSize=100&orderBy=startTime%20desc`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        traces = (data.traces || []).map((trace: any) => ({
+          name: trace.name || "unknown",
+          duration: trace.durations
+            ? Object.values(trace.durations).reduce((a: number, b: any) => a + (Number(b) || 0), 0)
+            : 0,
+          networkType: trace.attributes?.network_type || "unknown",
+          metrics: trace.metrics || {},
+          startedAt: trace.startTime ? new Date(trace.startTime).getTime() : 0,
+        }));
+      }
     } catch {
-      // performance_traces collection may not exist
+      // Performance API may not be available
     }
 
-    // Calculate summary stats from traces
     const totalTraces = traces.length;
-    const avgDuration = totalTraces > 0
-      ? Math.round(traces.reduce((sum, t) => sum + (t.duration || 0), 0) / totalTraces)
-      : 0;
-
-    // Separate by trace type
     const startupTraces = traces.filter((t) => t.name?.includes("startup") || t.name?.includes("app_start"));
     const networkTraces = traces.filter((t) => t.name?.includes("network") || t.name?.includes("http"));
     const renderTraces = traces.filter((t) => t.name?.includes("render") || t.name?.includes("draw"));

@@ -1,51 +1,72 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
-import { getAdminDb } from "@/lib/firebase-admin";
+import { getAccessToken } from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
+
+const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? "";
+const GA4_PROPERTY_ID = process.env.GA4_PROPERTY_ID ?? "";
 
 export async function GET() {
   try {
     await requireRole("viewer");
-    const db = getAdminDb();
 
-    // Read analytics events from Firestore analytics_events collection
+    if (!GA4_PROPERTY_ID) {
+      return NextResponse.json({
+        events: [],
+        topEvents: [],
+        totalEvents: 0,
+        note: "GA4_PROPERTY_ID not configured",
+      });
+    }
+
+    const token = await getAccessToken();
+
+    // Fetch recent events from GA4 Data API
     let events: any[] = [];
     try {
-      const snap = await db.collection("analytics_events")
-        .orderBy("createdAt", "desc")
-        .limit(200)
-        .get();
-      events = snap.docs.map((doc) => {
-        const d = doc.data();
-        return {
-          id: doc.id,
-          name: d.name || "unknown",
-          params: d.params || {},
-          userId: d.userId || "",
-          timestamp: d.createdAt || 0,
-        };
-      });
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const response = await fetch(
+        `https://analyticsdata.googleapis.com/v1beta/properties/${GA4_PROPERTY_ID}:runReport`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            dateRanges: [{ startDate: thirtyDaysAgo.toISOString().split("T")[0], endDate: "today" }],
+            dimensions: [{ name: "eventName" }],
+            metrics: [{ name: "eventCount" }],
+            orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+            limit: 50,
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        events = (data.rows || []).map((row: any) => ({
+          id: row.dimensionValues?.[0]?.value || "unknown",
+          name: row.dimensionValues?.[0]?.value || "unknown",
+          params: {},
+          userId: "",
+          timestamp: Date.now(),
+          count: Number(row.metricValues?.[0]?.value) || 0,
+        }));
+      }
     } catch {
-      // analytics_events collection may not exist
+      // GA4 API may not be available
     }
 
-    // Aggregate event counts by name
-    const eventCounts: Record<string, number> = {};
-    for (const event of events) {
-      const name = event.name || "unknown";
-      eventCounts[name] = (eventCounts[name] || 0) + 1;
-    }
-
-    const topEvents = Object.entries(eventCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 20);
+    const topEvents = events.map((e) => ({ name: e.name, count: e.count })).slice(0, 20);
+    const totalEvents = events.reduce((sum, e) => sum + (e.count || 0), 0);
 
     return NextResponse.json({
       events: events.slice(0, 100),
       topEvents,
-      totalEvents: events.length,
+      totalEvents,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

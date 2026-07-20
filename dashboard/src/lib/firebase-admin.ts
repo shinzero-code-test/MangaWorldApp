@@ -45,3 +45,26 @@ export function getAdminMessaging(): Messaging {
 export function getAdminRemoteConfig(): RemoteConfig {
   return (_remoteConfig ??= getRemoteConfig(getApp()));
 }
+
+/**
+ * Get an OAuth2 access token from the Firebase Admin SDK service account.
+ * Used for calling Google Cloud REST APIs (Crashlytics, Performance, Analytics).
+ */
+export async function getAccessToken(): Promise<string> {
+  const app = getApp();
+  const credential = app.options.credential;
+  if (!credential) throw new Error("No Firebase credentials configured");
+
+  // Use the Firebase Admin SDK's internal credential to get an access token
+  const { GoogleAuth } = await import("google-auth-library");
+  const auth = new GoogleAuth({
+    credentials: {
+      client_email: (credential as any).serviceAccount?.clientEmail || process.env.FIREBASE_CLIENT_EMAIL,
+      private_key: (credential as any).serviceAccount?.privateKey || process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    },
+    scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+  });
+  const client = await auth.getClient();
+  const tokenResponse = await client.getAccessToken();
+  return tokenResponse.token || "";
+}
