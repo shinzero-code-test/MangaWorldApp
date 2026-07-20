@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.ImageProvider
@@ -37,7 +38,7 @@ class ContinueReadingWidget : GlanceAppWidget() {
         setOf(DpSize(140.dp, 140.dp), DpSize(180.dp, 220.dp), DpSize(240.dp, 240.dp))
     )
 
-    override suspend fun provideGlance(context: Context, id: androidx.glance.GlanceId) {
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
         val entryPoint = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
         val settings = entryPoint.widgetSettingsManager()
         val data = try { entryPoint.widgetDataRepository().getContinueReading() } catch (_: Exception) { null }
@@ -110,6 +111,7 @@ private fun ContinueReadingContent(
 
         // Progress bar
         if (data.progressPercent > 0) {
+            val progressFraction = (data.progressPercent / 100f).coerceIn(0f, 1f)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = GlanceModifier
@@ -120,7 +122,8 @@ private fun ContinueReadingContent(
                 ) {
                     Box(
                         modifier = GlanceModifier
-                            .fillMaxSize()
+                            .fillMaxWidth(progressFraction)
+                            .height(6.dp)
                             .cornerRadius(3.dp)
                             .background(GlanceTheme.colors.primary)
                     ) {}
