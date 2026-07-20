@@ -33,7 +33,9 @@ import com.exapps.mangaworld.core.widget.WidgetEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 
 class WidgetShelf : GlanceAppWidget() {
-    override val sizeMode = SizeMode.Single
+    override val sizeMode = SizeMode.Responsive(
+        setOf(DpSize(180.dp, 40.dp), DpSize(240.dp, 50.dp), DpSize(320.dp, 60.dp))
+    )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val entryPoint = EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)

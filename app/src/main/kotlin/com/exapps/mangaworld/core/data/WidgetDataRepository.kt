@@ -184,13 +184,16 @@ class WidgetDataRepository @Inject constructor(
                 val imageLoader = (context.applicationContext as android.app.Application)
                     .let { it as? com.exapps.mangaworld.MangaWorldApp }
                     ?.imageLoader ?: ImageLoader(context)
+                // Cap at 200KB max to prevent OOM in Glance's remote views memory
+                val safeWidth = width.coerceAtMost(200)
+                val safeHeight = height.coerceAtMost(200)
                 val request = ImageRequest.Builder(context)
                     .data(url)
-                    .size(width, height)
+                    .size(safeWidth, safeHeight)
                     .allowHardware(false)
                     .build()
                 val result = imageLoader.execute(request)
-                result.drawable?.toBitmap(width = width, height = height)
+                result.drawable?.toBitmap(width = safeWidth, height = safeHeight)
             }.getOrNull()
         }
     }

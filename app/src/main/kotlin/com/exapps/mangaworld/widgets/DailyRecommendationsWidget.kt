@@ -61,7 +61,8 @@ private fun DailyRecommendationsContent(
                 title = "لا توجد اقتراحات حالياً",
                 subtitle = "سيتم تحديثها تلقائياً",
                 intent = AppLaunchIntents.home(context),
-                actionLabel = "افتح التطبيق"
+                actionLabel = "افتح التطبيق",
+                retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
         }

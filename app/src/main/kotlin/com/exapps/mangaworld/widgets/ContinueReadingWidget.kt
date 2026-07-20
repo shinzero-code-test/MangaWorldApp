@@ -76,7 +76,8 @@ private fun ContinueReadingContent(
                 title = "لا توجد قراءة حالية",
                 subtitle = "ابدأ قراءة مانجا لتظهر هنا",
                 intent = AppLaunchIntents.home(context),
-                actionLabel = "افتح التطبيق"
+                actionLabel = "افتح التطبيق",
+                retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
         }

@@ -60,7 +60,8 @@ private fun LatestUpdatesContent(
                 title = "لا توجد تحديثات حالياً",
                 subtitle = "سيتم جلبها تلقائياً",
                 intent = AppLaunchIntents.latestUpdates(context),
-                actionLabel = "عرض التحديثات"
+                actionLabel = "عرض التحديثات",
+                retryIntent = AppLaunchIntents.latestUpdates(context)
             )
             return@WidgetCard
         }

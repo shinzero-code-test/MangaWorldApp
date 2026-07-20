@@ -61,7 +61,8 @@ private fun LibraryWidgetContent(
                 title = "لا توجد عناصر في المكتبة",
                 subtitle = "أضف مانجا للمفضلة لتظهر هنا",
                 intent = AppLaunchIntents.home(context),
-                actionLabel = "تصفح"
+                actionLabel = "تصفح",
+                retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
         }

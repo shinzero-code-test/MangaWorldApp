@@ -174,7 +174,7 @@ internal fun WidgetListItem(
 }
 
 @Composable
-internal fun WidgetEmptyState(title: String, subtitle: String, intent: Intent? = null, actionLabel: String? = null) {
+internal fun WidgetEmptyState(title: String, subtitle: String, intent: Intent? = null, actionLabel: String? = null, retryIntent: Intent? = null) {
     Column(
         modifier = GlanceModifier.fillMaxSize(),
         verticalAlignment = Alignment.Vertical.CenterVertically,
@@ -213,6 +213,10 @@ internal fun WidgetEmptyState(title: String, subtitle: String, intent: Intent? =
         if (intent != null && !actionLabel.isNullOrBlank()) {
             Spacer(GlanceModifier.height(10.dp))
             WidgetPrimaryButton(label = actionLabel, intent = intent)
+        }
+        if (retryIntent != null) {
+            Spacer(GlanceModifier.height(6.dp))
+            WidgetPrimaryButton(label = "إعادة المحاولة", intent = retryIntent)
         }
     }
 }

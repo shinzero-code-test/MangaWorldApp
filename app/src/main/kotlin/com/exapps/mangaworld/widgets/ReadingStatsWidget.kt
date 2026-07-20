@@ -70,7 +70,8 @@ private fun ReadingStatsContent(
                 title = "لا توجد إحصائيات بعد",
                 subtitle = "ابدأ القراءة لتظهر إنجازاتك",
                 intent = AppLaunchIntents.home(context),
-                actionLabel = "ابدأ الآن"
+                actionLabel = "ابدأ الآن",
+                retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
         }
