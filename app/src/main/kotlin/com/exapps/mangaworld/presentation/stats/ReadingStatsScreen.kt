@@ -145,7 +145,7 @@ fun ReadingStatsScreen(
                     )
                 }
 
-                items(state.dailyStats.reversed().take(14)) { stat ->
+                items(state.recentDailyStats) { stat ->
                     DailyStatRow(stat)
                 }
             }

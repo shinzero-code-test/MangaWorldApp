@@ -18,6 +18,9 @@ data class ReadingStatsUiState(
 ) {
     val totalReadingHours: Int get() = (totalReadingTimeMs / 3_600_000).toInt()
     val totalReadingMinutes: Int get() = ((totalReadingTimeMs % 3_600_000) / 60_000).toInt()
+
+    /** Consistent reading time format used across all screens. */
+    val formattedReadingTime: String get() = "${totalReadingHours}h ${totalReadingMinutes}m"
     val averagePagesPerDay: Int get() {
         if (dailyStats.isEmpty()) return 0
         val totalPages = dailyStats.sumOf { it.pagesRead }
@@ -34,6 +37,9 @@ data class ReadingStatsUiState(
             .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
         return dailyStats.filter { it.date >= weekAgo }.sumOf { it.pagesRead }
     }
+
+    /** Last 14 days in reverse chronological order for the daily breakdown chart. */
+    val recentDailyStats: List<DailyStat> get() = dailyStats.sortedByDescending { it.date }.take(14)
 }
 
 @HiltViewModel

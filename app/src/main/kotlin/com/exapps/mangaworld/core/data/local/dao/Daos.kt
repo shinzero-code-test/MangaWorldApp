@@ -77,7 +77,7 @@ interface ReadChapterDao {
     @Query("SELECT chapterNumber FROM read_chapters WHERE mangaId = :mangaId")
     fun getReadChapters(mangaId: String): Flow<List<Float>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun markRead(entity: ReadChapterEntity)
 
     @Query("DELETE FROM read_chapters WHERE mangaId = :mangaId AND chapterNumber = :chapterNumber")

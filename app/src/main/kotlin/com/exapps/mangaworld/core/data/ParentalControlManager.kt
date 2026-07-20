@@ -3,12 +3,15 @@ package com.exapps.mangaworld.core.data
 import android.content.Context
 import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class ParentalControlManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val readingStatsStore: ReadingStatsStore
 ) {
     private val prefs: SharedPreferences by lazy {
         context.getSharedPreferences("parental_control_prefs", Context.MODE_PRIVATE)
@@ -83,25 +86,12 @@ class ParentalControlManager @Inject constructor(
 
     fun getMaxReadingMinutes(): Int = prefs.getInt(KEY_MAX_READING_MINUTES, 0)
 
-    fun recordReadingTime(minutes: Int) {
-        val today = java.time.LocalDate.now().toString()
-        val storedDate = prefs.getString(KEY_READING_DATE, "")
-        val storedMinutes = prefs.getInt(KEY_READING_TIME_TODAY, 0)
+    /** Delegate to ReadingStatsStore for consistent tracking. */
+    fun recordReadingTime(minutes: Int) = runBlocking { readingStatsStore.addReadingTime(minutes * 60_000L) }
 
-        if (storedDate == today) {
-            prefs.edit().putInt(KEY_READING_TIME_TODAY, storedMinutes + minutes).apply()
-        } else {
-            prefs.edit()
-                .putString(KEY_READING_DATE, today)
-                .putInt(KEY_READING_TIME_TODAY, minutes)
-                .apply()
-        }
-    }
-
-    fun getReadingTimeToday(): Int {
+    fun getReadingTimeToday(): Int = runBlocking {
         val today = java.time.LocalDate.now().toString()
-        val storedDate = prefs.getString(KEY_READING_DATE, "")
-        return if (storedDate == today) prefs.getInt(KEY_READING_TIME_TODAY, 0) else 0
+        readingStatsStore.dailyStats.first().find { it.date == today }?.readingTimeMinutes ?: 0
     }
 
     fun isReadingTimeExceeded(): Boolean {
