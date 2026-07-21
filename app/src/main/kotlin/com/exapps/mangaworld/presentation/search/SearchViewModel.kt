@@ -46,7 +46,7 @@ class SearchViewModel @Inject constructor(
     private val appSettings: StateFlow<AppSettings> = settingsRepo.getAppSettings()
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
-    val query: StateFlow<String> = _query.asStateFlow()
+    val query: StateFlow<String> = _query
     val source: StateFlow<MangaSource?> = _source.asStateFlow()
     val filters: StateFlow<AdvancedSearchFilters> = _filters.asStateFlow()
     val showAdvancedFilters: StateFlow<Boolean> = _showAdvancedFilters.asStateFlow()
@@ -123,7 +123,7 @@ class SearchViewModel @Inject constructor(
             .cachedIn(viewModelScope)
 
     fun setQuery(q: String) {
-        _query.update { q }
+        savedStateHandle["search_query"] = q
         _filters.update { it.copy(query = q) }
     }
 
@@ -149,7 +149,7 @@ class SearchViewModel @Inject constructor(
     }
 
     fun clear() {
-        _query.update { "" }
+        savedStateHandle["search_query"] = ""
         _filters.update { AdvancedSearchFilters() }
     }
 

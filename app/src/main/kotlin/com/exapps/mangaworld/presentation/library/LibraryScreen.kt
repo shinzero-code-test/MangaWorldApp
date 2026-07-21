@@ -67,7 +67,7 @@ fun LibraryScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        tab.label,
+                        stringResource(tab.labelRes),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                         color = if (active) Color.White else MangaColors.MutedLight

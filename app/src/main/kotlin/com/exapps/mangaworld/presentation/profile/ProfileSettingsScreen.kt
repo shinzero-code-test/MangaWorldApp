@@ -146,9 +146,9 @@ class ProfileSettingsViewModel @Inject constructor(
                 // Comments & reviews counts via Firestore aggregate queries
                 try {
                     _commentsCount.value = firestore.collectionGroup("comments")
-                        .whereEqualTo("authorUid", uid).count().get().await().count.toInt()
+                        .whereEqualTo("authorUid", uid).get().await().size()
                     _reviewsCount.value = firestore.collectionGroup("reviews")
-                        .whereEqualTo("authorUid", uid).count().get().await().count.toInt()
+                        .whereEqualTo("authorUid", uid).get().await().size()
                 } catch (_: Exception) {}
             }
         }

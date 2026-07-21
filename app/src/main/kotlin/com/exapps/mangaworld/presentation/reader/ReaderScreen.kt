@@ -1,5 +1,4 @@
 package com.exapps.mangaworld.presentation.reader
-import androidx.compose.ui.platform.announceForAccessibility
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
@@ -48,6 +47,18 @@ import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import com.exapps.mangaworld.presentation.webview.WebViewSolverActivity
+import android.view.accessibility.AccessibilityManager
+
+private fun android.content.Context.announceForAccessibility(text: String) {
+    val am = getSystemService(android.content.Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
+    if (am?.isEnabled == true) {
+        val event = android.view.accessibility.AccessibilityEvent.obtain().apply {
+            eventType = android.view.accessibility.AccessibilityEvent.TYPE_ANNOUNCEMENT
+            this.text.add(text)
+        }
+        am.sendAccessibilityEvent(event)
+    }
+}
 
 @Composable
 fun ReaderScreen(

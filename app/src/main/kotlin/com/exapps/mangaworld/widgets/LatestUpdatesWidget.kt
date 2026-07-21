@@ -14,6 +14,7 @@ import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.height
+import androidx.glance.text.Text
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.core.widget.WidgetEntryPoint
 import dagger.hilt.android.EntryPointAccessors
