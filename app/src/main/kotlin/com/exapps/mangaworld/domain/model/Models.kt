@@ -346,8 +346,9 @@ data class AppSettings(
     val mutedUserIds: Set<String> = emptySet(),
     val readingListStatus: String? = null,
     val favoriteGenres: List<String> = emptyList(),
-    val showLibraryPublic: Boolean = true
-)
+    val showLibraryPublic: Boolean = true,
+    val appLanguage: String = "ar"
+) { val isRtl get() = appLanguage == "ar" }
 
 enum class CommunityNotificationType {
     REPLY,

@@ -509,15 +509,13 @@ private suspend fun importManga(
                         if (inputStream != null) {
                             ZipInputStream(inputStream).use { zip ->
                                 var entry2 = zip.nextEntry
-                                var pageCount = 0
                                 while (entry2 != null) {
                                     if (!entry2.isDirectory) {
                                         val ext = entry2.name?.substringAfterLast('.', "")?.lowercase() ?: ""
                                         if (ext in imageExtensions) {
-                                            pageCount++
-                                            // Preserve original filename; prefix with page number for sort order
-                                            val originalName = entry2.name?.substringAfterLast('/') ?: "page_$pageCount"
-                                            val outputFile = File(chapterDir, "%03d_%s".format(pageCount, originalName))
+                                            // Use original filename from archive
+                                            val originalName = entry2.name?.substringAfterLast('/') ?: "page"
+                                            val outputFile = File(chapterDir, originalName)
                                             FileOutputStream(outputFile).use { out ->
                                                 zip.copyTo(out)
                                             }
@@ -534,9 +532,8 @@ private suspend fun importManga(
                     val images = entry.listFiles()
                         ?.filter { it.name?.substringAfterLast('.', "")?.lowercase() in imageExtensions }
                         ?.sortedBy { it.name } ?: emptyList()
-                    images.forEachIndexed { idx, img ->
-                        val ext = img.name?.substringAfterLast('.', "jpg") ?: "jpg"
-                        val outputFile = File(chapterDir, "%03d_%s".format(idx + 1, img.name ?: "page_${idx + 1}"))
+                    images.forEach { img ->
+                        val outputFile = File(chapterDir, img.name ?: "page")
                         try {
                             context.contentResolver.openInputStream(img.uri)?.use { input ->
                                 FileOutputStream(outputFile).use { output -> input.copyTo(output) }

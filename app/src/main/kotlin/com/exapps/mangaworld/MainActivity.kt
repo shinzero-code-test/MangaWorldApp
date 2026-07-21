@@ -204,6 +204,9 @@ private fun MangaApp(
     }
 
     MangaWorldTheme(darkTheme = isDark, useDynamicColors = settings.useDynamicColors) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides if (settings.isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
+        ) {
         Box(Modifier.fillMaxSize()) {
             when {
                 showPostOnboardingLogin -> {
@@ -353,6 +356,7 @@ private fun MangaApp(
                 BiometricLockOverlay(onUnlocked = { isLocked = false })
             }
         }
+        } // CompositionLocalProvider
     }
 }
 
