@@ -103,7 +103,7 @@ class CommunityViewModel @Inject constructor(
         _tab, _replyTo, _error, mangaTitle
     ) { q, tab, replyTo, error, title ->
         CommunityUiState(
-            title = if (chapterUrl == null) stringResource(R.string.fmt_068, title) else stringResource(R.string.community_discussion),
+            title = if (chapterUrl == null) context.getString(R.string.fmt_068, title) else context.getString(R.string.community_discussion),
             comments = filterMutedComments(q.first, q.fourth.mutedUserIds),
             reviews = q.second,
             profile = q.third,
@@ -115,7 +115,7 @@ class CommunityViewModel @Inject constructor(
             error = error
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, CommunityUiState(
-        title = if (chapterUrl == null) stringResource(R.string.community_title) else stringResource(R.string.community_discussion),
+        title = if (chapterUrl == null) context.getString(R.string.community_title) else context.getString(R.string.community_discussion),
         chapterMode = chapterUrl != null
     ))
 

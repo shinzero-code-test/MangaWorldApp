@@ -310,15 +310,15 @@ fun ImportMangaScreen(
                 Button(
                     onClick = {
                         if (mangaName.isBlank()) {
-                            Toast.makeText(context, stringResource(R.string.enter_manga_name), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.enter_manga_name), Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         if (folderUri == null) {
-                            Toast.makeText(context, stringResource(R.string.choose_manga_folder), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.choose_manga_folder), Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         if (chapters.isEmpty()) {
-                            Toast.makeText(context, stringResource(R.string.no_chapters_found), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.no_chapters_found), Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         isProcessing = true
@@ -361,14 +361,14 @@ fun ImportMangaScreen(
 }
 
 private fun getFolderDisplayName(context: Context, uri: Uri): String {
-    // DocumentFile.fromTreeUri() is the correct way to resolve a Tree URI from
-    // ACTION_OPEN_DOCUMENT_TREE. Calling contentResolver.query() on a Tree URI
-    // throws UnsupportedOperationException on most document providers.
     return try {
         val doc = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, uri)
-        doc?.name?.takeIf { it.isNotBlank() } ?: extractDisplayNameFromTreeId(uri)
+        doc?.name?.takeIf { it.isNotBlank() } ?: run {
+            val treeDocId = android.provider.DocumentsContract.getTreeDocumentId(uri)
+            treeDocId.substringAfterLast('/').takeIf { it.isNotBlank() } ?: context.getString(R.string.folder)
+        }
     } catch (_: Exception) {
-        extractDisplayNameFromTreeId(uri)
+        context.getString(R.string.folder)
     }
 }
 

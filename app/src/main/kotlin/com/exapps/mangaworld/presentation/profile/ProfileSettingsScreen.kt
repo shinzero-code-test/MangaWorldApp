@@ -370,7 +370,7 @@ fun ProfileSettingsScreen(
                 viewModel.linkGoogle(idToken)
             }
         } catch (e: Exception) {
-            viewModel.onProviderLinkError(stringResource(R.string.fmt_078, e.localizedMessage ?: stringResource(R.string.unknown_error)))
+            viewModel.onProviderLinkError(context.getString(R.string.fmt_078, e.localizedMessage ?: context.getString(R.string.unknown_error)))
         }
     }
     val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
