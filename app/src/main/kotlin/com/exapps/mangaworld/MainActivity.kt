@@ -73,15 +73,13 @@ class MainActivity : FragmentActivity() {
         splash.setKeepOnScreenCondition { false }
 
         setContent {
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                MangaApp(
-                    sessionManager = sessionManager,
-                    settingsRepo = settingsRepository,
-                    launchIntent = intent,
-                    deepLinkIntents = deepLinkIntents.asSharedFlow(),
-                    setFacebookCallbackManager = { facebookCallbackManager = it }
-                )
-            }
+            MangaApp(
+                sessionManager = sessionManager,
+                settingsRepo = settingsRepository,
+                launchIntent = intent,
+                deepLinkIntents = deepLinkIntents.asSharedFlow(),
+                setFacebookCallbackManager = { facebookCallbackManager = it }
+            )
         }
     }
 
@@ -419,7 +417,8 @@ private fun MangaWorldContent(
             MangaNavGraph(
                 navController = navController,
                 googleSignInClient = googleSignInClient,
-                setFacebookCallbackManager = setFacebookCallbackManager
+                setFacebookCallbackManager = setFacebookCallbackManager,
+                isSignedIn = userIsLoggedIn
             )
         }
     }

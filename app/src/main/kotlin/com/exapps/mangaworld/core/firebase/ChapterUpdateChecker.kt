@@ -58,17 +58,17 @@ class ChapterUpdateChecker @Inject constructor(
         val coverUrl: String
     )
 
-    suspend fun checkForUpdates() = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdates(forceCheck: Boolean = false) = withContext(Dispatchers.IO) {
         checkMutex.withLock {
             val settings = settingsRepository.getAppSettings().first()
             if (!settings.enableNotifications) return@withContext
             // Respect delivery mode — only INSTANT notifications fire immediately
             if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) return@withContext
 
-        // Throttle: check at most once per 2 hours
+        // Throttle: check at most once per 2 hours (bypassed by WorkManager via forceCheck)
         val lastCheck = prefs.getLong("last_update_check", 0L)
         val now = System.currentTimeMillis()
-        if (now - lastCheck < 2 * 60 * 60 * 1000L) return@withContext
+        if (!forceCheck && now - lastCheck < 2 * 60 * 60 * 1000L) return@withContext
         prefs.edit().putLong("last_update_check", now).commit()
 
         val favorites = favoriteDao.getFavoritesList()
@@ -210,6 +210,32 @@ class ChapterUpdateChecker @Inject constructor(
         favAction?.let { builder.addAction(it) }
 
         notificationManager.notify(NOTIFICATION_ID_NEW_CHAPTERS, builder.build())
+
+        // Persist to notification center
+        saveToNotificationCenter(chapters)
+    }
+
+    private fun saveToNotificationCenter(chapters: List<NewChapterInfo>) {
+        val notifPrefs = context.getSharedPreferences("local_notifications", Context.MODE_PRIVATE)
+        val json = notifPrefs.getString("notifications", "[]") ?: "[]"
+        val arr = try { org.json.JSONArray(json) } catch (_: Exception) { org.json.JSONArray() }
+
+        for (ch in chapters) {
+            val obj = org.json.JSONObject().apply {
+                put("id", "chapter_${ch.mangaId}_${System.currentTimeMillis()}")
+                put("title", "فصل جديد: ${ch.title}")
+                put("body", ch.info)
+                put("type", "chapter_update")
+                put("mangaId", ch.mangaId)
+                put("read", false)
+                put("timestamp", System.currentTimeMillis())
+            }
+            arr.put(obj)
+        }
+
+        // Keep only last 100 local notifications
+        while (arr.length() > 100) { arr.remove(0) }
+        notifPrefs.edit().putString("notifications", arr.toString()).apply()
     }
 
     companion object {

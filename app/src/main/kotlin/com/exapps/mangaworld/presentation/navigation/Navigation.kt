@@ -125,7 +125,8 @@ val bottomNavItems: List<Triple<Screen, Int, ImageVector>> = listOf(
 fun MangaNavGraph(
     navController: NavHostController,
     googleSignInClient: GoogleSignInClient,
-    setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit
+    setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit,
+    isSignedIn: Boolean = true
 ) {
     NavHost(
         navController = navController,
@@ -227,6 +228,7 @@ fun MangaNavGraph(
         composable(Screen.ProfileSettings.route) {
             com.exapps.mangaworld.presentation.profile.ProfileSettingsScreen(
                 onBack = { navController.popBackStack() },
+                onSignedOut = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Home.route) { inclusive = true } } },
                 onOpenReadingStats = { navController.navigate(Screen.ReadingStats.route) },
                 onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) },
                 onOpenSources = { navController.navigate(Screen.Sources.route) },
@@ -234,7 +236,10 @@ fun MangaNavGraph(
             )
         }
         composable(Screen.CloudSync.route) {
-            CloudSyncScreen(onBack = { navController.popBackStack() })
+            CloudSyncScreen(
+                onBack = { navController.popBackStack() },
+                onSignedOut = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Home.route) { inclusive = true } } }
+            )
         }
         composable(
             route = Screen.Downloads.route,
@@ -313,7 +318,8 @@ fun MangaNavGraph(
                 onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) },
                 onOpenSuggestions = { navController.navigate(Screen.Suggestions.route) },
                 onOpenProfile = { navController.navigate(Screen.Profile.route) },
-                onOpenModeration = { navController.navigate(Screen.ModerationDashboard.route) }
+                onOpenModeration = { navController.navigate(Screen.ModerationDashboard.route) },
+                isSignedIn = isSignedIn
             )
         }
         composable(Screen.Sources.route) {

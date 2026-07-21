@@ -515,14 +515,9 @@ private fun WebtoonReader(
         initialFirstVisibleItemIndex = initialPage.coerceIn(0, maxOf(0, pages.size - 1))
     )
 
-    // Only advance reading progress — never save backward scrolling
-    var highestPage by remember { mutableIntStateOf(initialPage) }
+    // Track actual visible page (forward and backward)
     LaunchedEffect(listState.firstVisibleItemIndex) {
-        val newPage = listState.firstVisibleItemIndex
-        if (newPage > highestPage) {
-            highestPage = newPage
-            onPageChanged(newPage)
-        }
+        onPageChanged(listState.firstVisibleItemIndex)
     }
 
     // Allow slider / external code to scroll to a specific page

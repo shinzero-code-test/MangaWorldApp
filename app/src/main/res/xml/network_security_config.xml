@@ -5,14 +5,17 @@
             <certificates src="system"/>
         </trust-anchors>
     </base-config>
-    <!-- Allow supported manga sources and image/API hosts -->
+    <!-- Allow supported manga sources and image/API hosts (HTTPS) -->
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">olympustaff.com</domain>
-        <domain includeSubdomains="true">azorafly.com</domain>
         <domain includeSubdomains="true">manga-starz.net</domain>
         <domain includeSubdomains="true">mangasid.com</domain>
         <domain includeSubdomains="true">meshmanga.com</domain>
         <domain includeSubdomains="true">appswat.com</domain>
         <domain includeSubdomains="true">wsrv.nl</domain>
+    </domain-config>
+    <!-- Sources that serve HTTP content -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">azorafly.com</domain>
     </domain-config>
 </network-security-config>

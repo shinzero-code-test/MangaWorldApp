@@ -54,6 +54,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -427,7 +429,12 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
                 modifier = Modifier.width(78.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MangaColors.Green, modifier = Modifier.size(22.dp))
+                Icon(
+                    if (status.homeOk) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
+                    contentDescription = null,
+                    tint = if (status.homeOk) MangaColors.Green else MangaColors.Error,
+                    modifier = Modifier.size(22.dp)
+                )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     if (status.homeOk) stringResource(R.string.ok_alt) else stringResource(R.string.str_331),
@@ -479,12 +486,23 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
                     .background(brandColor),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    status.source.displayName.take(1).uppercase(),
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium
-                )
+                if (status.source.logoRes != 0) {
+                    androidx.compose.foundation.Image(
+                        painter = painterResource(status.source.logoRes),
+                        contentDescription = status.source.displayName,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Text(
+                        status.source.displayName.take(1).uppercase(),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
             }
         }
 

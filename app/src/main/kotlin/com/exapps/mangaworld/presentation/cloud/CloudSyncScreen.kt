@@ -161,6 +161,7 @@ class CloudSyncViewModel @Inject constructor(
 @Composable
 fun CloudSyncScreen(
     onBack: () -> Unit,
+    onSignedOut: () -> Unit = {},
     viewModel: CloudSyncViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -268,7 +269,7 @@ fun CloudSyncScreen(
                 onEmailLogin = { viewModel.signInWithEmail(email, password) },
                 onGoogleLogin = { googleLauncher.launch(viewModel.googleSignInIntent()) },
                 hasGoogleSignIn = viewModel.hasGoogleSignIn(),
-                onSignOut = viewModel::signOut
+                onSignOut = { viewModel.signOut(); onSignedOut() }
             )
 
             // Profile card

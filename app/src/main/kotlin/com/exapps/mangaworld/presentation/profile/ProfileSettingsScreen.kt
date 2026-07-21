@@ -324,6 +324,7 @@ private fun formatJoinDate(context: android.content.Context, timestamp: Long): S
 @Composable
 fun ProfileSettingsScreen(
     onBack: () -> Unit,
+    onSignedOut: () -> Unit = {},
     onOpenReadingStats: () -> Unit,
     onOpenCloudSync: () -> Unit,
     onOpenSources: () -> Unit,
@@ -471,8 +472,8 @@ fun ProfileSettingsScreen(
     }
 
     if (showEditProfile) EditProfileDialog(profile, { showEditProfile = false }) { u, d, b -> viewModel.updateProfile(u, b, d); showEditProfile = false }
-    if (showDeleteConfirm) ConfirmDialog(stringResource(R.string.settings_delete_account), stringResource(R.string.settings_delete_account_confirm), stringResource(R.string.delete), { viewModel.deleteAccount(); showDeleteConfirm = false }, { showDeleteConfirm = false })
-    if (showSignOutConfirm) ConfirmDialog(stringResource(R.string.settings_sign_out), stringResource(R.string.settings_sign_out_confirm), stringResource(R.string.logout), { viewModel.signOut(); showSignOutConfirm = false }, { showSignOutConfirm = false })
+    if (showDeleteConfirm) ConfirmDialog(stringResource(R.string.settings_delete_account), stringResource(R.string.settings_delete_account_confirm), stringResource(R.string.delete), { viewModel.deleteAccount(); showDeleteConfirm = false; onSignedOut() }, { showDeleteConfirm = false })
+    if (showSignOutConfirm) ConfirmDialog(stringResource(R.string.settings_sign_out), stringResource(R.string.settings_sign_out_confirm), stringResource(R.string.logout), { viewModel.signOut(); showSignOutConfirm = false; onSignedOut() }, { showSignOutConfirm = false })
     if (showBlockedUsers) BlockedUsersDialog(blockedUsers, onDismiss = { showBlockedUsers = false }, onUnblock = { uid -> viewModel.unblockUser(uid) })
     if (showFavoriteGenres) FavoriteGenresDialog(favoriteGenres, onDismiss = { showFavoriteGenres = false }, onSave = { genres -> viewModel.setFavoriteGenres(genres) })
     if (showFollowingList) UserListDialog(stringResource(R.string.settings_following), emptyList(), onDismiss = { showFollowingList = false })

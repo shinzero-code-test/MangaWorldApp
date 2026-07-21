@@ -393,7 +393,6 @@ private suspend fun scanFolderForChapters(context: Context, folderUri: Uri): Lis
     return withContext(Dispatchers.IO) {
         val chapters = mutableListOf<ImportedChapter>()
 
-        // Primary path: DocumentFile.fromTreeUri() is the correct SAF API for Tree URIs
         val doc = try {
             androidx.documentfile.provider.DocumentFile.fromTreeUri(context, folderUri)
         } catch (_: Exception) {
@@ -401,29 +400,36 @@ private suspend fun scanFolderForChapters(context: Context, folderUri: Uri): Lis
         }
 
         if (doc == null || !doc.exists() || !doc.isDirectory) {
-            // Cannot resolve the tree — return empty (user will see "0 chapters")
             return@withContext chapters
         }
 
-        doc.listFiles()
-            .filter { file ->
-                file.isFile && file.name?.let { name ->
-                    name.endsWith(".zip", true) ||
-                        name.endsWith(".cbz", true) ||
-                        name.endsWith(".rar", true)
-                } == true
-            }
-            .sortedBy { file ->
-                file.name?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull() ?: 0f
-            }
-            .forEach { file ->
-                val name = file.name ?: "unknown"
-                val chapterNumber = name.replace("[^0-9.]".toRegex(), "").toFloatOrNull()
-                    ?: (chapters.size + 1).toFloat()
-                chapters.add(ImportedChapter(number = chapterNumber, fileName = name))
-            }
+        val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif")
+        val archiveExtensions = setOf("zip", "cbz", "rar")
 
-        chapters
+        doc.listFiles().forEach { file ->
+            val name = file.name ?: "unknown"
+            val chapterNumber = name.let { fileName ->
+                fileName.replace(Regex("[^0-9.]"), "").split(".").firstOrNull()?.toFloatOrNull()
+            } ?: (chapters.size + 1).toFloat()
+
+            when {
+                // Archive file → single chapter
+                file.isFile && name.substringAfterLast('.', "").lowercase() in archiveExtensions -> {
+                    chapters.add(ImportedChapter(number = chapterNumber, fileName = name))
+                }
+                // Directory containing images → single chapter
+                file.isDirectory -> {
+                    val hasImages = file.listFiles()?.any {
+                        it.name?.substringAfterLast('.', "")?.lowercase() in imageExtensions
+                    } == true
+                    if (hasImages) {
+                        chapters.add(ImportedChapter(number = chapterNumber, fileName = name))
+                    }
+                }
+            }
+        }
+
+        chapters.sortedBy { it.number }
     }
 }
 
@@ -466,20 +472,27 @@ private suspend fun importManga(
 
             var processedCount = 0
 
-            // DocumentFile.fromTreeUri() + listFiles() is the correct way to enumerate
-            // children from a Tree URI. Calling contentResolver.query() on a Tree URI
-            // throws UnsupportedOperationException — never use it as a fallback.
-            val files = doc.listFiles().filter { file ->
-                file.isFile && file.name?.let { name ->
-                    name.endsWith(".zip", true) || name.endsWith(".cbz", true) || name.endsWith(".rar", true)
+            val archiveExtensions = setOf("zip", "cbz", "rar")
+            val imageExtensions = setOf("jpg", "jpeg", "png", "webp")
+
+            // Separate archives from image directories
+            val archives = doc.listFiles().filter { file ->
+                file.isFile && file.name?.substringAfterLast('.', "")?.lowercase() in archiveExtensions
+            }
+            val imageDirs = doc.listFiles().filter { file ->
+                file.isDirectory && file.listFiles()?.any {
+                    it.name?.substringAfterLast('.', "")?.lowercase() in imageExtensions
                 } == true
             }
 
-            files.sortedBy { file ->
-                file.name?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull() ?: 0f
-            }.forEach { archiveFile ->
+            val sortedEntries = archives + imageDirs
+            sortedEntries.sortedBy { file ->
+                file.name?.let { name ->
+                    name.replace(Regex("[^0-9.]"), "").split(".").firstOrNull()?.toFloatOrNull()
+                } ?: 0f
+            }.forEach { entry ->
                 processedCount++
-                val chapterName = archiveFile.name?.substringBeforeLast('.') ?: "chapter_$processedCount"
+                val chapterName = entry.name?.substringBeforeLast('.') ?: "chapter_$processedCount"
                 val chapterDir = File(mangaDir, chapterName)
                 chapterDir.mkdirs()
 
@@ -489,32 +502,48 @@ private suspend fun importManga(
                     currentChapter = chapterName
                 ))
 
-                // Extract zip/cbz using DocumentFile URI
-                try {
-                    val inputStream = context.contentResolver.openInputStream(archiveFile.uri)
-                    if (inputStream != null) {
-                        ZipInputStream(inputStream).use { zip ->
-                            var entry = zip.nextEntry
-                            var pageCount = 0
-                            while (entry != null) {
-                                if (!entry.isDirectory) {
-                                    val ext = entry.name?.substringAfterLast('.', "")?.lowercase() ?: ""
-                                    if (ext in setOf("jpg", "jpeg", "png", "webp")) {
-                                        pageCount++
-                                        val outputFile = File(chapterDir, "%03d.%s".format(pageCount, ext))
-                                        FileOutputStream(outputFile).use { out ->
-                                            zip.copyTo(out)
+                if (entry.isFile) {
+                    // Extract archive (ZIP format)
+                    try {
+                        val inputStream = context.contentResolver.openInputStream(entry.uri)
+                        if (inputStream != null) {
+                            ZipInputStream(inputStream).use { zip ->
+                                var entry2 = zip.nextEntry
+                                var pageCount = 0
+                                while (entry2 != null) {
+                                    if (!entry2.isDirectory) {
+                                        val ext = entry2.name?.substringAfterLast('.', "")?.lowercase() ?: ""
+                                        if (ext in imageExtensions) {
+                                            pageCount++
+                                            // Preserve original filename; prefix with page number for sort order
+                                            val originalName = entry2.name?.substringAfterLast('/') ?: "page_$pageCount"
+                                            val outputFile = File(chapterDir, "%03d_%s".format(pageCount, originalName))
+                                            FileOutputStream(outputFile).use { out ->
+                                                zip.copyTo(out)
+                                            }
                                         }
                                     }
+                                    entry2 = zip.nextEntry
                                 }
-                                entry = zip.nextEntry
+                                File(chapterDir, ".completed").createNewFile()
                             }
-                            // Mark chapter as complete
-                            File(chapterDir, ".completed").createNewFile()
                         }
+                    } catch (_: Exception) { }
+                } else if (entry.isDirectory) {
+                    // Copy images from directory, preserving original names with sort prefix
+                    val images = entry.listFiles()
+                        ?.filter { it.name?.substringAfterLast('.', "")?.lowercase() in imageExtensions }
+                        ?.sortedBy { it.name } ?: emptyList()
+                    images.forEachIndexed { idx, img ->
+                        val ext = img.name?.substringAfterLast('.', "jpg") ?: "jpg"
+                        val outputFile = File(chapterDir, "%03d_%s".format(idx + 1, img.name ?: "page_${idx + 1}"))
+                        try {
+                            context.contentResolver.openInputStream(img.uri)?.use { input ->
+                                FileOutputStream(outputFile).use { output -> input.copyTo(output) }
+                            }
+                        } catch (_: Exception) { }
                     }
-                } catch (_: Exception) {
-                    // Skip files that aren't valid zip or can't be read
+                    File(chapterDir, ".completed").createNewFile()
                 }
             }
 
