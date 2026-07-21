@@ -109,9 +109,9 @@ class LocalStorageViewModel @Inject constructor(
 fun LocalStorageScreen(
     onMangaClick: (sourceId: String, slug: String) -> Unit,
     onImportManga: () -> Unit = {},
-    val context = LocalContext.current
     viewModel: LocalStorageViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
     val mangas by viewModel.downloadedMangas.collectAsStateWithLifecycle()
     val confirmDelete by viewModel.confirmDelete.collectAsStateWithLifecycle()
     val autoTags by viewModel.autoTags.collectAsStateWithLifecycle()
