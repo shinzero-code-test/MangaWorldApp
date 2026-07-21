@@ -111,7 +111,6 @@ fun LocalStorageScreen(
     onImportManga: () -> Unit = {},
     viewModel: LocalStorageViewModel = hiltViewModel()
 ) {
-    val context = LocalContext.current
     val mangas by viewModel.downloadedMangas.collectAsStateWithLifecycle()
     val confirmDelete by viewModel.confirmDelete.collectAsStateWithLifecycle()
     val autoTags by viewModel.autoTags.collectAsStateWithLifecycle()
@@ -125,14 +124,14 @@ fun LocalStorageScreen(
                 Icon(Icons.Filled.FolderOpen, null,
                     tint = MangaColors.Primary, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(10.dp))
-                Text(context.getString(R.string.local_storage_alt), style = MaterialTheme.typography.titleLarge,
+                Text(stringResource(R.string.local_storage_alt), style = MaterialTheme.typography.titleLarge,
                     color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onImportManga) {
-                    Icon(Icons.Filled.FileUpload, context.getString(R.string.import_label), tint = MangaColors.Cyan)
+                    Icon(Icons.Filled.FileUpload, stringResource(R.string.import_label), tint = MangaColors.Cyan)
                 }
                 if (mangas.isNotEmpty()) {
-                    Text(context.getString(R.string.fmt_034, mangas.size), style = MaterialTheme.typography.bodySmall,
+                    Text(stringResource(R.string.fmt_034, mangas.size), style = MaterialTheme.typography.bodySmall,
                         color = MangaColors.Muted)
                 }
             }
@@ -145,9 +144,9 @@ fun LocalStorageScreen(
                         modifier = Modifier.padding(32.dp)) {
                         Icon(Icons.Filled.FolderOff, null,
                             modifier = Modifier.size(72.dp), tint = MangaColors.Muted)
-                        Text(context.getString(R.string.no_manga_loaded), style = MaterialTheme.typography.titleMedium,
+                        Text(stringResource(R.string.no_manga_loaded), style = MaterialTheme.typography.titleMedium,
                             color = MangaColors.Muted)
-                        Text(context.getString(R.string.downloads_empty_hint),
+                        Text(stringResource(R.string.downloads_empty_hint),
                             style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
                         Spacer(Modifier.height(8.dp))
                         Button(
@@ -156,7 +155,7 @@ fun LocalStorageScreen(
                         ) {
                             Icon(Icons.Filled.FileUpload, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text(context.getString(R.string.import_external_manga))
+                            Text(stringResource(R.string.import_external_manga))
                         }
                     }
                 }
@@ -191,18 +190,18 @@ fun LocalStorageScreen(
                     Icon(Icons.Filled.DeleteForever, null,
                         tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(32.dp))
                 },
-                title = { Text(context.getString(R.string.settings_delete_account_empty), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.settings_delete_account_empty), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
                 text = {
-                    Text(context.getString(R.string.str_297, confirmDelete!!.title) + context.getString(R.string.str_003),
+                    Text(stringResource(R.string.str_297, confirmDelete!!.title) + stringResource(R.string.str_003),
                         color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 },
                 confirmButton = {
                     Button(onClick = viewModel::confirmDeleteManga,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) { Text(context.getString(R.string.delete)) }
+                    ) { Text(stringResource(R.string.delete)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = viewModel::dismissDelete) { Text(context.getString(R.string.cancel), color = MangaColors.Muted) }
+                    TextButton(onClick = viewModel::dismissDelete) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) }
                 }
             )
         }
@@ -267,8 +266,8 @@ private fun LocalMangaCard(
                         modifier = Modifier.size(14.dp), tint = MangaColors.Primary)
                     Text(
                         if (manga.totalChapters > 0)
-                            context.getString(R.string.fmt_009, downloadedChapters, manga.totalChapters)
-                        else context.getString(R.string.fmt_010, downloadedChapters),
+                            stringResource(R.string.fmt_009, downloadedChapters, manga.totalChapters)
+                        else stringResource(R.string.fmt_010, downloadedChapters),
                         style = MaterialTheme.typography.bodySmall,
                         color = MangaColors.OnSurfaceVariant
                     )
@@ -287,7 +286,7 @@ private fun LocalMangaCard(
                 modifier = Modifier.size(36.dp)
                     .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
             ) {
-                Icon(Icons.Filled.Delete, context.getString(R.string.delete), modifier = Modifier.size(18.dp),
+                Icon(Icons.Filled.Delete, stringResource(R.string.delete), modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.error)
             }
         }

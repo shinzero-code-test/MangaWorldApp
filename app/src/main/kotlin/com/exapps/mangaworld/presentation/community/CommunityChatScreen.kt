@@ -58,6 +58,7 @@ import javax.inject.Inject
 @HiltViewModel
 class CommunityChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val communityRepository: CommunityRepository,
     private val sessionManager: FirebaseSessionManager,
     private val analyticsManager: FirebaseAnalyticsManager,
@@ -104,7 +105,7 @@ fun CommunityChatScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = context.getString(R.string.accessibility_back), tint = MangaColors.OnSurface) }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_back), tint = MangaColors.OnSurface) }
             Text(viewModel.title, style = MaterialTheme.typography.titleLarge, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
             Spacer(Modifier.padding(0.dp))
         }

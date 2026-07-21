@@ -40,10 +40,10 @@ fun ReadingStatsScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text(context.getString(R.string.reading_stats), color = MangaColors.OnSurface) },
+                title = { Text(stringResource(R.string.reading_stats), color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, context.getString(R.string.back), tint = MangaColors.OnSurface)
+                        Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
@@ -72,13 +72,13 @@ fun ReadingStatsScreen(
                 ) {
                     StatCard(
                         modifier = Modifier.weight(1f),
-                        title = context.getString(R.string.reading_time),
+                        title = stringResource(R.string.reading_time),
                         value = "${state.totalReadingHours}h ${state.totalReadingMinutes}m",
                         color = MangaColors.Cyan
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
-                        title = context.getString(R.string.read_manga),
+                        title = stringResource(R.string.read_manga),
                         value = "${state.totalMangaRead}",
                         color = MangaColors.GlowPurple
                     )
@@ -101,14 +101,14 @@ fun ReadingStatsScreen(
                 ) {
                     StatCard(
                         modifier = Modifier.weight(1f),
-                        title = context.getString(R.string.today),
-                        value = context.getString(R.string.fmt_043, state.todayPages),
+                        title = stringResource(R.string.today),
+                        value = stringResource(R.string.fmt_043, state.todayPages),
                         color = MangaColors.PrimaryLight
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
-                        title = context.getString(R.string.this_week),
-                        value = context.getString(R.string.fmt_043, state.thisWeekPages),
+                        title = stringResource(R.string.this_week),
+                        value = stringResource(R.string.fmt_043, state.thisWeekPages),
                         color = MangaColors.Cyan
                     )
                 }
@@ -118,8 +118,8 @@ fun ReadingStatsScreen(
             item {
                 StatCard(
                     modifier = Modifier.fillMaxWidth(),
-                    title = context.getString(R.string.avg_pages_day),
-                    value = context.getString(R.string.fmt_043, state.averagePagesPerDay),
+                    title = stringResource(R.string.avg_pages_day),
+                    value = stringResource(R.string.fmt_043, state.averagePagesPerDay),
                     color = MangaColors.Muted
                 )
             }
@@ -130,7 +130,7 @@ fun ReadingStatsScreen(
 
                 item {
                     Text(
-                        context.getString(R.string.daily_details),
+                        stringResource(R.string.daily_details),
                         style = MaterialTheme.typography.titleMedium,
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.Bold
@@ -146,13 +146,13 @@ fun ReadingStatsScreen(
                         FilterChip(
                             selected = !showReadingTimeChart,
                             onClick = { showReadingTimeChart = false },
-                            label = { Text(context.getString(R.string.total_pages), style = MaterialTheme.typography.labelSmall) },
+                            label = { Text(stringResource(R.string.total_pages), style = MaterialTheme.typography.labelSmall) },
                             shape = RoundedCornerShape(10.dp)
                         )
                         FilterChip(
                             selected = showReadingTimeChart,
                             onClick = { showReadingTimeChart = true },
-                            label = { Text(context.getString(R.string.reading_time), style = MaterialTheme.typography.labelSmall) },
+                            label = { Text(stringResource(R.string.reading_time), style = MaterialTheme.typography.labelSmall) },
                             shape = RoundedCornerShape(10.dp)
                         )
                     }
@@ -173,7 +173,7 @@ fun ReadingStatsScreen(
             if (state.dailyStats.isNotEmpty()) {
                 item {
                     Text(
-                        context.getString(R.string.daily_details),
+                        stringResource(R.string.daily_details),
                         style = MaterialTheme.typography.titleMedium,
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.Bold
@@ -245,18 +245,18 @@ private fun StreakCard(
             )
             Column {
                 Text(
-                    context.getString(R.string.reading_sequence),
+                    stringResource(R.string.reading_sequence),
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.OnSurfaceVariant
                 )
                 Text(
-                    context.getString(R.string.fmt_020, currentStreak),
+                    stringResource(R.string.fmt_020, currentStreak),
                     style = MaterialTheme.typography.headlineMedium,
                     color = if (currentStreak > 0) MangaColors.GlowPurple else MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    context.getString(R.string.fmt_045, longestStreak),
+                    stringResource(R.string.fmt_045, longestStreak),
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.OnSurfaceVariant
                 )
@@ -323,12 +323,12 @@ private fun DailyStatRow(stat: com.exapps.mangaworld.core.data.DailyStat) {
             )
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    context.getString(R.string.fmt_043, stat.pagesRead),
+                    stringResource(R.string.fmt_043, stat.pagesRead),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MangaColors.Cyan
                 )
                 Text(
-                    context.getString(R.string.fmt_039, stat.readingTimeMinutes),
+                    stringResource(R.string.fmt_039, stat.readingTimeMinutes),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MangaColors.OnSurfaceVariant
                 )

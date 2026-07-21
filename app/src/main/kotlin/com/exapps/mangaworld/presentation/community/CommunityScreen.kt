@@ -102,7 +102,7 @@ class CommunityViewModel @Inject constructor(
         _tab, _replyTo, _error, mangaTitle
     ) { q, tab, replyTo, error, title ->
         CommunityUiState(
-            title = if (chapterUrl == null) context.getString(R.string.fmt_068, title) else context.getString(R.string.community_discussion),
+            title = if (chapterUrl == null) stringResource(R.string.fmt_068, title) else stringResource(R.string.community_discussion),
             comments = filterMutedComments(q.first, q.fourth.mutedUserIds),
             reviews = q.second,
             profile = q.third,
@@ -114,7 +114,7 @@ class CommunityViewModel @Inject constructor(
             error = error
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, CommunityUiState(
-        title = if (chapterUrl == null) context.getString(R.string.community_title) else context.getString(R.string.community_discussion),
+        title = if (chapterUrl == null) stringResource(R.string.community_title) else stringResource(R.string.community_discussion),
         chapterMode = chapterUrl != null
     ))
 
@@ -129,21 +129,21 @@ class CommunityViewModel @Inject constructor(
                 if (chapterUrl == null) communityRepository.postMangaComment(mangaId, slug, sourceId, fullText, spoiler, _replyTo.value?.id)
                 else communityRepository.postChapterComment(mangaId, slug, sourceId, chapterUrl, fullText, spoiler, _replyTo.value?.id)
             }.onSuccess { _replyTo.value = null; _error.value = null }
-                .onFailure { e -> _error.value = e.message ?: context.getString(R.string.community_error_post) }
+                .onFailure { e -> _error.value = e.message ?: stringResource(R.string.community_error_post) }
         }
     }
 
     fun upsertReview(rating: Int, title: String, body: String) {
         viewModelScope.launch {
             runCatching { communityRepository.upsertReview(mangaId, slug, sourceId, rating, title, body) }
-                .onFailure { e -> _error.value = e.message ?: context.getString(R.string.str_338) }
+                .onFailure { e -> _error.value = e.message ?: stringResource(R.string.str_338) }
         }
     }
 
     fun reportComment(comment: CommunityComment, reason: String) {
         viewModelScope.launch {
             runCatching { communityRepository.reportComment(comment, reason) }
-                .onFailure { e -> _error.value = e.message ?: context.getString(R.string.community_error_report) }
+                .onFailure { e -> _error.value = e.message ?: stringResource(R.string.community_error_report) }
         }
     }
 
@@ -213,7 +213,7 @@ fun CommunityScreen(
                 title = { Text(state.title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, context.getString(R.string.back), tint = MangaColors.OnSurface)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
@@ -231,13 +231,13 @@ fun CommunityScreen(
                 FilterChip(
                     selected = state.tab == CommunityTab.COMMENTS,
                     onClick = { viewModel.setTab(CommunityTab.COMMENTS) },
-                    label = { Text(context.getString(R.string.comments)) },
+                    label = { Text(stringResource(R.string.comments)) },
                     shape = RoundedCornerShape(10.dp)
                 )
                 FilterChip(
                     selected = state.tab == CommunityTab.REVIEWS,
                     onClick = { viewModel.setTab(CommunityTab.REVIEWS) },
-                    label = { Text(context.getString(R.string.community_reviews)) },
+                    label = { Text(stringResource(R.string.community_reviews)) },
                     shape = RoundedCornerShape(10.dp)
                 )
             }
@@ -253,7 +253,7 @@ fun CommunityScreen(
 
                     LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (flat.isEmpty()) {
-                            item { Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) { Text(context.getString(R.string.community_no_comments), color = MangaColors.Muted) } }
+                            item { Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.community_no_comments), color = MangaColors.Muted) } }
                         }
                         items(flat.size, key = { flat[it].first.comment.id }) { idx ->
                             val (thread, depth) = flat[idx]
@@ -285,7 +285,7 @@ fun CommunityScreen(
                             Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.Reply, null, tint = MangaColors.Cyan, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text(context.getString(R.string.fmt_050, reply.authorUsername.ifBlank { reply.authorName }), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.fmt_050, reply.authorUsername.ifBlank { reply.authorName }), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall)
                                 Spacer(Modifier.weight(1f))
                                 IconButton(onClick = { viewModel.setReply(null) }, modifier = Modifier.size(20.dp)) {
                                     Icon(Icons.Filled.Close, null, tint = MangaColors.Muted, modifier = Modifier.size(14.dp))
@@ -300,7 +300,7 @@ fun CommunityScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 OutlinedTextField(
                                     value = commentText, onValueChange = { commentText = it },
-                                    modifier = Modifier.weight(1f), placeholder = { Text(context.getString(R.string.community_add_comment)) },
+                                    modifier = Modifier.weight(1f), placeholder = { Text(stringResource(R.string.community_add_comment)) },
                                     shape = RoundedCornerShape(10.dp), maxLines = 3
                                 )
                                 Spacer(Modifier.width(8.dp))
@@ -321,12 +321,12 @@ fun CommunityScreen(
                                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Filled.Add, null, tint = MangaColors.Cyan, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(8.dp))
-                                    Text(context.getString(R.string.community_add_review), color = MangaColors.Cyan, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                    Text(stringResource(R.string.community_add_review), color = MangaColors.Cyan, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
                         if (state.reviews.isEmpty()) {
-                            item { Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) { Text(context.getString(R.string.community_no_reviews), color = MangaColors.Muted) } }
+                            item { Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) { Text(stringResource(R.string.community_no_reviews), color = MangaColors.Muted) } }
                         }
                         items(state.reviews, key = { it.id }) { review ->
                             ReviewCard(review = review, onProfileClick = { onOpenProfile(review.authorUid) })
@@ -345,27 +345,27 @@ fun CommunityScreen(
 
     // Review dialog
     if (reviewDialog) {
-        AlertDialog(onDismissRequest = { reviewDialog = false }, containerColor = MangaColors.Surface, title = { Text(context.getString(R.string.community_review_body_hint), color = MangaColors.OnSurface) },
+        AlertDialog(onDismissRequest = { reviewDialog = false }, containerColor = MangaColors.Surface, title = { Text(stringResource(R.string.community_review_body_hint), color = MangaColors.OnSurface) },
             text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = reviewTitle, onValueChange = { reviewTitle = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text(context.getString(R.string.community_review_title_hint)) }, shape = RoundedCornerShape(10.dp))
-                OutlinedTextField(value = reviewBody, onValueChange = { reviewBody = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text(context.getString(R.string.review_details)) }, minLines = 4, shape = RoundedCornerShape(10.dp))
-                Text(context.getString(R.string.rating), color = MangaColors.OnSurface, style = MaterialTheme.typography.labelMedium)
+                OutlinedTextField(value = reviewTitle, onValueChange = { reviewTitle = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text(stringResource(R.string.community_review_title_hint)) }, shape = RoundedCornerShape(10.dp))
+                OutlinedTextField(value = reviewBody, onValueChange = { reviewBody = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text(stringResource(R.string.review_details)) }, minLines = 4, shape = RoundedCornerShape(10.dp))
+                Text(stringResource(R.string.rating), color = MangaColors.OnSurface, style = MaterialTheme.typography.labelMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { (1..5).forEach { star -> FilterChip(selected = reviewRating == star, onClick = { reviewRating = star }, label = { Text("$star") }, shape = RoundedCornerShape(8.dp)) } }
             }},
-            confirmButton = { Button(onClick = { viewModel.upsertReview(reviewRating, reviewTitle, reviewBody); reviewDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)) { Text(context.getString(R.string.save)) } },
-            dismissButton = { TextButton(onClick = { reviewDialog = false }) { Text(context.getString(R.string.cancel), color = MangaColors.Muted) } }
+            confirmButton = { Button(onClick = { viewModel.upsertReview(reviewRating, reviewTitle, reviewBody); reviewDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)) { Text(stringResource(R.string.save)) } },
+            dismissButton = { TextButton(onClick = { reviewDialog = false }) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) } }
         )
     }
 
     // Report dialog
     reportTarget?.let { comment ->
-        AlertDialog(onDismissRequest = { reportTarget = null }, containerColor = MangaColors.Surface, title = { Text(context.getString(R.string.community_report_title), color = MangaColors.OnSurface) },
+        AlertDialog(onDismissRequest = { reportTarget = null }, containerColor = MangaColors.Surface, title = { Text(stringResource(R.string.community_report_title), color = MangaColors.OnSurface) },
             text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(comment.text, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(value = reportReason, onValueChange = { reportReason = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text(context.getString(R.string.community_report_reason)) }, shape = RoundedCornerShape(10.dp))
+                OutlinedTextField(value = reportReason, onValueChange = { reportReason = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text(stringResource(R.string.community_report_reason)) }, shape = RoundedCornerShape(10.dp))
             }},
-            confirmButton = { Button(onClick = { viewModel.reportComment(comment, reportReason); reportTarget = null }, enabled = reportReason.isNotBlank(), colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Error)) { Text(context.getString(R.string.community_send)) } },
-            dismissButton = { TextButton(onClick = { reportTarget = null }) { Text(context.getString(R.string.cancel), color = MangaColors.Muted) } }
+            confirmButton = { Button(onClick = { viewModel.reportComment(comment, reportReason); reportTarget = null }, enabled = reportReason.isNotBlank(), colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Error)) { Text(stringResource(R.string.community_send)) } },
+            dismissButton = { TextButton(onClick = { reportTarget = null }) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) } }
         )
     }
 }
@@ -408,9 +408,9 @@ private fun CommentCard(
                         Icon(Icons.Filled.MoreVert, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp))
                     }
                     DropdownMenu(expanded = showOverflow, onDismissRequest = { showOverflow = false }) {
-                        Text(context.getString(R.string.community_reply), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable { onReply(); showOverflow = false })
-                        Text(context.getString(R.string.community_report), color = MangaColors.Yellow, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable { onReport(); showOverflow = false })
-                        Text(context.getString(R.string.community_mute), color = MangaColors.Muted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable { onMute(); showOverflow = false })
+                        Text(stringResource(R.string.community_reply), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable { onReply(); showOverflow = false })
+                        Text(stringResource(R.string.community_report), color = MangaColors.Yellow, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable { onReport(); showOverflow = false })
+                        Text(stringResource(R.string.community_mute), color = MangaColors.Muted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable { onMute(); showOverflow = false })
                     }
                 }
             }
@@ -418,7 +418,7 @@ private fun CommentCard(
             // Content
             if (comment.spoiler && spoilerDefault && !isSpoilerRevealed) {
                 OutlinedButton(onClick = onRevealSpoiler, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.Visibility, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(context.getString(R.string.community_show_spoiler))
+                    Icon(Icons.Filled.Visibility, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.community_show_spoiler))
                 }
             } else {
                 Text(comment.text, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
@@ -433,7 +433,7 @@ private fun CommentCard(
                     Text("${comment.dislikes}", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
                 }
                 if (comment.replyCount > 0) {
-                    Text(context.getString(R.string.fmt_025, comment.replyCount), color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(R.string.fmt_025, comment.replyCount), color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }

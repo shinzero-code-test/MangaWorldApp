@@ -106,7 +106,7 @@ class SuggestionsViewModel @Inject constructor(
                 }
                 suggestionsManager.updateSuggestions(mangaSuggestions)
             } catch (e: Exception) {
-                errorMessage = context.getString(R.string.fmt_075, e.message ?: "")
+                errorMessage = stringResource(R.string.fmt_075, e.message ?: "")
             }
             isLoading = false
         }
