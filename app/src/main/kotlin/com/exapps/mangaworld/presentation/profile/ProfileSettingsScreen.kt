@@ -362,6 +362,7 @@ fun ProfileSettingsScreen(
     val avatarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { viewModel.uploadAvatar(it) }
     }
+    val context = androidx.compose.ui.platform.LocalContext.current
     val googleLinkLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         try {
             val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data).result
@@ -373,7 +374,6 @@ fun ProfileSettingsScreen(
             viewModel.onProviderLinkError(context.getString(R.string.fmt_078, e.localizedMessage ?: context.getString(R.string.unknown_error)))
         }
     }
-    val context = androidx.compose.ui.platform.LocalContext.current
     val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
     DisposableEffect(facebookCallbackManager) {
         val callback = object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
