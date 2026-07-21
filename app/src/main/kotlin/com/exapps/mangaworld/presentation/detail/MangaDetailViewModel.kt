@@ -234,7 +234,7 @@ class MangaDetailViewModel @Inject constructor(
                         id = "${currentMangaId}_${dir.name}",
                         mangaId = currentMangaId,
                         number = chNumber,
-                        title = stringResource(R.string.fmt_059, chNumber),
+                        title = context.getString(R.string.fmt_059, chNumber),
                         // chapterUrl = directory name; reader uses getLocalChapterPages(mangaId, chapterUrl)
                         url = dir.name,
                         totalPages = pageCount,
@@ -504,7 +504,7 @@ class MangaDetailViewModel @Inject constructor(
                         mangaId = currentMangaId,
                         mangaTitle = m?.title ?: currentSlug,
                         chapterUrl = chapter.url,
-                        chapterTitle = chapter.title ?: stringResource(R.string.fmt_059, chapter.displayNumber),
+                        chapterTitle = chapter.title ?: context.getString(R.string.fmt_059, chapter.displayNumber),
                         pages = pages,
                         wifiOnly = wifiOnly,
                         referer = srcReferer,

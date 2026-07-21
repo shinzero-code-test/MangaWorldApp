@@ -296,14 +296,14 @@ class ProfileSettingsViewModel @Inject constructor(
             _providerLinkError.value = accountMergeMessage(context, error.reason)
         } catch (error: ProviderManagementRequiresSignInException) {
             _providerLinkError.value = if (error.isGuestSession) {
-                stringResource(R.string.settings_provider_guest_error)
+                context.getString(R.string.settings_provider_guest_error)
             } else {
-                stringResource(R.string.settings_provider_sign_in_error)
+                context.getString(R.string.settings_provider_sign_in_error)
             }
         } catch (error: IllegalArgumentException) {
-            _providerLinkError.value = error.message ?: stringResource(R.string.cannot_make_change)
+            _providerLinkError.value = error.message ?: context.getString(R.string.cannot_make_change)
         } catch (_: Exception) {
-            _providerLinkError.value = stringResource(R.string.settings_provider_link_error)
+            _providerLinkError.value = context.getString(R.string.settings_provider_link_error)
         }
     }
 }
