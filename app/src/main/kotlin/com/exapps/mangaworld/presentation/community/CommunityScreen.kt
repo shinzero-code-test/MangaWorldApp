@@ -55,7 +55,7 @@ data class CommentThread(
 
 @Stable
 data class CommunityUiState(
-    val title: String = stringResource(R.string.community_title),
+    val title: String = "",
     val comments: List<CommunityComment> = emptyList(),
     val reviews: List<MangaReview> = emptyList(),
     val profile: CommunityProfile? = null,
