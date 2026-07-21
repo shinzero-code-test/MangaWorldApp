@@ -343,7 +343,8 @@ private fun MangaApp(
                         launchIntent = launchIntent,
                         deepLinkIntents = deepLinkIntents,
                         googleSignInClient = googleSignInClient,
-                        setFacebookCallbackManager = setFacebookCallbackManager
+                        setFacebookCallbackManager = setFacebookCallbackManager,
+                        isSignedIn = userIsLoggedIn
                     )
                 }
             }
@@ -360,7 +361,8 @@ private fun MangaWorldContent(
     launchIntent: Intent?,
     deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>,
     googleSignInClient: GoogleSignInClient,
-    setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit
+    setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit,
+    isSignedIn: Boolean = false
 ) {
     val navController = rememberNavController()
     val navBackStack by navController.currentBackStackEntryAsState()
@@ -418,7 +420,7 @@ private fun MangaWorldContent(
                 navController = navController,
                 googleSignInClient = googleSignInClient,
                 setFacebookCallbackManager = setFacebookCallbackManager,
-                isSignedIn = userIsLoggedIn
+                isSignedIn = isSignedIn
             )
         }
     }
