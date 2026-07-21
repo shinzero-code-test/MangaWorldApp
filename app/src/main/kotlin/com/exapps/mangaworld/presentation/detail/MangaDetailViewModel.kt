@@ -234,7 +234,7 @@ class MangaDetailViewModel @Inject constructor(
                         id = "${currentMangaId}_${dir.name}",
                         mangaId = currentMangaId,
                         number = chNumber,
-                        title = context.getString(R.string.fmt_059, chNumber),
+                        title = context.getString(R.string.fmt_059, chNumber.toString()),
                         // chapterUrl = directory name; reader uses getLocalChapterPages(mangaId, chapterUrl)
                         url = dir.name,
                         totalPages = pageCount,
