@@ -373,8 +373,8 @@ fun ProfileSettingsScreen(
             viewModel.onProviderLinkError(context.getString(R.string.fmt_078, e.localizedMessage ?: context.getString(R.string.unknown_error)))
         }
     }
-    val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
     DisposableEffect(facebookCallbackManager) {
         val callback = object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
             override fun onSuccess(result: com.facebook.login.LoginResult) {
