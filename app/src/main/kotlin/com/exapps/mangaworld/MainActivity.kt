@@ -1,5 +1,6 @@
 package com.exapps.mangaworld
 import com.exapps.mangaworld.R
+import androidx.compose.ui.res.stringResource
 
 import android.Manifest
 import android.content.Intent
@@ -455,7 +456,7 @@ private fun MangaBottomBar(
                     }
                 },
                 label = {
-                    Text(label, style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(label), style = MaterialTheme.typography.labelSmall)
                 },
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = MangaColors.PrimaryLight,
@@ -521,9 +522,9 @@ private fun BiometricLockOverlay(onUnlocked: () -> Unit) {
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(context.current.getString(R.string.app_locked), style = MaterialTheme.typography.titleLarge, color = MangaColors.OnSurface)
+                Text(context.getString(R.string.app_locked), style = MaterialTheme.typography.titleLarge, color = MangaColors.OnSurface)
                 Text(
-                    errorMessage ?: context.current.getString(R.string.unlock_app_biometric),
+                    errorMessage ?: context.getString(R.string.unlock_app_biometric),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MangaColors.OnSurfaceVariant
                 )
