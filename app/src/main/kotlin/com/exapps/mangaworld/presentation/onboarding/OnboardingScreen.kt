@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,35 +41,36 @@ val onboardingPages = listOf(
         icon = Icons.Filled.MenuBook,
         iconTint = MangaColors.PrimaryLight,
         iconBg = MangaColors.GlowPurple,
-        title = stringResource(R.string.onboarding_read_title),
-        subtitle = stringResource(R.string.str_010)
+        title = context.getString(R.string.onboarding_read_title),
+        subtitle = context.getString(R.string.str_010)
     ),
     OnboardingPage(
         icon = Icons.Filled.Language,
         iconTint = MangaColors.Cyan,
         iconBg = MangaColors.GlowCyan,
-        title = stringResource(R.string.onboarding_sources_title),
+        title = context.getString(R.string.onboarding_sources_title),
         subtitle = "Olympus Staff · Azora Moon · Manga Starz\nManga Sid · Meshmanga"
     ),
     OnboardingPage(
         icon = Icons.Filled.Download,
         iconTint = MangaColors.Green,
         iconBg = Color(0x2244BB44),
-        title = stringResource(R.string.onboarding_offline_title),
-        subtitle = stringResource(R.string.download_favorites_offline)
+        title = context.getString(R.string.onboarding_offline_title),
+        subtitle = context.getString(R.string.download_favorites_offline)
     ),
     OnboardingPage(
         icon = Icons.Filled.Tune,
         iconTint = MangaColors.Yellow,
         iconBg = Color(0x22FFDD00),
-        title = stringResource(R.string.onboarding_custom_title),
-        subtitle = stringResource(R.string.str_443)
+        title = context.getString(R.string.onboarding_custom_title),
+        subtitle = context.getString(R.string.str_443)
     )
 )
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreen(onFinish: () -> Unit) {
+    val context = LocalContext.current
     val pagerState = rememberPagerState { onboardingPages.size }
     val scope = rememberCoroutineScope()
     val isLast = pagerState.currentPage == onboardingPages.size - 1
@@ -85,7 +87,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                 horizontalArrangement = Arrangement.End) {
                 AnimatedVisibility(!isLast) {
                     TextButton(onClick = onFinish) {
-                        Text(stringResource(R.string.onboarding_skip), color = MangaColors.Muted,
+                        Text(context.getString(R.string.onboarding_skip), color = MangaColors.Muted,
                             style = MaterialTheme.typography.bodyMedium)
                     }
                 }
@@ -122,7 +124,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
 
                 // Button
                 GradientButton(
-                    text = if (isLast) stringResource(R.string.onboarding_start) else stringResource(R.string.next),
+                    text = if (isLast) context.getString(R.string.onboarding_start) else context.getString(R.string.next),
                     onClick = {
                         if (isLast) onFinish()
                         else scope.launch {

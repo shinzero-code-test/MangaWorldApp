@@ -106,10 +106,10 @@ fun ImportMangaScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.import_external_manga), color = MangaColors.OnSurface) },
+                title = { Text(context.getString(R.string.import_external_manga), color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
+                        Icon(Icons.Filled.ArrowBack, context.getString(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
@@ -135,9 +135,9 @@ fun ImportMangaScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(stringResource(R.string.manga_folder), style = MaterialTheme.typography.titleMedium,
+                        Text(context.getString(R.string.manga_folder), style = MaterialTheme.typography.titleMedium,
                             color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
-                        Text(stringResource(R.string.choose_manga_folder_desc),
+                        Text(context.getString(R.string.choose_manga_folder_desc),
                             style = MaterialTheme.typography.bodySmall, color = MangaColors.OnSurfaceVariant)
 
                         OutlinedButton(
@@ -146,11 +146,11 @@ fun ImportMangaScreen(
                         ) {
                             Icon(Icons.Filled.FolderOpen, null, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text(if (folderName.isNotBlank()) folderName else stringResource(R.string.choose_folder))
+                            Text(if (folderName.isNotBlank()) folderName else context.getString(R.string.choose_folder))
                         }
 
                         if (chapters.isNotEmpty()) {
-                            Text(stringResource(R.string.fmt_069, chapters.size),
+                            Text(context.getString(R.string.fmt_069, chapters.size),
                                 style = MaterialTheme.typography.bodySmall, color = MangaColors.Cyan)
                             LazyColumn(
                                 modifier = Modifier.heightIn(max = 200.dp),
@@ -167,7 +167,7 @@ fun ImportMangaScreen(
                                         Icon(Icons.Filled.Article, null,
                                             modifier = Modifier.size(16.dp), tint = MangaColors.Primary)
                                         Spacer(Modifier.width(8.dp))
-                                        Text(stringResource(R.string.fmt_055, chapter.number.toInt(), chapter.fileName),
+                                        Text(context.getString(R.string.fmt_055, chapter.number.toInt(), chapter.fileName),
                                             style = MaterialTheme.typography.bodySmall, color = MangaColors.OnSurface)
                                     }
                                 }
@@ -188,7 +188,7 @@ fun ImportMangaScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(stringResource(R.string.manga_cover), style = MaterialTheme.typography.titleMedium,
+                        Text(context.getString(R.string.manga_cover), style = MaterialTheme.typography.titleMedium,
                             color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
 
                         OutlinedButton(
@@ -197,13 +197,13 @@ fun ImportMangaScreen(
                         ) {
                             Icon(Icons.Filled.Image, null, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.choose_cover_image))
+                            Text(context.getString(R.string.choose_cover_image))
                         }
 
                         coverUri?.let { uri ->
                             AsyncImage(
                                 model = uri,
-                                contentDescription = stringResource(R.string.cover),
+                                contentDescription = context.getString(R.string.cover),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(200.dp)
@@ -226,13 +226,13 @@ fun ImportMangaScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(stringResource(R.string.manga_info), style = MaterialTheme.typography.titleMedium,
+                        Text(context.getString(R.string.manga_info), style = MaterialTheme.typography.titleMedium,
                             color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
 
                         OutlinedTextField(
                             value = mangaName,
                             onValueChange = { mangaName = it },
-                            label = { Text(stringResource(R.string.manga_name_required)) },
+                            label = { Text(context.getString(R.string.manga_name_required)) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
@@ -240,7 +240,7 @@ fun ImportMangaScreen(
                         OutlinedTextField(
                             value = mangaDescription,
                             onValueChange = { mangaDescription = it },
-                            label = { Text(stringResource(R.string.description)) },
+                            label = { Text(context.getString(R.string.description)) },
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 3
                         )
@@ -248,7 +248,7 @@ fun ImportMangaScreen(
                         OutlinedTextField(
                             value = mangaGenres,
                             onValueChange = { mangaGenres = it },
-                            label = { Text(stringResource(R.string.str_140)) },
+                            label = { Text(context.getString(R.string.str_140)) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
@@ -269,10 +269,10 @@ fun ImportMangaScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             if (progress.error != null) {
-                                Text(stringResource(R.string.fmt_073, progress.error), color = MangaColors.Error,
+                                Text(context.getString(R.string.fmt_073, progress.error), color = MangaColors.Error,
                                     style = MaterialTheme.typography.bodySmall)
                             } else if (progress.isComplete) {
-                                Text(stringResource(R.string.str_239), color = MangaColors.Cyan,
+                                Text(context.getString(R.string.str_239), color = MangaColors.Cyan,
                                     style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 Spacer(Modifier.height(8.dp))
                                 Button(
@@ -282,7 +282,7 @@ fun ImportMangaScreen(
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text(stringResource(R.string.ok))
+                                    Text(context.getString(R.string.ok))
                                 }
                             } else {
                                 LinearProgressIndicator(
@@ -293,10 +293,10 @@ fun ImportMangaScreen(
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 )
-                                Text(stringResource(R.string.fmt_072, progress.processedChapters, progress.totalChapters),
+                                Text(context.getString(R.string.fmt_072, progress.processedChapters, progress.totalChapters),
                                     style = MaterialTheme.typography.bodySmall, color = MangaColors.OnSurfaceVariant)
                                 if (progress.currentChapter.isNotBlank()) {
-                                    Text(stringResource(R.string.fmt_060, progress.currentChapter),
+                                    Text(context.getString(R.string.fmt_060, progress.currentChapter),
                                         style = MaterialTheme.typography.labelSmall, color = MangaColors.Muted)
                                 }
                             }
@@ -310,15 +310,15 @@ fun ImportMangaScreen(
                 Button(
                     onClick = {
                         if (mangaName.isBlank()) {
-                            Toast.makeText(context, stringResource(R.string.enter_manga_name), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.enter_manga_name), Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         if (folderUri == null) {
-                            Toast.makeText(context, stringResource(R.string.choose_manga_folder), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.choose_manga_folder), Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         if (chapters.isEmpty()) {
-                            Toast.makeText(context, stringResource(R.string.no_chapters_found), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.no_chapters_found), Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         isProcessing = true
@@ -351,7 +351,7 @@ fun ImportMangaScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(stringResource(R.string.import_manga))
+                    Text(context.getString(R.string.import_manga))
                 }
             }
 
@@ -381,9 +381,9 @@ private fun getFolderDisplayName(context: Context, uri: Uri): String {
 private fun extractDisplayNameFromTreeId(uri: Uri): String {
     return try {
         val treeDocId = android.provider.DocumentsContract.getTreeDocumentId(uri)
-        treeDocId.substringAfterLast('/').takeIf { it.isNotBlank() } ?: stringResource(R.string.folder)
+        treeDocId.substringAfterLast('/').takeIf { it.isNotBlank() } ?: context.getString(R.string.folder)
     } catch (_: Exception) {
-        stringResource(R.string.folder)
+        context.getString(R.string.folder)
     }
 }
 
@@ -458,7 +458,7 @@ private suspend fun importManga(
 
             if (doc == null || !doc.exists() || !doc.isDirectory) {
                 throw IllegalStateException(
-                    stringResource(R.string.str_228)
+                    context.getString(R.string.str_228)
                 )
             }
 
@@ -550,7 +550,7 @@ private suspend fun importManga(
                 description = description
             )
         } catch (e: Exception) {
-            onProgress(ImportProgress(error = e.message ?: stringResource(R.string.unknown_error)))
+            onProgress(ImportProgress(error = e.message ?: context.getString(R.string.unknown_error)))
             null
         }
     }

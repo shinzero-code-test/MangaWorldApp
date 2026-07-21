@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.presentation.community
 import com.exapps.mangaworld.R
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.background
@@ -63,7 +64,7 @@ class CommunityChatViewModel @Inject constructor(
     private val remoteConfigManager: FirebaseRemoteConfigManager
 ) : ViewModel() {
     val roomId: String = java.net.URLDecoder.decode(savedStateHandle["roomId"] ?: "global", "UTF-8")
-    val title: String = java.net.URLDecoder.decode(savedStateHandle["title"] ?: stringResource(R.string.live_chat), "UTF-8")
+    val title: String = java.net.URLDecoder.decode(savedStateHandle["title"] ?: context.getString(R.string.live_chat), "UTF-8")
     val messages = communityRepository.observeChatMessages(roomId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -92,6 +93,7 @@ fun CommunityChatScreen(
     onBack: () -> Unit,
     viewModel: CommunityChatViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     var message by remember { mutableStateOf("") }
@@ -102,7 +104,7 @@ fun CommunityChatScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.accessibility_back), tint = MangaColors.OnSurface) }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = context.getString(R.string.accessibility_back), tint = MangaColors.OnSurface) }
             Text(viewModel.title, style = MaterialTheme.typography.titleLarge, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
             Spacer(Modifier.padding(0.dp))
         }
@@ -127,9 +129,9 @@ fun CommunityChatScreen(
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = message, onValueChange = { message = it }, modifier = Modifier.weight(1f), label = { Text(stringResource(R.string.type_message)) })
+                OutlinedTextField(value = message, onValueChange = { message = it }, modifier = Modifier.weight(1f), label = { Text(context.getString(R.string.type_message)) })
                 IconButton(onClick = { if (message.isNotBlank()) { viewModel.send(message); message = "" } }) {
-                    Icon(Icons.Filled.Send, contentDescription = stringResource(R.string.accessibility_send), tint = MangaColors.Cyan)
+                    Icon(Icons.Filled.Send, contentDescription = context.getString(R.string.accessibility_send), tint = MangaColors.Cyan)
                 }
             }
         }

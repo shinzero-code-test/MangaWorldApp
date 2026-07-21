@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.presentation.diagnostics
 import com.exapps.mangaworld.R
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.background
@@ -160,6 +161,7 @@ fun DiagnosticsScreen(
     onBack: () -> Unit,
     viewModel: DiagnosticsViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     Column(
@@ -175,10 +177,10 @@ fun DiagnosticsScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = MangaColors.Cyan)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = context.getString(R.string.back), tint = MangaColors.Cyan)
             }
             Text(
-                stringResource(R.string.diagnostics_health),
+                context.getString(R.string.diagnostics_health),
                 style = MaterialTheme.typography.titleLarge,
                 color = MangaColors.OnSurface,
                 fontWeight = FontWeight.Bold
@@ -190,7 +192,7 @@ fun DiagnosticsScreen(
                     .clip(RoundedCornerShape(12.dp))
                     .background(MangaColors.SurfaceContainer)
             ) {
-                Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.update), tint = MangaColors.Cyan)
+                Icon(Icons.Filled.Refresh, contentDescription = context.getString(R.string.update), tint = MangaColors.Cyan)
             }
         }
 
@@ -258,7 +260,7 @@ private fun GeneralStatusCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    stringResource(R.string.general_status),
+                    context.getString(R.string.general_status),
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
@@ -278,11 +280,11 @@ private fun GeneralStatusCard(
         Spacer(Modifier.height(18.dp))
 
         val rows = listOf(
-            Triple(Icons.Filled.Storage, MangaColors.Cyan, stringResource(R.string.enabled_sources)) to appSettings.enabledSources.size.toString(),
-            Triple(Icons.Filled.Block, MangaColors.Pink, stringResource(R.string.blocked_keywords)) to appSettings.contentBlacklist.size.toString(),
-            Triple(Icons.Filled.Image, MangaColors.Orange, stringResource(R.string.str_255)) to formatDiagnosticBytes(imageCacheSizeBytes),
-            Triple(Icons.Filled.AccessTime, MangaColors.PrimaryLight, stringResource(R.string.str_009)) to lastUpdatedLabel(widgetSnapshotUpdatedAt),
-            Triple(Icons.Filled.Fingerprint, MangaColors.Green, stringResource(R.string.settings_biometric)) to if (appSettings.biometricLockEnabled) stringResource(R.string.enabled) else stringResource(R.string.disabled)
+            Triple(Icons.Filled.Storage, MangaColors.Cyan, context.getString(R.string.enabled_sources)) to appSettings.enabledSources.size.toString(),
+            Triple(Icons.Filled.Block, MangaColors.Pink, context.getString(R.string.blocked_keywords)) to appSettings.contentBlacklist.size.toString(),
+            Triple(Icons.Filled.Image, MangaColors.Orange, context.getString(R.string.str_255)) to formatDiagnosticBytes(imageCacheSizeBytes),
+            Triple(Icons.Filled.AccessTime, MangaColors.PrimaryLight, context.getString(R.string.str_009)) to lastUpdatedLabel(widgetSnapshotUpdatedAt),
+            Triple(Icons.Filled.Fingerprint, MangaColors.Green, context.getString(R.string.settings_biometric)) to if (appSettings.biometricLockEnabled) context.getString(R.string.enabled) else context.getString(R.string.disabled)
         )
 
         rows.forEachIndexed { index, (meta, value) ->
@@ -305,7 +307,7 @@ private fun lastUpdatedLabel(updatedAt: Long): String {
     return if (updatedAt > 0) {
         java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(updatedAt))
     } else {
-        stringResource(R.string.none_alt)
+        context.getString(R.string.none_alt)
     }
 }
 
@@ -382,7 +384,7 @@ private fun SourcesSectionHeader() {
         )
         Spacer(Modifier.width(10.dp))
         Text(
-            stringResource(R.string.sources_health),
+            context.getString(R.string.sources_health),
             color = MangaColors.OnSurface,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.titleMedium
@@ -428,7 +430,7 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
                 Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MangaColors.Green, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    if (status.homeOk) stringResource(R.string.ok_alt) else stringResource(R.string.str_331),
+                    if (status.homeOk) context.getString(R.string.ok_alt) else context.getString(R.string.str_331),
                     color = if (status.homeOk) MangaColors.Green else MangaColors.Error,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodyMedium
@@ -442,7 +444,7 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    if (status.hasCookie) stringResource(R.string.available) else stringResource(R.string.settings_unavailable),
+                    if (status.hasCookie) context.getString(R.string.available) else context.getString(R.string.settings_unavailable),
                     color = if (status.hasCookie) MangaColors.Green else MangaColors.Muted,
                     style = MaterialTheme.typography.labelSmall
                 )
@@ -461,11 +463,11 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(10.dp))
-                SourceDetailLabel(icon = Icons.Filled.Home, label = stringResource(R.string.home_page))
+                SourceDetailLabel(icon = Icons.Filled.Home, label = context.getString(R.string.home_page))
                 Spacer(Modifier.height(8.dp))
-                SourceDetailLabel(icon = Icons.Filled.Search, label = stringResource(R.string.str_426))
+                SourceDetailLabel(icon = Icons.Filled.Search, label = context.getString(R.string.str_426))
                 Spacer(Modifier.height(8.dp))
-                SourceDetailLabel(icon = Icons.Filled.Public, label = stringResource(R.string.str_355))
+                SourceDetailLabel(icon = Icons.Filled.Public, label = context.getString(R.string.str_355))
             }
 
             Spacer(Modifier.width(10.dp))
@@ -533,7 +535,7 @@ private fun InfoFooterBanner() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            stringResource(R.string.str_211),
+            context.getString(R.string.str_211),
             color = MangaColors.OnSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.weight(1f)
