@@ -39,6 +39,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SuggestionsViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val recommendationEngine: RecommendationEngine,
     private val suggestionsManager: SuggestionsManager,
     private val cacheDao: MangaCacheDao

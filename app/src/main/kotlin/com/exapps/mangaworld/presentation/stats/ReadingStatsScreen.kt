@@ -270,10 +270,10 @@ private fun SimpleBarChart(
     useReadingTime: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val maxValue = if (useReadingTime) {
+    val maxValue: Long = if (useReadingTime) {
         data.maxOfOrNull { it.readingTimeMs }?.coerceAtLeast(1) ?: 1
     } else {
-        data.maxOfOrNull { it.pagesRead }?.coerceAtLeast(1) ?: 1
+        data.maxOfOrNull { it.pagesRead.toLong() }?.coerceAtLeast(1) ?: 1
     }
 
     Row(
@@ -286,7 +286,7 @@ private fun SimpleBarChart(
     ) {
         data.forEach { stat ->
             val value = if (useReadingTime) stat.readingTimeMs else stat.pagesRead.toLong()
-            val heightFraction = if (maxValue > 0) value.toFloat() / maxValue else 0f
+            val heightFraction = if (maxValue > 0) value.toFloat() / maxValue.toFloat() else 0f
             Box(
                 modifier = Modifier
                     .weight(1f)
