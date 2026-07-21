@@ -47,6 +47,7 @@ class SettingsViewModelTest {
 
     private fun createViewModel() = SettingsViewModel(
         repo = settingsRepo,
+        context = io.mockk.mockk(relaxed = true),
         cacheManager = cacheManager,
         localBackupManager = localBackupManager,
         widgetDataRepository = widgetDataRepository,

@@ -52,6 +52,7 @@ class HomeViewModelTest {
     }
 
     private fun createViewModel() = HomeViewModel(
+        context = io.mockk.mockk(relaxed = true),
         repo = mangaRepo,
         settingsRepo = settingsRepo,
         remoteConfigManager = remoteConfigManager,
