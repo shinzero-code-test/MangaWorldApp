@@ -377,6 +377,7 @@ private fun getFolderDisplayName(context: Context, uri: Uri): String {
  * DocumentsContract.getTreeDocumentId() decodes this to "primary:Download/OmniFetch"
  * → we take the last path segment.
  */
+@Composable
 private fun extractDisplayNameFromTreeId(uri: Uri): String {
     return try {
         val treeDocId = android.provider.DocumentsContract.getTreeDocumentId(uri)

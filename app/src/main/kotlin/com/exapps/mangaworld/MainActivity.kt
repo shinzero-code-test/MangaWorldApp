@@ -470,6 +470,7 @@ private fun MangaBottomBar(
 }
 
 @Composable
+@Composable
 private fun BiometricLockOverlay(onUnlocked: () -> Unit) {
     val context = LocalContext.current
     val activity = context as? FragmentActivity ?: return

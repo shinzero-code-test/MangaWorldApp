@@ -302,6 +302,7 @@ private fun GeneralStatusCard(
     }
 }
 
+@Composable
 private fun lastUpdatedLabel(updatedAt: Long): String {
     return if (updatedAt > 0) {
         java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(updatedAt))

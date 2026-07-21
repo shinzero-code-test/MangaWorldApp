@@ -46,10 +46,10 @@ fun ImageViewerScreen(
         containerColor = MangaColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text(title ?: stringResource(R.string.view_image), color = MangaColors.OnSurface) },
+                title = { Text(title ?: context.getString(R.string.view_image), color = MangaColors.OnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
+                        Icon(Icons.Filled.ArrowBack, context.getString(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
                 actions = {
@@ -58,7 +58,7 @@ fun ImageViewerScreen(
                             saveImage(context, imageUrl)
                         }
                     }) {
-                        Icon(Icons.Filled.Download, stringResource(R.string.save), tint = MangaColors.Cyan)
+                        Icon(Icons.Filled.Download, context.getString(R.string.save), tint = MangaColors.Cyan)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
@@ -120,25 +120,25 @@ private suspend fun saveImage(context: Context, imageUrl: String) {
                 resolver.update(it, contentValues, null, null)
             }
             withContext(Dispatchers.Main) {
-                Toast.makeText(context, stringResource(R.string.reader_image_saved), Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.reader_image_saved), Toast.LENGTH_SHORT).show()
             }
         } else {
             // Android 9 and below — use external storage
             @Suppress("DEPRECATION")
             val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-            val mangaDir = java.io.File(directory, stringResource(R.string.app_name))
+            val mangaDir = java.io.File(directory, context.getString(R.string.app_name))
             mangaDir.mkdirs()
             val file = java.io.File(mangaDir, "MangaWorld_${System.currentTimeMillis()}.jpg")
             file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }
             // Scan the file so it appears in the gallery
             android.media.MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null, null)
             withContext(Dispatchers.Main) {
-                Toast.makeText(context, stringResource(R.string.image_saved), Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.image_saved), Toast.LENGTH_SHORT).show()
             }
         }
     } catch (e: Exception) {
         withContext(Dispatchers.Main) {
-            Toast.makeText(context, stringResource(R.string.fmt_077, e.message ?: ""), Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.fmt_077, e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 }
