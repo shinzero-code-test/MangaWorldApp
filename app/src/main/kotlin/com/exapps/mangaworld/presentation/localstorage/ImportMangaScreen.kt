@@ -77,6 +77,7 @@ fun ImportMangaScreen(
     viewModel: ImportMangaViewModel = hiltViewModel()
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var mangaName by remember { mutableStateOf("") }
     var mangaDescription by remember { mutableStateOf("") }
     var mangaGenres by remember { mutableStateOf("") }
@@ -379,11 +380,12 @@ private fun getFolderDisplayName(context: Context, uri: Uri): String {
  */
 @Composable
 private fun extractDisplayNameFromTreeId(uri: Uri): String {
+    val context = LocalContext.current
     return try {
         val treeDocId = android.provider.DocumentsContract.getTreeDocumentId(uri)
-        treeDocId.substringAfterLast('/').takeIf { it.isNotBlank() } ?: stringResource(R.string.folder)
+        treeDocId.substringAfterLast('/').takeIf { it.isNotBlank() } ?: context.getString(R.string.folder)
     } catch (_: Exception) {
-        stringResource(R.string.folder)
+        context.getString(R.string.folder)
     }
 }
 
@@ -458,7 +460,7 @@ private suspend fun importManga(
 
             if (doc == null || !doc.exists() || !doc.isDirectory) {
                 throw IllegalStateException(
-                    stringResource(R.string.str_228)
+                    context.getString(R.string.str_228)
                 )
             }
 
@@ -550,7 +552,7 @@ private suspend fun importManga(
                 description = description
             )
         } catch (e: Exception) {
-            onProgress(ImportProgress(error = e.message ?: stringResource(R.string.unknown_error)))
+            onProgress(ImportProgress(error = e.message ?: context.getString(R.string.unknown_error)))
             null
         }
     }

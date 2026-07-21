@@ -71,6 +71,7 @@ data class CommunityUiState(
 @HiltViewModel
 class CommunityViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val communityRepository: CommunityRepository,
     private val settingsRepository: SettingsRepository,
     private val sessionManager: FirebaseSessionManager,
@@ -129,21 +130,21 @@ class CommunityViewModel @Inject constructor(
                 if (chapterUrl == null) communityRepository.postMangaComment(mangaId, slug, sourceId, fullText, spoiler, _replyTo.value?.id)
                 else communityRepository.postChapterComment(mangaId, slug, sourceId, chapterUrl, fullText, spoiler, _replyTo.value?.id)
             }.onSuccess { _replyTo.value = null; _error.value = null }
-                .onFailure { e -> _error.value = e.message ?: stringResource(R.string.community_error_post) }
+                .onFailure { e -> _error.value = e.message ?: context.getString(R.string.community_error_post) }
         }
     }
 
     fun upsertReview(rating: Int, title: String, body: String) {
         viewModelScope.launch {
             runCatching { communityRepository.upsertReview(mangaId, slug, sourceId, rating, title, body) }
-                .onFailure { e -> _error.value = e.message ?: stringResource(R.string.str_338) }
+                .onFailure { e -> _error.value = e.message ?: context.getString(R.string.str_338) }
         }
     }
 
     fun reportComment(comment: CommunityComment, reason: String) {
         viewModelScope.launch {
             runCatching { communityRepository.reportComment(comment, reason) }
-                .onFailure { e -> _error.value = e.message ?: stringResource(R.string.community_error_report) }
+                .onFailure { e -> _error.value = e.message ?: context.getString(R.string.community_error_report) }
         }
     }
 

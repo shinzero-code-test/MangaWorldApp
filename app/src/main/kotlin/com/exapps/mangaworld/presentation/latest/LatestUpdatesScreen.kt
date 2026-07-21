@@ -83,6 +83,7 @@ data class LatestUpdatesUiState(
 
 @HiltViewModel
 class LatestUpdatesViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val mangaRepository: MangaRepository,
     private val settingsRepository: SettingsRepository,
     private val libraryRepository: LibraryRepository,
@@ -127,7 +128,7 @@ class LatestUpdatesViewModel @Inject constructor(
                     next.copy(items = filterItems(next))
                 }
             }.onFailure { e ->
-                _state.update { it.copy(isLoading = false, error = e.message ?: stringResource(R.string.str_229)) }
+                _state.update { it.copy(isLoading = false, error = e.message ?: context.getString(R.string.str_229)) }
             }
 
             if (result.isSuccess) {

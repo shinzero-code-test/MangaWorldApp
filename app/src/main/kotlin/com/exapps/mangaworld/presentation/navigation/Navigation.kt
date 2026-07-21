@@ -113,12 +113,12 @@ sealed class Screen(val route: String) {
     object ReaderDeepLink : Screen("reader_deep_link?sourceId={sourceId}&mangaId={mangaId}&chapterUrl={chapterUrl}")
 }
 
-val bottomNavItems: List<Triple<Screen, String, ImageVector>> = listOf(
-    Triple(Screen.Home,         LocalContext.current.getString(R.string.home),     Icons.Filled.Home),
-    Triple(Screen.Browse,       LocalContext.current.getString(R.string.browse),         Icons.Filled.GridView),
-    Triple(Screen.Search,       LocalContext.current.getString(R.string.search),          Icons.Filled.Search),
-    Triple(Screen.Library,      LocalContext.current.getString(R.string.library_section_title),      Icons.Filled.BookmarkBorder),
-    Triple(Screen.More,         LocalContext.current.getString(R.string.more_title),       Icons.Filled.MoreHoriz),
+val bottomNavItems: List<Triple<Screen, Int, ImageVector>> = listOf(
+    Triple(Screen.Home,         R.string.home,     Icons.Filled.Home),
+    Triple(Screen.Browse,       R.string.browse,         Icons.Filled.GridView),
+    Triple(Screen.Search,       R.string.search,          Icons.Filled.Search),
+    Triple(Screen.Library,      R.string.library_section_title,      Icons.Filled.BookmarkBorder),
+    Triple(Screen.More,         R.string.more_title,       Icons.Filled.MoreHoriz),
 )
 
 @Composable
@@ -207,7 +207,7 @@ fun MangaNavGraph(
             route = Screen.CommunityChat.route,
             arguments = listOf(
                 navArgument("roomId") { type = NavType.StringType; defaultValue = "global" },
-                navArgument("title") { type = NavType.StringType; defaultValue = LocalContext.current.getString(R.string.live_chat) }
+                navArgument("title") { type = NavType.StringType; defaultValue = "live_chat" }
             )
         ) { back ->
             // NavType.StringType does NOT auto-decode URL-encoded query params

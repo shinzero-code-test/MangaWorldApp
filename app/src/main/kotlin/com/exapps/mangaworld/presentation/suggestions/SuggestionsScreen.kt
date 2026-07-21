@@ -86,7 +86,7 @@ class SuggestionsViewModel @Inject constructor(
                 }
 
                 if (cachedMangas.isEmpty()) {
-                    errorMessage = stringResource(R.string.str_367)
+                    errorMessage = context.getString(R.string.str_367)
                     isLoading = false
                     return@launch
                 }
@@ -106,7 +106,7 @@ class SuggestionsViewModel @Inject constructor(
                 }
                 suggestionsManager.updateSuggestions(mangaSuggestions)
             } catch (e: Exception) {
-                errorMessage = stringResource(R.string.fmt_075, e.message ?: "")
+                errorMessage = context.getString(R.string.fmt_075, e.message ?: "")
             }
             isLoading = false
         }

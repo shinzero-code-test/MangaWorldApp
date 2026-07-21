@@ -32,8 +32,9 @@ data class OnboardingPage(
     val icon: ImageVector,
     val iconTint: Color,
     val iconBg: Color,
-    val title: String,
-    val subtitle: String
+    @androidx.annotation.StringRes val titleRes: Int,
+    @androidx.annotation.StringRes val subtitleRes: Int? = null,
+    val subtitleText: String? = null
 )
 
 val onboardingPages = listOf(
@@ -41,29 +42,29 @@ val onboardingPages = listOf(
         icon = Icons.Filled.MenuBook,
         iconTint = MangaColors.PrimaryLight,
         iconBg = MangaColors.GlowPurple,
-        title = stringResource(R.string.onboarding_read_title),
-        subtitle = stringResource(R.string.str_010)
+        titleRes = R.string.onboarding_read_title,
+        subtitleRes = R.string.str_010
     ),
     OnboardingPage(
         icon = Icons.Filled.Language,
         iconTint = MangaColors.Cyan,
         iconBg = MangaColors.GlowCyan,
-        title = stringResource(R.string.onboarding_sources_title),
-        subtitle = "Olympus Staff · Azora Moon · Manga Starz\nManga Sid · Meshmanga"
+        titleRes = R.string.onboarding_sources_title,
+        subtitleText = "Olympus Staff · Azora Moon · Manga Starz\nManga Sid · Meshmanga"
     ),
     OnboardingPage(
         icon = Icons.Filled.Download,
         iconTint = MangaColors.Green,
         iconBg = Color(0x2244BB44),
-        title = stringResource(R.string.onboarding_offline_title),
-        subtitle = stringResource(R.string.download_favorites_offline)
+        titleRes = R.string.onboarding_offline_title,
+        subtitleRes = R.string.download_favorites_offline
     ),
     OnboardingPage(
         icon = Icons.Filled.Tune,
         iconTint = MangaColors.Yellow,
         iconBg = Color(0x22FFDD00),
-        title = stringResource(R.string.onboarding_custom_title),
-        subtitle = stringResource(R.string.str_443)
+        titleRes = R.string.onboarding_custom_title,
+        subtitleRes = R.string.str_443
     )
 )
 
@@ -153,7 +154,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
         }
         Spacer(Modifier.height(40.dp))
         Text(
-            page.title,
+            stringResource(page.titleRes),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = MangaColors.OnSurface,
@@ -161,7 +162,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
         )
         Spacer(Modifier.height(16.dp))
         Text(
-            page.subtitle,
+            page.subtitleText ?: stringResource(page.subtitleRes!!),
             style = MaterialTheme.typography.bodyLarge,
             color = MangaColors.OnSurfaceVariant,
             textAlign = TextAlign.Center,

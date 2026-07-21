@@ -409,7 +409,7 @@ fun ProfileSettingsScreen(
             Spacer(Modifier.height(20.dp))
 
             Section(stringResource(R.string.more_profile), Icons.Filled.Person, MangaColors.Cyan, "profile", expandedSection, onToggle = { expandedSection = it }) {
-                ProfileInfoSection(profile, formatJoinDate(profile?.updatedAt ?: 0L)) { showEditProfile = true }
+                ProfileInfoSection(profile, formatJoinDate(context, profile?.updatedAt ?: 0L)) { showEditProfile = true }
             }
             Section(stringResource(R.string.settings_account), Icons.Filled.AccountCircle, MangaColors.PrimaryLight, "account", expandedSection, onToggle = { expandedSection = it }) {
                 AccountInfoSection(userEmail, { showSignOutConfirm = true }, { showDeleteConfirm = true })
@@ -794,10 +794,10 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     )
 }
 
-private val AVAILABLE_GENRES = listOf(
-    stringResource(R.string.genre_action), stringResource(R.string.genre_adventure), stringResource(R.string.genre_comedy), stringResource(R.string.genre_drama), stringResource(R.string.genre_fantasy), stringResource(R.string.genre_horror), stringResource(R.string.genre_romance), stringResource(R.string.genre_scifi),
-    stringResource(R.string.genre_shounen), stringResource(R.string.genre_shoujo), stringResource(R.string.genre_seinen), stringResource(R.string.genre_seinen), stringResource(R.string.genre_ecchi), stringResource(R.string.genre_apocalypse), stringResource(R.string.my_history), stringResource(R.string.genre_sports),
-    stringResource(R.string.genre_mystery), stringResource(R.string.str_288), stringResource(R.string.genre_supernatural)
+private val AVAILABLE_GENRE_RES = listOf(
+    R.string.genre_action, R.string.genre_adventure, R.string.genre_comedy, R.string.genre_drama, R.string.genre_fantasy, R.string.genre_horror, R.string.genre_romance, R.string.genre_scifi,
+    R.string.genre_shounen, R.string.genre_shoujo, R.string.genre_seinen, R.string.genre_seinen, R.string.genre_ecchi, R.string.genre_apocalypse, R.string.my_history, R.string.genre_sports,
+    R.string.genre_mystery, R.string.str_288, R.string.genre_supernatural
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -809,7 +809,8 @@ private val AVAILABLE_GENRES = listOf(
             Column {
                 Text(stringResource(R.string.choose_favorite_genres), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 12.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AVAILABLE_GENRES.forEach { genre ->
+                    AVAILABLE_GENRE_RES.forEach { genreRes ->
+                        val genre = stringResource(genreRes)
                         val isSelected = genre in selectedGenres
                         Surface(
                             shape = RoundedCornerShape(20.dp),

@@ -450,7 +450,7 @@ private fun MangaBottomBar(
                                     .background(MangaColors.GlowPurple)
                             )
                         }
-                        Icon(icon, contentDescription = label,
+                        Icon(icon, contentDescription = stringResource(label),
                             modifier = Modifier.size(22.dp))
                     }
                 },
@@ -496,8 +496,8 @@ private fun BiometricLockOverlay(onUnlocked: () -> Unit) {
         )
 
         val info = BiometricPrompt.PromptInfo.Builder()
-            .setTitle(LocalContext.current.getString(R.string.open_mangaworld))
-            .setSubtitle(LocalContext.current.getString(R.string.use_biometric_continue))
+            .setTitle(context.getString(R.string.open_mangaworld))
+            .setSubtitle(context.getString(R.string.use_biometric_continue))
             .setAllowedAuthenticators(
                 BiometricManager.Authenticators.BIOMETRIC_STRONG or
                     BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -521,9 +521,9 @@ private fun BiometricLockOverlay(onUnlocked: () -> Unit) {
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(LocalContext.current.getString(R.string.app_locked), style = MaterialTheme.typography.titleLarge, color = MangaColors.OnSurface)
+                Text(context.current.getString(R.string.app_locked), style = MaterialTheme.typography.titleLarge, color = MangaColors.OnSurface)
                 Text(
-                    errorMessage ?: LocalContext.current.getString(R.string.unlock_app_biometric),
+                    errorMessage ?: context.current.getString(R.string.unlock_app_biometric),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MangaColors.OnSurfaceVariant
                 )

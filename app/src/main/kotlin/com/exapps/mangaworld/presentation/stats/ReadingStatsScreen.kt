@@ -56,6 +56,8 @@ fun ReadingStatsScreen(
             }
             return@Scaffold
         }
+        var showReadingTimeChart by remember { mutableStateOf(false) }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -126,7 +128,6 @@ fun ReadingStatsScreen(
 
             // Daily chart (simple bar chart)
             if (state.dailyStats.isNotEmpty()) {
-                var showReadingTimeChart by remember { mutableStateOf(false) }
 
                 item {
                     Text(
