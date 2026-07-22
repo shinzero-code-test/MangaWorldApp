@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">MangaWorld</string>
-    <string name="splash_tagline">اقرأ المانجا العربية</string>
+    <string name="app_name">مانجا وورلد</string>
+    <string name="splash_tagline">بوابتك إلى عالم المانجا</string>
 
     <!-- ─── App Shortcuts ─────────────────────────────────────────────────── -->
     <string name="shortcut_search_short">بحث</string>

@@ -5,17 +5,28 @@
             <certificates src="system"/>
         </trust-anchors>
     </base-config>
-    <!-- Allow supported manga sources and image/API hosts (HTTPS) -->
-    <domain-config cleartextTrafficPermitted="false">
+    <!-- Manga sources that may serve HTTP content or mixed content -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">azorafly.com</domain>
+        <domain includeSubdomains="true">azoramoon.com</domain>
+        <domain includeSubdomains="true">3asq.org</domain>
         <domain includeSubdomains="true">olympustaff.com</domain>
         <domain includeSubdomains="true">manga-starz.net</domain>
         <domain includeSubdomains="true">mangasid.com</domain>
         <domain includeSubdomains="true">meshmanga.com</domain>
+        <domain includeSubdomains="true">hijala.com</domain>
+        <domain includeSubdomains="true">lavascans.com</domain>
+        <domain includeSubdomains="true">stellarsaber.pro</domain>
+        <domain includeSubdomains="true">procomic.pro</domain>
+        <domain includeSubdomains="true">ar.kenmanga.com</domain>
+        <domain includeSubdomains="true">lek-manga.net</domain>
+        <domain includeSubdomains="true">lekmanga.online</domain>
+        <domain includeSubdomains="true">like-manga.net</domain>
+        <domain includeSubdomains="true">link-manga.net</domain>
+        <domain includeSubdomains="true">manga-leko.site</domain>
+        <domain includeSubdomains="true">manga-lionz.org</domain>
+        <domain includeSubdomains="true">rocksmanga.com</domain>
         <domain includeSubdomains="true">appswat.com</domain>
         <domain includeSubdomains="true">wsrv.nl</domain>
-    </domain-config>
-    <!-- Sources that serve HTTP content -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">azorafly.com</domain>
     </domain-config>
 </network-security-config>

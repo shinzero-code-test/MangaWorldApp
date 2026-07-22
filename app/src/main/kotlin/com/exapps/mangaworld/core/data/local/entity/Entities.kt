@@ -15,20 +15,21 @@ data class FavoriteEntity(
     val addedAt: Long = System.currentTimeMillis(),
     val readChapters: Int = 0,
     val totalChapters: Int = 0,
-    val readingStatus: String? = null
+    val readingStatus: String? = null,
+    val isFavorite: Boolean = true
 ) {
     fun toDomain() = FavoriteManga(
         mangaId = mangaId, slug = slug, title = title, coverUrl = coverUrl,
         source = MangaSource.fromId(sourceId), addedAt = addedAt,
         readChapters = readChapters, totalChapters = totalChapters,
-        readingStatus = readingStatus
+        readingStatus = readingStatus, isFavorite = isFavorite
     )
 }
 
 fun FavoriteManga.toEntity() = FavoriteEntity(
     mangaId = mangaId, slug = slug, title = title, coverUrl = coverUrl,
     sourceId = source.id, addedAt = addedAt, readChapters = readChapters,
-    totalChapters = totalChapters, readingStatus = readingStatus
+    totalChapters = totalChapters, readingStatus = readingStatus, isFavorite = isFavorite
 )
 
 @Entity(tableName = "reading_history",

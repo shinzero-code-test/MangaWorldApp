@@ -293,7 +293,6 @@ class MangaDetailViewModel @Inject constructor(
         viewModelScope.launch {
             if (_state.value.isFavorite) {
                 libraryRepo.removeFavorite(currentMangaId)
-                _state.update { it.copy(readingStatus = null) }
                 runCatching { firebaseTopicManager.unsubscribeFromManga(currentMangaId) }
             } else {
                 libraryRepo.addFavorite(

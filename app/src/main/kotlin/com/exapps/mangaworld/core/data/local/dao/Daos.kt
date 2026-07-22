@@ -6,13 +6,13 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface FavoriteDao {
-    @Query("SELECT * FROM favorites ORDER BY addedAt DESC")
+    @Query("SELECT * FROM favorites WHERE isFavorite = 1 ORDER BY addedAt DESC")
     fun getAllFavorites(): Flow<List<FavoriteEntity>>
 
-    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE mangaId = :mangaId)")
+    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE mangaId = :mangaId AND isFavorite = 1)")
     fun isFavoriteFlow(mangaId: String): Flow<Boolean>
 
-    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE mangaId = :mangaId)")
+    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE mangaId = :mangaId AND isFavorite = 1)")
     suspend fun isFavorite(mangaId: String): Boolean
 
     @Query("SELECT * FROM favorites WHERE mangaId = :mangaId LIMIT 1")
@@ -24,7 +24,12 @@ interface FavoriteDao {
     @Query("DELETE FROM favorites WHERE mangaId = :mangaId")
     suspend fun delete(mangaId: String)
 
-    /** Atomically delete only if the entity's addedAt is older than the given timestamp. */
+    @Query("UPDATE favorites SET isFavorite = :isFav WHERE mangaId = :mangaId")
+    suspend fun setFavorite(mangaId: String, isFav: Boolean)
+
+    @Query("UPDATE favorites SET isFavorite = 1 WHERE mangaId = :mangaId")
+    suspend fun restoreFavorite(mangaId: String)
+
     @Query("DELETE FROM favorites WHERE mangaId = :mangaId AND addedAt <= :olderThan")
     suspend fun deleteIfOlder(mangaId: String, olderThan: Long)
 
@@ -39,6 +44,9 @@ interface FavoriteDao {
 
     @Query("SELECT * FROM favorites ORDER BY addedAt DESC")
     suspend fun getFavoritesList(): List<FavoriteEntity>
+
+    @Query("SELECT * FROM favorites WHERE isFavorite = 1 ORDER BY addedAt DESC")
+    suspend fun getFavoritesOnly(): List<FavoriteEntity>
 }
 
 @Dao

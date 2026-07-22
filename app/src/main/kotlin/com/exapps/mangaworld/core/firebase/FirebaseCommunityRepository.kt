@@ -259,6 +259,31 @@ class FirebaseCommunityRepository @Inject constructor(
                 mapOf("uid" to uid, "username" to profile.username, "updatedAt" to profile.updatedAt)
             )
         }.await()
+
+        // Propagate profile changes to existing comments and reviews
+        runCatching {
+            val newAuthorName = profile.displayName.ifBlank { profile.username }
+            val batch = firestore.batch()
+            val comments = firestore.collectionGroup("comments")
+                .whereEqualTo("authorUid", uid).get().await()
+            for (doc in comments.documents) {
+                batch.update(doc.reference, mapOf(
+                    "authorName" to newAuthorName,
+                    "authorUsername" to profile.username,
+                    "authorPhotoUrl" to (profile.avatarUrl ?: "")
+                ))
+            }
+            val reviews = firestore.collectionGroup("reviews")
+                .whereEqualTo("authorUid", uid).get().await()
+            for (doc in reviews.documents) {
+                batch.update(doc.reference, mapOf(
+                    "authorName" to newAuthorName,
+                    "authorUsername" to profile.username,
+                    "authorPhotoUrl" to (profile.avatarUrl ?: "")
+                ))
+            }
+            batch.commit().await()
+        }
     }
 
     override suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean, showLibraryPublic: Boolean) {

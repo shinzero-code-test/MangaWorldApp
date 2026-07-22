@@ -9,6 +9,7 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.ImageProvider
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
@@ -26,6 +27,7 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -54,8 +56,6 @@ class WidgetShelf : GlanceAppWidget() {
 class WidgetShelfReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = WidgetShelf()
 }
-
-private data class ShelfAction(val icon: String, val label: String)
 
 @Composable
 private fun WidgetShelfContent(
@@ -92,19 +92,19 @@ private fun WidgetShelfContent(
             modifier = GlanceModifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            ShelfButton(action = ShelfAction("🏠", LocalContext.current.getString(R.string.widget_shelf_home)), intent = AppLaunchIntents.home(context))
+            ShelfButton(label = context.getString(R.string.widget_shelf_home), iconRes = R.drawable.ic_shortcut_search, intent = AppLaunchIntents.home(context))
             Spacer(GlanceModifier.width(6.dp))
-            ShelfButton(action = ShelfAction("🔍", LocalContext.current.getString(R.string.widget_shelf_search)), intent = AppLaunchIntents.search(context))
+            ShelfButton(label = context.getString(R.string.widget_shelf_search), iconRes = R.drawable.ic_shortcut_search, intent = AppLaunchIntents.search(context))
             Spacer(GlanceModifier.width(6.dp))
-            ShelfButton(action = ShelfAction("📚", LocalContext.current.getString(R.string.widget_shelf_library)), intent = AppLaunchIntents.library(context))
+            ShelfButton(label = context.getString(R.string.widget_shelf_library), iconRes = R.drawable.ic_shortcut_downloads, intent = AppLaunchIntents.library(context))
             Spacer(GlanceModifier.width(6.dp))
-            ShelfButton(action = ShelfAction("⬇️", LocalContext.current.getString(R.string.widget_shelf_downloads)), intent = AppLaunchIntents.downloads(context))
+            ShelfButton(label = context.getString(R.string.widget_shelf_downloads), iconRes = R.drawable.ic_shortcut_downloads, intent = AppLaunchIntents.downloads(context))
         }
     }
 }
 
 @Composable
-private fun ShelfButton(action: ShelfAction, intent: android.content.Intent) {
+private fun ShelfButton(label: String, iconRes: Int, intent: android.content.Intent) {
     Box(
         modifier = GlanceModifier
             .fillMaxWidth()
@@ -115,10 +115,14 @@ private fun ShelfButton(action: ShelfAction, intent: android.content.Intent) {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
-            Text(action.icon, style = TextStyle(fontSize = 16.sp))
+            androidx.glance.Image(
+                provider = ImageProvider(iconRes),
+                contentDescription = label,
+                modifier = GlanceModifier.size(20.dp)
+            )
             Spacer(GlanceModifier.height(4.dp))
             Text(
-                action.label,
+                label,
                 style = TextStyle(
                     color = GlanceTheme.colors.onSurfaceVariant,
                     fontSize = 11.sp,

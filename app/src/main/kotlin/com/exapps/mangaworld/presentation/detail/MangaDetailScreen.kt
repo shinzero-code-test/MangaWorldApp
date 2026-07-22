@@ -338,11 +338,9 @@ private fun DetailContent(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (sortedChapters.isNotEmpty()) {
-                    val firstUnread = sortedChapters.lastOrNull { !readChapters.contains(it.number) }
-                        ?: sortedChapters.last()
                     GradientButton(
                         text = stringResource(R.string.read_now),
-                        onClick = { onChapterClick(firstUnread) },
+                        onClick = { onChapterClick(sortedChapters.first()) },
                         modifier = Modifier.weight(1f).height(52.dp)
                     )
                 }

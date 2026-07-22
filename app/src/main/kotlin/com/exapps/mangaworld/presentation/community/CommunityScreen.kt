@@ -235,12 +235,14 @@ fun CommunityScreen(
                     label = { Text(stringResource(R.string.comments)) },
                     shape = RoundedCornerShape(10.dp)
                 )
-                FilterChip(
-                    selected = state.tab == CommunityTab.REVIEWS,
-                    onClick = { viewModel.setTab(CommunityTab.REVIEWS) },
-                    label = { Text(stringResource(R.string.community_reviews)) },
-                    shape = RoundedCornerShape(10.dp)
-                )
+                if (!state.chapterMode) {
+                    FilterChip(
+                        selected = state.tab == CommunityTab.REVIEWS,
+                        onClick = { viewModel.setTab(CommunityTab.REVIEWS) },
+                        label = { Text(stringResource(R.string.community_reviews)) },
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
             }
 
             when (state.tab) {

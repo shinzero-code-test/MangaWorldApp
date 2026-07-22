@@ -310,7 +310,7 @@ class LibraryRepositoryImpl @Inject constructor(
         prefs.clearSyncTombstone("favorites", manga.mangaId)
     }
     override suspend fun removeFavorite(mangaId: String) {
-        favoriteDao.delete(mangaId)
+        favoriteDao.setFavorite(mangaId, false)
         prefs.markSyncTombstone("favorites", mangaId)
     }
     override suspend fun isFavorite(mangaId: String) = favoriteDao.isFavorite(mangaId)

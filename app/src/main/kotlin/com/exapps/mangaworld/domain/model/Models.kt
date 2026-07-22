@@ -235,7 +235,8 @@ data class FavoriteManga(
     val addedAt: Long = System.currentTimeMillis(),
     val readChapters: Int = 0,
     val totalChapters: Int = 0,
-    val readingStatus: String? = null
+    val readingStatus: String? = null,
+    val isFavorite: Boolean = true
 ) {
     val progressPercent: Float
         get() = if (totalChapters > 0) (readChapters.toFloat() / totalChapters).coerceIn(0f, 1f)
