@@ -164,8 +164,6 @@ class NotificationCenterViewModel @Inject constructor(
             }
         }
     }
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
