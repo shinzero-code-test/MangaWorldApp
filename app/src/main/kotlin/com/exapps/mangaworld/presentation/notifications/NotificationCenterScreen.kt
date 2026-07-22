@@ -92,24 +92,25 @@ class NotificationCenterViewModel @Inject constructor(
     /** Local notifications from SharedPreferences (chapter updates, suggestions, reminders) */
     private val localNotifications = _refreshTrigger.flatMapLatest {
         kotlinx.coroutines.flow.flow {
-        val prefs = context.getSharedPreferences("local_notifications", android.content.Context.MODE_PRIVATE)
-        val json = prefs.getString("notifications", "[]") ?: "[]"
-        val items = try {
-            val arr = org.json.JSONArray(json)
-            (0 until arr.length()).mapNotNull { i ->
-                val obj = arr.optJSONObject(i) ?: return@mapNotNull null
-                UnifiedNotification(
-                    id = obj.optString("id", ""),
-                    title = obj.optString("title", ""),
-                    body = obj.optString("body", ""),
-                    type = obj.optString("type", "system"),
-                    mangaId = obj.optString("mangaId", null),
-                    read = obj.optBoolean("read", false),
-                    timestamp = obj.optLong("timestamp", 0L)
-                )
-            }
-        } catch (_: Exception) { emptyList() }
-        emit(items)
+            val prefs = context.getSharedPreferences("local_notifications", android.content.Context.MODE_PRIVATE)
+            val json = prefs.getString("notifications", "[]") ?: "[]"
+            val items = try {
+                val arr = org.json.JSONArray(json)
+                (0 until arr.length()).mapNotNull { i ->
+                    val obj = arr.optJSONObject(i) ?: return@mapNotNull null
+                    UnifiedNotification(
+                        id = obj.optString("id", ""),
+                        title = obj.optString("title", ""),
+                        body = obj.optString("body", ""),
+                        type = obj.optString("type", "system"),
+                        mangaId = obj.optString("mangaId", null),
+                        read = obj.optBoolean("read", false),
+                        timestamp = obj.optLong("timestamp", 0L)
+                    )
+                }
+            } catch (_: Exception) { emptyList() }
+            emit(items)
+        }
     }
 
     val notifications = combine(communityNotifications, localNotifications, _unreadOnly) { community, local, unread ->
