@@ -325,7 +325,7 @@ class MangaDetailViewModel @Inject constructor(
             }
             // Update status
             libraryRepo.updateReadingStatus(currentMangaId, status)
-            _state.update { it.copy(readingStatus = status, isFavorite = true) }
+            _state.update { it.copy(readingStatus = status) }
             runCatching { firebaseSyncManager.pushLocalSnapshot() }
             widgetShortcutCoordinator.refreshWidgets()
         }

@@ -318,7 +318,20 @@ class LibraryRepositoryImpl @Inject constructor(
     override suspend fun getFavoritesByStatus(status: String): List<FavoriteManga> =
         favoriteDao.getByStatus(status).map { it.toDomain() }
     override suspend fun updateReadingStatus(mangaId: String, status: String?) {
-        favoriteDao.updateReadingStatus(mangaId, status)
+        // Ensure entity exists — insert with isFavorite=false if it doesn't
+        val existing = favoriteDao.getById(mangaId)
+        if (existing == null) {
+            // We don't have enough info to create a full entity here,
+            // so just create a minimal one. The caller should ensure the entity exists.
+            favoriteDao.insert(
+                com.exapps.mangaworld.core.data.local.entity.FavoriteEntity(
+                    mangaId = mangaId, slug = mangaId, title = mangaId,
+                    coverUrl = "", sourceId = "unknown", isFavorite = false, readingStatus = status
+                )
+            )
+        } else {
+            favoriteDao.updateReadingStatus(mangaId, status)
+        }
         prefs.clearSyncTombstone("favorites", mangaId)
     }
 

@@ -149,10 +149,6 @@ fun LibraryBottomSheet(
                                 if (isSelected) {
                                     onSetStatus(null)
                                 } else {
-                                    // Ensure manga is in favourites first
-                                    if (!isFavourite) {
-                                        onToggleFavourite()
-                                    }
                                     onSetStatus(status.label)
                                 }
                             }
