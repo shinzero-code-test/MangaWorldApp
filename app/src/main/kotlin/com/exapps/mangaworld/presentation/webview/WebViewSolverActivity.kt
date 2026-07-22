@@ -136,6 +136,7 @@ private fun CloudflareWebView(
                         useWideViewPort    = true
                         allowContentAccess = false
                         setSupportZoom(true)
+                        mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     }
 
                     val cm = CookieManager.getInstance()

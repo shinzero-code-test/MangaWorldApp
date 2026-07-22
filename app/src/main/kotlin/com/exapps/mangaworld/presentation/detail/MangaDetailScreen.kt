@@ -340,7 +340,7 @@ private fun DetailContent(
                 if (sortedChapters.isNotEmpty()) {
                     GradientButton(
                         text = stringResource(R.string.read_now),
-                        onClick = { onChapterClick(sortedChapters.first()) },
+                        onClick = { onChapterClick(sortedChapters.minByOrNull { it.number }!!) },
                         modifier = Modifier.weight(1f).height(52.dp)
                     )
                 }

@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -86,8 +87,11 @@ class NotificationCenterViewModel @Inject constructor(
             }
         }
 
+    private val _refreshTrigger = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
     /** Local notifications from SharedPreferences (chapter updates, suggestions, reminders) */
-    private val localNotifications = kotlinx.coroutines.flow.flow {
+    private val localNotifications = _refreshTrigger.flatMapLatest {
+        kotlinx.coroutines.flow.flow {
         val prefs = context.getSharedPreferences("local_notifications", android.content.Context.MODE_PRIVATE)
         val json = prefs.getString("notifications", "[]") ?: "[]"
         val items = try {
@@ -134,7 +138,10 @@ class NotificationCenterViewModel @Inject constructor(
                     changed = true
                 }
             }
-            if (changed) prefs.edit().putString("notifications", arr.toString()).apply()
+            if (changed) {
+                prefs.edit().putString("notifications", arr.toString()).apply()
+                _refreshTrigger.tryEmit(Unit)
+            }
         }
     }
 
@@ -152,8 +159,11 @@ class NotificationCenterViewModel @Inject constructor(
                         if (obj.optString("id", "") == item.id) obj.put("read", true)
                     }
                     prefs.edit().putString("notifications", arr.toString()).apply()
+                    _refreshTrigger.tryEmit(Unit)
                 }
             }
+        }
+    }
         }
     }
 }

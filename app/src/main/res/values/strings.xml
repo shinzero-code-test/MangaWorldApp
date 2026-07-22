@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">مانجا وورلد</string>
+    <string name="app_name">MangaWorld</string>
     <string name="splash_tagline">بوابتك إلى عالم المانجا</string>
+    <string name="login_title_part1">مانجا</string>
+    <string name="login_title_part2">وورلد</string>
 
     <!-- ─── App Shortcuts ─────────────────────────────────────────────────── -->
     <string name="shortcut_search_short">بحث</string>
@@ -43,7 +45,7 @@
 
     <!-- ─── Auth ───────────────────────────────────────────────────────────── -->
     <string name="auth_welcome">أنشئ حسابك وابدأ القراءة</string>
-    <string name="auth_tagline">عالمك. مانغاك.</string>
+    <string name="auth_tagline">بوابتك إلى عالم المانجا</string>
     <string name="auth_email_hint">البريد الإلكتروني أو اسم المستخدم</string>
     <string name="auth_password_hint">كلمة المرور</string>
     <string name="auth_confirm_password">تأكيد كلمة المرور</string>
@@ -287,8 +289,6 @@
     <string name="library_widget_desc">quick access to your library</string>
     <string name="widget_reading_stats_desc">إحصائيات قراءتك اليومية</string>
     <string name="reading_stats_widget_desc">إحصائيات قراءتك اليومية</string>
-    <string name="widget_shelf_desc">shortcuts to app features</string>
-    <string name="shelf_widget_desc">shortcuts to app features</string>
 
     <!-- ─── User List Dialog ───────────────────────────────────────────────── -->
     <string name="dialog_no_users">لا يوجد مستخدمون حالياً</string>
@@ -886,8 +886,4 @@
     <string name="widget_theme_light">فاتح</string>
     <string name="widget_theme_dark">داكن</string>
     <string name="widget_theme_mono">أحادي اللون</string>
-    <string name="widget_shelf_home">الرئيسية</string>
-    <string name="widget_shelf_search">البحث</string>
-    <string name="widget_shelf_library">المكتبة</string>
-    <string name="widget_shelf_downloads">التنزيلات</string>
 </resources>

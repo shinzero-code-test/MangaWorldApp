@@ -92,8 +92,8 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             Row {
-                Text("Manga", color = MangaColors.OnSurface, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
-                Text("World", color = MangaColors.Primary, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
+                Text(stringResource(R.string.login_title_part1), color = MangaColors.OnSurface, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
+                Text(stringResource(R.string.login_title_part2), color = MangaColors.Primary, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
             }
             Spacer(modifier = Modifier.height(6.dp))
             Text(stringResource(R.string.auth_tagline), color = MangaColors.OnSurfaceVariant, fontSize = 15.sp)
