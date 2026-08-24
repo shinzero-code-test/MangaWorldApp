@@ -935,13 +935,6 @@
     <string name="widget_streak_days">%1$d يوم</string>
     <string name="widget_time_hm">%1$sس %2$sد</string>
     <string name="widget_time_m">%1$s دقيقة</string>
-    <string name="widget_size_small">صغير (1x2)</string>
-    <string name="widget_size_medium">متوسط (2x2)</string>
-    <string name="widget_size_large">كبير (4x2)</string>
-    <string name="widget_theme_system">تلقائي (افتراضي)</string>
-    <string name="widget_theme_light">فاتح</string>
-    <string name="widget_theme_dark">داكن</string>
-    <string name="widget_theme_mono">أحادي اللون</string>
     <string name="downloads_more_items">+%1$d عناصر أخرى</string>
 
     <!-- Worker notification strings -->

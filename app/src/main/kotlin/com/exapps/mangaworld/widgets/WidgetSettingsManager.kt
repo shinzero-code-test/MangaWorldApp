@@ -15,7 +15,7 @@ enum class WidgetSize(@androidx.annotation.StringRes val labelRes: Int, val widt
 }
 
 enum class WidgetTheme(@androidx.annotation.StringRes val labelRes: Int) {
-    SYSTEM(AppR.string.widget_theme_system),
+    SYSTEM(AppR.string.widget_theme_auto),
     LIGHT(AppR.string.widget_theme_light),
     DARK(AppR.string.widget_theme_dark),
     MONOCHROME(AppR.string.widget_theme_mono)
