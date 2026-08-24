@@ -29,4 +29,5 @@ sessions/
 dashboard/tsconfig.tsbuildinfo
 .mimocode/
 firebase-debug.log
+firebase-debug.log
 firebase-debug.*.log

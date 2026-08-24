@@ -761,4 +761,3 @@ class DownloadQueueManager @Inject constructor(
         const val NOTIF_ID_BATCH = 40000
     }
 }
-}
