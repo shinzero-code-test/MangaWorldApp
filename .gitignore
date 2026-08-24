@@ -20,7 +20,7 @@ keystore.properties
 google-services.json
 review_manifest.json
 .gitignore
-AGENTS.md
+# AGENTS.md is tracked — remove this line
 logs/
 sessions/
 /.mimocode/dashboard/tsconfig.tsbuildinfo
