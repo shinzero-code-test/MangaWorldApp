@@ -20,6 +20,7 @@ import com.exapps.mangaworld.core.firebase.FirebaseStartupCoordinator
 import com.exapps.mangaworld.core.firebase.FirebaseSyncWorker
 import com.exapps.mangaworld.core.firebase.FavoriteDigestWorker
 import com.exapps.mangaworld.core.firebase.SuggestionNotificationWorker
+import com.exapps.mangaworld.core.firebase.installAppCheckProvider
 import com.exapps.mangaworld.core.widget.AppShortcutManager
 import com.exapps.mangaworld.core.widget.WidgetRefreshScheduler
 import dagger.hilt.android.HiltAndroidApp
