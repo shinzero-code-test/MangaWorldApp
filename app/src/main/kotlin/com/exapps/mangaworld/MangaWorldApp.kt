@@ -16,8 +16,6 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.memory.MemoryCache
 import com.google.firebase.appcheck.FirebaseAppCheck
-import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
-import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.exapps.mangaworld.core.firebase.FirebaseStartupCoordinator
 import com.exapps.mangaworld.core.firebase.FirebaseSyncWorker
 import com.exapps.mangaworld.core.firebase.FavoriteDigestWorker
@@ -96,22 +94,7 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     private fun initializeAppCheck() {
         try {
             val firebaseAppCheck = FirebaseAppCheck.getInstance()
-            if (BuildConfig.DEBUG) {
-                // Debug provider is compile-guarded to debug builds only — it must never act
-                // as a release fallback, or de-Googled devices get an attestation bypass.
-                firebaseAppCheck.installAppCheckProviderFactory(
-                    DebugAppCheckProviderFactory.getInstance()
-                )
-            } else {
-                try {
-                    firebaseAppCheck.installAppCheckProviderFactory(
-                        PlayIntegrityAppCheckProviderFactory.getInstance()
-                    )
-                } catch (_: Exception) {
-                    // No Play Services on this device: App Check stays unavailable in release.
-                    android.util.Log.w("MangaWorldApp", "Play Integrity unavailable — App Check disabled")
-                }
-            }
+            installAppCheckProvider(firebaseAppCheck)
             firebaseAppCheck.setTokenAutoRefreshEnabled(true)
         } catch (e: Exception) {
             android.util.Log.e("MangaWorldApp", "App Check initialization failed: ${e.message}")
