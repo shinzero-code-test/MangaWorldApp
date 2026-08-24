@@ -532,10 +532,7 @@ class AzoraScraper @Inject constructor(
         // always LATEST order regardless of selection.
         when (sortBy) {
             SortBy.RATING -> items.sortedByDescending { it.rating ?: 0f }
-            SortBy.POPULARITY -> items.sortedByDescending {
-                it.views?.trimStart()?.takeWhile(Char::isDigit)?.toLongOrNull()
-                    ?: it.latestChapter?.toLong() ?: 0L
-            }
+            SortBy.POPULARITY -> items.sortedByDescending { it.latestChapter ?: 0 }
             SortBy.OLDEST -> items.sortedBy { it.title.lowercase() }
             SortBy.LATEST -> items
         }

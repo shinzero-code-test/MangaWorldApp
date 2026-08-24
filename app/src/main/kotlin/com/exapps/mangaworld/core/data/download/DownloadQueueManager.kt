@@ -152,7 +152,7 @@ class DownloadQueueManager @Inject constructor(
                 referer = referer,
                 pagesJson = JSONArray(pages.map { it.url }).toString(),
                 status = "queued"
-            ).also(downloadTaskDao::upsert)
+            ).also { downloadTaskDao.upsert(it) }
         }
         analyticsManager.logDownloadStatus(
             mangaId = mangaId,
@@ -505,7 +505,7 @@ class DownloadQueueManager @Inject constructor(
             // One recount per manga covers every deleted directory above.
             refreshDownloadedCount(mangaId)
         }
-        tasks.mapNotNull(DownloadTaskEntity::batchId).distinct().forEach(::reconcileBatchCompletion)
+        tasks.mapNotNull(DownloadTaskEntity::batchId).distinct().forEach { reconcileBatchCompletion(it) }
     }
 
     private suspend fun resubmitTasks(tasks: List<DownloadTaskEntity>) {
@@ -540,7 +540,7 @@ class DownloadQueueManager @Inject constructor(
                 queuedTasks += queuedTask
             }
         }
-        failedBatchIds.forEach(::reconcileBatchCompletion)
+        failedBatchIds.forEach { reconcileBatchCompletion(it) }
         enqueueBatchWorkers(queuedTasks)
     }
 
@@ -751,6 +751,7 @@ class DownloadQueueManager @Inject constructor(
                 downloadedMangaDao.upsert(entity)
                 existingIds.add(mangaId) // avoid duplicates in same scan
             } catch (_: Exception) { /* skip malformed metadata */ }
+        } // forEach dir
     }
 
     private companion object {

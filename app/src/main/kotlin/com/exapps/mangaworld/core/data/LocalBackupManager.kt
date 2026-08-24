@@ -78,20 +78,20 @@ class LocalBackupManager @Inject constructor(
         // Rows merge newest-wins so an old backup cannot clobber fresher local state.
         database.withTransaction {
             root.optJSONArray("favorites")?.forEachObjects { row ->
-                runCatching { row.toFavoriteEntity() }.getOrNull()?.let(::mergeFavorite)
+                runCatching { row.toFavoriteEntity() }.getOrNull()?.let { mergeFavorite(it) }
             }
             root.optJSONArray("history")?.forEachObjects { row ->
-                runCatching { row.toHistoryEntity() }.getOrNull()?.let(::mergeHistory)
+                runCatching { row.toHistoryEntity() }.getOrNull()?.let { mergeHistory(it) }
             }
             // markRead uses OnConflictStrategy.IGNORE — a natural union of read chapters.
             root.optJSONArray("readChapters")?.forEachObjects { row ->
-                runCatching { row.toReadChapterEntity() }.getOrNull()?.let(readChapterDao::markRead)
+                runCatching { row.toReadChapterEntity() }.getOrNull()?.let { readChapterDao.markRead(it) }
             }
             root.optJSONArray("progress")?.forEachObjects { row ->
-                runCatching { row.toProgressEntity() }.getOrNull()?.let(::mergeProgress)
+                runCatching { row.toProgressEntity() }.getOrNull()?.let { mergeProgress(it) }
             }
             root.optJSONArray("annotations")?.forEachObjects { row ->
-                runCatching { row.toAnnotationEntity() }.getOrNull()?.let(::mergeAnnotation)
+                runCatching { row.toAnnotationEntity() }.getOrNull()?.let { mergeAnnotation(it) }
             }
         }
 

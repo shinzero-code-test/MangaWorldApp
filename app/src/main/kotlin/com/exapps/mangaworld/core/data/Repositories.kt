@@ -268,11 +268,7 @@ class MangaPagingSource(
 
             val sorted = when (filters.sortBy) {
                 SortBy.RATING     -> filtered.sortedByDescending { it.rating ?: 0f }
-                // Real views first (numeric prefix), latestChapter as last-resort proxy.
-                SortBy.POPULARITY -> filtered.sortedByDescending {
-                    it.views?.trimStart()?.takeWhile(Char::isDigit)?.toLongOrNull()
-                        ?: it.latestChapter?.toLong() ?: 0L
-                }
+                SortBy.POPULARITY -> filtered.sortedByDescending { it.latestChapter ?: 0 }
                 SortBy.OLDEST     -> filtered.sortedBy { it.title.lowercase() }
                 SortBy.LATEST     -> filtered.sortedWith(
                     compareBy<MangaItem> { rank(it, filters.query) }
@@ -510,8 +506,6 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setContentBlacklist(values: Set<String>) { prefs.setContentBlacklist(values) }
     override suspend fun setSpoilerCollapseDefault(enabled: Boolean) { prefs.setSpoilerCollapseDefault(enabled) }
     override suspend fun setMutedUserIds(values: Set<String>) { prefs.setMutedUsers(values) }
-    override suspend fun addMutedUser(uid: String) { prefs.addMutedUser(uid) }
-    override suspend fun removeMutedUser(uid: String) { prefs.removeMutedUser(uid) }
     override suspend fun setReadingListStatus(status: String?) { prefs.setReadingListStatus(status) }
     override suspend fun setShowLibraryPublic(enabled: Boolean) { prefs.setShowLibraryPublic(enabled) }
     override fun getReaderSettings() = prefs.readerSettings
@@ -545,6 +539,6 @@ class SettingsRepositoryImpl @Inject constructor(
     override fun getFavoriteGenres(): Flow<List<String>> = prefs.appSettings.map { it.favoriteGenres }
     override suspend fun setFavoriteGenres(genres: List<String>) { prefs.setFavoriteGenres(genres) }
     override fun getMutedUserIds(): Flow<Set<String>> = prefs.appSettings.map { it.mutedUserIds }
-    override suspend fun addMutedUser(uid: String) { val current = prefs.appSettings.first().mutedUserIds; prefs.setMutedUsers(current + uid) }
-    override suspend fun removeMutedUser(uid: String) { val current = prefs.appSettings.first().mutedUserIds; prefs.setMutedUsers(current - uid) }
+    override suspend fun addMutedUser(uid: String) { prefs.addMutedUser(uid) }
+    override suspend fun removeMutedUser(uid: String) { prefs.removeMutedUser(uid) }
 }

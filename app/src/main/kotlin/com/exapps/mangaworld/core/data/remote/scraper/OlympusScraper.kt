@@ -453,7 +453,7 @@ class OlympusScraper @Inject constructor(
     private fun applyBrowseSort(items: List<MangaItem>, sortBy: SortBy): List<MangaItem> = when (sortBy) {
         SortBy.RATING -> items.sortedByDescending { it.rating ?: 0f }
         // Prefer real view counts when parsed; latestChapter is only a last-resort proxy.
-        SortBy.POPULARITY -> items.sortedByDescending { it.views?.toLongOrNull() ?: it.latestChapter?.toLong() ?: 0L }
+        SortBy.POPULARITY -> items.sortedByDescending { it.latestChapter ?: 0 }
         SortBy.OLDEST -> items.sortedBy { it.title.lowercase() }
         SortBy.LATEST -> items
     }
