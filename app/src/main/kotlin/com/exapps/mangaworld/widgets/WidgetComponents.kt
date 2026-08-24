@@ -26,7 +26,6 @@ import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
-import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
@@ -131,9 +130,9 @@ internal fun WidgetListItem(
             WidgetStatusDot(active = leadingDotActive)
             Spacer(GlanceModifier.width(8.dp))
         }
-        // defaultWeight lets the trailing badge keep its intrinsic width —
-        // fillMaxWidth here squeezed badges to zero (H-review).
-        Column(modifier = GlanceModifier.defaultWeight()) {
+        // Wrap-content Column: a fillMaxWidth here squeezed the trailing badge
+        // to zero width inside the LinearLayout-backed Row (H-review).
+        Column {
             if (showTitle) {
                 Text(
                     text = title,

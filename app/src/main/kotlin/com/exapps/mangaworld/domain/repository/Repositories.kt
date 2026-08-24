@@ -96,9 +96,6 @@ interface SettingsRepository {
     suspend fun setContentBlacklist(values: Set<String>)
     suspend fun setSpoilerCollapseDefault(enabled: Boolean)
     suspend fun setMutedUserIds(values: Set<String>)
-    /** Atomic single-user mute toggles — avoid read-then-set races. */
-    suspend fun addMutedUser(uid: String)
-    suspend fun removeMutedUser(uid: String)
     suspend fun setReadingListStatus(status: String?)
     suspend fun setShowLibraryPublic(enabled: Boolean)
 

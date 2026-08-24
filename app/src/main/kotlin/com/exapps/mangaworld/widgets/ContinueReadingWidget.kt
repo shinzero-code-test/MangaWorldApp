@@ -25,7 +25,6 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
-import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
@@ -121,7 +120,7 @@ private fun ContinueReadingContent(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = GlanceModifier
-                        .defaultWeight()
+                        .fillMaxWidth()
                         .height(6.dp)
                         .cornerRadius(3.dp)
                         .background(GlanceTheme.colors.surfaceVariant)

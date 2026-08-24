@@ -75,13 +75,15 @@ abstract class BaseScraperImpl(
 
             val request = requestBuilder.build()
 
-            val result: kotlin.Pair<String, Int> = client.newCall(request).use { call ->
-                call.execute().use { response ->
-                    (response.body?.string() ?: "") to response.code
-                }
+            val response = client.newCall(request).execute()
+            val body: String
+            val code: Int
+            try {
+                body = response.body?.string() ?: ""
+                code = response.code
+            } finally {
+                response.close()
             }
-            val body = result.first
-            val code = result.second
             val doc = Jsoup.parse(body, url)
             val title = doc.title().lowercase()
             val isCf = code == 403 || code == 503 ||

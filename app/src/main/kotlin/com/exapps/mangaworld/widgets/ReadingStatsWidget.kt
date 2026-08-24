@@ -22,7 +22,6 @@ import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
-import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -78,11 +77,11 @@ private fun ReadingStatsContent(
             return@WidgetCard
         }
 
-        StatsRow(icon = "🔥", label = LocalContext.current.getString(R.string.widget_reading_streak), value = ctx.getString(R.string.widget_streak_days, stats.readingStreakDays))
+        StatsRow(icon = "🔥", label = LocalContext.current.getString(R.string.widget_reading_streak), value = context.getString(R.string.widget_streak_days, stats.readingStreakDays))
         Spacer(GlanceModifier.height(8.dp))
         StatsRow(icon = "📖", label = LocalContext.current.getString(R.string.widget_chapters_read), value = stats.totalChaptersRead.toString())
         Spacer(GlanceModifier.height(8.dp))
-        StatsRow(icon = "⏱️", label = LocalContext.current.getString(R.string.widget_reading_time), value = formatMinutes(ctx, stats.totalReadingMinutes))
+        StatsRow(icon = "⏱️", label = LocalContext.current.getString(R.string.widget_reading_time), value = formatMinutes(context, stats.totalReadingMinutes))
     }
 }
 
@@ -111,8 +110,7 @@ private fun StatsRow(icon: String, label: String, value: String) {
             style = TextStyle(
                 color = GlanceTheme.colors.onSurfaceVariant,
                 fontSize = 13.sp
-            ),
-            modifier = GlanceModifier.defaultWeight()
+            )
         )
         Spacer(GlanceModifier.width(8.dp))
         Text(
