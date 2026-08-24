@@ -1,6 +1,5 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
-import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -107,7 +106,7 @@ class AzoraScraper @Inject constructor(
                 resp.body?.string() ?: ""
             }
         }.onFailure {
-            FirebaseTelemetry.logScraperFailure(source.id, "raw_html", it)
+            ScraperTelemetry.logFailure(source.id, "raw_html", it)
         }.getOrDefault("")
     }
 

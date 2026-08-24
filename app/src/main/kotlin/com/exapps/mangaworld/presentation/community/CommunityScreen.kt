@@ -286,10 +286,14 @@ fun CommunityScreen(
 
     // Gate interaction callbacks for guests: rules would reject the writes, so
     // guests get silent no-ops instead of error snackbars (H6).
-    val gatedLike: (String) -> Unit = if (isSignedIn) viewModel::likeComment else {}
-    val gatedDislike: (String) -> Unit = if (isSignedIn) viewModel::dislikeComment else {}
-    val gatedMute: (String) -> Unit = if (isSignedIn) viewModel::muteUser else {}
-    val gatedReport: (CommunityTarget) -> Unit = if (isSignedIn) { { reportTarget = it } } else { {} }
+    val gatedLike: (String) -> Unit = { id -> if (isSignedIn) viewModel.likeComment(id) }
+    val gatedDislike: (String) -> Unit = { id -> if (isSignedIn) viewModel.dislikeComment(id) }
+    val gatedMute: (String) -> Unit = { uid -> if (isSignedIn) viewModel.muteUser(uid) }
+    val gatedLikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.likeReview(review) }
+    val gatedDislikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.dislikeReview(review) }
+    val gatedReport: (CommunityTarget) -> Unit = { target ->
+        if (isSignedIn) reportTarget = target
+    }
 
     // Scroll once to the focused comment; later like/vote mutations must not
     // yank scroll position back (S-review).
@@ -366,8 +370,8 @@ fun CommunityScreen(
                     onDelete = { deleteTarget = CommunityTarget.Review(it) },
                     onReport = { gatedReport(CommunityTarget.Review(it)) },
                     onMute = gatedMute,
-                    onLike = gatedLike,
-                    onDislike = gatedDislike
+                    onLike = gatedLikeReview,
+                    onDislike = gatedDislikeReview
                 )
             }
             if (state.tab == CommunityTab.COMMENTS && isSignedIn) {

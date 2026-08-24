@@ -235,7 +235,7 @@ class MangaDetailViewModel @Inject constructor(
                 val mangaDir = File(mangaDirPath)
                 if (!mangaDir.exists()) {
                     _state.update { it.copy(isLoading = false, error = context.getString(R.string.local_folder_missing)) }
-                    return@launch
+                    return@withContext
                 }
 
                 // Read metadata.json

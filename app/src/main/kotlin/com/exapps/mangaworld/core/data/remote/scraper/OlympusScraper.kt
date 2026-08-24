@@ -137,15 +137,18 @@ class OlympusScraper @Inject constructor(
         val url = "${source.baseUrl}/series/$slug"
         val doc = fetchDocument(url)
 
-        fun Element?.lazySrc(): String? {
-            val el = this ?: return null
+        fun lazySrc(element: org.jsoup.nodes.Element?): String? {
+            val el = element ?: return null
             val dataSrc = el.attr("data-src").ifBlank { el.attr("data-lazy-src") }
+            if (dataSrc.isNotBlank() && !dataSrc.startsWith("data:")) return dataSrc
             val abs = el.attr("abs:src")
-            return sequenceOf(dataSrc, abs.takeUnless { it.startsWith("data:") }, el.attr("src").takeUnless { it.startsWith("data:") })
-                .filterNotNull().firstOrNull { it.isNotBlank() }
+            if (abs.isNotBlank() && !abs.startsWith("data:")) return abs
+            val src = el.attr("src")
+            if (src.isNotBlank() && !src.startsWith("data:")) return src
+            return null
         }
-        val coverUrl = doc.selectFirst("img[alt=\"Manga Image\"]").lazySrc()
-            ?: doc.selectFirst(".text-right img.shadow-sm, .shadow-sm").lazySrc()
+        val coverUrl = lazySrc(doc.selectFirst("img[alt=\"Manga Image\"]"))
+            ?: lazySrc(doc.selectFirst(".text-right img.shadow-sm, .shadow-sm"))
             ?: ""
 
         // Title: h1 is the most reliable; .col-md-9 doesn't exist in real HTML

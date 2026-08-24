@@ -1,6 +1,5 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
-import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import okhttp3.FormBody
@@ -319,7 +318,7 @@ class StarzScraper @Inject constructor(
                 chapters
             } else emptyList()
         } catch (e: Exception) {
-            FirebaseTelemetry.logScraperFailure(source.id, "detail_chapters_api", e)
+            ScraperTelemetry.logFailure(source.id, "detail_chapters_api", e)
             emptyList()
         }
 

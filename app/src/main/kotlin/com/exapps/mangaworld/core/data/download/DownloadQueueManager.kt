@@ -183,25 +183,22 @@ class DownloadQueueManager @Inject constructor(
     ): Int {
         // A whole-manga selection should never create two durable rows for the same chapter,
         // even when a scraper returns duplicate chapter URLs.
+        // Eager List filters — Sequence lambdas defer suspension past the coroutine body.
         val accepted = ready
-            .asSequence()
             .filter { it.pages.isNotEmpty() }
             .distinctBy { it.chapterUrl }
             .filter { request ->
                 !isChapterDownloaded(mangaId, request.chapterUrl) &&
                     downloadTaskDao.getPendingByChapter(request.chapterUrl, mangaId) == null
             }
-            .toList()
         val acceptedUrls = accepted.mapTo(mutableSetOf()) { it.chapterUrl }
         val failures = failed
-            .asSequence()
             .filterNot { it.chapterUrl in acceptedUrls }
             .distinctBy { it.chapterUrl }
             .filter { failure ->
                 !isChapterDownloaded(mangaId, failure.chapterUrl) &&
                     downloadTaskDao.getPendingByChapter(failure.chapterUrl, mangaId) == null
             }
-            .toList()
         val total = accepted.size + failures.size
         if (total == 0) return 0
 

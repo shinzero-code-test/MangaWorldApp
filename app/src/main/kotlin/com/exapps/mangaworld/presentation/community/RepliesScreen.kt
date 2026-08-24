@@ -251,12 +251,14 @@ fun CommunityRepliesScreen(
     var deleteTarget by remember { mutableStateOf<CommunityTarget?>(null) }
 
     // Guest gating: rules would reject these writes; keep guests silent (H6).
-    val gatedLike: (String) -> Unit = if (isSignedIn) viewModel::likeComment else {}
-    val gatedDislike: (String) -> Unit = if (isSignedIn) viewModel::dislikeComment else {}
-    val gatedMute: (String) -> Unit = if (isSignedIn) viewModel::muteUser else {}
-    val gatedReport: (CommunityTarget) -> Unit = if (isSignedIn) { { reportTarget = it } } else { {} }
-    val gatedLikeReview: (MangaReview) -> Unit = if (isSignedIn) viewModel::likeReview else {}
-    val gatedDislikeReview: (MangaReview) -> Unit = if (isSignedIn) viewModel::dislikeReview else {}
+    val gatedLike: (String) -> Unit = { id -> if (isSignedIn) viewModel.likeComment(id) }
+    val gatedDislike: (String) -> Unit = { id -> if (isSignedIn) viewModel.dislikeComment(id) }
+    val gatedMute: (String) -> Unit = { uid -> if (isSignedIn) viewModel.muteUser(uid) }
+    val gatedReport: (CommunityTarget) -> Unit = { target ->
+        if (isSignedIn) reportTarget = target
+    }
+    val gatedLikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.likeReview(review) }
+    val gatedDislikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.dislikeReview(review) }
 
     Scaffold(
         containerColor = MangaColors.Background,

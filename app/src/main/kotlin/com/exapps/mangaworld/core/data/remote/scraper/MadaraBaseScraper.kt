@@ -423,7 +423,7 @@ open class MadaraBaseScraper(
                 }
             }
         } catch (e: Exception) {
-            FirebaseTelemetry.logScraperFailure(source.id, "chapters_ajax", e)
+            ScraperTelemetry.logFailure(source.id, "chapters_ajax", e)
         }
 
         // Fallback: try wp-admin AJAX (some Madara sites use this instead)
@@ -466,7 +466,7 @@ open class MadaraBaseScraper(
                     }
                 }
             } catch (e: Exception) {
-                FirebaseTelemetry.logScraperFailure(source.id, "chapters_admin_ajax", e)
+                ScraperTelemetry.logFailure(source.id, "chapters_admin_ajax", e)
             }
         }
 

@@ -506,7 +506,9 @@ fun MangaNavGraph(
                         popUpTo(Screen.Detail.createRoute(sourceId, slug)) { inclusive = true }
                     }
                 },
-                onOpenCommunity = if (isImported) {} else {
+                onOpenCommunity = if (isImported) {
+                    { /* imported manga has no community */ }
+                } else {
                     { navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl)) }
                 }
             )
@@ -553,7 +555,9 @@ fun MangaNavGraph(
                         popUpTo(Screen.Detail.createRoute(sourceId, slug)) { inclusive = true }
                     }
                 },
-                onOpenCommunity = if (isImported) {} else {
+                onOpenCommunity = if (isImported) {
+                    { /* imported manga has no community */ }
+                } else {
                     { navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl)) }
                 }
             )
@@ -686,9 +690,9 @@ private fun launchFacebookLogin(context: android.content.Context) {
  * "relative" would let hostile absolute URLs through.
  */
 private fun isTrustedChapterHost(chapterUrl: String, baseUrl: String): Boolean {
-    val linkHost = okhttp3.HttpUrl.Companion.toHttpUrlOrNull(chapterUrl)?.host
+    val linkHost = okhttp3.HttpUrl.parse(chapterUrl)?.host
         ?: return true // not an absolute http(s) URL — resolved against source.baseUrl by the reader
-    val expectedHost = okhttp3.HttpUrl.Companion.toHttpUrlOrNull(baseUrl)?.host
+    val expectedHost = okhttp3.HttpUrl.parse(baseUrl)?.host
         ?: return false
     return linkHost.equals(expectedHost, ignoreCase = true)
 }

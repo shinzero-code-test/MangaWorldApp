@@ -18,7 +18,6 @@ import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.Query
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.firestore.AggregateSource
 import com.google.firebase.firestore.DocumentReference
@@ -821,17 +820,17 @@ class FirebaseCommunityRepository @Inject constructor(
      */
     private suspend fun collectAuthorContentRefs(uid: String, collection: String): List<DocumentReference> {
         val references = mutableListOf<DocumentReference>()
-        var lastPage: QuerySnapshot? = null
+        var lastUpdatedAt: Long? = null
         var pages = 0
         do {
             var query: Query = firestore.collectionGroup(collection)
                 .whereEqualTo("authorUid", uid)
                 .orderBy("updatedAt")
                 .limit(300)
-            lastPage?.documents?.lastOrNull()?.let { query = query.startAfter(it) }
+            lastUpdatedAt?.let { ts -> query = query.startAfter(ts) }
             val snapshot = query.get().await()
             references += snapshot.documents.map { it.reference }
-            lastPage = snapshot
+            lastUpdatedAt = snapshot.documents.lastOrNull()?.getLong("updatedAt")
             pages++
         } while (snapshot.size() == 300 && pages < 10)
         return references
@@ -867,7 +866,7 @@ class FirebaseCommunityRepository @Inject constructor(
                     conn.outputStream.use { os -> os.write(body.toString().toByteArray()) }
                     val code = conn.responseCode
                     if (code in 200..299) {
-                        val response = JSONObject(conn.inputStream.bufferedReader().readText())
+                        val response = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
                         require(response.optBoolean("allowed", true)) {
                             context.getString(R.string.community_error_banned_content)
                         }

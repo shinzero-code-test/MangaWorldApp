@@ -123,7 +123,7 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
                     val declared = resp.body?.contentLength() ?: -1L
                     if (declared > MAX_IMAGE_BYTES) return@use null
 
-                    val bytes = resp.body!!.byteStream().use { input ->
+                    val bytes: ByteArray = resp.body!!.byteStream().use { input ->
                         val buffer = java.io.ByteArrayOutputStream(minOf(declared.takeIf { it > 0 } ?: 64_000L, MAX_IMAGE_BYTES).toInt())
                         val chunk = ByteArray(64 * 1024)
                         var total = 0L

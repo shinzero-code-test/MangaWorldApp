@@ -115,10 +115,11 @@ private fun ContinueReadingContent(
         // Progress bar
         if (data.progressPercent > 0) {
             val progressFraction = (data.progressPercent / 100f).coerceIn(0f, 1f)
+            // Glance has no weight-with-fraction; derive inner width from LocalSize.
+            val widgetWidth = androidx.glance.LocalSize.current.width
+            val fillWidth = (widgetWidth.value * progressFraction).dp
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Weight split renders real progress; the old nested full-width
-                // box always drew a complete bar (H-review).
-                Row(
+                Box(
                     modifier = GlanceModifier
                         .defaultWeight()
                         .height(6.dp)
@@ -127,13 +128,10 @@ private fun ContinueReadingContent(
                 ) {
                     Box(
                         modifier = GlanceModifier
+                            .width(fillWidth)
                             .fillMaxHeight()
-                            .defaultWeight(progressFraction)
                             .background(GlanceTheme.colors.primary)
                     ) {}
-                    if (progressFraction < 1f) {
-                        Spacer(modifier = GlanceModifier.defaultWeight(1f - progressFraction))
-                    }
                 }
                 Spacer(GlanceModifier.width(6.dp))
                 Text(

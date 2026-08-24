@@ -1,6 +1,5 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
-import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -212,7 +211,7 @@ class AreaScansScraper @Inject constructor(
                     } else null
                 }
             } catch (e: Exception) {
-                FirebaseTelemetry.logScraperFailure(source.id, "pages_ts_reader", e)
+                ScraperTelemetry.logFailure(source.id, "pages_ts_reader", e)
                 images
             }
         } else images
@@ -250,7 +249,7 @@ class AreaScansScraper @Inject constructor(
             }
             if (!ajaxItems.isNullOrEmpty()) return@runCatching ajaxItems
         } catch (e: Exception) {
-            FirebaseTelemetry.logScraperFailure(source.id, "search_ajax_fallback", e)
+            ScraperTelemetry.logFailure(source.id, "search_ajax_fallback", e)
         }
 
         results

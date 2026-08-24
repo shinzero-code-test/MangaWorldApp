@@ -1,6 +1,5 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
-import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import okhttp3.OkHttpClient
@@ -232,7 +231,7 @@ open class MangaReaderBaseScraper(
                             } else null
                         }
                     } catch (e: Exception) {
-                        FirebaseTelemetry.logScraperFailure(source.id, "pages_ts_reader", e)
+                        ScraperTelemetry.logFailure(source.id, "pages_ts_reader", e)
                         emptyList()
                     }
                 } else emptyList()
