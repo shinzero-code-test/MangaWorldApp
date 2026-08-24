@@ -100,7 +100,7 @@ class AreaScansScraper @Inject constructor(
                     mangaId = "${source.id}_$slug",
                     number = chNum,
                     title = chLink.selectFirst(".chap-num")?.text()?.cleanText()?.replace("الفصل", "")?.trim()?.ifBlank { null }
-                        ?: context.getString(com.exapps.mangaworld.R.string.fmt_059, chNum.toInt()),
+                        ?: context.getString(com.exapps.mangaworld.R.string.fmt_059, chNum.toInt().toString()),
                     url = chHref
                 )
             }.distinctBy { it.url }.sortedByDescending { it.number }
