@@ -22,24 +22,29 @@ export default function UsersPage() {
   const [roleFilter,setRoleFilter]= useState("");
   const [provFilter,setProvFilter]= useState("");
 
-  const fetchUsers = useCallback(async () => {
-    setLoading(true);
-    const params = new URLSearchParams({
-      page: String(page), limit: String(PAGE_SIZE),
-      ...(search     && { search }),
-      ...(roleFilter && { role: roleFilter }),
-      ...(provFilter && { provider: provFilter }),
-    });
-    try {
-      const res  = await fetch(`/api/users?${params}`);
-      const data = await res.json();
-      setUsers(data.users ?? []);
-      setTotal(data.total ?? 0);
-    } catch { setUsers([]); }
-    finally  { setLoading(false); }
+  // Debounced + aborted so per-keystroke searches cannot resolve out of order.
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      const params = new URLSearchParams({
+        page: String(page), limit: String(PAGE_SIZE),
+        ...(search     && { search }),
+        ...(roleFilter && { role: roleFilter }),
+        ...(provFilter && { provider: provFilter }),
+      });
+      try {
+        const res  = await fetch(`/api/users?${params}`, { signal: controller.signal });
+        if (!res.ok) { setUsers([]); setTotal(0); return; }
+        const data = await res.json();
+        setUsers(data.users ?? []);
+        setTotal(data.total ?? 0);
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") { setUsers([]); }
+      } finally { setLoading(false); }
+    }, 300);
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [page, search, roleFilter, provFilter]);
-
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
   // Count by role from current page (approximate)
   const roleCounts = users.reduce((acc, u) => {

@@ -142,7 +142,12 @@ class MeshmangaScraper @Inject constructor(
         val chapters = mutableListOf<Chapter>()
         var nextUrl: String? = "$apiBase/chapters/?serie=$seriesId&page_size=100&order_by=-order"
 
-        while (!nextUrl.isNullOrBlank()) {
+        // Bounded crawl: a misbehaving self-referential `next` must not loop
+        // forever on IO (M-review). 50 pages × 100 items ≫ any real series.
+        val visited = mutableSetOf<String>()
+        var pageGuard = 0
+        while (!nextUrl.isNullOrBlank() && pageGuard++ < 50) {
+            if (!visited.add(nextUrl)) break
             val json = apiGetObject(nextUrl) ?: break
             val results = json.optJSONArray("results") ?: JSONArray()
             for (i in 0 until results.length()) {
@@ -261,8 +266,7 @@ class MeshmangaScraper @Inject constructor(
                 .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
                 .build()
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: ""
-            response.close()
+            val body = response.use { it.body?.string() ?: "" }
             if (body.isBlank()) null else JSONObject(body)
         }.getOrNull()
     }
@@ -278,8 +282,7 @@ class MeshmangaScraper @Inject constructor(
                 .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
                 .build()
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: ""
-            response.close()
+            val body = response.use { it.body?.string() ?: "" }
             if (body.isBlank()) return@runCatching null
             val array = JSONArray(body)
             (0 until array.length()).mapNotNull { i -> array.optJSONObject(i) }

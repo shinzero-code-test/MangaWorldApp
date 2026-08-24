@@ -85,8 +85,8 @@ class NotificationPolicyManager @Inject constructor(
         // Use low-importance reminder channel (created in init block)
         val notification = NotificationCompat.Builder(context, REMINDER_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
-            .setContentTitle("لم نرك منذ فترة!")
-            .setContentText("هل تريد المتابعة في قراءة \"$lastMangaTitle\"؟")
+            .setContentTitle(context.getString(com.exapps.mangaworld.R.string.reminder_title))
+            .setContentText(context.getString(com.exapps.mangaworld.R.string.reminder_continue_reading, lastMangaTitle))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
@@ -95,13 +95,16 @@ class NotificationPolicyManager @Inject constructor(
         notificationManager.notify(NOTIFICATION_ID_INACTIVITY, notification)
     }
 
-    fun muteMangaNotifications(mangaId: String) {
+    // Serializes read-modify-write on the muted_manga StringSet (M-review).
+    private val muteLock = Any()
+
+    fun muteMangaNotifications(mangaId: String) = synchronized(muteLock) {
         val prefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
         val muted = prefs.getStringSet("muted_manga", emptySet()) ?: emptySet()
         prefs.edit().putStringSet("muted_manga", muted + mangaId).apply()
     }
 
-    fun unmuteMangaNotifications(mangaId: String) {
+    fun unmuteMangaNotifications(mangaId: String) = synchronized(muteLock) {
         val prefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
         val muted = prefs.getStringSet("muted_manga", emptySet()) ?: emptySet()
         prefs.edit().putStringSet("muted_manga", muted - mangaId).apply()

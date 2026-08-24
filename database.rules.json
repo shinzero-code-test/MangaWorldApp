@@ -5,7 +5,8 @@
         ".read": "auth != null",
         "messages": {
           "$messageId": {
-            ".write": "auth != null && !data.exists() && newData.child('authorUid').val() == auth.uid"
+            ".write": "auth != null && auth.token.firebase.sign_in_provider != 'anonymous' && !data.exists() && newData.child('authorUid').isString() && newData.child('authorUid').val() == auth.uid",
+            ".validate": "newData.hasChildren(['authorUid', 'authorName', 'text', 'createdAt']) && newData.child('authorUid').isString() && newData.child('authorUid').val() == auth.uid && newData.child('authorName').isString() && newData.child('authorName').val().length > 0 && newData.child('authorName').val().length <= 64 && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 500 && newData.child('createdAt').isNumber() && (!newData.hasChild('authorBadge') || (newData.child('authorBadge').isString() && newData.child('authorBadge').val().length <= 32))"
           }
         }
       }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { DASHBOARD_ROLES, requireRole } from "@/lib/auth";
+import { genericErrorResponse } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
 
@@ -71,9 +72,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       recentHistory: history,
       lists,
     });
-  } catch (error: any) {
-    const status = error.message === "Forbidden" ? 403 : error.message === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: error.message }, { status });
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }
 
@@ -88,17 +89,36 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (body.role !== undefined && !DASHBOARD_ROLES.includes(body.role)) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
-    if (body.username !== undefined) profileUpdates.username = body.username;
-    if (body.bio !== undefined) profileUpdates.bio = body.bio;
-    if (body.isPublic !== undefined) profileUpdates.isPublic = body.isPublic;
+    if (body.username !== undefined) {
+      if (typeof body.username !== "string" || body.username.trim().length < 1 || body.username.length > 64) {
+        return NextResponse.json({ error: "Invalid username" }, { status: 400 });
+      }
+      profileUpdates.username = body.username.trim();
+    }
+    if (body.bio !== undefined) {
+      if (typeof body.bio !== "string" || body.bio.length > 1_000) {
+        return NextResponse.json({ error: "Invalid bio" }, { status: 400 });
+      }
+      profileUpdates.bio = body.bio;
+    }
+    if (body.isPublic !== undefined && typeof body.isPublic !== "boolean") {
+      return NextResponse.json({ error: "Invalid isPublic" }, { status: 400 });
+    }
 
     await getAdminDb().collection("publicProfiles").doc(uid).update(profileUpdates);
 
     // Update Auth
     if (body.disabled !== undefined) {
+      if (typeof body.disabled !== "boolean") {
+        return NextResponse.json({ error: "Invalid disabled flag" }, { status: 400 });
+      }
       await getAdminAuth().updateUser(uid, { disabled: body.disabled });
     }
     if (body.email) {
+      // Email format check before hitting the Auth API (M-6).
+      if (typeof body.email !== "string" || body.email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(body.email)) {
+        return NextResponse.json({ error: "Invalid email" }, { status: 400 });
+      }
       await getAdminAuth().updateUser(uid, { email: body.email });
     }
     if (body.role !== undefined) {
@@ -108,7 +128,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }

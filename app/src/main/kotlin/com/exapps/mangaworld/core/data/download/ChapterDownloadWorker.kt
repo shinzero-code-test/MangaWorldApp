@@ -22,6 +22,7 @@ import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -30,6 +31,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import org.json.JSONArray
 
 @HiltWorker
 class ChapterDownloadWorker @AssistedInject constructor(
@@ -37,6 +39,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val downloadTaskDao: DownloadTaskDao,
     private val downloadedMangaDao: DownloadedMangaDao,
+    private val downloadQueueManager: DownloadQueueManager,
     private val okHttpClient: OkHttpClient,
     private val settingsRepository: SettingsRepository,
     private val analyticsManager: FirebaseAnalyticsManager
@@ -44,12 +47,35 @@ class ChapterDownloadWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val taskId = inputData.getString(KEY_TASK_ID) ?: return@withContext Result.failure()
-        val mangaId = inputData.getString(KEY_MANGA_ID) ?: return@withContext Result.failure()
-        val chapterUrl = inputData.getString(KEY_CHAPTER_URL) ?: return@withContext Result.failure()
-        val chapterTitle = inputData.getString(KEY_CHAPTER_TITLE)
-        val referer = inputData.getString(KEY_REFERER).orEmpty()
-        val pages = inputData.getStringArray(KEY_PAGES)?.toList().orEmpty()
-        if (pages.isEmpty()) return@withContext Result.failure()
+        val task = downloadTaskDao.getById(taskId) ?: return@withContext Result.failure()
+        if (task.status !in ACTIVE_TASK_STATUSES) return@withContext Result.success()
+        val mangaId = task.mangaId
+        val chapterUrl = task.chapterUrl
+        val chapterTitle = task.chapterTitle
+        val referer = task.referer
+        val batchId = task.batchId
+        // Keep WorkManager input small (it has a strict size cap); durable URLs live in Room.
+        val pages = task.pagesJson.toPageUrls()
+        if (pages.isEmpty()) {
+            val message = ERROR_RETRY_UNAVAILABLE
+            if (
+                downloadTaskDao.updateFailureStateIfActive(
+                    id = taskId,
+                    status = "failed",
+                    retries = task.retries,
+                    errorMessage = message,
+                    updatedAt = System.currentTimeMillis()
+                ) == 0
+            ) return@withContext Result.success()
+            if (batchId == null) {
+                if (downloadTaskDao.markFailureNotified(taskId) > 0) {
+                    showFailureNotification(chapterTitle ?: chapterUrl, mangaId, chapterUrl)
+                }
+            } else {
+                downloadQueueManager.reconcileBatchCompletion(batchId)
+            }
+            return@withContext Result.success()
+        }
 
         val downloadsRoot = File(appContext.getExternalFilesDir(null), "downloads")
         val targetDir = DownloadStorage.canonicalChapterDir(downloadsRoot, mangaId, chapterUrl)
@@ -57,11 +83,21 @@ class ChapterDownloadWorker @AssistedInject constructor(
         if (!targetDir.exists()) targetDir.mkdirs()
 
         val chapterKey = DownloadStorage.chapterKey(chapterUrl)
-        val displayTitle = chapterTitle ?: "الفصل $chapterKey"
-        downloadTaskDao.updateState(taskId, "running", 0f, 0, pages.size, System.currentTimeMillis(), null)
+        val displayTitle = chapterTitle ?: appContext.getString(R.string.fmt_059, chapterKey)
+        if (
+            downloadTaskDao.updateStateIfActive(
+                taskId,
+                "running",
+                0f,
+                0,
+                pages.size,
+                System.currentTimeMillis(),
+                null
+            ) == 0
+        ) return@withContext Result.success()
         runCatching { setForeground(buildForegroundInfo(displayTitle, 0, pages.size, mangaId, chapterUrl)) }
 
-        return@withContext runCatching {
+        return@withContext try {
             var done = existingPageCount(targetDir)
             updateProgress(taskId, displayTitle, done, pages.size, mangaId, chapterUrl)
 
@@ -80,8 +116,24 @@ class ChapterDownloadWorker @AssistedInject constructor(
                 updateProgress(taskId, displayTitle, done, pages.size, mangaId, chapterUrl)
             }
 
-            File(targetDir, ".completed").writeText("ok")
-            downloadTaskDao.updateState(taskId, "completed", 1f, pages.size, pages.size, System.currentTimeMillis(), null)
+            val pendingMarker = File(targetDir, ".completed.part")
+            val completionMarker = File(targetDir, ".completed")
+            pendingMarker.writeText("ok")
+            check(pendingMarker.renameTo(completionMarker)) { "completion marker rename failed" }
+            if (
+                downloadTaskDao.updateStateIfActive(
+                    taskId,
+                    "completed",
+                    1f,
+                    pages.size,
+                    pages.size,
+                    System.currentTimeMillis(),
+                    null
+                ) == 0
+            ) {
+                completionMarker.delete()
+                return@withContext Result.success()
+            }
             analyticsManager.logDownloadStatus(
                 mangaId = mangaId,
                 sourceId = mangaId.substringBefore('_'),
@@ -93,31 +145,55 @@ class ChapterDownloadWorker @AssistedInject constructor(
             val count = mangaDir.listFiles()?.count { it.isDirectory && File(it, ".completed").exists() } ?: 0
             downloadedMangaDao.updateChapterCount(mangaId, count)
 
-            showCompletionNotification(displayTitle, pages.size, mangaId, chapterUrl)
-            Result.success()
-        }.getOrElse { e ->
-            runCatching {
-                downloadTaskDao.getById(taskId)?.let { current ->
-                    analyticsManager.logDownloadStatus(
-                        mangaId = current.mangaId,
-                        sourceId = current.mangaId.substringBefore('_'),
-                        status = "failed",
-                        totalPages = pages.size,
-                        retryCount = current.retries + 1,
-                        reason = e.message
-                    )
-                    downloadTaskDao.upsert(
-                        current.copy(
-                            status = "failed",
-                            retries = current.retries + 1,
-                            errorMessage = e.message,
-                            updatedAt = System.currentTimeMillis()
-                        )
-                    )
-                }
-                showFailureNotification(displayTitle, mangaId, chapterUrl)
+            if (batchId == null) {
+                showCompletionNotification(displayTitle, pages.size, mangaId, chapterUrl)
+            } else {
+                downloadQueueManager.reconcileBatchCompletion(batchId)
             }
-            Result.retry()
+            Result.success()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            val current = downloadTaskDao.getById(taskId)
+            val retries = (current?.retries ?: 0) + 1
+            val userFacingError = ERROR_DOWNLOAD_FAILED
+            if (runAttemptCount + 1 < MAX_DOWNLOAD_ATTEMPTS) {
+                val wasRescheduled = downloadTaskDao.updateFailureStateIfActive(
+                    id = taskId,
+                    status = "queued",
+                    retries = retries,
+                    errorMessage = userFacingError,
+                    updatedAt = System.currentTimeMillis()
+                ) > 0
+                return@withContext if (wasRescheduled) Result.retry() else Result.success()
+            }
+
+            val failed = downloadTaskDao.updateFailureStateIfActive(
+                id = taskId,
+                status = "failed",
+                retries = retries,
+                errorMessage = userFacingError,
+                updatedAt = System.currentTimeMillis()
+            ) > 0
+            if (!failed) return@withContext Result.success()
+            analyticsManager.logDownloadStatus(
+                mangaId = mangaId,
+                sourceId = mangaId.substringBefore('_'),
+                status = "failed",
+                totalPages = pages.size,
+                retryCount = retries,
+                reason = e.message
+            )
+            if (batchId == null) {
+                // A terminal failure is shown once only. Manual retry explicitly resets this
+                // flag; returning success prevents WorkManager from re-running it on launch.
+                if (downloadTaskDao.markFailureNotified(taskId) > 0) {
+                    showFailureNotification(displayTitle, mangaId, chapterUrl)
+                }
+            } else {
+                downloadQueueManager.reconcileBatchCompletion(batchId)
+            }
+            Result.success()
         }
     }
 
@@ -138,32 +214,33 @@ class ChapterDownloadWorker @AssistedInject constructor(
 
         val tempFile = File(outFile.absolutePath + ".part")
         if (tempFile.exists()) tempFile.delete()
-        val resp = okHttpClient.newCall(reqBuilder.build()).execute()
-        if (!resp.isSuccessful) {
-            val code = resp.code
-            resp.close()
-            error("HTTP $code for $pageUrl")
+        okHttpClient.newCall(reqBuilder.build()).execute().use { response ->
+            if (!response.isSuccessful) error("HTTP ${response.code} for $pageUrl")
+            val body = response.body ?: error("Empty body for $pageUrl")
+            body.byteStream().use { input ->
+                tempFile.outputStream().use { out -> input.copyTo(out) }
+            }
         }
-        val body = resp.body ?: run { resp.close(); error("Empty body for $pageUrl") }
-        body.byteStream().use { input ->
-            tempFile.outputStream().use { out -> input.copyTo(out) }
-        }
-        resp.close()
         if (tempFile.length() <= 0L) {
             tempFile.delete()
             error("Downloaded empty image for $pageUrl")
         }
-        tempFile.renameTo(outFile)
+        check(tempFile.renameTo(outFile)) { appContext.getString(R.string.download_error) }
         return true
     }
 
     private fun buildForegroundInfo(title: String, done: Int, total: Int, mangaId: String, chapterUrl: String): ForegroundInfo {
         val sourceId = mangaId.substringBefore('_')
-        val chapterNotifId = NOTIF_ID_PROGRESS + Math.abs(chapterUrl.hashCode() % 9000)
+        // All chapters in a manga reuse one silent foreground notification rather than leaving
+        // a new persistent notification for every chapter in a whole-manga download.
+        val chapterNotifId = NOTIF_ID_PROGRESS + Math.abs(mangaId.hashCode() % 9000)
         val notification = NotificationCompat.Builder(appContext, MangaWorldApp.DOWNLOAD_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_shortcut_downloads)
-            .setContentTitle("جاري تنزيل $title")
-            .setContentText(if (total > 0) "$done/$total صفحة" else "جاري...")
+            .setContentTitle(appContext.getString(R.string.download_notification_progress_title, title))
+            .setContentText(
+                if (total > 0) appContext.getString(R.string.download_notification_progress_pages, done, total)
+                else appContext.getString(R.string.download_notification_progress_indeterminate)
+            )
             .setOngoing(true)
             .setProgress(total, done, total == 0)
             .setOnlyAlertOnce(true)
@@ -188,8 +265,8 @@ class ChapterDownloadWorker @AssistedInject constructor(
         val sourceId = mangaId.substringBefore('_')
         val notif = NotificationCompat.Builder(appContext, MangaWorldApp.COMPLETE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_shortcut_downloads)
-            .setContentTitle("✓ تم تنزيل $title")
-            .setContentText("$pages صفحة — اضغط للقراءة بدون إنترنت")
+            .setContentTitle(appContext.getString(R.string.download_notification_complete_title, title))
+            .setContentText(appContext.getString(R.string.download_notification_complete_body, pages))
             .setContentIntent(
                 PendingIntent.getActivity(
                     appContext,
@@ -207,8 +284,8 @@ class ChapterDownloadWorker @AssistedInject constructor(
     private fun showFailureNotification(title: String, mangaId: String, chapterUrl: String) {
         val notif = NotificationCompat.Builder(appContext, MangaWorldApp.COMPLETE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_shortcut_downloads)
-            .setContentTitle("✗ فشل تنزيل $title")
-            .setContentText("اضغط لفتح إدارة التنزيلات أو إعادة المحاولة")
+            .setContentTitle(appContext.getString(R.string.download_notification_failed_title, title))
+            .setContentText(appContext.getString(R.string.download_notification_failed_body))
             .setContentIntent(
                 PendingIntent.getActivity(
                     appContext,
@@ -227,7 +304,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
         dir.listFiles()?.count { it.isFile && it.extension.lowercase() == "jpg" && it.length() > 0L } ?: 0
 
     private suspend fun updateProgress(taskId: String, title: String, done: Int, total: Int, mangaId: String, chapterUrl: String) {
-        downloadTaskDao.updateState(
+        downloadTaskDao.updateStateIfActive(
             taskId,
             "running",
             if (total == 0) 0f else done.toFloat() / total,
@@ -239,16 +316,28 @@ class ChapterDownloadWorker @AssistedInject constructor(
         runCatching { setForeground(buildForegroundInfo(title, done, total, mangaId, chapterUrl)) }
     }
 
+    private fun String.toPageUrls(): List<String> = runCatching {
+        val array = JSONArray(this)
+        (0 until array.length()).mapNotNull { index ->
+            array.optString(index).takeIf { it.isNotBlank() }
+        }
+    }.getOrDefault(emptyList())
+
     companion object {
         const val KEY_TASK_ID = "task_id"
-        const val KEY_MANGA_ID = "manga_id"
-        const val KEY_CHAPTER_URL = "chapter_url"
-        const val KEY_CHAPTER_TITLE = "chapter_title"
-        const val KEY_PAGES = "pages"
-        const val KEY_REFERER = "referer"
+
+        /** Stable, language-neutral error codes persisted in Room and translated at render time. */
+        const val ERROR_RETRY_UNAVAILABLE = "retry_unavailable"
+        const val ERROR_DOWNLOAD_FAILED = "download_error"
+        const val ERROR_CANCELLED = "cancelled"
+
+        // Notification ID ranges are disjoint: progress [1001..10_000],
+        // completion [20_000..29_999], failure [30_000..39_999], batch [40_000..40_999].
         private const val NOTIF_ID_PROGRESS = 1001
-        private const val NOTIF_ID_COMPLETE = 2000
-        private const val NOTIF_ID_FAIL = 3000
+        private const val NOTIF_ID_COMPLETE = 20000
+        private const val NOTIF_ID_FAIL = 30000
         private const val PARALLEL_DOWNLOADS = 4
+        private const val MAX_DOWNLOAD_ATTEMPTS = 3
+        private val ACTIVE_TASK_STATUSES = setOf("queued", "running")
     }
 }

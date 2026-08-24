@@ -1,12 +1,11 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import okhttp3.OkHttpClient
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 /**
  * Reusable scraper for WordPress + MangaReader theme sites.
@@ -31,23 +30,7 @@ open class MangaReaderBaseScraper(
 
     protected open val listPath: String = "/manga/"
 
-    private val arabicMonths = mapOf(
-        "يناير" to "Jan", "فبراير" to "Feb", "مارس" to "Mar", "أبريل" to "Apr",
-        "مايو" to "May", "يونيو" to "Jun", "يوليو" to "Jul", "أغسطس" to "Aug",
-        "سبتمبر" to "Sep", "أكتوبر" to "Oct", "نوفمبر" to "Nov", "ديسمبر" to "Dec"
-    )
-
-    protected fun parseArabicDate(text: String): Long? {
-        if (text.isBlank()) return null
-        var normalized = text.trim()
-        for ((ar, en) in arabicMonths) {
-            normalized = normalized.replace(ar, en)
-        }
-        return runCatching {
-            val fmt = SimpleDateFormat("d MMM yyyy", Locale.ENGLISH)
-            fmt.parse(normalized)?.time
-        }.getOrNull()
-    }
+    protected fun parseArabicDate(text: String): Long? = ScraperText.parseArabicDate(text)
 
     // ─── Home ─────────────────────────────────────────────────────────────────
 
@@ -163,8 +146,7 @@ open class MangaReaderBaseScraper(
             val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
             val chNum = el.attr("data-num").toFloatOrNull()
                 ?: el.attr("data-ch").toFloatOrNull()
-                ?: chLink.selectFirst(".chapternum, .ch-num")?.text()?.replace("الفصل", "")
-                    ?.replace("[^0-9.]".toRegex(), "")?.trim()?.toFloatOrNull()
+                ?: ScraperText.firstChapterNumber(chLink.selectFirst(".chapternum, .ch-num")?.text())
                 ?: chHref.trimEnd('/').substringAfterLast("/").substringBefore("?").toFloatOrNull()
                 ?: return@mapNotNull null
             val dateText = el.selectFirst(".chapterdate, .ch-date, .dt a")?.text()?.cleanText()
@@ -249,7 +231,10 @@ open class MangaReaderBaseScraper(
                                 ChapterPage(index = i, url = imgSrc.encodeForUrl(), headers = buildImageHeaders(imgSrc, chapterUrl))
                             } else null
                         }
-                    } catch (_: Exception) { emptyList() }
+                    } catch (e: Exception) {
+                        FirebaseTelemetry.logScraperFailure(source.id, "pages_ts_reader", e)
+                        emptyList()
+                    }
                 } else emptyList()
             }
     }
@@ -332,14 +317,30 @@ open class MangaReaderBaseScraper(
             val title = card.selectFirst(".tt, .bigor .adds .epxs")?.text()?.cleanText()
                 ?: linkEl.attr("title").cleanText().ifBlank { slug }
 
+            // Home cards on this theme usually link to the SERIES page while
+            // posing as chapters ("الفصل N" chip, no chapter URL). Emitting them
+            // produced fake "chapter 0" entries routed at a manga URL — broken
+            // reader loads and poisoned continue-reading shortcuts. Only emit
+            // when an explicit chapter link exists on the card (M-review).
+            val chapterLink = card.selectFirst("a[href*='chapter'], .chapter-item a[href], .eplast a[href]")
+                ?: return@forEach
+            val chapterUrl = chapterLink.attr("abs:href").ifEmpty { chapterLink.attr("href") }
+            if (chapterUrl.isBlank()) return@forEach
+
+            val chapterNumber = chapterLink.attr("data-num").toFloatOrNull()
+                ?: ScraperText.firstChapterNumber(chapterLink.text())
+                ?: ScraperText.firstChapterNumber(card.selectFirst(".epxs, .chapternum, .ch-num")?.text())
+                ?: ScraperText.lastSegmentNumber(chapterUrl)
+                ?: return@forEach
+
             latestItems.add(
                 LatestChapterItem(
                     mangaId = "${source.id}_$slug",
                     mangaSlug = slug,
                     mangaTitle = title,
                     coverUrl = coverUrl,
-                    chapterNumber = 0f,
-                    chapterUrl = href,
+                    chapterNumber = chapterNumber,
+                    chapterUrl = chapterUrl,
                     timeAgo = "",
                     source = source
                 )

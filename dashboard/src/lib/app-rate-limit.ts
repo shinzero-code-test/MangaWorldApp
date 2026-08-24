@@ -1,15 +1,17 @@
-type RateLimit = { count: number; resetAt: number };
+import { consumeRateLimit } from "./security";
 
-const limits = new Map<string, RateLimit>();
+export { consumeRateLimit };
 
-export function allowAppMutation(key: string, limit: number, windowMs: number): boolean {
-  const now = Date.now();
-  const current = limits.get(key);
-  if (!current || current.resetAt <= now) {
-    limits.set(key, { count: 1, resetAt: now + windowMs });
-    return true;
-  }
-  if (current.count >= limit) return false;
-  current.count += 1;
-  return true;
+/**
+ * App-facing mutation limiter. Backed by Firestore fixed-window counters so the
+ * limit holds across serverless instances (M-3); falls back to per-instance
+ * memory only if Firestore is unavailable.
+ */
+export async function allowAppMutation(
+  key: string,
+  limit: number,
+  windowMs: number
+): Promise<boolean> {
+  const result = await consumeRateLimit("app-mutation", key, limit, windowMs);
+  return result.allowed;
 }

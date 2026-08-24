@@ -3,12 +3,7 @@ import { useEffect, useState } from "react";
 import { Shield, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { PageHeader, StatusBadge, EmptyState, ConfirmDialog } from "@/components/ui";
 import { formatRelative } from "@/lib/utils";
-
-interface Report {
-  id: string; reporterId: string; reportedId: string; mangaId?: string;
-  reason: string; status: "open"|"resolved"|"dismissed"; priority?: string;
-  createdAt: string|number;
-}
+import type { ModerationReport } from "@/types/community";
 
 const TABS = [
   { id:"open",      label:"مفتوحة",    icon: Clock,        color:"var(--warning)"  },
@@ -21,9 +16,11 @@ const priorityColor: Record<string,string> = {
 };
 
 export default function ModerationPage() {
-  const [allReports, setAllReports] = useState<Report[]>([]);
+  const [allReports, setAllReports] = useState<ModerationReport[]>([]);
   const [activeTab,  setActiveTab]  = useState("open");
   const [loading,    setLoading]    = useState(true);
+  const [forbidden,  setForbidden]  = useState(false);
+  const [canAct,     setCanAct]     = useState(false);
   const [actionId,   setActionId]   = useState<string|null>(null);
   const [actionType, setActionType] = useState<"resolve"|"dismiss"|null>(null);
   const [actionLoad, setActionLoad] = useState(false);
@@ -31,9 +28,21 @@ export default function ModerationPage() {
   useEffect(() => {
     setLoading(true);
     fetch("/api/moderation/reports")
-      .then(r => r.json())
-      .then(d => { setAllReports(d.reports ?? []); setLoading(false); })
+      .then(r => {
+        if (r.status === 403) { setForbidden(true); return null; }
+        if (!r.ok) throw new Error("failed");
+        return r.json();
+      })
+      .then(d => {
+        if (d) { setAllReports(d.reports ?? []); setForbidden(false); }
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
+    // Resolve the viewer's own role so privileged actions are hidden from viewers.
+    fetch("/api/auth/me")
+      .then(r => (r.ok ? r.json() : null))
+      .then(u => setCanAct(u?.role === "moderator" || u?.role === "super-admin"))
+      .catch(() => setCanAct(false));
   }, []);
 
   const counts = {
@@ -49,7 +58,7 @@ export default function ModerationPage() {
     if (!actionId || !actionType) return;
     setActionLoad(true);
     try {
-      await fetch("/api/moderation/reports", {
+      const res = await fetch("/api/moderation/reports", {
         method:"PATCH",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
@@ -57,9 +66,12 @@ export default function ModerationPage() {
           status:   actionType === "resolve" ? "resolved" : "dismissed",
         }),
       });
-      setAllReports(prev =>
-        prev.map(r => r.id === actionId ? { ...r, status: actionType==="resolve"?"resolved":"dismissed" } : r)
-      );
+      // Only mutate local state when the server actually accepted the change.
+      if (res.ok) {
+        setAllReports(prev =>
+          prev.map(r => r.id === actionId ? { ...r, status: actionType==="resolve"?"resolved":"dismissed" } : r)
+        );
+      }
     } finally {
       setActionLoad(false); setActionId(null); setActionType(null);
     }
@@ -118,6 +130,14 @@ export default function ModerationPage() {
             <div key={i} className="h-28 rounded-[var(--radius-lg)] border skeleton-shimmer" style={{ borderColor:"var(--border)" }} />
           ))}
         </div>
+      ) : forbidden ? (
+        <div className="rounded-[var(--radius-lg)] border" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+          <EmptyState
+            icon={Shield}
+            title="ليست لديك صلاحية"
+            description="هذه الصفحة مخصصة للمشرفين والمديرين فقط."
+          />
+        </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-[var(--radius-lg)] border" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
           <EmptyState
@@ -155,13 +175,13 @@ export default function ModerationPage() {
                       </code>
                     )}
                     <code className="text-xs px-2 py-0.5 rounded" style={{ background:"var(--muted)", color:"var(--muted-foreground)" }} dir="ltr">
-                      reporter: {report.reporterId.slice(0,8)}…
+                      reporter: {report.reporterUid.slice(0,8)}…
                     </code>
                     <code className="text-xs px-2 py-0.5 rounded" style={{ background:"var(--muted)", color:"var(--muted-foreground)" }} dir="ltr">
-                      reported: {report.reportedId.slice(0,8)}…
+                      {report.targetType}: {report.reportedUid.slice(0,8)}…
                     </code>
                   </div>
-                  {report.status === "open" && (
+                  {report.status === "open" && canAct && (
                     <div className="flex gap-2 mt-3">
                       <button onClick={() => { setActionId(report.id); setActionType("resolve"); }}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition hover:opacity-80"

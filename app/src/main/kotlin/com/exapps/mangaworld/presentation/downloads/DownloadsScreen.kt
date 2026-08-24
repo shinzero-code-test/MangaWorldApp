@@ -56,17 +56,9 @@ class DownloadsViewModel @Inject constructor(
 
     fun pauseAll() = viewModelScope.launch { manager.pauseAll() }
     fun resumeAll() = viewModelScope.launch { manager.resumeAll() }
-    fun cancelAll() {
-        viewModelScope.launch {
-            tasks.value.filter { it.status == "queued" || it.status == "running" }
-                .forEach { manager.cancelTask(it.id) }
-        }
-    }
-    fun cancelMangaDownloads(mangaId: String) {
-        viewModelScope.launch {
-            tasks.value.filter { it.mangaId == mangaId && (it.status == "queued" || it.status == "running" || it.status == "paused") }
-                .forEach { manager.cancelTask(it.id) }
-        }
+    fun cancelAll() = viewModelScope.launch { manager.cancelAllDownloads() }
+    fun cancelMangaDownloads(mangaId: String) = viewModelScope.launch {
+        manager.cancelMangaDownloads(mangaId)
     }
 }
 
@@ -74,13 +66,11 @@ class DownloadsViewModel @Inject constructor(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
+fun DownloadsScreen(
+    onBack: () -> Unit,
+    viewModel: DownloadsViewModel = hiltViewModel()
+) {
     val tasks by viewModel.tasks.collectAsStateWithLifecycle()
-
-    val inProgress = remember(tasks) { tasks.filter { it.status == "running" } }
-    val queued = remember(tasks) { tasks.filter { it.status == "queued" || it.status == "paused" } }
-    val completed = remember(tasks) { tasks.filter { it.status == "completed" } }
-    val failed = remember(tasks) { tasks.filter { it.status == "failed" || it.status == "cancelled" } }
 
     var showMenu by remember { mutableStateOf(false) }
     var showCancelAllDialog by remember { mutableStateOf(false) }
@@ -102,7 +92,7 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { /* handled by nav */ }) {
+                    IconButton(onClick = onBack) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.back),
@@ -165,13 +155,13 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
             return@Scaffold
         }
 
-        // Group tasks by mangaId
+        // Group once; sort by a precomputed latest-createdAt map — the old
+        // comparator re-filtered the whole task list per comparison (O(n²)).
         val grouped = remember(tasks) {
+            val latestByManga = tasks.groupBy { it.mangaId }
+                .mapValues { (_, group) -> group.maxOfOrNull { it.createdAt } ?: 0L }
             tasks.groupBy { it.mangaId }
-                .toSortedMap(compareByDescending { mangaId ->
-                    tasks.filter { it.mangaId == mangaId }
-                        .maxOfOrNull { it.createdAt } ?: 0L
-                })
+                .toSortedMap(compareByDescending<String> { latestByManga[it] ?: 0L })
         }
 
         LazyColumn(
@@ -204,19 +194,28 @@ fun DownloadsScreen(viewModel: DownloadsViewModel = hiltViewModel()) {
                     item("task_${task.id}") {
                         ChapterDownloadCard(
                             task = task,
-                            onPause = if (task.status == "running") {{ viewModel.pauseTask(task.id) }} else null,
-                            onResume = if (task.status == "paused") {{ viewModel.resumeTask(task.id) }} else null,
+                            onPause = if (task.status == "running") {
+                                { viewModel.pauseTask(task.id) }
+                            } else {
+                                null
+                            },
+                            onResume = if (task.status == "paused") {
+                                { viewModel.resumeTask(task.id) }
+                            } else {
+                                null
+                            },
                             onCancel = { viewModel.cancelTask(task.id) }
                         )
                     }
                 }
 
-                // Show completed tasks (collapsed by default, expandable)
+                // Show completed tasks (collapsed by default, expandable).
+                // Dismissal goes through the overflow menu "Clear completed" action.
                 if (completed.isNotEmpty()) {
                     item("completed_header_$mangaId") {
                         CompletedChaptersSummary(
                             count = completed.size,
-                            onCancelAll = { completed.forEach { viewModel.cancelTask(it.id) } }
+                            chapters = completed.mapNotNull { it.chapterTitle ?: it.chapterUrl.substringAfterLast("/") }
                         )
                     }
                 }
@@ -425,7 +424,8 @@ private fun ChapterDownloadCard(
                     "completed" -> "✓"
                     "failed" -> stringResource(R.string.str_331)
                     "cancelled" -> stringResource(R.string.cancelled)
-                    else -> task.status
+                    // Never leak internal status enums to the UI.
+                    else -> stringResource(R.string.pending)
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = statusColor,
@@ -460,7 +460,7 @@ private fun ChapterDownloadCard(
 // ─── Completed Chapters Summary ───────────────────────────────────────────────
 
 @Composable
-private fun CompletedChaptersSummary(count: Int, onCancelAll: () -> Unit) {
+private fun CompletedChaptersSummary(count: Int, chapters: List<String> = emptyList()) {
     var expanded by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
@@ -489,7 +489,26 @@ private fun CompletedChaptersSummary(count: Int, onCancelAll: () -> Unit) {
                 )
             }
         }
+        if (expanded && chapters.isNotEmpty()) {
+            Column(Modifier.padding(start = 36.dp, end = 12.dp, bottom = 10.dp)) {
+                chapters.take(20).forEach { title ->
+                    Text(
+                        "• $title",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MangaColors.OnSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (chapters.size > 20) {
+                    Text(
+                        stringResource(R.string.downloads_more_items, chapters.size - 20),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MangaColors.Muted,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+        }
     }
 }
-
-

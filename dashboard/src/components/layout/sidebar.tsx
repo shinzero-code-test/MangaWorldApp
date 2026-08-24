@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3, Users, Shield, MessageSquare, TrendingUp,
   Zap, Bug, Trophy, Settings2, Bell, Database,
-  HardDrive, Smartphone, Package, BookOpen,
+  HardDrive, Smartphone, Package, ShieldAlert, Star,
   LogOut, Sun, Moon, PanelLeftOpen
 } from "lucide-react";
 import { useTheme } from "@/components/providers/theme-provider";
@@ -34,12 +34,16 @@ const navGroups: NavGroup[] = [
       { href:"/dashboard/users",              label:"المستخدمون", icon:Users,         minRole:"moderator" },
       { href:"/dashboard/moderation",         label:"الإشراف",    icon:Shield,        minRole:"moderator" },
       { href:"/dashboard/community/comments", label:"المجتمع",    icon:MessageSquare, minRole:"moderator" },
+      { href:"/dashboard/community/reviews",  label:"المراجعات",  icon:Star,          minRole:"moderator" },
+      { href:"/dashboard/moderation/banned-keywords", label:"الكلمات المحظورة", icon:ShieldAlert, minRole:"moderator" },
     ],
   },
   {
     label:"تحليلات",
     items:[
       { href:"/dashboard/analytics",   label:"التحليلات", icon:TrendingUp },
+      { href:"/dashboard/analytics/engagement", label:"التفاعل", icon:TrendingUp },
+      { href:"/dashboard/analytics/events",     label:"الأحداث",  icon:TrendingUp, minRole:"super-admin" },
       { href:"/dashboard/performance", label:"الأداء",    icon:Zap,       minRole:"super-admin" },
       { href:"/dashboard/crashlytics", label:"الأعطال",   icon:Bug,       minRole:"super-admin" },
       { href:"/dashboard/achievements",label:"الإنجازات", icon:Trophy },

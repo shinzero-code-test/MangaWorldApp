@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/google"];
+const PUBLIC_PATHS = new Set(["/login", "/api/auth/login", "/api/auth/google"]);
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public paths
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  // Allow public paths — exact match on the first segment so "/loginfoo" etc.
+  // doesn't accidentally inherit the exemption (L-7).
+  const firstSegment = "/" + (pathname.split("/")[1] ?? "");
+  if (PUBLIC_PATHS.has(pathname) || PUBLIC_PATHS.has(firstSegment)) {
     return NextResponse.next();
   }
 

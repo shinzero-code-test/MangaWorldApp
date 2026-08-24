@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.pager.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -26,6 +29,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -38,6 +42,9 @@ import androidx.compose.ui.unit.dp
 import coil.transform.Transformation
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
@@ -66,6 +73,8 @@ fun ReaderScreen(
     mangaId: String,
     chapterUrl: String,
     onBack: () -> Unit,
+    communityEnabled: Boolean,
+    isSignedIn: Boolean = true,
     onOpenCommunity: () -> Unit,
     viewModel: ReaderViewModel = hiltViewModel()
 ) {
@@ -81,14 +90,14 @@ fun ReaderScreen(
             ctx.announceForAccessibility(ctx.getString(R.string.reader_page_counter, "${state.currentPage + 1}", "${state.totalPages}"))
         }
     }
-    var noteDialog by remember { mutableStateOf(false) }
-    var noteText by remember { mutableStateOf("") }
-    var annotationsSheetOpen by remember { mutableStateOf(false) }
-    var commentsSheetOpen by remember { mutableStateOf(false) }
-    var settingsSheetOpen by remember { mutableStateOf(false) }
-    var commentText by remember { mutableStateOf("") }
-    var commentSpoiler by remember { mutableStateOf(false) }
-    var showSavePageDialog by remember { mutableStateOf(false) }
+    var noteDialog by rememberSaveable { mutableStateOf(false) }
+    var noteText by rememberSaveable { mutableStateOf("") }
+    var annotationsSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var commentsSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var settingsSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var commentText by rememberSaveable { mutableStateOf("") }
+    var commentSpoiler by rememberSaveable { mutableStateOf(false) }
+    var showSavePageDialog by rememberSaveable { mutableStateOf(false) }
     val solverLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val cookies = result.data?.getStringExtra(WebViewSolverActivity.RESULT_COOKIES).orEmpty()
@@ -137,9 +146,29 @@ fun ReaderScreen(
             }
         }
 
-        SideEffect {
-            activity?.window?.attributes = activity.window.attributes.apply {
-                screenBrightness = state.brightness.coerceIn(0.05f, 1f)
+        // Keep-screen-on must be applied AND cleared with the reader, or the flag
+        // leaks to the rest of the app.
+        DisposableEffect(state.keepScreenOn, activity) {
+            val window = activity?.window
+            if (state.keepScreenOn) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+        }
+
+        // Brightness override: capture the previous value once and restore it on
+        // dispose so leaving the reader never leaves the app dimmed.
+        val previousBrightness = remember(activity) { activity?.window?.attributes?.screenBrightness }
+        DisposableEffect(state.brightness, activity) {
+            val act = activity
+            if (act != null) {
+                val attributes = act.window.attributes
+                attributes.screenBrightness = state.brightness.coerceIn(0.05f, 1f)
+                act.window.attributes = attributes
+            }
+            onDispose {
+                val owner = activity ?: return@onDispose
+                val attrs = owner.window.attributes
+                attrs.screenBrightness = previousBrightness ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                owner.window.attributes = attrs
             }
         }
 
@@ -194,30 +223,9 @@ fun ReaderScreen(
                 currentPage = state.currentPage + 1,
                 totalPages = state.totalPages,
                 onBack = onBack,
-                onModeChange = viewModel::setReaderMode,
-                currentMode = state.readerMode,
-                onDownload = viewModel::downloadCurrentChapter,
-                downloadInProgress = state.downloadInProgress,
-                onCancelDownload = viewModel::cancelDownload,
                 onRetryDownload = viewModel::retryCurrentChapterDownload,
-                canRetry = state.downloadMessage?.startsWith(stringResource(R.string.str_331)) == true,
-                brightness = state.brightness,
-                onBrightnessChange = viewModel::setBrightness,
-                imageFilter = state.imageFilter,
-                onImageFilterChange = viewModel::setImageFilter,
-                incognitoMode = state.incognitoMode,
-                onIncognitoChange = viewModel::setIncognito,
-                hasBookmark = state.currentPage in state.bookmarkedPages,
-                onToggleBookmark = {
-                    if (state.hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    viewModel.toggleBookmarkCurrentPage()
-                },
-                onEditNote = {
-                    noteText = state.pageNotes[state.currentPage].orEmpty()
-                    noteDialog = true
-                },
-                onBrowseAnnotations = { annotationsSheetOpen = true },
-                onOpenComments = { commentsSheetOpen = true },
+                // Typed failure signal — display strings must never drive behavior.
+                canRetry = state.lastDownloadFailed,
                 onOpenSettings = { settingsSheetOpen = true },
                 liveReaders = state.liveReaders,
                 hasPreviousChapter = state.prevChapterUrl != null,
@@ -237,6 +245,7 @@ fun ReaderScreen(
             ReaderBottomBar(
                 currentPage = state.currentPage,
                 totalPages = state.totalPages,
+                showPageNumber = state.showPageNumber,
                 onPageSelected = viewModel::onPageChanged
             )
         }
@@ -357,7 +366,10 @@ fun ReaderScreen(
                             ) {
                                 Column(Modifier.fillMaxWidth().padding(14.dp)) {
                                     Text(
-                                        text = stringResource(R.string.fmt_052, page.index + 1) + if (page.index in state.bookmarkedPages) " • محفوظة" else "",
+                                        // Own formatted resource instead of concatenating a literal suffix.
+                                        text = if (page.index in state.bookmarkedPages)
+                                            stringResource(R.string.reader_page_bookmarked, page.index + 1)
+                                        else stringResource(R.string.fmt_052, page.index + 1),
                                         color = MangaColors.OnSurface,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -373,15 +385,18 @@ fun ReaderScreen(
             }
         }
 
-        if (commentsSheetOpen) {
+        if (communityEnabled && commentsSheetOpen) {
             ModalBottomSheet(onDismissRequest = { commentsSheetOpen = false }) {
                 ReaderCommentsSheet(
                     comments = state.chapterComments,
                     collapseSpoilersByDefault = state.spoilerCollapseDefault,
+                    // Guests read-only: composer hidden, sign-in hint shown instead (H6).
+                    isSignedIn = isSignedIn,
                     commentText = commentText,
                     onCommentTextChange = { commentText = it },
                     spoiler = commentSpoiler,
                     onSpoilerChange = { commentSpoiler = it },
+                    errorMessage = state.chapterCommentError,
                     onSend = {
                         viewModel.postReaderComment(commentText, commentSpoiler)
                         commentText = ""
@@ -417,7 +432,6 @@ fun ReaderScreen(
                     onShowPageNumberChange = viewModel::setShowPageNumber,
                     onDownload = { viewModel.downloadCurrentChapter() },
                     onCancelDownload = { viewModel.cancelDownload() },
-                    onRetryDownload = { viewModel.retryCurrentChapterDownload() },
                     onToggleBookmark = { viewModel.toggleBookmarkCurrentPage() },
                     onEditNote = {
                         noteText = state.pageNotes[state.currentPage].orEmpty()
@@ -425,6 +439,7 @@ fun ReaderScreen(
                         noteDialog = true
                     },
                     onBrowseAnnotations = { settingsSheetOpen = false; annotationsSheetOpen = true },
+                    communityEnabled = communityEnabled,
                     onOpenComments = { settingsSheetOpen = false; commentsSheetOpen = true }
                 )
             }
@@ -477,7 +492,8 @@ private fun ReaderContent(
                 )
             } else {
                 HorizontalReader(pages = state.pages, rtl = true,
-                    initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress)
+                    initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress,
+                    doubleTapZoomEnabled = state.doubleTapZoom)
             }
         ReaderMode.HORIZONTAL_LTR ->
             if (state.dualPageLandscape && isLandscape) {
@@ -492,7 +508,8 @@ private fun ReaderContent(
                 )
             } else {
                 HorizontalReader(pages = state.pages, rtl = false,
-                    initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress)
+                    initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress,
+                    doubleTapZoomEnabled = state.doubleTapZoom)
             }
     }
 }
@@ -515,9 +532,16 @@ private fun WebtoonReader(
         initialFirstVisibleItemIndex = initialPage.coerceIn(0, maxOf(0, pages.size - 1))
     )
 
-    // Track actual visible page (forward and backward)
-    LaunchedEffect(listState.firstVisibleItemIndex) {
-        onPageChanged(listState.firstVisibleItemIndex)
+    // Track actual visible page (forward and backward). Emissions are gated on
+    // scroll settle so programmatic animateScrollToItem passes don't fire
+    // intermediate onPageChanged calls (progress writes, reaction re-observes)
+    // and can't feed the slider feedback loop.
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.isScrollInProgress }
+            .filter { (_, scrolling) -> !scrolling }
+            .map { (index, _) -> index }
+            .distinctUntilChanged()
+            .collect { page -> onPageChanged(page) }
     }
 
     // Allow slider / external code to scroll to a specific page
@@ -610,7 +634,8 @@ private fun HorizontalReader(
     imageFilter: ReaderImageFilter,
     onPageChanged: (Int) -> Unit,
     onTap: (Float, Float) -> Unit,
-    onLongPress: () -> Unit = {}
+    onLongPress: () -> Unit = {},
+    doubleTapZoomEnabled: Boolean = true
 ) {
     val orderedPages = if (rtl) pages.reversed() else pages
     val adjustedInitial = if (rtl && orderedPages.isNotEmpty()) {
@@ -646,9 +671,11 @@ private fun HorizontalReader(
                             onTap(nx, ny)
                         },
                         onDoubleTap = {
-                            // Toggle zoom: 1x ↔ 2x
-                            pageScale = if (pageScale > 1f) 1f else 2f
-                            if (pageScale == 1f) { pageOffsetX = 0f; pageOffsetY = 0f }
+                            // Honor the user's double-tap-zoom setting (was always-on).
+                            if (doubleTapZoomEnabled) {
+                                pageScale = if (pageScale > 1f) 1f else 2f
+                                if (pageScale == 1f) { pageOffsetX = 0f; pageOffsetY = 0f }
+                            }
                         }
                     )
                 }
@@ -738,24 +765,8 @@ private fun ReaderTopBar(
     currentPage: Int,
     totalPages: Int,
     onBack: () -> Unit,
-    onModeChange: (ReaderMode) -> Unit,
-    currentMode: ReaderMode,
-    onDownload: () -> Unit,
-    downloadInProgress: Boolean,
-    onCancelDownload: () -> Unit,
     onRetryDownload: () -> Unit,
     canRetry: Boolean,
-    brightness: Float,
-    onBrightnessChange: (Float) -> Unit,
-    imageFilter: ReaderImageFilter,
-    onImageFilterChange: (ReaderImageFilter) -> Unit,
-    incognitoMode: Boolean,
-    onIncognitoChange: (Boolean) -> Unit,
-    hasBookmark: Boolean,
-    onToggleBookmark: () -> Unit,
-    onEditNote: () -> Unit,
-    onBrowseAnnotations: () -> Unit,
-    onOpenComments: () -> Unit,
     onOpenSettings: () -> Unit,
     liveReaders: Int,
     hasPreviousChapter: Boolean,
@@ -782,7 +793,7 @@ private fun ReaderTopBar(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("$currentPage / $totalPages",
                         style = MaterialTheme.typography.bodyMedium, color = Color.White)
-                    Text("$liveReaders live", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f))
+                    Text(stringResource(R.string.reader_live_count, liveReaders), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f))
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -794,6 +805,11 @@ private fun ReaderTopBar(
                 }
                 IconButton(onClick = onOpenSettings) {
                     Icon(Icons.Filled.MoreVert, stringResource(R.string.settings), tint = Color.White)
+                }
+                if (canRetry) {
+                    IconButton(onClick = onRetryDownload) {
+                        Icon(Icons.Filled.Refresh, stringResource(R.string.retry_short), tint = Color.White)
+                    }
                 }
             }
         }
@@ -822,10 +838,10 @@ private fun ReaderSettingsSheet(
     onShowPageNumberChange: (Boolean) -> Unit,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
-    onRetryDownload: () -> Unit,
     onToggleBookmark: () -> Unit,
     onEditNote: () -> Unit,
     onBrowseAnnotations: () -> Unit,
+    communityEnabled: Boolean,
     onOpenComments: () -> Unit
 ) {
     var expandedSection by remember { mutableStateOf<String?>("actions") }
@@ -883,12 +899,14 @@ private fun ReaderSettingsSheet(
                     label = stringResource(R.string.bookmarks),
                     onClick = onBrowseAnnotations
                 )
-                ActionButton(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Filled.Forum,
-                    label = stringResource(R.string.discussion),
-                    onClick = onOpenComments
-                )
+                if (communityEnabled) {
+                    ActionButton(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Filled.Forum,
+                        label = stringResource(R.string.discussion),
+                        onClick = onOpenComments
+                    )
+                }
             }
         }
 
@@ -1026,9 +1044,20 @@ private fun SectionHeader(
 
 @Composable
 private fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+    // Row-level toggleable semantics: one focus target, correct Role for TalkBack.
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
         Text(label, color = MangaColors.OnSurface)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 
@@ -1036,10 +1065,12 @@ private fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean
 private fun ReaderCommentsSheet(
     comments: List<CommunityComment>,
     collapseSpoilersByDefault: Boolean,
+    isSignedIn: Boolean,
     commentText: String,
     onCommentTextChange: (String) -> Unit,
     spoiler: Boolean,
     onSpoilerChange: (Boolean) -> Unit,
+    errorMessage: String?,
     onSend: () -> Unit,
     onOpenCommunity: () -> Unit
 ) {
@@ -1065,13 +1096,26 @@ private fun ReaderCommentsSheet(
                 }
             }
         }
-        OutlinedTextField(value = commentText, onValueChange = onCommentTextChange, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.add_comment)) })
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = spoiler, onCheckedChange = onSpoilerChange)
-                Text(stringResource(R.string.community_spoiler))
+        if (isSignedIn) {
+            OutlinedTextField(value = commentText, onValueChange = onCommentTextChange, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.add_comment)) })
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = spoiler, onCheckedChange = onSpoilerChange)
+                    Text(stringResource(R.string.community_spoiler))
+                }
+                Button(onClick = onSend, enabled = commentText.isNotBlank()) { Text(stringResource(R.string.community_send)) }
             }
-            Button(onClick = onSend, enabled = commentText.isNotBlank()) { Text(stringResource(R.string.community_send)) }
+            errorMessage?.let { msg ->
+                Text(msg, color = MangaColors.Error, style = MaterialTheme.typography.bodySmall)
+            }
+        } else {
+            // Guests: composer hidden — Firestore rules would reject the write anyway.
+            Text(
+                stringResource(R.string.reader_sign_in_to_participate),
+                color = MangaColors.Muted,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -1117,7 +1161,12 @@ private fun ReaderImageFilter.toColorFilter(): ColorFilter? {
 // ─── Bottom Bar ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun ReaderBottomBar(currentPage: Int, totalPages: Int, onPageSelected: (Int) -> Unit) {
+private fun ReaderBottomBar(
+    currentPage: Int,
+    totalPages: Int,
+    showPageNumber: Boolean,
+    onPageSelected: (Int) -> Unit
+) {
     if (totalPages == 0) return
     Column(
         Modifier.fillMaxWidth()
@@ -1135,10 +1184,12 @@ private fun ReaderBottomBar(currentPage: Int, totalPages: Int, onPageSelected: (
                 inactiveTrackColor = Color(0x55FFFFFF)
             )
         )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                Text("${currentPage + 1}", style = MaterialTheme.typography.labelSmall, color = Color.White)
-                Text("$totalPages", style = MaterialTheme.typography.labelSmall, color = Color(0x88FFFFFF))
+        if (showPageNumber) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    Text("${currentPage + 1}", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    Text("$totalPages", style = MaterialTheme.typography.labelSmall, color = Color(0x88FFFFFF))
+                }
             }
         }
     }

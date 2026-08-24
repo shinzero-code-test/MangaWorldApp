@@ -8,7 +8,6 @@ import {
   Copy,
   Check,
   Loader2,
-  BookOpen,
   AlertCircle,
   Smartphone,
 } from "lucide-react";
@@ -24,6 +23,7 @@ export default function TwoFAPage() {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
 
   // Check 2FA status on mount
@@ -37,9 +37,13 @@ export default function TwoFAPage() {
         if (data.enabled && data.verified) {
           router.replace("/dashboard");
         } else if (data.needsSetup) {
-          // Need to set up 2FA
-          fetch("/api/auth/2fa/setup")
-            .then((r) => r.json())
+          // Need to set up 2FA — POST: setup generates/rotates state, so it must
+          // never be a side-effecting GET (CSRF surface under SameSite=Lax).
+          fetch("/api/auth/2fa/setup", { method: "POST" })
+            .then(async (r) => {
+              if (!r.ok) throw new Error("setup-failed");
+              return r.json();
+            })
             .then((setup) => {
               if (setup.alreadyEnabled) {
                 setState("validate");
@@ -48,6 +52,10 @@ export default function TwoFAPage() {
                 setSecret(setup.secret);
                 setState("setup");
               }
+            })
+            .catch(() => {
+              setError("تعذر تحضير المصادقة الثنائية. أعد المحاولة.");
+              setState("validate");
             });
         } else if (data.needsValidation) {
           setState("validate");
@@ -56,6 +64,9 @@ export default function TwoFAPage() {
       .catch(() => {
         router.replace("/login");
       });
+    return () => {
+      if (redirectTimer.current) clearTimeout(redirectTimer.current);
+    };
   }, [router]);
 
   const otpValue = otp.join("");
@@ -129,7 +140,7 @@ export default function TwoFAPage() {
         return;
       }
       setState("done");
-      setTimeout(() => {
+      redirectTimer.current = setTimeout(() => {
         router.replace("/dashboard");
         router.refresh();
       }, 1200);

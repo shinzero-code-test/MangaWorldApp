@@ -26,6 +26,8 @@ import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
+import androidx.glance.layout.defaultWeight
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -129,7 +131,9 @@ internal fun WidgetListItem(
             WidgetStatusDot(active = leadingDotActive)
             Spacer(GlanceModifier.width(8.dp))
         }
-        Column(modifier = GlanceModifier.fillMaxWidth()) {
+        // defaultWeight lets the trailing badge keep its intrinsic width —
+        // fillMaxWidth here squeezed badges to zero (H-review).
+        Column(modifier = GlanceModifier.defaultWeight()) {
             if (showTitle) {
                 Text(
                     text = title,
@@ -175,7 +179,7 @@ internal fun WidgetListItem(
 }
 
 @Composable
-internal fun WidgetEmptyState(title: String, subtitle: String, intent: Intent? = null, actionLabel: String? = null, retryIntent: Intent? = null) {
+internal fun WidgetEmptyState(title: String, subtitle: String, intent: Intent? = null, actionLabel: String? = null) {
     Column(
         modifier = GlanceModifier.fillMaxSize(),
         verticalAlignment = Alignment.Vertical.CenterVertically,
@@ -214,10 +218,6 @@ internal fun WidgetEmptyState(title: String, subtitle: String, intent: Intent? =
         if (intent != null && !actionLabel.isNullOrBlank()) {
             Spacer(GlanceModifier.height(10.dp))
             WidgetPrimaryButton(label = actionLabel, intent = intent)
-        }
-        if (retryIntent != null) {
-            Spacer(GlanceModifier.height(6.dp))
-            WidgetPrimaryButton(label = LocalContext.current.getString(R.string.widget_retry), intent = retryIntent)
         }
     }
 }

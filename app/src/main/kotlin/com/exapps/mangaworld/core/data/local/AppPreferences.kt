@@ -196,6 +196,19 @@ class AppPreferences @Inject constructor(
     suspend fun setMutedUsers(values: Set<String>) =
         dataStore.edit { it[KEY_MUTED_USERS] = values.joinToString(",") }
 
+    /** Atomic add/remove inside one edit{} — the read-then-set pattern raced (M-review). */
+    suspend fun addMutedUser(uid: String) = dataStore.edit { prefs ->
+        val current = prefs[KEY_MUTED_USERS]
+            ?.split(',')?.filter(String::isNotBlank)?.toSet().orEmpty()
+        prefs[KEY_MUTED_USERS] = (current + uid).joinToString(",")
+    }
+
+    suspend fun removeMutedUser(uid: String) = dataStore.edit { prefs ->
+        val current = prefs[KEY_MUTED_USERS]
+            ?.split(',')?.filter(String::isNotBlank)?.toSet().orEmpty()
+        prefs[KEY_MUTED_USERS] = (current - uid).joinToString(",")
+    }
+
     suspend fun setReadingListStatus(value: String?) = dataStore.edit {
         if (value.isNullOrBlank()) it.remove(KEY_READING_LIST_STATUS)
         else it[KEY_READING_LIST_STATUS] = value

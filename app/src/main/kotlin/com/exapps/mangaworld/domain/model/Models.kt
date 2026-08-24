@@ -20,8 +20,8 @@ enum class MangaSource(
     MESHMANGA("meshmanga", "مانجا سوات", "https://meshmanga.com", false, ThemeType.API, R.drawable.meshmanga_com_logo),
 
     // ─── New Arabic Sources (Madara Theme) ────────────────────────────────────
-    ASQ3("asq3", "مانجا العاشق", "https://3asq.org", true, ThemeType.MADARA, R.drawable.asq3_org_logo),
-    LEKMANGA("lekmanga", "مانجا ليك", "https://lek-manga.net", false, ThemeType.MADARA, R.drawable.lek_manga_net_logo),
+    ASQ3("asq3", "مانجا العاشق", "https://3asq.online", true, ThemeType.MADARA, R.drawable.asq3_org_logo),
+    LEKMANGA("lekmanga", "مانجا ليك", "https://mangalik.net", false, ThemeType.MADARA, R.drawable.lek_manga_net_logo),
     LEKMANGAONLINE("lekmangaonline", "مانجا ليك اونلاين", "https://lekmanga.online", false, ThemeType.MADARA, R.drawable.lekmanga_online_logo),
     LIKEMANGA("likemanga", "مانجا لايك", "https://like-manga.net", false, ThemeType.MADARA, R.drawable.like_manga_net_logo),
     LINKMANGA("linkmanga", "مانجا لينك", "https://link-manga.net", false, ThemeType.MADARA, R.drawable.link_manga_net_logo),
@@ -407,6 +407,13 @@ data class CommunityComment(
     val slug: String = "",
     val sourceId: String = "",
     val parentId: String? = null,
+    /** The root comment ID for a flat reply thread. Legacy nested replies omit this value. */
+    val threadRootId: String? = null,
+    /** Non-null when this comment is a reply to a manga review rather than a comment. */
+    val reviewId: String? = null,
+    /** Explicit addressee for a flat reply; falls back to the thread author when absent. */
+    val replyToUid: String? = null,
+    val replyToUsername: String? = null,
     val authorUid: String,
     val authorName: String,
     val authorUsername: String = "",
@@ -415,6 +422,8 @@ data class CommunityComment(
     val text: String,
     val mentions: List<String> = emptyList(),
     val spoiler: Boolean = false,
+    val isDeleted: Boolean = false,
+    val editedAt: Long? = null,
     val reportedCount: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
     val replyCount: Int = 0,
@@ -434,7 +443,20 @@ data class MangaReview(
     val title: String = "",
     val body: String = "",
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = createdAt
+    val updatedAt: Long = createdAt,
+    val replyCount: Int = 0,
+    val likes: Int = 0,
+    val dislikes: Int = 0,
+    val reportedCount: Int = 0,
+    val isDeleted: Boolean = false
+)
+
+/** Metadata used when a reply is sent from the dedicated, flat replies screen. */
+data class CommunityReplyTarget(
+    val parentId: String? = null,
+    val reviewId: String? = null,
+    val replyToUid: String? = null,
+    val replyToUsername: String? = null
 )
 
 data class ReaderReaction(
@@ -467,13 +489,15 @@ data class CommunityNotification(
 data class ModerationReport(
     val id: String,
     val commentId: String,
+    val targetId: String = commentId,
     val mangaId: String,
     val chapterUrl: String? = null,
     val reportedUid: String,
     val reporterUid: String,
     val reason: String,
     val createdAt: Long,
-    val status: String = "open"
+    val status: String = "open",
+    val targetType: String = "comment"
 )
 
 data class CommunityChatMessage(

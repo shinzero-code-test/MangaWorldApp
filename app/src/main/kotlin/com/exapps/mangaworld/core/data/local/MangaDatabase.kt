@@ -16,10 +16,11 @@ import com.exapps.mangaworld.core.data.local.entity.*
         ReaderAnnotationEntity::class,
         MangaCacheEntity::class,
         DownloadTaskEntity::class,
+        DownloadBatchEntity::class,
         DownloadedMangaEntity::class,
     ],
-    version = 13,         // v13: add isFavorite to favorites
-    exportSchema = false
+    version = 14,         // v14: download batches/retry metadata and favourite/list consistency
+    exportSchema = true   // Schemas exported to app/schemas via KSP arg — enables MigrationTestHelper coverage
 )
 abstract class MangaDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDao
@@ -29,6 +30,7 @@ abstract class MangaDatabase : RoomDatabase() {
     abstract fun readerAnnotationDao(): ReaderAnnotationDao
     abstract fun mangaCacheDao(): MangaCacheDao
     abstract fun downloadTaskDao(): DownloadTaskDao
+    abstract fun downloadBatchDao(): DownloadBatchDao
     abstract fun downloadedMangaDao(): DownloadedMangaDao
 
     companion object {
@@ -79,6 +81,32 @@ abstract class MangaDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE download_tasks ADD COLUMN sourceId TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE download_tasks ADD COLUMN mangaSlug TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE download_tasks ADD COLUMN batchId TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE download_tasks ADD COLUMN wifiOnly INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE download_tasks ADD COLUMN failureNotified INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS download_batches (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        mangaId TEXT NOT NULL,
+                        mangaTitle TEXT NOT NULL,
+                        totalChapters INTEGER NOT NULL,
+                        completedChapters INTEGER NOT NULL,
+                        failedChapters INTEGER NOT NULL,
+                        completionNotified INTEGER NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_download_tasks_batchId ON download_tasks(batchId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_download_batches_mangaId ON download_batches(mangaId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_download_batches_updatedAt ON download_batches(updatedAt)")
+            }
+        }
+
         private fun getColumnNames(db: SupportSQLiteDatabase, table: String): Set<String> {
             val cols = mutableSetOf<String>()
             val cursor = db.query("PRAGMA table_info($table)")
@@ -96,8 +124,11 @@ abstract class MangaDatabase : RoomDatabase() {
                 "index_reading_progress_mangaId" to "reading_progress(mangaId)",
                 "index_download_tasks_mangaId" to "download_tasks(mangaId)",
                 "index_download_tasks_chapterUrl" to "download_tasks(chapterUrl)",
+                "index_download_tasks_batchId" to "download_tasks(batchId)",
                 "index_download_tasks_status" to "download_tasks(status)",
                 "index_download_tasks_updatedAt" to "download_tasks(updatedAt)",
+                "index_download_batches_mangaId" to "download_batches(mangaId)",
+                "index_download_batches_updatedAt" to "download_batches(updatedAt)",
                 "index_manga_cache_sourceId" to "manga_cache(sourceId)",
                 "index_manga_cache_cachedAt" to "manga_cache(cachedAt)"
             ).forEach { (name, def) -> db.execSQL("CREATE INDEX IF NOT EXISTS $name ON $def") }

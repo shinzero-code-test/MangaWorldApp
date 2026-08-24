@@ -69,7 +69,6 @@ class ChapterUpdateChecker @Inject constructor(
         val lastCheck = prefs.getLong("last_update_check", 0L)
         val now = System.currentTimeMillis()
         if (!forceCheck && now - lastCheck < 2 * 60 * 60 * 1000L) return@withContext
-        prefs.edit().putLong("last_update_check", now).commit()
 
         val favorites = favoriteDao.getFavoritesList()
         if (favorites.isEmpty()) return@withContext
@@ -103,7 +102,11 @@ class ChapterUpdateChecker @Inject constructor(
                         newChapters.add(
                             NewChapterInfo(
                                 title = favorite.title,
-                                info = "$diff فصل${if (diff > 1) " جديدة" else " جديد"}",
+                                info = context.getString(
+                                    if (diff > 1) R.string.notif_new_chapter_info_plural
+                                    else R.string.notif_new_chapter_info_single,
+                                    diff
+                                ),
                                 mangaId = favorite.mangaId,
                                 sourceId = favorite.sourceId,
                                 slug = favorite.slug,
@@ -121,31 +124,17 @@ class ChapterUpdateChecker @Inject constructor(
         if (newChapters.isNotEmpty()) {
             showNewChaptersNotification(newChapters)
         }
+
+        // Throttle timestamp is written only after a completed sweep — a mid-loop
+        // failure must not consume the 2h window (L-review).
+        prefs.edit().putLong("last_update_check", System.currentTimeMillis()).commit()
         } // end checkMutex.withLock
     }
 
-    suspend fun snapshotCurrentCounts() = withContext(Dispatchers.IO) {
-        val favorites = favoriteDao.getFavoritesList()
-        val favoritesBySource = favorites.groupBy { it.sourceId }
-        for ((sourceId, sourceFavorites) in favoritesBySource) {
-            try {
-                val source = MangaSource.fromId(sourceId)
-                val homeData = mangaRepository.getHomeData(source).getOrDefault(
-                    com.exapps.mangaworld.domain.model.HomeData()
-                )
-                for (favorite in sourceFavorites) {
-                    val maxChapter = homeData.latestChapters
-                        .filter { it.mangaId == favorite.mangaId || it.mangaSlug == favorite.slug }
-                        .maxOfOrNull { it.chapterNumber } ?: continue
-                    prefs.edit().putFloat("max_chapter_${favorite.mangaId}", maxChapter).apply()
-                }
-            } catch (e: Exception) {
-                Log.w("ChapterUpdateChecker", "Failed to snapshot counts for source $sourceId: ${e.message}")
-            }
-        }
-    }
+    // snapshotCurrentCounts() deleted (L-review): zero callers, mutated
+    // max_chapter_* prefs outside the check mutex.
 
-    private fun showNewChaptersNotification(chapters: List<NewChapterInfo>) {
+    private suspend fun showNewChaptersNotification(chapters: List<NewChapterInfo>) {
         // Content intent — open latest updates
         val contentIntent = AppLaunchIntents.latestUpdates(context)
         val pendingContentIntent = PendingIntent.getActivity(
@@ -156,9 +145,9 @@ class ChapterUpdateChecker @Inject constructor(
         )
 
         val title = if (chapters.size == 1) {
-            "فصل جديد: ${chapters[0].title}"
+            context.getString(R.string.notif_new_chapter_title_single, chapters[0].title)
         } else {
-            "${chapters.size} فصول جديدة في مفضلتك"
+            context.getString(R.string.notif_new_chapters_title_multi, chapters.size)
         }
 
         val body = chapters.take(5).joinToString("\n") { "• ${it.title} — ${it.info}" }
@@ -166,7 +155,7 @@ class ChapterUpdateChecker @Inject constructor(
         // "Read Now" action
         val readAction = NotificationCompat.Action(
             android.R.drawable.stat_notify_chat,
-            "اقرأ الآن",
+            context.getString(R.string.notif_action_read_now),
             pendingContentIntent
         )
 
@@ -190,7 +179,7 @@ class ChapterUpdateChecker @Inject constructor(
             )
             NotificationCompat.Action(
                 android.R.drawable.btn_star,
-                "إضافة للمفضلة",
+                context.getString(R.string.notif_action_add_favorite),
                 favPendingIntent
             )
         } else null
@@ -215,27 +204,24 @@ class ChapterUpdateChecker @Inject constructor(
         saveToNotificationCenter(chapters)
     }
 
-    private fun saveToNotificationCenter(chapters: List<NewChapterInfo>) {
-        val notifPrefs = context.getSharedPreferences("local_notifications", Context.MODE_PRIVATE)
-        val json = notifPrefs.getString("notifications", "[]") ?: "[]"
-        val arr = try { org.json.JSONArray(json) } catch (_: Exception) { org.json.JSONArray() }
-
-        for (ch in chapters) {
-            val obj = org.json.JSONObject().apply {
-                put("id", "chapter_${ch.mangaId}_${System.currentTimeMillis()}")
-                put("title", "فصل جديد: ${ch.title}")
-                put("body", ch.info)
-                put("type", "chapter_update")
-                put("mangaId", ch.mangaId)
-                put("read", false)
-                put("timestamp", System.currentTimeMillis())
+    private suspend fun saveToNotificationCenter(chapters: List<NewChapterInfo>) {
+        com.exapps.mangaworld.core.data.NotificationCenterStore.update(context) { arr ->
+            for (ch in chapters) {
+                val obj = org.json.JSONObject().apply {
+                    put("id", "chapter_${ch.mangaId}_${System.currentTimeMillis()}")
+                    put("title", context.getString(R.string.notif_new_chapter_title_single, ch.title))
+                    put("body", ch.info)
+                    put("type", "chapter_update")
+                    put("mangaId", ch.mangaId)
+                    put("read", false)
+                    put("timestamp", System.currentTimeMillis())
+                }
+                arr.put(obj)
             }
-            arr.put(obj)
-        }
 
-        // Keep only last 100 local notifications
-        while (arr.length() > 100) { arr.remove(0) }
-        notifPrefs.edit().putString("notifications", arr.toString()).apply()
+            // Keep only last 100 local notifications
+            while (arr.length() > 100) { arr.remove(0) }
+        }
     }
 
     companion object {

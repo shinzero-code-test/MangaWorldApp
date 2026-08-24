@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 import {
-  Menu, Bell, Sun, Moon, ChevronLeft, Search,
+  Menu, Bell, Sun, Moon, ChevronLeft,
   User, LogOut, Settings2
 } from "lucide-react";
 import { useTheme } from "@/components/providers/theme-provider";
@@ -100,35 +101,14 @@ export function Header({ onToggleSidebar, userEmail, userRole }: HeaderProps) {
           {time}
         </span>
 
-        {/* Search hint */}
-        <button
-          className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition hover:bg-[var(--accent)]"
-          style={{
-            borderColor: "var(--border)",
-            color: "var(--muted-foreground)",
-          }}
-          aria-label="البحث"
-        >
-          <Search size={14} />
-          <span>بحث</span>
-          <kbd
-            className="text-[10px] px-1.5 py-0.5 rounded font-mono"
-            style={{
-              background: "var(--muted)",
-              color: "var(--muted-foreground)",
-            }}
-          >
-            Cmd+K
-          </kbd>
-        </button>
-
         {/* Notifications */}
-        <button
+        <Link
+          href="/dashboard/notifications"
           className="relative p-2 rounded-lg transition hover:bg-[var(--accent)]"
           aria-label="الإشعارات"
         >
           <Bell size={18} />
-        </button>
+        </Link>
 
         {/* Theme toggle */}
         <button

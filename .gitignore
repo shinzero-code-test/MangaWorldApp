@@ -23,4 +23,8 @@ review_manifest.json
 AGENTS.md
 logs/
 sessions/
-/.mimocode/
+/.mimocode/dashboard/tsconfig.tsbuildinfo
+
+# Local tooling / build artifacts
+dashboard/tsconfig.tsbuildinfo
+.mimocode/

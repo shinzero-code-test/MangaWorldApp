@@ -47,7 +47,8 @@ class FirebaseNetworkInterceptor @Inject constructor(
         val trace = FirebasePerformance.getInstance().newTrace("scraper_request")
         trace.putAttribute("network_type", firebaseTelemetry.refreshNetworkTypeKey())
         sourceId?.let {
-            firebaseTelemetry.setActiveSource(it)
+            // Per-trace attribution only: the global `active_source` Crashlytics
+            // key was racy under parallel paging across 18 sources (M-review).
             trace.putAttribute("scraper_source", it)
         }
         trace.start()

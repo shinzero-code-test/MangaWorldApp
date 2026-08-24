@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { getDashboardRoleCounts, requireRole } from "@/lib/auth";
+import { genericErrorResponse } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    await requireRole("viewer");
+    // Moderator minimum: "viewer" rank would admit the viewer role itself (M-4).
+    await requireRole("moderator");
 
     const [
       usersSnap, openReportsSnap,
@@ -68,7 +70,8 @@ export async function GET() {
       roleCounts,
       services: { auth: true, db: dbOk, rc: true, fcm: true, crash: crashOk },
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }

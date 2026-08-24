@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +27,8 @@ import javax.inject.Inject
  */
 class AreaScansScraper @Inject constructor(
     client: OkHttpClient,
-    settingsRepo: SettingsRepository
+    settingsRepo: SettingsRepository,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : BaseScraperImpl(client, MangaSource.AREASCANS, settingsRepo) {
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
@@ -35,6 +37,9 @@ class AreaScansScraper @Inject constructor(
 
         HomeData(
             featured = mangaCards.take(8),
+            // Intentional: no verified selector for this site's home chapter
+            // cards yet — fabricating one risks broken reader routes. Implement
+            // when a fixture from the live site confirms the markup.
             latestChapters = emptyList(),
             trending = mangaCards
         )
@@ -86,10 +91,9 @@ class AreaScansScraper @Inject constructor(
                 val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
                 // Prefer data-ch attribute (reliable integer)
                 val chNum = el.attr("data-ch").toFloatOrNull()
-                    ?: chLink.selectFirst(".chap-num")?.text()?.cleanText()
-                        ?.replace("الفصل", "")?.replace("[^0-9.]".toRegex(), "")?.trim()?.toFloatOrNull()
-                    ?: chLink.text().cleanText().replace("الفصل", "").replace("[^0-9.]".toRegex(), "").trim().toFloatOrNull()
-                    ?: chHref.trimEnd('/').substringAfterLast("/").substringBefore("?").toFloatOrNull()
+                    ?: ScraperText.firstChapterNumber(chLink.selectFirst(".chap-num")?.text())
+                    ?: ScraperText.firstChapterNumber(chLink.text())
+                    ?: ScraperText.lastSegmentNumber(chHref)
                     ?: return@mapNotNull null
                 val dateText = chLink.selectFirst(".chap-date")?.text()?.cleanText()
                 Chapter(
@@ -97,7 +101,7 @@ class AreaScansScraper @Inject constructor(
                     mangaId = "${source.id}_$slug",
                     number = chNum,
                     title = chLink.selectFirst(".chap-num")?.text()?.cleanText()?.replace("الفصل", "")?.trim()?.ifBlank { null }
-                        ?: "الفصل ${chNum.toInt()}",
+                        ?: context.getString(com.exapps.mangaworld.R.string.fmt_059, chNum.toInt()),
                     url = chHref
                 )
             }.distinctBy { it.url }.sortedByDescending { it.number }
@@ -147,8 +151,7 @@ class AreaScansScraper @Inject constructor(
                 .post(formBody)
                 .build()
             val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
-            val body = response.body?.string() ?: "{}"
-            response.close()
+            val body = response.use { it.body?.string() ?: "{}" }
             val json = org.json.JSONObject(body)
             if (json.optBoolean("success", false)) {
                 val html = json.optJSONObject("data")?.optString("content", "") ?: ""
@@ -208,7 +211,10 @@ class AreaScansScraper @Inject constructor(
                         ChapterPage(index = i, url = imgSrc.encodeForUrl(), headers = buildImageHeaders(imgSrc, chapterUrl))
                     } else null
                 }
-            } catch (_: Exception) { images }
+            } catch (e: Exception) {
+                FirebaseTelemetry.logScraperFailure(source.id, "pages_ts_reader", e)
+                images
+            }
         } else images
     }
 
@@ -225,7 +231,9 @@ class AreaScansScraper @Inject constructor(
         // Fallback: try AJAX search (GET with query params — POST body is ignored)
         try {
             val searchUrl = "${source.baseUrl}/wp-admin/admin-ajax.php?action=ts_ac_do_search&ts_ac_query=$encoded"
-            withContext(Dispatchers.IO) {
+            // Capture the withContext result — `return@withContext` alone discarded
+            // the AJAX hits and search always fell through to HTML results (M-review).
+            val ajaxItems: List<MangaItem>? = withContext(Dispatchers.IO) {
                 val request = Request.Builder()
                     .url(searchUrl)
                     .header("User-Agent", USER_AGENT)
@@ -233,15 +241,17 @@ class AreaScansScraper @Inject constructor(
                     .header("Referer", source.baseUrl)
                     .build()
                 val response = client.newCall(request).execute()
-                val body = response.body?.string() ?: "{}"
-                response.close()
-                if (body.isNotBlank() && body.trimStart().startsWith("{")) {
-                    val json = JSONObject(body)
-                    val items = parseAjaxSearchResults(json)
-                    if (items.isNotEmpty()) return@withContext items
+                response.use { resp ->
+                    val body = resp.body?.string() ?: "{}"
+                    if (body.isNotBlank() && body.trimStart().startsWith("{")) {
+                        parseAjaxSearchResults(JSONObject(body)).ifEmpty { null }
+                    } else null
                 }
             }
-        } catch (_: Exception) { }
+            if (!ajaxItems.isNullOrEmpty()) return@runCatching ajaxItems
+        } catch (e: Exception) {
+            FirebaseTelemetry.logScraperFailure(source.id, "search_ajax_fallback", e)
+        }
 
         results
     }

@@ -68,6 +68,7 @@
     <string name="auth_error_username_short">اسم المستخدم قصير جداً (3 أحرف على الأقل)</string>
     <string name="auth_error_username_long">اسم المستخدم طويل جداً (20 حرف كحد أقصى)</string>
     <string name="auth_error_username_invalid">اسم المستخدم يجب أن يحتوي على أحرف وأرقام وشرطات سفلية فقط</string>
+    <string name="auth_error_username_taken">اسم المستخدم مستخدم بالفعل</string>
     <string name="auth_error_username_required">اسم المستخدم مطلوب</string>
     <string name="auth_error_display_name_required">أدخل الاسم المعروض</string>
     <string name="auth_error_email_used">هذا البريد الإلكتروني مستخدم بالفعل في حساب آخر</string>
@@ -180,6 +181,7 @@
     <string name="community_comments_count">تعليقات %s</string>
     <string name="community_discussion">نقاش الفصل</string>
     <string name="community_no_comments">لا توجد تعليقات بعد</string>
+    <string name="community_no_replies">لا توجد ردود بعد</string>
     <string name="community_no_reviews">لا توجد مراجعات بعد</string>
     <string name="community_add_comment">أضف تعليقاً…</string>
     <string name="community_send">إرسال</string>
@@ -285,8 +287,8 @@
     <string name="daily_recommendations_widget_desc">اقتراحات مانجا مخصصة لك</string>
     <string name="widget_latest_updates_desc">أحدث فصول المانجا المفضلة</string>
     <string name="latest_updates_widget_desc">أحدث فصول المانجا المفضلة</string>
-    <string name="widget_library_desc">quick access to your library</string>
-    <string name="library_widget_desc">quick access to your library</string>
+    <string name="widget_library_desc">وصول سريع إلى المكتبة</string>
+    <string name="library_widget_desc">وصول سريع إلى المكتبة</string>
     <string name="widget_reading_stats_desc">إحصائيات قراءتك اليومية</string>
     <string name="reading_stats_widget_desc">إحصائيات قراءتك اليومية</string>
 
@@ -886,4 +888,70 @@
     <string name="widget_theme_light">فاتح</string>
     <string name="widget_theme_dark">داكن</string>
     <string name="widget_theme_mono">أحادي اللون</string>
+    <!-- ─── Community threads / ownership ─────────────────────────────────── -->
+    <string name="community_replies">الردود</string>
+    <string name="community_view_replies">عرض الردود</string>
+    <string name="community_like">إعجاب</string>
+    <string name="community_dislike">عدم إعجاب</string>
+    <string name="community_rating_format">%1$d/5</string>
+    <string name="community_deleted_content">تم حذف هذا المحتوى</string>
+    <string name="community_edit_comment">تعديل التعليق</string>
+    <string name="community_edit_review">تعديل المراجعة</string>
+    <string name="community_delete_comment">حذف التعليق</string>
+    <string name="community_delete_review">حذف المراجعة</string>
+    <string name="community_delete_content_confirm">سيُحذف المحتوى مع الإبقاء على الردود المتصلة به.</string>
+    <string name="community_reply_hint">اكتب ردّاً…</string>
+    <string name="community_error_empty_content">لا يمكن أن يكون المحتوى فارغاً</string>
+    <string name="community_error_empty_message">لا يمكن أن تكون الرسالة فارغة</string>
+    <string name="community_error_invalid_content">تعذر تحديد المحتوى المطلوب</string>
+    <string name="community_error_vote">تعذر تحديث التفاعل</string>
+    <string name="community_error_banned_content">يحتوي المحتوى على كلمات محظورة</string>
+    <string name="community_error_author_edit">يمكن للكاتب فقط تعديل هذا التعليق</string>
+    <string name="community_error_author_delete">يمكن للكاتب فقط حذف هذا المحتوى</string>
+    <string name="community_error_deleted_review">لا يمكن إنشاء مراجعة جديدة بعد حذف مراجعتك لهذا العمل</string>
+    <string name="community_error_sign_in">سجّل الدخول أولاً لإتمام هذا الإجراء</string>
+    <string name="community_error_report_reason_required">أدخل سبب الإبلاغ</string>
+    <string name="community_error_self_follow">لا يمكنك متابعة نفسك</string>
+    <!-- ─── Download notifications ─────────────────────────────────────────── -->
+    <string name="download_notification_progress_title">جاري تنزيل %1$s</string>
+    <string name="download_notification_progress_pages">%1$d/%2$d صفحة</string>
+    <string name="download_notification_progress_indeterminate">جارٍ التنزيل…</string>
+    <string name="download_notification_complete_title">اكتمل تنزيل %1$s</string>
+    <string name="download_notification_complete_body">%1$d صفحة — اضغط للقراءة بدون إنترنت</string>
+    <string name="download_notification_failed_title">فشل تنزيل %1$s</string>
+    <string name="download_notification_failed_body">اضغط لفتح إدارة التنزيلات أو إعادة المحاولة</string>
+    <string name="download_notification_batch_complete_title">اكتمل تنزيل %1$s</string>
+    <string name="download_notification_batch_complete_body">%1$d فصلاً متاحاً للقراءة بدون إنترنت</string>
+    <string name="download_notification_batch_partial_title">اكتمل تنزيل %1$s جزئياً</string>
+    <string name="download_notification_batch_partial_body">%1$d فصلاً مكتمل، و%2$d فشل</string>
+    <string name="download_retry_unavailable">تعذر إعادة المحاولة لأن بيانات الفصل غير مكتملة</string>
+
+    <!-- UI review fixes -->
+    <string name="manhua">مانها</string>
+    <string name="widget_loading">جاري التحميل…</string>
+    <string name="reader_live_count">%1$d يقرأ الآن</string>
+    <string name="reader_page_bookmarked">%1$d • محفوظة</string>
+    <string name="reader_sign_in_to_participate">سجّل الدخول للانضمام إلى النقاش</string>
+    <string name="widget_streak_days">%1$d يوم</string>
+    <string name="widget_time_hm">%1$sس %2$sد</string>
+    <string name="widget_time_m">%1$s دقيقة</string>
+    <string name="widget_size_small">صغير (1x2)</string>
+    <string name="widget_size_medium">متوسط (2x2)</string>
+    <string name="widget_size_large">كبير (4x2)</string>
+    <string name="widget_theme_system">تلقائي (افتراضي)</string>
+    <string name="widget_theme_light">فاتح</string>
+    <string name="widget_theme_dark">داكن</string>
+    <string name="widget_theme_mono">أحادي اللون</string>
+    <string name="downloads_more_items">+%1$d عناصر أخرى</string>
+
+    <!-- Worker notification strings -->
+    <string name="notif_new_chapter_title_single">فصل جديد: %1$s</string>
+    <string name="notif_new_chapters_title_multi">%1$d فصول جديدة في مفضلتك</string>
+    <string name="notif_new_chapter_info_single">%1$d فصل جديد</string>
+    <string name="notif_new_chapter_info_plural">%1$d فصول جديدة</string>
+    <string name="notif_action_read_now">اقرأ الآن</string>
+    <string name="notif_action_add_favorite">إضافة للمفضلة</string>
+    <string name="suggestion_notif_extra">\nو %1$d أخرى</string>
+    <string name="reminder_title">لم نرك منذ فترة!</string>
+    <string name="reminder_continue_reading">هل تريد المتابعة في قراءة \"%1$s\"؟</string>
 </resources>

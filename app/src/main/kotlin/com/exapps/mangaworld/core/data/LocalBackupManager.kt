@@ -3,6 +3,9 @@ package com.exapps.mangaworld.core.data
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import android.util.Log
+import androidx.room.withTransaction
+import com.exapps.mangaworld.core.data.local.MangaDatabase
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
@@ -28,24 +31,36 @@ import javax.inject.Singleton
 @Singleton
 class LocalBackupManager @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val database: MangaDatabase,
     private val favoriteDao: FavoriteDao,
     private val historyDao: ReadingHistoryDao,
     private val readChapterDao: ReadChapterDao,
     private val progressDao: ReadingProgressDao,
     private val annotationDao: ReaderAnnotationDao,
+    private val readingStatsStore: ReadingStatsStore,
     private val settingsRepository: SettingsRepository
 ) {
     suspend fun exportTo(uri: Uri) {
         val root = JSONObject().apply {
-            put("schemaVersion", 2)
+            put("schemaVersion", SCHEMA_VERSION)
             put("exportedAt", System.currentTimeMillis())
-            put("favorites", JSONArray(favoriteDao.getFavoritesList().map { it.toJson() }))
+            put("favorites", JSONArray(favoriteDao.getAllLibraryEntries().map { it.toJson() }))
             put("history", JSONArray(historyDao.getAll().map { it.toJson() }))
             put("readChapters", JSONArray(readChapterDao.getAll().map { it.toJson() }))
             put("progress", JSONArray(progressDao.getAll().map { it.toJson() }))
             put("annotations", JSONArray(annotationDao.getAll().map { it.toJson() }))
-            put("appSettings", settingsRepository.getAppSettings().first().toJson())
+            // Persist the RAW stored source set: getAppSettings() applies a Remote-Config filter
+            // whose filtered view must never be written back, or a temporarily server-disabled
+            // source would become permanently disabled after a backup round-trip.
+            put(
+                "appSettings",
+                settingsRepository.getAppSettings().first()
+                    .copy(enabledSources = settingsRepository.getStoredEnabledSources())
+                    .toJson()
+            )
             put("readerSettings", settingsRepository.getReaderSettings().first().toJson())
+            runCatching { put("readingStats", readingStatsStore.snapshot()) }
+                .onFailure { Log.w(TAG, "Stats export skipped: ${it.message}") }
         }
         context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(root.toString(2)) }
     }
@@ -53,13 +68,59 @@ class LocalBackupManager @Inject constructor(
     suspend fun importFrom(uri: Uri) {
         val json = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: return
         val root = JSONObject(json)
-        root.optJSONArray("favorites")?.forEachObjects { favoriteDao.insert(it.toFavoriteEntity()) }
-        root.optJSONArray("history")?.forEachObjects { historyDao.insertOrUpdate(it.toHistoryEntity()) }
-        root.optJSONArray("readChapters")?.forEachObjects { readChapterDao.markRead(it.toReadChapterEntity()) }
-        root.optJSONArray("progress")?.forEachObjects { progressDao.save(it.toProgressEntity()) }
-        root.optJSONArray("annotations")?.forEachObjects { annotationDao.upsert(it.toAnnotationEntity()) }
+        val backupVersion = root.optInt("schemaVersion", 1)
+        if (backupVersion > SCHEMA_VERSION) {
+            Log.w(TAG, "Backup schema v$backupVersion is newer than supported v$SCHEMA_VERSION — aborting import")
+            return
+        }
+
+        // One atomic unit: a crash mid-import must never leave a half-restored library.
+        // Rows merge newest-wins so an old backup cannot clobber fresher local state.
+        database.withTransaction {
+            root.optJSONArray("favorites")?.forEachObjects { row ->
+                runCatching { row.toFavoriteEntity() }.getOrNull()?.let(::mergeFavorite)
+            }
+            root.optJSONArray("history")?.forEachObjects { row ->
+                runCatching { row.toHistoryEntity() }.getOrNull()?.let(::mergeHistory)
+            }
+            // markRead uses OnConflictStrategy.IGNORE — a natural union of read chapters.
+            root.optJSONArray("readChapters")?.forEachObjects { row ->
+                runCatching { row.toReadChapterEntity() }.getOrNull()?.let(readChapterDao::markRead)
+            }
+            root.optJSONArray("progress")?.forEachObjects { row ->
+                runCatching { row.toProgressEntity() }.getOrNull()?.let(::mergeProgress)
+            }
+            root.optJSONArray("annotations")?.forEachObjects { row ->
+                runCatching { row.toAnnotationEntity() }.getOrNull()?.let(::mergeAnnotation)
+            }
+        }
+
         root.optJSONObject("appSettings")?.toAppSettings()?.let { applyAppSettings(it) }
         root.optJSONObject("readerSettings")?.toReaderSettings()?.let { applyReaderSettings(it) }
+        root.optJSONObject("readingStats")?.let { stats ->
+            runCatching { readingStatsStore.restore(stats) }
+                .onFailure { Log.w(TAG, "Stats restore skipped: ${it.message}") }
+        }
+    }
+
+    private suspend fun mergeFavorite(backup: FavoriteEntity) {
+        val existing = favoriteDao.getById(backup.mangaId)
+        if (existing == null || backup.addedAt >= existing.addedAt) favoriteDao.insert(backup)
+    }
+
+    private suspend fun mergeHistory(backup: ReadingHistoryEntity) {
+        val existing = historyDao.getByMangaId(backup.mangaId)
+        if (existing == null || backup.lastReadAt >= existing.lastReadAt) historyDao.insertOrUpdate(backup)
+    }
+
+    private suspend fun mergeProgress(backup: ReadingProgressEntity) {
+        val existing = progressDao.get(backup.mangaId, backup.chapterNumber)
+        if (existing == null || backup.updatedAt >= existing.updatedAt) progressDao.save(backup)
+    }
+
+    private suspend fun mergeAnnotation(backup: ReaderAnnotationEntity) {
+        val existing = annotationDao.get(backup.mangaId, backup.chapterUrl, backup.pageIndex)
+        if (existing == null || backup.updatedAt >= existing.updatedAt) annotationDao.upsert(backup)
     }
 
     private suspend fun applyAppSettings(settings: AppSettings) {
@@ -81,6 +142,7 @@ class LocalBackupManager @Inject constructor(
         settingsRepository.setOnboardingCompleted(settings.onboardingCompleted)
         settingsRepository.setReadingListStatus(settings.readingListStatus)
         settingsRepository.setFavoriteGenres(settings.favoriteGenres)
+        settingsRepository.setShowLibraryPublic(settings.showLibraryPublic)
     }
 
     private suspend fun applyReaderSettings(settings: ReaderSettings) {
@@ -111,6 +173,7 @@ class LocalBackupManager @Inject constructor(
     private fun FavoriteEntity.toJson() = JSONObject().apply {
         put("mangaId", mangaId); put("slug", slug); put("title", title); put("coverUrl", coverUrl)
         put("sourceId", sourceId); put("addedAt", addedAt); put("readChapters", readChapters); put("totalChapters", totalChapters)
+        put("readingStatus", readingStatus); put("isFavorite", isFavorite)
     }
     private fun ReadingHistoryEntity.toJson() = JSONObject().apply {
         put("mangaId", mangaId); put("slug", slug); put("title", title); put("coverUrl", coverUrl)
@@ -121,7 +184,18 @@ class LocalBackupManager @Inject constructor(
     private fun ReadingProgressEntity.toJson() = JSONObject().apply { put("mangaId", mangaId); put("chapterNumber", chapterNumber.toDouble()); put("currentPage", currentPage); put("totalPages", totalPages); put("updatedAt", updatedAt) }
     private fun ReaderAnnotationEntity.toJson() = JSONObject().apply { put("mangaId", mangaId); put("chapterUrl", chapterUrl); put("pageIndex", pageIndex); put("note", note); put("isBookmarked", isBookmarked); put("updatedAt", updatedAt) }
 
-    private fun JSONObject.toFavoriteEntity() = FavoriteEntity(getString("mangaId"), getString("slug"), getString("title"), getString("coverUrl"), getString("sourceId"), getLong("addedAt"), optInt("readChapters"), optInt("totalChapters"))
+    private fun JSONObject.toFavoriteEntity() = FavoriteEntity(
+        mangaId = getString("mangaId"),
+        slug = getString("slug"),
+        title = getString("title"),
+        coverUrl = getString("coverUrl"),
+        sourceId = getString("sourceId"),
+        addedAt = getLong("addedAt"),
+        readChapters = optInt("readChapters"),
+        totalChapters = optInt("totalChapters"),
+        readingStatus = optString("readingStatus").takeIf { it.isNotBlank() },
+        isFavorite = optBoolean("isFavorite", true)
+    )
     private fun JSONObject.toHistoryEntity() = ReadingHistoryEntity(getString("mangaId"), getString("slug"), getString("title"), getString("coverUrl"), getString("sourceId"), getDouble("lastChapterNumber").toFloat(), optString("lastChapterUrl"), getLong("lastReadAt"), optInt("readChapters"), optInt("totalChapters"))
     private fun JSONObject.toReadChapterEntity() = ReadChapterEntity(getString("mangaId"), getDouble("chapterNumber").toFloat(), getLong("readAt"))
     private fun JSONObject.toProgressEntity() = ReadingProgressEntity(getString("mangaId"), getDouble("chapterNumber").toFloat(), optInt("currentPage"), optInt("totalPages"), getLong("updatedAt"))
@@ -134,6 +208,7 @@ class LocalBackupManager @Inject constructor(
         put("notificationDeliveryMode", notificationDeliveryMode.name); put("autoCleanupReadDownloads", autoCleanupReadDownloads); put("cleanupAfterHours", cleanupAfterHours)
         put("imageCacheLimitMb", imageCacheLimitMb); put("contentBlacklist", JSONArray(contentBlacklist.toList())); put("spoilerCollapseDefault", spoilerCollapseDefault); put("mutedUserIds", JSONArray(mutedUserIds.toList()))
         put("readingListStatus", readingListStatus); put("favoriteGenres", JSONArray(favoriteGenres))
+        put("showLibraryPublic", showLibraryPublic)
     }
     private fun ReaderSettings.toJson() = JSONObject().apply {
         put("mode", mode.name); put("brightness", brightness.toDouble()); put("pageSpacing", pageSpacing); put("keepScreenOn", keepScreenOn)
@@ -163,7 +238,8 @@ class LocalBackupManager @Inject constructor(
         spoilerCollapseDefault = optBoolean("spoilerCollapseDefault", true),
         mutedUserIds = optJSONArray("mutedUserIds")?.toStringSet() ?: emptySet(),
         readingListStatus = optString("readingListStatus").takeIf { it.isNotBlank() },
-        favoriteGenres = optJSONArray("favoriteGenres")?.toStringList() ?: emptyList()
+        favoriteGenres = optJSONArray("favoriteGenres")?.toStringList() ?: emptyList(),
+        showLibraryPublic = optBoolean("showLibraryPublic", true)
     )
 
     private fun JSONObject.toReaderSettings(): ReaderSettings = ReaderSettings(
@@ -194,5 +270,12 @@ class LocalBackupManager @Inject constructor(
     private fun JSONArray.toStringList(): List<String> = (0 until length()).mapNotNull { idx -> optString(idx).takeIf { it.isNotBlank() } }
     private inline fun JSONArray.forEachObjects(block: (JSONObject) -> Unit) {
         for (i in 0 until length()) optJSONObject(i)?.let(block)
+    }
+
+    private companion object {
+        const val TAG = "LocalBackupManager"
+
+        /** v3: adds `readingStats` and `showLibraryPublic`; imports of v1/v2 remain accepted. */
+        const val SCHEMA_VERSION = 3
     }
 }

@@ -1,8 +1,36 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Eye, EyeOff, BookOpen, Loader2 } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Loader2 } from "lucide-react";
+import {
+  GoogleAuthProvider,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+} from "firebase/auth";
+import { clientAuth } from "@/lib/firebase-client";
+
+function authErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  return typeof error.code === "string" ? error.code : undefined;
+}
+
+function googleSignInErrorMessage(error: unknown): string {
+  return authErrorCode(error) === "auth/popup-closed-by-user"
+    ? "تم إغلاق نافذة تسجيل الدخول"
+    : "تعذر بدء تسجيل الدخول بـ Google. حاول مرة أخرى.";
+}
+
+function emailSignInErrorMessage(error: unknown): string {
+  const messages: Record<string, string> = {
+    "auth/user-not-found": "البريد الإلكتروني غير مسجل",
+    "auth/wrong-password": "كلمة المرور غير صحيحة",
+    "auth/invalid-credential": "بيانات تسجيل الدخول غير صحيحة",
+    "auth/too-many-requests": "تم تقييد الحساب مؤقتاً. حاول لاحقاً",
+    "auth/invalid-email": "البريد الإلكتروني غير صالح",
+  };
+  return messages[authErrorCode(error) ?? ""] ?? "خطأ في تسجيل الدخول";
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -13,31 +41,11 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const router = useRouter();
 
-  useEffect(() => {
-    const s1 = document.createElement("script");
-    s1.src = "https://www.gstatic.com/firebasejs/11.0.0/firebase-app-compat.js";
-    s1.onload = () => {
-      const s2 = document.createElement("script");
-      s2.src = "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth-compat.js";
-      document.head.appendChild(s2);
-    };
-    document.head.appendChild(s1);
-  }, []);
+  // Caps the claims-refresh handshake: a persistently true `refreshRequired` (stale custom
+  // claims, clock skew) must never loop forever hammering forced token refreshes.
+  const MAX_REFRESH_ATTEMPTS = 2;
 
-  const getAuth = () => {
-    const fb = (window as any).firebase;
-    if (!fb) return null;
-    if (!fb.apps.length) {
-      fb.initializeApp({
-        apiKey: process.env.NEXT_PUBLIC_FIREBASE_CLIENT_API_KEY,
-        authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      });
-    }
-    return fb.auth();
-  };
-
-  const handleSession = async (idToken: string, refreshToken: () => Promise<string>) => {
+  const handleSession = async (idToken: string, refreshToken: () => Promise<string>, attempt = 0) => {
     const res = await fetch("/api/auth/google", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -46,7 +54,10 @@ export default function LoginPage() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "خطأ في تسجيل الدخول");
     if (data.refreshRequired) {
-      await handleSession(await refreshToken(), refreshToken);
+      if (attempt >= MAX_REFRESH_ATTEMPTS) {
+        throw new Error("تعذر تحديث صلاحيات الحساب. حاول تسجيل الدخول مرة أخرى.");
+      }
+      await handleSession(await refreshToken(), refreshToken, attempt + 1);
       return;
     }
     router.push("/2fa");
@@ -57,17 +68,12 @@ export default function LoginPage() {
     setGoogleLoading(true);
     setError("");
     try {
-      const auth = getAuth();
-      if (!auth) { setError("جاري تحميل Firebase..."); return; }
-      const provider = new (window as any).firebase.auth.GoogleAuthProvider();
-      const result = await auth.signInWithPopup(provider);
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(clientAuth, provider);
       await handleSession(await result.user.getIdToken(), () => result.user.getIdToken(true));
-    } catch (e: any) {
-      if (e.code === "auth/popup-closed-by-user") {
-        setError("تم إغلاق نافذة تسجيل الدخول");
-      } else {
-        setError(e.message || "خطأ في تسجيل الدخول بـ Google");
-      }
+    } catch (error: unknown) {
+      setError(googleSignInErrorMessage(error));
     } finally {
       setGoogleLoading(false);
     }
@@ -78,19 +84,10 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      const auth = getAuth();
-      if (!auth) { setError("جاري تحميل Firebase..."); return; }
-      const result = await auth.signInWithEmailAndPassword(email, password);
+      const result = await signInWithEmailAndPassword(clientAuth, email, password);
       await handleSession(await result.user.getIdToken(), () => result.user.getIdToken(true));
-    } catch (e: any) {
-      const msgs: Record<string, string> = {
-        "auth/user-not-found": "البريد الإلكتروني غير مسجل",
-        "auth/wrong-password": "كلمة المرور غير صحيحة",
-        "auth/invalid-credential": "بيانات تسجيل الدخول غير صحيحة",
-        "auth/too-many-requests": "تم تقييد الحساب مؤقتاً. حاول لاحقاً",
-        "auth/invalid-email": "البريد الإلكتروني غير صالح",
-      };
-      setError(msgs[e.code] || e.message || "خطأ في تسجيل الدخول");
+    } catch (error: unknown) {
+      setError(emailSignInErrorMessage(error));
     } finally {
       setLoading(false);
     }

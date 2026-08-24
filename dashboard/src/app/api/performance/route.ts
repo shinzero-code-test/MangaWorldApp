@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
 import { getAccessToken } from "@/lib/firebase-admin";
+import { genericErrorResponse } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +58,8 @@ export async function GET() {
       traces: traces.slice(0, 20),
       screenMetrics: [],
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }

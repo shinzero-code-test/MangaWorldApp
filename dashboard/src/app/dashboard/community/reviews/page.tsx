@@ -4,16 +4,7 @@ import { useEffect, useState } from "react";
 import { Star, Trash2 } from "lucide-react";
 import { PageHeader, EmptyState, SkeletonTable, ConfirmDialog } from "@/components/ui";
 import { formatRelative, truncate } from "@/lib/utils";
-
-interface Review {
-  id:        string;
-  userId:    string;
-  userName?: string;
-  mangaId:   string;
-  rating:    number;
-  text:      string;
-  createdAt: string | number;
-}
+import type { MangaReview } from "@/types/community";
 
 function StarRating({ rating, max = 5 }: { rating: number; max?: number }) {
   return (
@@ -33,29 +24,50 @@ function StarRating({ rating, max = 5 }: { rating: number; max?: number }) {
 }
 
 export default function ReviewsPage() {
-  const [reviews,       setReviews]       = useState<Review[]>([]);
+  const [reviews,       setReviews]       = useState<MangaReview[]>([]);
   const [loading,       setLoading]       = useState(true);
-  const [deleteId,      setDeleteId]      = useState<string | null>(null);
+  const [error,         setError]         = useState("");
+  const [deleteTarget,  setDeleteTarget]  = useState<MangaReview | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     fetch("/api/community/reviews")
-      .then((r) => r.json())
-      .then((d) => { setReviews(d.reviews ?? d.data ?? []); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then((r) => {
+        if (!r.ok) throw new Error(r.status === 403 ? "forbidden" : "failed");
+        return r.json();
+      })
+      .then((d) => {
+        // Defensive: never render soft-deleted rows even if the API regresses.
+        setReviews((Array.isArray(d.reviews) ? d.reviews : []).filter((rv: MangaReview) => !rv.isDeleted));
+        setLoading(false);
+      })
+      .catch((e: Error) => {
+        setError(e.message === "forbidden" ? "ليست لديك صلاحية عرض المراجعات" : "فشل تحميل المراجعات");
+        setLoading(false);
+      });
   }, []);
 
   const handleDelete = async () => {
-    if (!deleteId) return;
+    if (!deleteTarget) return;
+    const target = deleteTarget;
     setDeleteLoading(true);
     try {
-      await fetch(`/api/community/reviews?id=${deleteId}`, { method: "DELETE" });
-      setReviews((p) => p.filter((r) => r.id !== deleteId));
-    } finally { setDeleteLoading(false); setDeleteId(null); }
+      const response = await fetch("/api/community/reviews", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewId: target.id, mangaId: target.mangaId }),
+      });
+      if (response.ok) {
+        setReviews((previous) => previous.filter((review) =>
+          review.id !== target.id || review.mangaId !== target.mangaId,
+        ));
+      }
+    } finally { setDeleteLoading(false); setDeleteTarget(null); }
   };
 
-  const avgRating = reviews.length
-    ? (reviews.reduce((a, r) => a + r.rating, 0) / reviews.length).toFixed(1)
+  const activeReviews = reviews.filter((r) => !r.isDeleted);
+  const avgRating = activeReviews.length
+    ? (activeReviews.reduce((a, r) => a + r.rating, 0) / activeReviews.length).toFixed(1)
     : "—";
 
   return (
@@ -68,9 +80,12 @@ export default function ReviewsPage() {
 
       <div className="rounded-[var(--radius-lg)] border overflow-hidden"
         style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+        {error && (
+          <div className="p-3 text-sm" style={{ color: "var(--destructive)" }}>{error}</div>
+        )}
         {loading ? (
           <SkeletonTable rows={8} cols={5} />
-        ) : reviews.length === 0 ? (
+        ) : !error && reviews.length === 0 ? (
           <EmptyState icon={Star} title="لا توجد مراجعات" description="لم يُضف أي مستخدم مراجعة بعد" />
         ) : (
           <div className="overflow-x-auto">
@@ -89,16 +104,16 @@ export default function ReviewsPage() {
                 {reviews.map((r) => (
                   <tr key={r.id}>
                     <td>
-                      <p className="text-sm font-medium">{r.userName || "مجهول"}</p>
-                      <p className="text-xs font-mono" style={{ color: "var(--muted-foreground)" }} dir="ltr">
-                        {r.userId.slice(0, 8)}…
+                       <p className="text-sm font-medium">{r.authorName || r.authorUsername || "مجهول"}</p>
+                       <p className="text-xs font-mono" style={{ color: "var(--muted-foreground)" }} dir="ltr">
+                         {r.authorUid.slice(0, 8)}…
                       </p>
                     </td>
                     <td>
                       <StarRating rating={r.rating} />
                     </td>
                     <td className="max-w-[250px]">
-                      <p className="text-sm">{truncate(r.text || "—", 60)}</p>
+                       <p className="text-sm">{truncate(r.title || r.body || "—", 60)}</p>
                     </td>
                     <td>
                       <code className="text-xs px-1.5 py-0.5 rounded"
@@ -112,7 +127,7 @@ export default function ReviewsPage() {
                       </span>
                     </td>
                     <td>
-                      <button onClick={() => setDeleteId(r.id)}
+                       <button onClick={() => setDeleteTarget(r)}
                         className="p-1.5 rounded-lg transition hover:bg-red-500/10"
                         aria-label="حذف المراجعة">
                         <Trash2 size={14} style={{ color: "var(--destructive)" }} />
@@ -127,13 +142,13 @@ export default function ReviewsPage() {
       </div>
 
       <ConfirmDialog
-        open={!!deleteId}
+         open={deleteTarget !== null}
         title="حذف المراجعة"
-        description="هل تريد حذف هذه المراجعة نهائياً؟"
+         description="سيُخفى محتوى المراجعة مع الإبقاء على الردود المتصلة بها."
         confirmLabel="حذف"
         variant="danger"
         onConfirm={handleDelete}
-        onCancel={() => setDeleteId(null)}
+         onCancel={() => setDeleteTarget(null)}
         loading={deleteLoading}
       />
     </div>

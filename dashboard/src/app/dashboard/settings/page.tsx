@@ -58,7 +58,6 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT);
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState(false);
-  const [saved,    setSaved]    = useState(false);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -74,16 +73,23 @@ export default function SettingsPage() {
 
   const update = (key: string, val: any) => setSettings(p => ({ ...p, [key]: val }));
 
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      await fetch("/api/settings", {
+      const res = await fetch("/api/settings", {
         method:"PUT",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ settings }),
       });
+      if (!res.ok) { setSaveError("فشل الحفظ — لم يتم تطبيق التغييرات."); return; }
+      setSaveError("");
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setSaveError("خطأ في الاتصال أثناء الحفظ.");
     } finally { setSaving(false); }
   };
 
@@ -137,6 +143,9 @@ export default function SettingsPage() {
 
       <div className="fixed bottom-0 start-0 end-0 z-20 flex items-center justify-end gap-3 px-6 py-4 border-t"
         style={{ background:"var(--card)", borderColor:"var(--border)" }}>
+        {saveError && (
+          <span className="text-sm" style={{ color:"var(--destructive)" }}>{saveError}</span>
+        )}
         <button onClick={handleSave} disabled={saving}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition hover:opacity-90 disabled:opacity-60"
           style={{ background:"var(--primary)", color:"var(--primary-foreground)" }}>

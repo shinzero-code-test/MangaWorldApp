@@ -36,7 +36,8 @@ import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
@@ -44,8 +45,21 @@ import javax.inject.Inject
 class ModerationDashboardViewModel @Inject constructor(
     private val communityRepository: CommunityRepository
 ) : ViewModel() {
-    val reports = communityRepository.observeModerationReports().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-    val profile = flow { emit(communityRepository.getCurrentProfile()) }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val profile = flow { emit(communityRepository.getCurrentProfile()) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    private val isModerator = profile.map { p ->
+        p?.role in setOf("moderator", "super-admin")
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    // Listener attaches only for actual moderators — previously every visitor
+    // registered the privileged Firestore query and ate permission-denied noise
+    // (M-review). Server rules remain the real gate; this is defense-in-depth.
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val reports = isModerator.flatMapLatest { allowed ->
+        if (allowed) communityRepository.observeModerationReports()
+        else kotlinx.coroutines.flow.flowOf(emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 }
 
 @Composable

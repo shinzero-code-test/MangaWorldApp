@@ -8,10 +8,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     await requireRole("super-admin");
     const { uid } = await params;
-    const { banned } = await request.json();
-    await getAdminAuth().updateUser(uid, { disabled: banned });
-    return NextResponse.json({ success: true, banned });
+    const body = await request.json();
+    // Strict boolean — non-boolean input previously threw inside updateUser (→ 500).
+    if (typeof body?.banned !== "boolean") {
+      return NextResponse.json({ error: "banned must be a boolean" }, { status: 400 });
+    }
+    await getAdminAuth().updateUser(uid, { disabled: body.banned });
+    return NextResponse.json({ success: true, banned: body.banned });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: error.message === "Forbidden" ? 403 : 500 });
+    const message = error instanceof Error ? error.message : "";
+    return NextResponse.json({ error: message === "Forbidden" ? "Forbidden" : "فشل تحديث حالة الحظر" }, { status: message === "Forbidden" ? 403 : 500 });
   }
 }

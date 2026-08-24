@@ -1,13 +1,26 @@
 package com.exapps.mangaworld.core.data.download
 
 import android.app.Application
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import androidx.room.withTransaction
+import androidx.core.app.NotificationCompat
 import androidx.work.*
+import androidx.work.await
+import com.exapps.mangaworld.MangaWorldApp
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
+import com.exapps.mangaworld.core.data.local.MangaDatabase
 import com.exapps.mangaworld.core.data.local.dao.DownloadTaskDao
+import com.exapps.mangaworld.core.data.local.dao.DownloadBatchDao
 import com.exapps.mangaworld.core.data.local.dao.DownloadedMangaDao
+import com.exapps.mangaworld.core.data.local.entity.DownloadBatchEntity
 import com.exapps.mangaworld.core.data.local.entity.DownloadTaskEntity
 import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
 import com.exapps.mangaworld.domain.model.ChapterPage
+import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.repository.MangaRepository
+import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -16,22 +29,49 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** A chapter whose pages were resolved before creating a durable download work item. */
+data class PreparedChapterDownload(
+    val chapterUrl: String,
+    val chapterTitle: String?,
+    val pages: List<ChapterPage>,
+    val referer: String
+)
+
+/** A page-resolution failure that remains visible and manually retryable in Downloads. */
+data class FailedChapterDownload(
+    val chapterUrl: String,
+    val chapterTitle: String?,
+    val errorMessage: String
+)
 
 @Singleton
 class DownloadQueueManager @Inject constructor(
     private val app: Application,
+    private val database: MangaDatabase,
     private val downloadTaskDao: DownloadTaskDao,
+    private val downloadBatchDao: DownloadBatchDao,
     private val downloadedMangaDao: DownloadedMangaDao,
     private val okHttpClient: OkHttpClient,
-    private val analyticsManager: FirebaseAnalyticsManager
+    private val analyticsManager: FirebaseAnalyticsManager,
+    private val mangaRepository: MangaRepository
 ) {
+    private val queueMutex = Mutex()
+
     // ─── Observe ──────────────────────────────────────────────────────────────
 
     fun observeTasks(): Flow<List<DownloadTaskEntity>> = downloadTaskDao.observeAll()
+    fun observeTask(taskId: String): Flow<DownloadTaskEntity?> = downloadTaskDao.observeById(taskId)
     fun observeDownloadedMangas(): Flow<List<DownloadedMangaEntity>> = downloadedMangaDao.observeAll()
+
+    suspend fun pendingTaskId(mangaId: String, chapterUrl: String): String? =
+        downloadTaskDao.getPendingByChapter(chapterUrl, mangaId)?.id
 
     // ─── Chapter key (trim trailing slash so WordPress URLs work) ─────────────
 
@@ -84,26 +124,36 @@ class DownloadQueueManager @Inject constructor(
         pages: List<ChapterPage>,
         wifiOnly: Boolean = true,
         referer: String = "",
-        mangaMetadata: DownloadedMangaEntity? = null
-    ) {
-        if (downloadTaskDao.getPendingByChapter(chapterUrl, mangaId) != null) return
+        mangaMetadata: DownloadedMangaEntity? = null,
+        sourceId: String = mangaId.substringBefore('_'),
+        mangaSlug: String = ""
+    ): Boolean {
+        // Check-then-insert must be atomic or two concurrent enqueues for the same chapter can
+        // both pass the dedup check and create duplicate rows/workers.
+        val task = queueMutex.withLock {
+            if (
+                pages.isEmpty() ||
+                isChapterDownloaded(mangaId, chapterUrl, mangaTitle) ||
+                downloadTaskDao.getPendingByChapter(chapterUrl, mangaId) != null
+            ) return false
 
-        DownloadStorage.migrateLegacyDirectoryIfNeeded(downloadsRoot, mangaId, mangaTitle)
-
-        val targetDir = DownloadStorage.canonicalChapterDir(downloadsRoot, mangaId, chapterUrl)
-        downloadTaskDao.upsert(
+            DownloadStorage.migrateLegacyDirectoryIfNeeded(downloadsRoot, mangaId, mangaTitle)
+            val targetDir = DownloadStorage.canonicalChapterDir(downloadsRoot, mangaId, chapterUrl)
             DownloadTaskEntity(
                 id = taskId,
                 mangaId = mangaId,
                 mangaTitle = mangaTitle,
                 chapterUrl = chapterUrl,
                 chapterTitle = chapterTitle,
+                sourceId = sourceId,
+                mangaSlug = mangaSlug,
+                wifiOnly = wifiOnly,
                 targetDir = targetDir.absolutePath,
                 referer = referer,
                 pagesJson = JSONArray(pages.map { it.url }).toString(),
                 status = "queued"
-            )
-        )
+            ).also(downloadTaskDao::upsert)
+        }
         analyticsManager.logDownloadStatus(
             mangaId = mangaId,
             sourceId = mangaId.substringBefore('_'),
@@ -111,144 +161,438 @@ class DownloadQueueManager @Inject constructor(
             totalPages = pages.size
         )
 
-        // Persist manga metadata so the Local Storage screen can display it
-        if (mangaMetadata != null) {
-            val existing = downloadedMangaDao.get(mangaId)
-            downloadedMangaDao.upsert(
-                mangaMetadata.copy(
-                    downloadedChapters = existing?.downloadedChapters ?: 0,
-                    downloadedAt = existing?.downloadedAt ?: System.currentTimeMillis()
-                )
-            )
-            // Save cover + metadata.json for offline access
-            saveCoverAndMetadata(canonicalMangaDir(mangaId), mangaMetadata)
-        }
+        persistMangaMetadata(mangaId, mangaMetadata)
+        enqueueWorker(task)
+        return true
+    }
 
+    /**
+     * Persist all work before enqueueing it. A unique per-manga work chain then processes one
+     * chapter at a time, which prevents a whole-manga request from overwhelming the source or
+     * WorkManager and enables a single completion notification.
+     */
+    suspend fun enqueueBatch(
+        mangaId: String,
+        mangaTitle: String,
+        mangaSlug: String,
+        sourceId: String,
+        ready: List<PreparedChapterDownload>,
+        failed: List<FailedChapterDownload>,
+        wifiOnly: Boolean,
+        mangaMetadata: DownloadedMangaEntity? = null
+    ): Int {
+        // A whole-manga selection should never create two durable rows for the same chapter,
+        // even when a scraper returns duplicate chapter URLs.
+        val accepted = ready
+            .asSequence()
+            .filter { it.pages.isNotEmpty() }
+            .distinctBy { it.chapterUrl }
+            .filter { request ->
+                !isChapterDownloaded(mangaId, request.chapterUrl) &&
+                    downloadTaskDao.getPendingByChapter(request.chapterUrl, mangaId) == null
+            }
+            .toList()
+        val acceptedUrls = accepted.mapTo(mutableSetOf()) { it.chapterUrl }
+        val failures = failed
+            .asSequence()
+            .filterNot { it.chapterUrl in acceptedUrls }
+            .distinctBy { it.chapterUrl }
+            .filter { failure ->
+                !isChapterDownloaded(mangaId, failure.chapterUrl) &&
+                    downloadTaskDao.getPendingByChapter(failure.chapterUrl, mangaId) == null
+            }
+            .toList()
+        val total = accepted.size + failures.size
+        if (total == 0) return 0
+
+        DownloadStorage.migrateLegacyDirectoryIfNeeded(downloadsRoot, mangaId, mangaTitle)
+        val batchId = "batch_${UUID.randomUUID()}"
+        val batch = DownloadBatchEntity(
+            id = batchId,
+            mangaId = mangaId,
+            mangaTitle = mangaTitle,
+            totalChapters = total,
+            failedChapters = failures.size
+        )
+        val failedTasks = failures.map { failure ->
+            val targetDir = DownloadStorage.canonicalChapterDir(downloadsRoot, mangaId, failure.chapterUrl)
+            DownloadTaskEntity(
+                id = "dl_${UUID.randomUUID()}",
+                mangaId = mangaId,
+                mangaTitle = mangaTitle,
+                chapterUrl = failure.chapterUrl,
+                chapterTitle = failure.chapterTitle,
+                sourceId = sourceId,
+                mangaSlug = mangaSlug,
+                batchId = batchId,
+                wifiOnly = wifiOnly,
+                targetDir = targetDir.absolutePath,
+                status = "failed",
+                failureNotified = true,
+                errorMessage = failure.errorMessage
+            )
+        }
+        val queued = accepted.map { request ->
+            DownloadTaskEntity(
+                id = "dl_${UUID.randomUUID()}",
+                mangaId = mangaId,
+                mangaTitle = mangaTitle,
+                chapterUrl = request.chapterUrl,
+                chapterTitle = request.chapterTitle,
+                sourceId = sourceId,
+                mangaSlug = mangaSlug,
+                batchId = batchId,
+                wifiOnly = wifiOnly,
+                targetDir = DownloadStorage.canonicalChapterDir(downloadsRoot, mangaId, request.chapterUrl).absolutePath,
+                referer = request.referer,
+                pagesJson = JSONArray(request.pages.map { it.url }).toString(),
+                status = "queued"
+            )
+        }
+        database.withTransaction {
+            downloadBatchDao.upsert(batch)
+            downloadTaskDao.upsertAll(failedTasks + queued)
+        }
+        persistMangaMetadata(mangaId, mangaMetadata)
+        if (queued.isEmpty()) {
+            notifyBatchIfTerminal(batchId)
+        } else {
+            enqueueBatchWorkers(queued)
+        }
+        return total
+    }
+
+    private suspend fun persistMangaMetadata(mangaId: String, mangaMetadata: DownloadedMangaEntity?) {
+        mangaMetadata ?: return
+        val existing = downloadedMangaDao.get(mangaId)
+        downloadedMangaDao.upsert(
+            mangaMetadata.copy(
+                downloadedChapters = existing?.downloadedChapters ?: 0,
+                downloadedAt = existing?.downloadedAt ?: System.currentTimeMillis()
+            )
+        )
+        saveCoverAndMetadata(canonicalMangaDir(mangaId), mangaMetadata)
+    }
+
+    private fun enqueueWorker(task: DownloadTaskEntity) {
+        val request = buildWorkerRequest(task)
+        WorkManager.getInstance(app).enqueueUniqueWork(
+            mangaQueueName(task.mangaId),
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
+            request
+        )
+    }
+
+    /** Adds a fully prepared manga batch as one ordered WorkManager continuation. */
+    private fun enqueueBatchWorkers(tasks: List<DownloadTaskEntity>) {
+        val requests = tasks.map(::buildWorkerRequest)
+        if (requests.isEmpty()) return
+
+        var continuation = WorkManager.getInstance(app).beginUniqueWork(
+            mangaQueueName(tasks.first().mangaId),
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
+            requests.first()
+        )
+        requests.drop(1).forEach { request ->
+            continuation = continuation.then(request)
+        }
+        continuation.enqueue()
+    }
+
+    private fun buildWorkerRequest(task: DownloadTaskEntity): OneTimeWorkRequest {
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+            .setRequiredNetworkType(if (task.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
             .build()
         val input = Data.Builder()
-            .putString(ChapterDownloadWorker.KEY_TASK_ID, taskId)
-            .putString(ChapterDownloadWorker.KEY_MANGA_ID, mangaId)
-            .putString(ChapterDownloadWorker.KEY_CHAPTER_URL, chapterUrl)
-            .putString(ChapterDownloadWorker.KEY_CHAPTER_TITLE, chapterTitle)
-            .putString(ChapterDownloadWorker.KEY_REFERER, referer)
-            .putStringArray(ChapterDownloadWorker.KEY_PAGES, pages.map { it.url }.toTypedArray())
+            .putString(ChapterDownloadWorker.KEY_TASK_ID, task.id)
             .build()
-        val request = OneTimeWorkRequestBuilder<ChapterDownloadWorker>()
+        return OneTimeWorkRequestBuilder<ChapterDownloadWorker>()
             .setInputData(input)
             .setConstraints(constraints)
-            .addTag(taskId)
-            .addTag("manga_$mangaId")
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                MIN_RETRY_BACKOFF_SECONDS,
+                java.util.concurrent.TimeUnit.SECONDS
+            )
+            .addTag(task.id)
+            .addTag("manga_${task.mangaId}")
             .build()
-        WorkManager.getInstance(app).enqueue(request)
+    }
+
+    private fun mangaQueueName(mangaId: String): String = "manga_download_queue_$mangaId"
+
+    /** Reconciles persisted task states and emits exactly one notification per batch. */
+    suspend fun reconcileBatchCompletion(batchId: String) {
+        downloadBatchDao.synchronizeOutcomeCounts(batchId)
+        notifyBatchIfTerminal(batchId)
+    }
+
+    private suspend fun notifyBatchIfTerminal(batchId: String) {
+        if (downloadBatchDao.claimTerminalNotification(batchId) == 0) return
+        // Read after atomically claiming the notification so concurrent workers cannot publish
+        // an earlier, non-terminal count in the final batch summary.
+        val batch = downloadBatchDao.getById(batchId) ?: return
+
+        val hasFailures = batch.failedChapters > 0
+        val notification = NotificationCompat.Builder(app, MangaWorldApp.COMPLETE_CHANNEL_ID)
+            .setSmallIcon(com.exapps.mangaworld.R.drawable.ic_shortcut_downloads)
+            .setContentTitle(
+                app.getString(
+                    if (hasFailures) com.exapps.mangaworld.R.string.download_notification_batch_partial_title
+                    else com.exapps.mangaworld.R.string.download_notification_batch_complete_title,
+                    batch.mangaTitle
+                )
+            )
+            .setContentText(
+                if (hasFailures) {
+                    app.getString(
+                        com.exapps.mangaworld.R.string.download_notification_batch_partial_body,
+                        batch.completedChapters,
+                        batch.failedChapters
+                    )
+                } else {
+                    app.getString(
+                        com.exapps.mangaworld.R.string.download_notification_batch_complete_body,
+                        batch.completedChapters
+                    )
+                }
+            )
+            .setContentIntent(
+                PendingIntent.getActivity(
+                    app,
+                    (batch.id + "complete").hashCode(),
+                    AppLaunchIntents.downloads(app),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
+            .setAutoCancel(true)
+            .build()
+        (app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .notify(NOTIF_ID_BATCH + (batch.id.hashCode() and 0x0FFF), notification)
     }
 
     // ─── Cancel / delete ─────────────────────────────────────────────────────
 
-    suspend fun cancelTask(taskId: String) {
-        val task = downloadTaskDao.getById(taskId) ?: return
-        downloadTaskDao.upsert(
-            task.copy(status = "cancelled", updatedAt = System.currentTimeMillis(),
-                errorMessage = "Cancelled by user")
-        )
+    suspend fun cancelTask(taskId: String) = queueMutex.withLock {
+        val task = downloadTaskDao.getById(taskId) ?: return@withLock
+        if (task.status == "completed") return@withLock
+        val now = System.currentTimeMillis()
+        val incomplete = downloadTaskDao.getIncompleteByMangaId(task.mangaId)
+        val targetIsIncomplete = incomplete.any { it.id == taskId }
+        if (targetIsIncomplete) {
+            incomplete.forEach { queuedTask ->
+                val updatedTask = when {
+                    queuedTask.id == taskId -> queuedTask.copy(
+                        status = "cancelled",
+                        updatedAt = now,
+                        errorMessage = ChapterDownloadWorker.ERROR_CANCELLED
+                    )
+                    queuedTask.status == "running" -> queuedTask.copy(
+                        status = "queued",
+                        updatedAt = now
+                    )
+                    else -> queuedTask
+                }
+                if (updatedTask != queuedTask) downloadTaskDao.upsert(updatedTask)
+            }
+            cancelMangaQueue(task.mangaId)
+            enqueueQueuedTasks(task.mangaId)
+        } else {
+            downloadTaskDao.upsert(
+                task.copy(
+                    status = "cancelled",
+                    updatedAt = now,
+                    errorMessage = ChapterDownloadWorker.ERROR_CANCELLED
+                )
+            )
+        }
         analyticsManager.logDownloadStatus(
             mangaId = task.mangaId,
             sourceId = task.mangaId.substringBefore('_'),
             status = "cancelled",
             totalPages = runCatching { JSONArray(task.pagesJson).length() }.getOrDefault(0)
         )
-        deleteChapterDirectory(task.mangaId, task.chapterUrl, task.mangaTitle)
-        WorkManager.getInstance(app).cancelAllWorkByTag(taskId)
+        withContext(Dispatchers.IO) {
+            deleteChapterDirectory(task.mangaId, task.chapterUrl, task.mangaTitle)
+            refreshDownloadedCount(task.mangaId)
+        }
+        val batchId = task.batchId
+        if (batchId != null) reconcileBatchCompletion(batchId)
     }
 
-    suspend fun pauseTask(taskId: String) {
-        val task = downloadTaskDao.getById(taskId) ?: return
-        if (task.status != "running") return
-        downloadTaskDao.upsert(
-            task.copy(status = "paused", updatedAt = System.currentTimeMillis())
-        )
-        WorkManager.getInstance(app).cancelAllWorkByTag(taskId)
+    suspend fun pauseTask(taskId: String) = queueMutex.withLock {
+        val task = downloadTaskDao.getById(taskId) ?: return@withLock
+        if (task.status !in setOf("running", "queued")) return@withLock
+        pauseMangaTasks(task.mangaId, setOf(taskId))
     }
 
-    suspend fun resumeTask(taskId: String) {
-        val task = downloadTaskDao.getById(taskId) ?: return
-        if (task.status != "paused") return
-        downloadTaskDao.upsert(task.copy(status = "queued", updatedAt = System.currentTimeMillis()))
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-        WorkManager.getInstance(app).enqueue(
-            OneTimeWorkRequestBuilder<ChapterDownloadWorker>()
-                .setInputData(Data.Builder()
-                    .putString(ChapterDownloadWorker.KEY_TASK_ID, task.id)
-                    .putString(ChapterDownloadWorker.KEY_MANGA_ID, task.mangaId)
-                    .putString(ChapterDownloadWorker.KEY_CHAPTER_URL, task.chapterUrl)
-                    .putString(ChapterDownloadWorker.KEY_CHAPTER_TITLE, task.chapterTitle)
-                    .putString(ChapterDownloadWorker.KEY_REFERER, task.referer)
-                    .putStringArray(
-                        ChapterDownloadWorker.KEY_PAGES,
-                        runCatching {
-                            val arr = JSONArray(task.pagesJson)
-                            Array(arr.length()) { idx -> arr.getString(idx) }
-                        }.getOrDefault(emptyArray())
-                    )
-                    .build())
-                .setConstraints(constraints)
-                .addTag(taskId)
-                .addTag("manga_${task.mangaId}")
-                .build()
-        )
+    suspend fun resumeTask(taskId: String) = queueMutex.withLock {
+        val task = downloadTaskDao.getById(taskId) ?: return@withLock
+        if (task.status != "paused") return@withLock
+        resubmitTasks(listOf(task))
     }
 
-    suspend fun pauseAll() {
-        downloadTaskDao.observeAll().first().forEach { task ->
-            if (task.status == "running" || task.status == "queued") {
-                pauseTask(task.id)
+    suspend fun pauseAll() = queueMutex.withLock {
+        downloadTaskDao.getAllIncomplete()
+            .filter { it.status == "queued" || it.status == "running" }
+            .groupBy(DownloadTaskEntity::mangaId)
+            .forEach { (mangaId, tasks) ->
+                pauseMangaTasks(mangaId, tasks.mapTo(mutableSetOf(), DownloadTaskEntity::id))
             }
+    }
+
+    suspend fun resumeAll() = queueMutex.withLock {
+        downloadTaskDao.getAllPaused()
+            .groupBy(DownloadTaskEntity::mangaId)
+            .forEach { (_, tasks) ->
+                resubmitTasks(tasks)
+            }
+    }
+
+    suspend fun cancelAllDownloads() = queueMutex.withLock {
+        downloadTaskDao.getAllIncomplete()
+            .groupBy(DownloadTaskEntity::mangaId)
+            .forEach { (mangaId, tasks) ->
+                cancelMangaDownloadsLocked(mangaId, tasks)
+            }
+    }
+
+    suspend fun cancelMangaDownloads(mangaId: String) = queueMutex.withLock {
+        val tasks = downloadTaskDao.getIncompleteByMangaId(mangaId)
+        if (tasks.isNotEmpty()) {
+            cancelMangaDownloadsLocked(mangaId, tasks)
         }
     }
 
-    suspend fun resumeAll() {
-        downloadTaskDao.observeAll().first().forEach { task ->
-            if (task.status == "paused") {
-                resumeTask(task.id)
-            }
-        }
+    suspend fun retryTask(taskId: String) = queueMutex.withLock {
+        val task = downloadTaskDao.getById(taskId) ?: return@withLock
+        resubmitTasks(listOf(task))
     }
 
-    suspend fun retryTask(taskId: String) {
-        val task = downloadTaskDao.getById(taskId) ?: return
-        downloadTaskDao.upsert(task.copy(status = "queued", errorMessage = null,
-            updatedAt = System.currentTimeMillis()))
-        // Default to wifi-only (safe default) since DownloadTaskEntity doesn't persist wifiOnly
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.UNMETERED)
-            .build()
-        WorkManager.getInstance(app).enqueue(
-            OneTimeWorkRequestBuilder<ChapterDownloadWorker>()
-                .setInputData(Data.Builder()
-                    .putString(ChapterDownloadWorker.KEY_TASK_ID, task.id)
-                    .putString(ChapterDownloadWorker.KEY_MANGA_ID, task.mangaId)
-                    .putString(ChapterDownloadWorker.KEY_CHAPTER_URL, task.chapterUrl)
-                    .putString(ChapterDownloadWorker.KEY_CHAPTER_TITLE, task.chapterTitle)
-                    .putString(ChapterDownloadWorker.KEY_REFERER, task.referer)
-                    .putStringArray(
-                        ChapterDownloadWorker.KEY_PAGES,
-                        runCatching {
-                            val arr = JSONArray(task.pagesJson)
-                            Array(arr.length()) { idx -> arr.getString(idx) }
-                        }.getOrDefault(emptyArray())
+    private suspend fun pauseMangaTasks(mangaId: String, pausedTaskIds: Set<String>) {
+        val now = System.currentTimeMillis()
+        downloadTaskDao.getIncompleteByMangaId(mangaId).forEach { task ->
+            val updatedTask = when {
+                task.id in pausedTaskIds -> task.copy(status = "paused", updatedAt = now)
+                task.status == "running" -> task.copy(status = "queued", updatedAt = now)
+                else -> task
+            }
+            if (updatedTask != task) downloadTaskDao.upsert(updatedTask)
+        }
+        cancelMangaQueue(mangaId)
+        enqueueQueuedTasks(mangaId)
+    }
+
+    private suspend fun cancelMangaDownloadsLocked(
+        mangaId: String,
+        tasks: List<DownloadTaskEntity>
+    ) {
+        val now = System.currentTimeMillis()
+        tasks.forEach { task ->
+            downloadTaskDao.upsert(
+                task.copy(
+                    status = "cancelled",
+                    updatedAt = now,
+                    errorMessage = ChapterDownloadWorker.ERROR_CANCELLED
+                )
+            )
+        }
+        cancelMangaQueue(mangaId)
+        withContext(Dispatchers.IO) {
+            tasks.forEach { task ->
+                deleteChapterDirectory(task.mangaId, task.chapterUrl, task.mangaTitle)
+            }
+            // One recount per manga covers every deleted directory above.
+            refreshDownloadedCount(mangaId)
+        }
+        tasks.mapNotNull(DownloadTaskEntity::batchId).distinct().forEach(::reconcileBatchCompletion)
+    }
+
+    private suspend fun resubmitTasks(tasks: List<DownloadTaskEntity>) {
+        val queuedTasks = mutableListOf<DownloadTaskEntity>()
+        val failedBatchIds = mutableSetOf<String>()
+        tasks.forEach { task ->
+            val pages = resolvePagesForRetry(task)
+            if (pages.isEmpty()) {
+                downloadTaskDao.upsert(
+                    task.copy(
+                        status = "failed",
+                        errorMessage = ChapterDownloadWorker.ERROR_RETRY_UNAVAILABLE,
+                        updatedAt = System.currentTimeMillis()
                     )
-                    .build())
-                .setConstraints(constraints)
-                .addTag(taskId)
-                .addTag("manga_${task.mangaId}")
-                .build()
-        )
+                )
+                task.batchId?.let(failedBatchIds::add)
+            } else {
+                val referer = pages.firstOrNull()?.headers?.get("Referer")
+                    ?.takeIf { it.isNotBlank() }
+                    ?: task.referer.ifBlank { task.chapterUrl }
+                val queuedTask = task.copy(
+                    referer = referer,
+                    pagesJson = JSONArray(pages.map { it.url }).toString(),
+                    status = "queued",
+                    progress = 0f,
+                    retries = 0,
+                    errorMessage = null,
+                    failureNotified = false,
+                    updatedAt = System.currentTimeMillis()
+                )
+                downloadTaskDao.upsert(queuedTask)
+                queuedTasks += queuedTask
+            }
+        }
+        failedBatchIds.forEach(::reconcileBatchCompletion)
+        enqueueBatchWorkers(queuedTasks)
+    }
+
+    private suspend fun cancelMangaQueue(mangaId: String) {
+        WorkManager.getInstance(app).cancelUniqueWork(mangaQueueName(mangaId)).await()
+    }
+
+    private suspend fun enqueueQueuedTasks(mangaId: String) {
+        enqueueBatchWorkers(downloadTaskDao.getQueuedByMangaId(mangaId))
+    }
+
+    private suspend fun resolvePagesForRetry(task: DownloadTaskEntity): List<ChapterPage> {
+        val cachedPages = runCatching {
+            val array = JSONArray(task.pagesJson)
+            (0 until array.length()).map { index -> ChapterPage(index, array.getString(index)) }
+        }.getOrDefault(emptyList())
+        if (cachedPages.isNotEmpty()) return cachedPages
+
+        val source = MangaSource.fromIdOrNull(task.sourceId.ifBlank { task.mangaId.substringBefore('_') })
+            ?: return emptyList()
+        val slug = task.mangaSlug.ifBlank { task.mangaId.substringAfter("${source.id}_") }
+        return mangaRepository.getChapterPages(slug, task.chapterUrl, source).getOrDefault(emptyList())
     }
 
     suspend fun clearCompleted() = downloadTaskDao.clearCompleted()
+
+    /**
+     * Re-enqueue durable task rows that were stranded `queued` by a crash between the Room
+     * write and the WorkManager enqueue (or a lost work chain). `running` rows whose worker
+     * is gone are reset to `queued` first, mirroring pauseMangaTasks.
+     */
+    suspend fun recoverOrphanTasks() = queueMutex.withLock {
+        val orphans = downloadTaskDao.getAllIncomplete()
+            .filter { it.status == "queued" || it.status == "running" }
+            .groupBy(DownloadTaskEntity::mangaId)
+        val now = System.currentTimeMillis()
+        orphans.forEach { (mangaId, tasks) ->
+            // A `running` row may belong to a worker killed with the process — reset it so the
+            // fresh chain picks it up. If a worker was somehow still alive, APPEND_OR_REPLACE
+            // supersedes its stale chain and page-level resume makes the redo cheap.
+            tasks.filter { it.status == "running" }.forEach { runningTask ->
+                downloadTaskDao.upsert(runningTask.copy(status = "queued", updatedAt = now))
+            }
+            enqueueBatchWorkers(downloadTaskDao.getQueuedByMangaId(mangaId))
+        }
+    }
+
+    /** Removes finished task rows from the Downloads list without touching downloaded files. */
+    suspend fun dismissTasks(taskIds: List<String>) {
+        if (taskIds.isEmpty()) return
+        downloadTaskDao.deleteByIds(taskIds)
+    }
 
     suspend fun getDownloadedChapterDir(mangaId: String, chapterUrl: String): String? =
         DownloadStorage.canonicalChapterDir(downloadsRoot, mangaId, chapterUrl)
@@ -259,9 +603,9 @@ class DownloadQueueManager @Inject constructor(
      * Delete ALL downloaded content for a manga: files on disk, task records,
      * and the downloaded_manga metadata row.
      */
-    suspend fun deleteDownloadedManga(mangaId: String) {
+    suspend fun deleteDownloadedManga(mangaId: String) = queueMutex.withLock {
         // Cancel any active work
-        WorkManager.getInstance(app).cancelAllWorkByTag("manga_$mangaId")
+        WorkManager.getInstance(app).cancelUniqueWork(mangaQueueName(mangaId)).await()
         // Delete files
         deleteMangaDirectory(canonicalMangaDir(mangaId))
         downloadedMangaDao.get(mangaId)?.title?.let { title ->
@@ -269,6 +613,7 @@ class DownloadQueueManager @Inject constructor(
         }
         // Remove DB records
         downloadTaskDao.deleteByMangaId(mangaId)
+        downloadBatchDao.deleteByMangaId(mangaId)
         downloadedMangaDao.delete(mangaId)
     }
 
@@ -315,8 +660,9 @@ class DownloadQueueManager @Inject constructor(
                         coverFile.outputStream().use { out -> inp.copyTo(out) }
                     }
                 }
-                // Update localCoverPath in DB
-                downloadedMangaDao.upsert(metadata.copy(localCoverPath = coverFile.absolutePath))
+                // Targeted update: re-upserting a stale metadata copy here could revert
+                // downloadedChapters if a chapter completed while the cover was downloading.
+                downloadedMangaDao.updateCoverPath(metadata.mangaId, coverFile.absolutePath)
             }
         }
         // metadata.json
@@ -405,7 +751,12 @@ class DownloadQueueManager @Inject constructor(
                 downloadedMangaDao.upsert(entity)
                 existingIds.add(mangaId) // avoid duplicates in same scan
             } catch (_: Exception) { /* skip malformed metadata */ }
-        }
     }
 
+    private companion object {
+        const val MIN_RETRY_BACKOFF_SECONDS = 10L
+
+        /** Batch-summary notifications live above every per-task range (see ChapterDownloadWorker). */
+        const val NOTIF_ID_BATCH = 40000
+    }
 }

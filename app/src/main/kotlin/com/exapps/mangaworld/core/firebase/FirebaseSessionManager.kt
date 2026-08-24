@@ -53,7 +53,14 @@ class FirebaseSessionManager @Inject constructor(
 
     fun currentUser(): com.google.firebase.auth.FirebaseUser? = auth.currentUser
 
-    suspend fun currentIdToken(): String? = auth.currentUser?.getIdToken(false)?.await()?.token
+    /**
+     * ID token for dashboard mutation calls (vote / push-reply / Cloudinary /
+     * moderation check). Defaults to force-refresh: these are low-frequency
+     * operations, and the cached token can be past expiry after idle periods,
+     * turning mutations into silent 401s (M-review).
+     */
+    suspend fun currentIdToken(forceRefresh: Boolean = true): String? =
+        auth.currentUser?.getIdToken(forceRefresh)?.await()?.token
 
     fun linkedProviderIds(): Set<String> = auth.currentUser?.providerData
         ?.map { it.providerId }

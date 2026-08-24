@@ -268,7 +268,11 @@ class MangaPagingSource(
 
             val sorted = when (filters.sortBy) {
                 SortBy.RATING     -> filtered.sortedByDescending { it.rating ?: 0f }
-                SortBy.POPULARITY -> filtered.sortedByDescending { it.latestChapter ?: 0 }
+                // Real views first (numeric prefix), latestChapter as last-resort proxy.
+                SortBy.POPULARITY -> filtered.sortedByDescending {
+                    it.views?.trimStart()?.takeWhile(Char::isDigit)?.toLongOrNull()
+                        ?: it.latestChapter?.toLong() ?: 0L
+                }
                 SortBy.OLDEST     -> filtered.sortedBy { it.title.lowercase() }
                 SortBy.LATEST     -> filtered.sortedWith(
                     compareBy<MangaItem> { rank(it, filters.query) }
@@ -306,32 +310,37 @@ class LibraryRepositoryImpl @Inject constructor(
         favoriteDao.getAllFavorites().map { list -> list.map { it.toDomain() } }
 
     override suspend fun addFavorite(manga: FavoriteManga) {
-        favoriteDao.insert(manga.toEntity())
+        val existing = favoriteDao.getById(manga.mangaId)
+        if (existing == null) {
+            favoriteDao.insert(manga.toEntity().copy(isFavorite = true))
+        } else {
+            favoriteDao.insert(existing.copy(isFavorite = true, addedAt = System.currentTimeMillis()))
+        }
         prefs.clearSyncTombstone("favorites", manga.mangaId)
     }
     override suspend fun removeFavorite(mangaId: String) {
+        // Favourites and reading-list membership are independent.
         favoriteDao.setFavorite(mangaId, false)
-        prefs.markSyncTombstone("favorites", mangaId)
+        // Keep the cloud record so another device retains the independent reading-list state.
+        prefs.clearSyncTombstone("favorites", mangaId)
     }
     override suspend fun isFavorite(mangaId: String) = favoriteDao.isFavorite(mangaId)
     override fun isFavoriteFlow(mangaId: String): Flow<Boolean> = favoriteDao.isFavoriteFlow(mangaId)
+    override fun observeLibraryEntry(mangaId: String): Flow<FavoriteManga?> =
+        favoriteDao.observeById(mangaId).map { it?.toDomain() }
+    override suspend fun ensureLibraryEntry(manga: FavoriteManga) {
+        if (favoriteDao.getById(manga.mangaId) == null) {
+            favoriteDao.insert(manga.toEntity())
+        }
+        prefs.clearSyncTombstone("favorites", manga.mangaId)
+    }
     override suspend fun getFavoritesByStatus(status: String): List<FavoriteManga> =
         favoriteDao.getByStatus(status).map { it.toDomain() }
     override suspend fun updateReadingStatus(mangaId: String, status: String?) {
-        // Ensure entity exists — insert with isFavorite=false if it doesn't
-        val existing = favoriteDao.getById(mangaId)
-        if (existing == null) {
-            // We don't have enough info to create a full entity here,
-            // so just create a minimal one. The caller should ensure the entity exists.
-            favoriteDao.insert(
-                com.exapps.mangaworld.core.data.local.entity.FavoriteEntity(
-                    mangaId = mangaId, slug = mangaId, title = mangaId,
-                    coverUrl = "", sourceId = "unknown", isFavorite = false, readingStatus = status
-                )
-            )
-        } else {
-            favoriteDao.updateReadingStatus(mangaId, status)
-        }
+        // Metadata belongs to the caller that creates the entry through ensureLibraryEntry().
+        // Avoid persisting an unusable placeholder record if that invariant is violated.
+        if (favoriteDao.getById(mangaId) == null) return
+        favoriteDao.updateReadingStatus(mangaId, status)
         prefs.clearSyncTombstone("favorites", mangaId)
     }
 
@@ -380,6 +389,17 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun markChapterUnread(mangaId: String, chapterNumber: Float) {
         readChapterDao.markUnread(mangaId, chapterNumber)
+        syncFavoriteProgress(mangaId)
+    }
+
+    override suspend fun markAllChaptersRead(mangaId: String, chapterNumbers: Collection<Float>) {
+        val now = System.currentTimeMillis()
+        readChapterDao.markAllRead(chapterNumbers.map { ReadChapterEntity(mangaId, it, now) })
+        syncFavoriteProgress(mangaId)
+    }
+
+    override suspend fun markAllChaptersUnread(mangaId: String, chapterNumbers: Collection<Float>) {
+        chapterNumbers.forEach { readChapterDao.markUnread(mangaId, it) }
         syncFavoriteProgress(mangaId)
     }
 
@@ -472,6 +492,7 @@ class SettingsRepositoryImpl @Inject constructor(
     override fun getAppSettings() = combine(prefs.appSettings, remoteConfigManager.disabledSourceIds) { local, remoteDisabled ->
         local.copy(enabledSources = local.enabledSources - remoteDisabled)
     }
+    override suspend fun getStoredEnabledSources(): Set<String> = prefs.appSettings.first().enabledSources
     override suspend fun updateTheme(theme: AppTheme) { prefs.setTheme(theme) }
     override suspend fun setOnboardingCompleted(completed: Boolean) { prefs.setOnboardingDone(completed) }
     override suspend fun setDownloadOnWifiOnly(enabled: Boolean) { prefs.setDownloadWifiOnly(enabled) }
@@ -489,6 +510,8 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setContentBlacklist(values: Set<String>) { prefs.setContentBlacklist(values) }
     override suspend fun setSpoilerCollapseDefault(enabled: Boolean) { prefs.setSpoilerCollapseDefault(enabled) }
     override suspend fun setMutedUserIds(values: Set<String>) { prefs.setMutedUsers(values) }
+    override suspend fun addMutedUser(uid: String) { prefs.addMutedUser(uid) }
+    override suspend fun removeMutedUser(uid: String) { prefs.removeMutedUser(uid) }
     override suspend fun setReadingListStatus(status: String?) { prefs.setReadingListStatus(status) }
     override suspend fun setShowLibraryPublic(enabled: Boolean) { prefs.setShowLibraryPublic(enabled) }
     override fun getReaderSettings() = prefs.readerSettings

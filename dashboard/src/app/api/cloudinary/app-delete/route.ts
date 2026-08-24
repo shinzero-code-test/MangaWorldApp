@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
   try {
     const user = await verifyAppIdToken(request);
-    if (!allowAppMutation(`delete:${user.uid}`, 30, 60 * 60 * 1000)) {
+    if (!(await allowAppMutation(`delete:${user.uid}`, 30, 60 * 60 * 1000))){
       return NextResponse.json({ error: "Too many delete requests" }, { status: 429 });
     }
     const { publicId } = await request.json();

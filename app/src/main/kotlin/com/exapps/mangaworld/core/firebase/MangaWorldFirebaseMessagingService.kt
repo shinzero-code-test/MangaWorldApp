@@ -94,9 +94,9 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
                     )
                 }
                 analyticsManager.logNotificationReceived(type = type, hasImage = imageUrl != null)
-                // Use a stable notification ID based on message data to avoid collisions
-                // with local notifications (which use IDs 5000+) and between different messages
-                val notificationId = 3000 + ((message.data["mangaId"] ?: body).hashCode() and 0x7FFFFFFF) % 1000
+                // Disjoint ID band: the old `% 1000` collided across manga and with
+                // other channels' ranges, replacing unrelated notifications (M-review).
+                val notificationId = NOTIF_ID_FCM_BASE + ((message.data["mangaId"] ?: body).hashCode() and 0x7FFFFFFF) % 100000
                 getSystemService<NotificationManager>()?.notify(
                     notificationId,
                     notificationBuilder.build()
@@ -108,21 +108,62 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
     /**
      * Download bitmap using the injected OkHttpClient (connection pooling, caching, interceptor)
      * instead of raw HttpURLConnection. Runs on IO thread to avoid ANR.
+     *
+     * Hardened: response capped at [MAX_IMAGE_BYTES] and the decoded bitmap is
+     * downsampled to ≤[TARGET_DIMENSION]px — a hostile push pointing at a huge
+     * image previously caused OOM-level decodes on low-end devices (M-review).
      */
     private suspend fun loadNotificationBitmap(imageUrl: String?): Bitmap? {
         if (imageUrl.isNullOrBlank()) return null
         return withContext(Dispatchers.IO) {
             runCatching {
                 val request = Request.Builder().url(imageUrl).build()
-                val response = okHttpClient.newCall(request).execute()
-                response.use { resp ->
-                    val body = resp.body ?: return@use null
-                    val stream: InputStream = body.byteStream()
-                    stream.use(BitmapFactory::decodeStream)
+                okHttpClient.newCall(request).execute().use { resp ->
+                    if (!resp.isSuccessful) return@use null
+                    val declared = resp.body?.contentLength() ?: -1L
+                    if (declared > MAX_IMAGE_BYTES) return@use null
+
+                    val bytes = resp.body!!.byteStream().use { input ->
+                        val buffer = java.io.ByteArrayOutputStream(minOf(declared.takeIf { it > 0 } ?: 64_000L, MAX_IMAGE_BYTES).toInt())
+                        val chunk = ByteArray(64 * 1024)
+                        var total = 0L
+                        while (true) {
+                            val read = input.read(chunk)
+                            if (read == -1) break
+                            total += read
+                            if (total > MAX_IMAGE_BYTES) return@use null
+                            buffer.write(chunk, 0, read)
+                        }
+                        buffer.toByteArray()
+                    }
+
+                    // Bounds pass → sample size → memory-bounded decode.
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@use null
+                    var sample = 1
+                    while (bounds.outWidth / (sample * 2) >= TARGET_DIMENSION ||
+                        bounds.outHeight / (sample * 2) >= TARGET_DIMENSION) {
+                        sample *= 2
+                    }
+                    val options = BitmapFactory.Options().apply {
+                        inSampleSize = sample
+                        inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+                    }
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
                 }
             }.onFailure { e ->
                 Log.w("MessagingService", "Failed to load notification image: ${e.message}")
             }.getOrNull()
         }
+    }
+
+    private companion object {
+        /** 2 MB hard cap on push-image downloads. */
+        const val MAX_IMAGE_BYTES = 2L * 1024 * 1024
+        /** Big-picture decode target (longest edge) — notifications never render larger. */
+        const val TARGET_DIMENSION = 1024
+        /** Disjoint from download IDs [1000..9999] and local notification ranges. */
+        const val NOTIF_ID_FCM_BASE = 200000
     }
 }

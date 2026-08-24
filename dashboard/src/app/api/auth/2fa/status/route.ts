@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { genericErrorResponse } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +21,8 @@ export async function GET() {
       needsSetup: !enabled,
       needsValidation: enabled && !verified,
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "خطأ" },
-      { status: 401 }
-    );
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status: status === 500 ? 401 : status });
   }
 }

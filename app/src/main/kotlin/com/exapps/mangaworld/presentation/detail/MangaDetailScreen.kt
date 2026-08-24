@@ -55,11 +55,19 @@ fun MangaDetailScreen(
     LaunchedEffect(slug, source) { viewModel.load(slug, source, rawSourceId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
+    val communityEnabled = !MangaSource.isLocalSource(rawSourceId) && !slug.startsWith("imported_")
 
     // Cache sorted chapters to avoid recomputation on every recomposition
     val sortedChapters = remember(state.manga, state.readChapters, state.readingProgress, state.downloadedChapters, state.chaptersReversed) {
         viewModel.sortedChapters()
     }
+
+    // Memoized filtered list — getFilteredChapters() re-sorts + re-filters the
+    // whole chapter list, so it must never run bare during recomposition.
+    val filteredChapters = remember(
+        state.manga, state.readChapters, state.readingProgress,
+        state.downloadedChapters, state.chaptersReversed, state.chapterSearchQuery
+    ) { viewModel.getFilteredChapters() }
 
     // Launcher for Cloudflare WebView solver
     val cfLauncher = rememberLauncherForActivityResult(
@@ -88,7 +96,7 @@ fun MangaDetailScreen(
                 }
             )
             state.error != null && state.manga == null -> DetailError(
-                state.error!!, onRetry = { viewModel.load(slug, source) }
+                state.error!!, onRetry = { viewModel.retry() }
             )
             state.manga != null -> DetailContent(
                 manga = state.manga!!,
@@ -97,16 +105,17 @@ fun MangaDetailScreen(
                 readChapters = state.readChapters,
                 chaptersReversed = state.chaptersReversed,
                 sortedChapters = sortedChapters,
-                filteredChapters = viewModel.getFilteredChapters(),
+                filteredChapters = filteredChapters,
                 chapterSearchQuery = state.chapterSearchQuery,
                 downloadingChapters = state.downloadingChapters,
+                showCommunity = communityEnabled,
                 onToggleFav = viewModel::toggleFavorite,
                 onSetReadingStatus = viewModel::setReadingStatus,
                 onToggleOrder = viewModel::toggleChaptersOrder,
                 onDownloadChapter = viewModel::downloadChapter,
                 onShowDownloadDialog = viewModel::showDownloadDialog,
-                onOpenCommunity = if (source.id == "local" || slug.startsWith("imported_")) { {} } else { { onOpenCommunity("${source.id}_$slug") } },
-                onOpenChapterCommunity = if (source.id == "local" || slug.startsWith("imported_")) { _: String, _: String -> } else onOpenChapterCommunity,
+                onOpenCommunity = { onOpenCommunity("${source.id}_$slug") },
+                onOpenChapterCommunity = onOpenChapterCommunity,
                 onOpenOtherSource = onOpenOtherSource,
                 onShowAddToList = viewModel::showAddToListDialog,
                 onShowComparison = viewModel::showSourceComparison,
@@ -230,6 +239,7 @@ private fun DetailContent(
     filteredChapters: List<Chapter>,
     chapterSearchQuery: String,
     downloadingChapters: Set<Float>,
+    showCommunity: Boolean,
     onToggleFav: () -> Unit,
     onSetReadingStatus: (String?) -> Unit,
     onToggleOrder: () -> Unit,
@@ -254,77 +264,73 @@ private fun DetailContent(
     LazyColumn(Modifier.fillMaxSize()) {
         // ── Header ──────────────────────────────────────────────────────────
         item {
-            Box(Modifier.fillMaxWidth().height(320.dp)) {
+            Box(Modifier.fillMaxWidth().height(356.dp)) {
                 AsyncImage(
                     model = ImageRequest.Builder(ctx).data(manga.coverUrl).crossfade(true).withFirebaseTrace("detail_cover").build(),
                     imageLoader = ctx.imageLoader,
                     contentDescription = null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().blur(20.dp)
+                    modifier = Modifier.fillMaxSize().blur(28.dp)
                 )
                 Box(
                     Modifier.fillMaxSize().background(
                         Brush.verticalGradient(
-                            listOf((dominantColor ?: Color(0x88000000)).copy(alpha = 0.72f), MangaColors.Background),
+                            listOf(
+                                (dominantColor ?: MangaColors.PrimaryDim).copy(alpha = 0.78f),
+                                MangaColors.Background.copy(alpha = 0.74f),
+                                MangaColors.Background
+                            ),
                             startY = 0f, endY = Float.POSITIVE_INFINITY
                         )
                     )
                 )
-                Row(
-                    Modifier.align(Alignment.BottomStart)
-                        .padding(horizontal = 20.dp, vertical = 20.dp),
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                NeonGlassPanel(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    shape = RoundedCornerShape(26.dp),
+                    cornerRadius = 26.dp
                 ) {
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        elevation = CardDefaults.cardElevation(8.dp),
-                        modifier = Modifier.size(110.dp, 155.dp)
+                    Row(
+                        Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(ctx).data(manga.coverUrl).crossfade(true).withFirebaseTrace("detail_related_cover").build(),
-                            imageLoader = ctx.imageLoader,
-                            contentDescription = manga.title, contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                    Column(Modifier.weight(1f).padding(bottom = 4.dp)) {
-                        Text(
-                            manga.title, style = MaterialTheme.typography.titleLarge,
-                            color = Color.White, fontWeight = FontWeight.Bold,
-                            maxLines = 3, overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            TypeBadge(manga.type); StatusBadge(manga.status)
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        SourceBadge(manga.source)
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            StatItem(Icons.Filled.MenuBook, "${manga.totalChapters}", stringResource(R.string.chapter))
-                            if (manga.views != null)
-                                StatItem(Icons.Filled.Visibility, manga.views, stringResource(R.string.watch))
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { onShowAddToList() }
-                                .padding(horizontal = 4.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        NeonGlassPanel(
+                            modifier = Modifier.size(108.dp, 154.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            cornerRadius = 18.dp
                         ) {
-                            Icon(
-                                Icons.Filled.PlaylistAdd,
-                                contentDescription = null,
-                                tint = MangaColors.PrimaryLight,
-                                modifier = Modifier.size(16.dp)
+                            AsyncImage(
+                                model = ImageRequest.Builder(ctx).data(manga.coverUrl).crossfade(true).withFirebaseTrace("detail_related_cover").build(),
+                                imageLoader = ctx.imageLoader,
+                                contentDescription = manga.title, contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
                             )
+                        }
+                        Column(Modifier.weight(1f).padding(bottom = 2.dp)) {
                             Text(
-                                stringResource(R.string.add_to_list),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MangaColors.PrimaryLight
+                                manga.title,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis
                             )
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                TypeBadge(manga.type)
+                                StatusBadge(manga.status)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            SourceBadge(manga.source)
+                            Spacer(Modifier.height(10.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                StatItem(Icons.Filled.MenuBook, "${manga.totalChapters}", stringResource(R.string.chapter))
+                                if (manga.views != null) {
+                                    StatItem(Icons.Filled.Visibility, manga.views, stringResource(R.string.watch))
+                                }
+                            }
                         }
                     }
                 }
@@ -333,59 +339,41 @@ private fun DetailContent(
 
         // ── Action buttons ───────────────────────────────────────────────────
         item {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (sortedChapters.isNotEmpty()) {
-                    GradientButton(
-                        text = stringResource(R.string.read_now),
-                        onClick = { onChapterClick(sortedChapters.minByOrNull { it.number }!!) },
-                        modifier = Modifier.weight(1f).height(52.dp)
-                    )
-                }
-                // Download All FAB
-                IconButton(
-                    onClick = onShowDownloadDialog,
-                    modifier = Modifier
-                        .size(50.dp)
-                        .background(MangaColors.SurfaceContainer, RoundedCornerShape(12.dp))
-                ) {
-                    Icon(Icons.Filled.Download, stringResource(R.string.download), tint = MangaColors.Cyan)
-                }
-                // Library button — opens library bottom sheet
-                IconButton(
-                    onClick = { showLibrarySheet = true },
-                    modifier = Modifier
-                        .size(50.dp)
-                        .background(
-                            if (isFavorite) MangaColors.Primary else MangaColors.SurfaceContainer,
-                            RoundedCornerShape(12.dp)
+                    item {
+                        GradientButton(
+                            text = stringResource(R.string.read_now),
+                            onClick = { onChapterClick(sortedChapters.minByOrNull { it.number }!!) },
+                            modifier = Modifier.widthIn(min = 156.dp).height(52.dp)
                         )
-                ) {
-                    Icon(
+                    }
+                }
+                item { DetailGlassAction(Icons.Filled.Download, stringResource(R.string.download), MangaColors.Cyan, onShowDownloadDialog) }
+                item {
+                    DetailGlassAction(
                         Icons.Filled.AutoStories,
                         stringResource(R.string.library_section_title),
-                        tint = if (isFavorite) Color.White else MangaColors.PrimaryLight
+                        if (isFavorite) Color.White else MangaColors.PrimaryLight,
+                        onClick = { showLibrarySheet = true },
+                        active = isFavorite
                     )
                 }
-                IconButton(
-                    onClick = onOpenCommunity,
-                    modifier = Modifier
-                        .size(50.dp)
-                        .background(MangaColors.SurfaceContainer, RoundedCornerShape(12.dp))
-                ) {
-                    Icon(Icons.Filled.Forum, stringResource(R.string.community_title), tint = MangaColors.Cyan)
+                if (showCommunity) {
+                    item {
+                        DetailGlassAction(
+                            Icons.Filled.Forum,
+                            stringResource(R.string.community_title),
+                            MangaColors.Cyan,
+                            onOpenCommunity
+                        )
+                    }
                 }
-                // Source comparison button
-                IconButton(
-                    onClick = onShowComparison,
-                    modifier = Modifier
-                        .size(50.dp)
-                        .background(MangaColors.SurfaceContainer, RoundedCornerShape(12.dp))
-                ) {
-                    Icon(Icons.Filled.CompareArrows, stringResource(R.string.compare_sources), tint = MangaColors.Yellow)
-                }
+                item { DetailGlassAction(Icons.Filled.PlaylistAdd, stringResource(R.string.add_to_list), MangaColors.PrimaryLight, onShowAddToList) }
+                item { DetailGlassAction(Icons.Filled.CompareArrows, stringResource(R.string.compare_sources), MangaColors.Yellow, onShowComparison) }
             }
         }
 
@@ -405,9 +393,12 @@ private fun DetailContent(
         // ── Description ──────────────────────────────────────────────────────
         if (manga.description.isNotEmpty()) {
             item {
-                GradientDivider(Modifier.padding(horizontal = 16.dp))
-                Spacer(Modifier.height(12.dp))
-                Column(Modifier.padding(horizontal = 16.dp)) {
+                NeonGlassPanel(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    cornerRadius = 18.dp
+                ) {
+                    Column(Modifier.padding(16.dp)) {
                     Text(
                         stringResource(R.string.story), style = MaterialTheme.typography.titleSmall,
                         color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold
@@ -430,21 +421,24 @@ private fun DetailContent(
                         }
                     }
                 }
-                Spacer(Modifier.height(12.dp))
+                }
             }
         }
 
         if (manga.authorName != null || manga.artistName != null || manga.alternativeTitles.isNotEmpty()) {
             item {
-                GradientDivider(Modifier.padding(horizontal = 16.dp))
-                Spacer(Modifier.height(12.dp))
-                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.additional_info), style = MaterialTheme.typography.titleSmall, color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold)
-                    manga.authorName?.let { InfoRow(stringResource(R.string.author), it) }
-                    manga.artistName?.let { InfoRow(stringResource(R.string.artist), it) }
-                    if (manga.alternativeTitles.isNotEmpty()) InfoRow(stringResource(R.string.alternative_names), manga.alternativeTitles.joinToString(" • "))
+                NeonGlassPanel(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    cornerRadius = 18.dp
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(stringResource(R.string.additional_info), style = MaterialTheme.typography.titleSmall, color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold)
+                        manga.authorName?.let { InfoRow(stringResource(R.string.author), it) }
+                        manga.artistName?.let { InfoRow(stringResource(R.string.artist), it) }
+                        if (manga.alternativeTitles.isNotEmpty()) InfoRow(stringResource(R.string.alternative_names), manga.alternativeTitles.joinToString(" • "))
+                    }
                 }
-                Spacer(Modifier.height(12.dp))
             }
         }
 
@@ -566,7 +560,8 @@ private fun DetailContent(
         }
 
         // ── Chapters ─────────────────────────────────────────────────────────
-        items(filteredChapters, key = { it.url.ifBlank { it.id } }) { chapter ->
+        // Composite key per project rule — blank url+id duplicates must not crash.
+        items(filteredChapters, key = { "${manga.source.id}_${it.url.ifBlank { it.id }}_${it.number}" }) { chapter ->
             ChapterItem(
                 chapter = chapter,
                 isRead = readChapters.contains(chapter.number),
@@ -574,7 +569,11 @@ private fun DetailContent(
                 onClick = { onChapterClick(chapter) },
                 onLongClick = { onToggleChapterRead(chapter) },
                 onDownload = { onDownloadChapter(chapter) },
-                onOpenChapterComments = { onOpenChapterCommunity("${manga.source.id}_${manga.slug}", chapter.url) }
+                onOpenChapterComments = if (showCommunity) {
+                    { onOpenChapterCommunity("${manga.source.id}_${manga.slug}", chapter.url) }
+                } else {
+                    null
+                }
             )
         }
         item { Spacer(Modifier.height(80.dp)) }
@@ -600,99 +599,112 @@ private fun ChapterItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
     onDownload: () -> Unit,
-    onOpenChapterComments: () -> Unit
+    onOpenChapterComments: (() -> Unit)?
 ) {
-    Row(
+    // pointerInput(Unit) launches once — capture the latest callbacks so taps
+    // never operate on a stale chapter copy (rememberUpdatedState).
+    val currentOnClick by rememberUpdatedState(onClick)
+    val currentOnLongClick by rememberUpdatedState(onLongClick)
+    NeonGlassPanel(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onTap = { onClick() },
-                    onLongPress = { onLongClick() }
+                    onTap = { currentOnClick() },
+                    onLongPress = { currentOnLongClick() }
                 )
-            }
-            .background(if (isRead) Color(0x0AFFFFFF) else Color.Transparent)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+            },
+        shape = RoundedCornerShape(16.dp),
+        cornerRadius = 16.dp,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            if (chapter.coverUrl.isNotBlank()) {
-                MangaCover(
-                    url = chapter.coverUrl,
-                    contentDescription = chapter.title ?: "Chapter cover",
-                    modifier = Modifier.size(56.dp, 72.dp).clip(RoundedCornerShape(10.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(if (isRead) Color(0x0AFFFFFF) else Color.Transparent)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                if (chapter.coverUrl.isNotBlank()) {
+                    MangaCover(
+                        url = chapter.coverUrl,
+                        contentDescription = chapter.title ?: stringResource(R.string.chapter),
+                        modifier = Modifier.size(56.dp, 72.dp).clip(RoundedCornerShape(10.dp))
+                    )
+                    Spacer(Modifier.width(12.dp))
+                }
+                Box(
+                    Modifier.size(8.dp).clip(CircleShape).background(
+                        if (isRead) MangaColors.Muted else MangaColors.Primary
+                    )
                 )
                 Spacer(Modifier.width(12.dp))
-            }
-            Box(
-                Modifier.size(8.dp).clip(CircleShape).background(
-                    if (isRead) MangaColors.Muted else MangaColors.Primary
-                )
-            )
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(
-                    stringResource(R.string.fmt_059, chapter.displayNumber),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isRead) MangaColors.Muted else MangaColors.OnSurface,
-                    fontWeight = FontWeight.Medium
-                )
-                if (!chapter.title.isNullOrEmpty()) {
+                Column {
                     Text(
-                        chapter.title, style = MaterialTheme.typography.bodySmall,
-                        color = MangaColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis
+                        stringResource(R.string.fmt_059, chapter.displayNumber),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isRead) MangaColors.Muted else MangaColors.OnSurface,
+                        fontWeight = FontWeight.Medium
                     )
-                }
-            }
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (chapter.dateText != null) {
-                    Text(chapter.dateText, style = MaterialTheme.typography.labelSmall, color = MangaColors.Muted)
-                }
-                if (chapter.isPaid) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .background(Color(0x22FFD700), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Icon(Icons.Filled.Lock, null, modifier = Modifier.size(10.dp), tint = MangaColors.Yellow)
-                        Spacer(Modifier.width(3.dp))
-                        Text(stringResource(R.string.paid), style = MaterialTheme.typography.labelSmall, color = MangaColors.Yellow)
+                    if (!chapter.title.isNullOrEmpty()) {
+                        Text(
+                            chapter.title, style = MaterialTheme.typography.bodySmall,
+                            color = MangaColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }
 
-            // Per-chapter download button
-            when {
-                isDownloading -> CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = MangaColors.Cyan
-                )
-                chapter.isDownloaded -> Icon(
-                    Icons.Filled.DownloadDone, null,
-                    modifier = Modifier.size(20.dp), tint = MangaColors.Primary
-                )
-                else -> IconButton(
-                    onClick = onDownload,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        Icons.Filled.Download, stringResource(R.string.download_chapter),
-                        modifier = Modifier.size(18.dp), tint = MangaColors.Muted
-                    )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (chapter.dateText != null) {
+                        Text(chapter.dateText, style = MaterialTheme.typography.labelSmall, color = MangaColors.Muted)
+                    }
+                    if (chapter.isPaid) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .background(Color(0x22FFD700), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Icon(Icons.Filled.Lock, null, modifier = Modifier.size(10.dp), tint = MangaColors.Yellow)
+                            Spacer(Modifier.width(3.dp))
+                            Text(stringResource(R.string.paid), style = MaterialTheme.typography.labelSmall, color = MangaColors.Yellow)
+                        }
+                    }
                 }
-            }
-            IconButton(onClick = onOpenChapterComments, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.Forum, stringResource(R.string.str_230), modifier = Modifier.size(18.dp), tint = MangaColors.Muted)
+
+                // Per-chapter download button
+                when {
+                    isDownloading -> CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MangaColors.Cyan
+                    )
+                    chapter.isDownloaded -> Icon(
+                        Icons.Filled.DownloadDone, null,
+                        modifier = Modifier.size(24.dp), tint = MangaColors.Primary
+                    )
+                    else -> IconButton(
+                        onClick = onDownload,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Download, stringResource(R.string.download_chapter),
+                            modifier = Modifier.size(20.dp), tint = MangaColors.Muted
+                        )
+                    }
+                }
+                onOpenChapterComments?.let { openComments ->
+                    IconButton(onClick = openComments, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Filled.Forum, stringResource(R.string.str_230), modifier = Modifier.size(20.dp), tint = MangaColors.Muted)
+                    }
+                }
             }
         }
     }
-    GradientDivider(Modifier.padding(horizontal = 16.dp))
 }
 
 // ─── Download options dialog ──────────────────────────────────────────────────
@@ -771,6 +783,31 @@ private fun StatItem(
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Icon(icon, null, tint = MangaColors.PrimaryLight, modifier = Modifier.size(14.dp))
         Text("$value $label", style = MaterialTheme.typography.labelSmall, color = MangaColors.OnSurfaceVariant)
+    }
+}
+
+@Composable
+private fun DetailGlassAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    tint: Color,
+    onClick: () -> Unit,
+    active: Boolean = false
+) {
+    NeonGlassPanel(
+        modifier = Modifier
+            .size(52.dp)
+            .clickable(onClickLabel = contentDescription, onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        cornerRadius = 16.dp,
+        glowColors = if (active) MangaColors.GradientPurpleCyan else listOf(MangaColors.OutlineVariant, MangaColors.OutlineVariant)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.align(Alignment.Center).size(23.dp)
+        )
     }
 }
 

@@ -9,8 +9,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import org.jsoup.Jsoup
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 /**
  * Reusable scraper for WordPress + Madara theme sites.
@@ -33,23 +31,7 @@ open class MadaraBaseScraper(
 
     protected open val listPath: String = "/manga/"
 
-    private val arabicMonths = mapOf(
-        "يناير" to "Jan", "فبراير" to "Feb", "مارس" to "Mar", "أبريل" to "Apr",
-        "مايو" to "May", "يونيو" to "Jun", "يوليو" to "Jul", "أغسطس" to "Aug",
-        "سبتمبر" to "Sep", "أكتوبر" to "Oct", "نوفمبر" to "Nov", "ديسمبر" to "Dec"
-    )
-
-    protected fun parseArabicDate(text: String): Long? {
-        if (text.isBlank()) return null
-        var normalized = text.trim()
-        for ((ar, en) in arabicMonths) {
-            normalized = normalized.replace(ar, en)
-        }
-        return runCatching {
-            val fmt = SimpleDateFormat("d MMM yyyy", Locale.ENGLISH)
-            fmt.parse(normalized)?.time
-        }.getOrNull()
-    }
+    protected fun parseArabicDate(text: String): Long? = ScraperText.parseArabicDate(text)
 
     // ─── Home ─────────────────────────────────────────────────────────────────
 
@@ -166,9 +148,7 @@ open class MadaraBaseScraper(
         // Try to get full chapter list via AJAX
         val chapters = tryAjaxChapters(doc, slug, url)
 
-        val viewsText = doc.body().text().let { text ->
-            Regex("(\\d[\\d,]*)\\s*(مشاهدة|view)").find(text)?.groupValues?.get(1)?.replace(",", "")
-        }
+        val viewsText = ScraperText.extractViews(doc.body().text())?.toString()
 
         MangaDetail(
             id = "${source.id}_$slug",
@@ -234,8 +214,13 @@ open class MadaraBaseScraper(
         val results = parseMangaGrid(doc)
         if (results.isNotEmpty()) return@runCatching results
 
-        // Fallback: try /manga/ path search
-        val url2 = "${source.baseUrl}${listPath}?s=$encoded&page=$page"
+        // Fallback: try /{listPath}/ path search — WP archives paginate via
+        // /page/N/, not ?page= (which repeats page-1 results) (L-review).
+        val url2 = if (page <= 1) {
+            "${source.baseUrl}${listPath}?s=$encoded"
+        } else {
+            "${source.baseUrl}${listPath}page/$page/?s=$encoded"
+        }
         val doc2 = runCatching { fetchDocument(url2) }.getOrNull()
         if (doc2 != null) {
             val results2 = parseMangaGrid(doc2)
@@ -297,7 +282,10 @@ open class MadaraBaseScraper(
             val titleEl = card.selectFirst(".post-title a, .post-title h3 a, .item-summary .post-title a")
 
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-            val slug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
+            // Works for /manga/, /comics/, /manhwa/ layouts: take the last path
+            // segment (query-stripped). substringAfterLast("/manga/") returned the
+            // whole URL when the delimiter was absent, corrupting slugs (H-review).
+            val slug = href.substringBefore("?").trimEnd('/').substringAfterLast('/').trimEnd('/')
             if (slug.isEmpty()) return@forEach
 
             val coverUrl = imgEl.attr("abs:src").ifEmpty {
@@ -340,11 +328,14 @@ open class MadaraBaseScraper(
     protected open fun parseMadaraPopularManga(doc: org.jsoup.nodes.Document): List<MangaItem> {
         return doc.select(".widget-manga-recent .popular-item-wrap, .sidebar .popular-item-wrap").mapNotNull { item ->
             val img = item.selectFirst(".popular-img img, img") ?: return@mapNotNull null
-            val link = item.selectFirst("a[href*='/manga/']") ?: return@mapNotNull null
+            val link = item.selectFirst("a[href*='/manga/'], a[href*='/comics/'], a[href*='/manhwa/']") ?: return@mapNotNull null
             val title = item.selectFirst(".post-title a, .popular-title")?.text()?.cleanText()
                 ?: link.attr("title").cleanText()
             val href = link.attr("abs:href").ifEmpty { link.attr("href").absoluteUrl() }
-            val slug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
+            // Works for /manga/, /comics/, /manhwa/ layouts: take the last path
+            // segment (query-stripped). substringAfterLast("/manga/") returned the
+            // whole URL when the delimiter was absent, corrupting slugs (H-review).
+            val slug = href.substringBefore("?").trimEnd('/').substringAfterLast('/').trimEnd('/')
             if (slug.isBlank()) return@mapNotNull null
             MangaItem(
                 id = "${source.id}_$slug",
@@ -431,7 +422,9 @@ open class MadaraBaseScraper(
                     allChapters.addAll(ajaxChapters)
                 }
             }
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            FirebaseTelemetry.logScraperFailure(source.id, "chapters_ajax", e)
+        }
 
         // Fallback: try wp-admin AJAX (some Madara sites use this instead)
         if (allChapters.isEmpty()) {
@@ -472,7 +465,9 @@ open class MadaraBaseScraper(
                         }
                     }
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                FirebaseTelemetry.logScraperFailure(source.id, "chapters_admin_ajax", e)
+            }
         }
 
         return allChapters.distinctBy { it.url }.sortedByDescending { it.number }

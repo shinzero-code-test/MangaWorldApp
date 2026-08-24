@@ -31,10 +31,13 @@ export default function EngagementPage() {
   useEffect(() => {
     setLoading(true);
     const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
-    fetch(`/api/analytics/engagement?days=${days}`)
-      .then((r) => r.json())
+    const controller = new AbortController();
+    // Abort stale requests so rapid period switches can't resolve out of order.
+    fetch(`/api/analytics/engagement?days=${days}`, { signal: controller.signal })
+      .then((r) => { if (!r.ok) throw new Error("failed"); return r.json(); })
       .then((d) => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch((e: Error) => { if (e.name !== "AbortError") setLoading(false); });
+    return () => controller.abort();
   }, [period]);
 
   if (loading || !data) {

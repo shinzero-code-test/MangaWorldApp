@@ -128,12 +128,12 @@ class SuggestionNotificationWorker @AssistedInject constructor(
 
             val title = ctx.getString(com.exapps.mangaworld.R.string.suggestion_notif_title)
             val body = newSuggestions.take(3).joinToString("\n") { "• ${it.title}" }
-            val extraText = if (newSuggestions.size > 3) "\nو ${newSuggestions.size - 3} أخرى" else ""
+            val extraText = if (newSuggestions.size > 3) ctx.getString(com.exapps.mangaworld.R.string.suggestion_notif_extra, newSuggestions.size - 3) else ""
 
             // "Read Now" action
             val readAction = NotificationCompat.Action(
                 android.R.drawable.stat_notify_chat,
-                "اقرأ الآن",
+                ctx.getString(com.exapps.mangaworld.R.string.notif_action_read_now),
                 pendingIntent
             )
 
@@ -156,7 +156,7 @@ class SuggestionNotificationWorker @AssistedInject constructor(
             )
             val favAction = NotificationCompat.Action(
                 android.R.drawable.btn_star,
-                "إضافة للمفضلة",
+                ctx.getString(com.exapps.mangaworld.R.string.notif_action_add_favorite),
                 favPendingIntent
             )
 

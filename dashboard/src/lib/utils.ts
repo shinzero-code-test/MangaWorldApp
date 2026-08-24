@@ -9,20 +9,29 @@ export const formatDateFull = (ts: number | string | Date) =>
   new Date(ts).toLocaleString("ar-SA", { year:"numeric", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" });
 
 // ─── Relative time ───────────────────────────────────
+// Uses Arabic-Indic digits and proper plural forms (singular/dual/plural).
 export const formatRelative = (ts: number | string | Date): string => {
   const diff = Date.now() - new Date(ts).getTime();
-  if (diff < 0)          return "الآن";
   if (diff < 60_000)     return "الآن";
-  if (diff < 3_600_000)  return `منذ ${Math.floor(diff / 60_000)} دقيقة`;
-  if (diff < 86_400_000) return `منذ ${Math.floor(diff / 3_600_000)} ساعة`;
-  if (diff < 604_800_000)return `منذ ${Math.floor(diff / 86_400_000)} يوم`;
+  if (diff < 3_600_000)  return `منذ ${arabicCount(Math.floor(diff / 60_000), "دقيقة", "دقيقتين", "دقائق")}`;
+  if (diff < 86_400_000) return `منذ ${arabicCount(Math.floor(diff / 3_600_000), "ساعة", "ساعتين", "ساعات")}`;
+  if (diff < 604_800_000)return `منذ ${arabicCount(Math.floor(diff / 86_400_000), "يوم", "يومين", "أيام")}`;
   return formatDate(ts);
 };
 
+/** Formats a count with the correct Arabic noun form: 1 دقيقة / 2 دقيقتين / 3-10 دقائق / 11+ دقيقة. */
+function arabicCount(n: number, singular: string, dual: string, plural: string): string {
+  const digits = formatAr(n);
+  if (n === 1) return `${digits} ${singular}`;
+  if (n === 2) return dual;
+  if (n >= 3 && n <= 10) return `${digits} ${plural}`;
+  return `${digits} ${singular}`;
+}
+
 // ─── Duration ────────────────────────────────────────
 export const formatDuration = (ms: number): string => {
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 1000) return `${formatAr(Math.round(ms))} م.ث`;
+  return `${formatAr(Number((ms / 1000).toFixed(1)))} ث`;
 };
 
 // ─── Avatar ──────────────────────────────────────────
@@ -54,7 +63,7 @@ export const formatBytes = (b: number): string => {
   if (b === 0) return "0 B";
   const k = 1024, sizes = ["B","KB","MB","GB","TB"];
   const i = Math.floor(Math.log(b) / Math.log(k));
-  return `${(b / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+  return `${formatAr(Number((b / Math.pow(k, i)).toFixed(1)))} ${sizes[i]}`;
 };
 
 // ─── Truncate ─────────────────────────────────────────

@@ -46,9 +46,11 @@
                 android:resource="@xml/shortcuts" />
         </activity>
 
+        <!-- Target of res/xml/shortcuts.xml "random_manga" — kept non-exported:
+             launcher-driven shortcut starts don't require export (L-review). -->
         <activity
             android:name=".core.integration.RandomShortcutActivity"
-            android:exported="true"
+            android:exported="false"
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />

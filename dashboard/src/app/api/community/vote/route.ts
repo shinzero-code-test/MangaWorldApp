@@ -1,75 +1,89 @@
 import { NextRequest, NextResponse } from "next/server";
+import { type DocumentReference } from "firebase-admin/firestore";
 import { verifyAppIdToken } from "@/lib/app-auth";
 import { allowAppMutation } from "@/lib/app-rate-limit";
 import { getAdminDb } from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
 
+type TargetType = "comment" | "review";
+
 export async function POST(request: NextRequest) {
   try {
     const user = await verifyAppIdToken(request);
-    if (!allowAppMutation(`comment-vote:${user.uid}`, 120, 60 * 1000)) {
+    if (!(await allowAppMutation(`community-vote:${user.uid}`, 120, 60 * 1000))){
       return NextResponse.json({ error: "Too many vote requests" }, { status: 429 });
     }
 
-    const { commentId, vote } = await request.json();
-    if (!isCommentId(commentId) || !isVote(vote)) {
-      return NextResponse.json({ error: "A valid comment vote is required" }, { status: 400 });
+    const payload = await request.json();
+    // Keep commentId support for older app releases while new clients use a typed target.
+    const targetType: TargetType = payload.targetType === "review" ? "review" : "comment";
+    const targetId = typeof payload.targetId === "string" ? payload.targetId : payload.commentId;
+    const mangaId = payload.mangaId;
+    if (!isIdentifier(targetId) || !isVote(payload.vote) || (targetType === "review" && !isIdentifier(mangaId))) {
+      return NextResponse.json({ error: "A valid content vote is required" }, { status: 400 });
     }
 
     const db = getAdminDb();
-    const comments = await db.collectionGroup("comments")
-      .where("id", "==", commentId)
-      .limit(2)
-      .get();
-    if (comments.empty) {
-      return NextResponse.json({ error: "Comment not found" }, { status: 404 });
-    }
-    if (comments.size > 1) {
-      return NextResponse.json({ error: "Ambiguous comment identifier" }, { status: 409 });
+    let contentRef: DocumentReference;
+    if (targetType === "review") {
+      contentRef = db.collection("community_manga").doc(mangaId).collection("reviews").doc(targetId);
+    } else {
+      const comments = await db.collectionGroup("comments")
+        .where("id", "==", targetId)
+        .limit(2)
+        .get();
+      if (comments.empty) throw new ContentNotFoundError();
+      if (comments.size > 1) {
+        return NextResponse.json({ error: "Ambiguous comment identifier" }, { status: 409 });
+      }
+      contentRef = comments.docs[0].ref;
     }
 
-    const commentRef = comments.docs[0].ref;
-    const voteRef = commentRef.collection("votes").doc(user.uid);
+    const voteRef = contentRef.collection("votes").doc(user.uid);
     const result = await db.runTransaction(async (transaction) => {
-      const [commentSnapshot, voteSnapshot] = await Promise.all([
-        transaction.get(commentRef),
+      const [contentSnapshot, voteSnapshot] = await Promise.all([
+        transaction.get(contentRef),
         transaction.get(voteRef),
       ]);
-      const comment = commentSnapshot.data();
-      if (!comment) throw new CommentNotFoundError();
-      if (comment.authorUid === user.uid) throw new SelfVoteError();
+      const content = contentSnapshot.data();
+      if (!content) throw new ContentNotFoundError();
+      if (content.authorUid === user.uid) throw new SelfVoteError();
 
       const previousVote = voteSnapshot.data()?.value;
-      if (previousVote === vote) {
-        return { likes: nonNegativeCount(comment.likes), dislikes: nonNegativeCount(comment.dislikes), changed: false };
+      if (previousVote === payload.vote) {
+        return {
+          likes: nonNegativeCount(content.likes),
+          dislikes: nonNegativeCount(content.dislikes),
+          changed: false,
+        };
       }
 
-      const likes = Math.max(0, nonNegativeCount(comment.likes) + voteDelta(previousVote, vote, 1));
-      const dislikes = Math.max(0, nonNegativeCount(comment.dislikes) + voteDelta(previousVote, vote, -1));
-      transaction.set(voteRef, { uid: user.uid, value: vote, updatedAt: Date.now() });
-      transaction.update(commentRef, { likes, dislikes });
+      const likes = Math.max(0, nonNegativeCount(content.likes) + voteDelta(previousVote, payload.vote, 1));
+      const dislikes = Math.max(0, nonNegativeCount(content.dislikes) + voteDelta(previousVote, payload.vote, -1));
+      transaction.set(voteRef, { uid: user.uid, value: payload.vote, updatedAt: Date.now() });
+      transaction.update(contentRef, { likes, dislikes });
       return { likes, dislikes, changed: true };
     });
 
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
-    if (error instanceof CommentNotFoundError) {
-      return NextResponse.json({ error: "Comment not found" }, { status: 404 });
+    if (error instanceof ContentNotFoundError) {
+      return NextResponse.json({ error: "Content not found" }, { status: 404 });
     }
     if (error instanceof SelfVoteError) {
-      return NextResponse.json({ error: "You cannot vote on your own comment" }, { status: 403 });
+      return NextResponse.json({ error: "You cannot vote on your own content" }, { status: 403 });
     }
-    console.error("Comment vote error:", error);
-    return NextResponse.json({ error: "Unable to update comment vote" }, { status: 401 });
+    console.error("Community vote error:", error);
+    return NextResponse.json({ error: "Unable to update content vote" }, { status: 401 });
   }
 }
 
-class CommentNotFoundError extends Error {}
+class ContentNotFoundError extends Error {}
 class SelfVoteError extends Error {}
 
-function isCommentId(value: unknown): value is string {
-  return typeof value === "string" && /^[A-Za-z0-9-]{1,128}$/.test(value);
+function isIdentifier(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 1 && value.length <= 512 && !value.includes("/");
 }
 
 function isVote(value: unknown): value is 1 | -1 {

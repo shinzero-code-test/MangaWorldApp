@@ -53,7 +53,8 @@ export default function StoragePage() {
   }));
 
   const totalBytes = data?.totalBytes ?? breakdown.reduce((a, b) => a + b.bytes, 0);
-  const bucketName = data?.bucketName ?? "manga-world.appspot.com";
+  // No fabricated bucket names: when the API fails, show an honest placeholder.
+  const bucketName = data?.bucketName ?? "—";
 
   return (
     <div className="space-y-6">

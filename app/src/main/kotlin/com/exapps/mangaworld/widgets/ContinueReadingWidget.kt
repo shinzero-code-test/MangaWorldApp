@@ -25,6 +25,8 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.defaultWeight
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -80,7 +82,6 @@ private fun ContinueReadingContent(
                 subtitle = LocalContext.current.getString(R.string.widget_empty_reading_hint),
                 intent = AppLaunchIntents.home(context),
                 actionLabel = LocalContext.current.getString(R.string.widget_open_app),
-                retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
         }
@@ -115,20 +116,24 @@ private fun ContinueReadingContent(
         if (data.progressPercent > 0) {
             val progressFraction = (data.progressPercent / 100f).coerceIn(0f, 1f)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
+                // Weight split renders real progress; the old nested full-width
+                // box always drew a complete bar (H-review).
+                Row(
                     modifier = GlanceModifier
-                        .fillMaxWidth()
+                        .defaultWeight()
                         .height(6.dp)
-                        .background(GlanceTheme.colors.surfaceVariant)
                         .cornerRadius(3.dp)
+                        .background(GlanceTheme.colors.surfaceVariant)
                 ) {
                     Box(
                         modifier = GlanceModifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .cornerRadius(3.dp)
+                            .fillMaxHeight()
+                            .defaultWeight(progressFraction)
                             .background(GlanceTheme.colors.primary)
                     ) {}
+                    if (progressFraction < 1f) {
+                        Spacer(modifier = GlanceModifier.defaultWeight(1f - progressFraction))
+                    }
                 }
                 Spacer(GlanceModifier.width(6.dp))
                 Text(

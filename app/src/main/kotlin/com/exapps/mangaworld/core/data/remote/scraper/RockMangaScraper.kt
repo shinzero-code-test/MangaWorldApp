@@ -26,6 +26,9 @@ class RockMangaScraper @Inject constructor(
 
         HomeData(
             featured = mangaCards.take(8),
+            // Intentional: no verified selector for this site's home chapter
+            // cards yet — fabricating one risks broken reader routes. Implement
+            // when a fixture from the live site confirms the markup.
             latestChapters = emptyList(),
             trending = mangaCards
         )
@@ -64,8 +67,8 @@ class RockMangaScraper @Inject constructor(
             val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
             val chText = chLink.selectFirst("span.contain-zeb")?.text()?.cleanText()
                 ?: chLink.attr("title").cleanText()
-            val chNum = chText.replace("الفصل", "").replace("[^0-9.]".toRegex(), "").trim().toFloatOrNull()
-                ?: chHref.trimEnd('/').substringAfterLast("/").toFloatOrNull()
+            val chNum = ScraperText.firstChapterNumber(chText)
+                ?: ScraperText.lastSegmentNumber(chHref)
                 ?: return@mapNotNull null
             val dateText = li.selectFirst("span.time")?.text()?.cleanText()
             val dateLong = dateText?.let { parseArabicDate(it) }
@@ -81,9 +84,7 @@ class RockMangaScraper @Inject constructor(
             )
         }.distinctBy { it.url }.sortedByDescending { it.number }
 
-        val viewsText = doc.body().text().let { text ->
-            Regex("(\\d[\\d,]*)\\s*(مشاهدة|view)").find(text)?.groupValues?.get(1)?.replace(",", "")
-        }
+        val viewsText = ScraperText.extractViews(doc.body().text())?.toString()
 
         MangaDetail(
             id = "rockmanga_$slug",
@@ -125,7 +126,9 @@ class RockMangaScraper @Inject constructor(
     }
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
-        val doc = fetchDocument("${source.baseUrl}/manga-genre/$genre/page/$page/")
+        // Path position: encode with %20 (URLEncoder's "+" is wrong inside paths).
+        val enc = java.net.URLEncoder.encode(genre, "UTF-8").replace("+", "%20")
+        val doc = fetchDocument("${source.baseUrl}/manga-genre/$enc/page/$page/")
         parseMangaCards(doc)
     }
 
@@ -181,21 +184,5 @@ class RockMangaScraper @Inject constructor(
         }.distinctBy { it.id }
     }
 
-    private val arabicMonths = mapOf(
-        "يناير" to "Jan", "فبراير" to "Feb", "مارس" to "Mar", "أبريل" to "Apr",
-        "مايو" to "May", "يونيو" to "Jun", "يوليو" to "Jul", "أغسطس" to "Aug",
-        "سبتمبر" to "Sep", "أكتوبر" to "Oct", "نوفمبر" to "Nov", "ديسمبر" to "Dec"
-    )
-
-    private fun parseArabicDate(text: String): Long? {
-        if (text.isBlank()) return null
-        var normalized = text.trim()
-        for ((ar, en) in arabicMonths) {
-            normalized = normalized.replace(ar, en)
-        }
-        return runCatching {
-            val fmt = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.ENGLISH)
-            fmt.parse(normalized)?.time
-        }.getOrNull()
-    }
+    private fun parseArabicDate(text: String): Long? = ScraperText.parseArabicDate(text)
 }

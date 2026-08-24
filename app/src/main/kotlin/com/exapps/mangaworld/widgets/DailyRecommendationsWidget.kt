@@ -32,7 +32,7 @@ class DailyRecommendationsWidget : GlanceAppWidget() {
         val snapshot = try { entryPoint.widgetDataRepository().getRemoteSnapshot() } catch (_: Exception) { null }
         if (snapshot == null) {
             provideContent {
-                Text(text = "Loading...")
+                Text(text = context.getString(R.string.widget_loading))
             }
             return
         }
@@ -71,7 +71,6 @@ private fun DailyRecommendationsContent(
                 subtitle = LocalContext.current.getString(R.string.widget_empty_recommendations_hint),
                 intent = AppLaunchIntents.home(context),
                 actionLabel = LocalContext.current.getString(R.string.widget_open_app),
-                retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
         }

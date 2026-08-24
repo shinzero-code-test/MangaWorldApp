@@ -42,6 +42,8 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     @Inject lateinit var appShortcutManager: AppShortcutManager
     @Inject lateinit var okHttpClient: OkHttpClient
     @Inject lateinit var firebaseStartupCoordinator: FirebaseStartupCoordinator
+    @Inject lateinit var downloadQueueManager: com.exapps.mangaworld.core.data.download.DownloadQueueManager
+    @Inject lateinit var readingStatsStore: com.exapps.mangaworld.core.data.ReadingStatsStore
 
     internal val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -82,23 +84,34 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
         applicationScope.launch {
             appShortcutManager.refreshDynamicShortcuts()
             firebaseStartupCoordinator.initialize()
+            // Re-enqueue durable download rows stranded by a crash between the Room write and
+            // the WorkManager enqueue; without this they sit "pending" forever.
+            runCatching { downloadQueueManager.recoverOrphanTasks() }
+                .onFailure { android.util.Log.w("MangaWorldApp", "Download recovery failed: ${it.message}") }
+            // Bound daily reading-stat maps (no-op when nothing to prune).
+            runCatching { readingStatsStore.pruneOldStats() }
         }
     }
 
     private fun initializeAppCheck() {
         try {
             val firebaseAppCheck = FirebaseAppCheck.getInstance()
-            val providerFactory = if (BuildConfig.DEBUG) {
-                DebugAppCheckProviderFactory.getInstance()
+            if (BuildConfig.DEBUG) {
+                // Debug provider is compile-guarded to debug builds only — it must never act
+                // as a release fallback, or de-Googled devices get an attestation bypass.
+                firebaseAppCheck.installAppCheckProviderFactory(
+                    DebugAppCheckProviderFactory.getInstance()
+                )
             } else {
                 try {
-                    PlayIntegrityAppCheckProviderFactory.getInstance()
+                    firebaseAppCheck.installAppCheckProviderFactory(
+                        PlayIntegrityAppCheckProviderFactory.getInstance()
+                    )
                 } catch (_: Exception) {
-                    // Play Integrity unavailable (no Play Services) — fall back to debug provider
-                    DebugAppCheckProviderFactory.getInstance()
+                    // No Play Services on this device: App Check stays unavailable in release.
+                    android.util.Log.w("MangaWorldApp", "Play Integrity unavailable — App Check disabled")
                 }
             }
-            firebaseAppCheck.installAppCheckProviderFactory(providerFactory)
             firebaseAppCheck.setTokenAutoRefreshEnabled(true)
         } catch (e: Exception) {
             android.util.Log.e("MangaWorldApp", "App Check initialization failed: ${e.message}")

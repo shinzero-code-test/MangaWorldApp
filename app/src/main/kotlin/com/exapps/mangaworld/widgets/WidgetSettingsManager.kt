@@ -5,18 +5,20 @@ import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.exapps.mangaworld.R as AppR
 
-enum class WidgetSize(val label: String, val widthDp: Int, val heightDp: Int) {
-    SMALL("صغير (1x2)", 180, 180),
-    MEDIUM("متوسط (2x2)", 240, 220),
-    LARGE("كبير (4x2)", 320, 280)
+
+enum class WidgetSize(@androidx.annotation.StringRes val labelRes: Int, val widthDp: Int, val heightDp: Int) {
+    SMALL(AppR.string.widget_size_small, 180, 180),
+    MEDIUM(AppR.string.widget_size_medium, 240, 220),
+    LARGE(AppR.string.widget_size_large, 320, 280)
 }
 
-enum class WidgetTheme(val label: String) {
-    SYSTEM("تلقائي (افتراضي)"),
-    LIGHT("فاتح"),
-    DARK("داكن"),
-    MONOCHROME("أحادي اللون")
+enum class WidgetTheme(@androidx.annotation.StringRes val labelRes: Int) {
+    SYSTEM(AppR.string.widget_theme_system),
+    LIGHT(AppR.string.widget_theme_light),
+    DARK(AppR.string.widget_theme_dark),
+    MONOCHROME(AppR.string.widget_theme_mono)
 }
 
 @Singleton

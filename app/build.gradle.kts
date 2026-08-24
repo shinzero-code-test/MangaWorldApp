@@ -11,6 +11,12 @@ plugins {
     alias(libs.plugins.firebase.perf)
 }
 
+// Room schema history — exported JSON per version enables MigrationTestHelper regression tests.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.incremental", "true")
+}
+
 // ─── Signing from environment variables or Gradle properties ─────────────────
 fun env(vararg names: String): String =
     names.firstNotNullOfOrNull {
@@ -48,8 +54,8 @@ android {
         applicationId = "com.exapps.mangaworld"
         minSdk        = 26
         targetSdk     = 35
-        versionCode   = 163
-        versionName   = "6.4.1"
+        versionCode   = 170
+        versionName   = "7.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -192,7 +198,8 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-perf")
     implementation("com.google.firebase:firebase-appcheck-playintegrity")
-    implementation("com.google.firebase:firebase-appcheck-debug")
+    // Debug provider must never ship in release builds (attestation-bypass path).
+    debugImplementation("com.google.firebase:firebase-appcheck-debug")
     implementation(libs.play.services.auth)
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 

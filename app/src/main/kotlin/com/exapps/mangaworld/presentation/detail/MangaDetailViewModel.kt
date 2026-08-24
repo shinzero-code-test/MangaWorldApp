@@ -2,13 +2,13 @@ package com.exapps.mangaworld.presentation.detail
 
 import android.content.Context
 import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
-
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
+import com.exapps.mangaworld.core.data.download.FailedChapterDownload
+import com.exapps.mangaworld.core.data.download.PreparedChapterDownload
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
 import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
@@ -76,6 +76,7 @@ class MangaDetailViewModel @Inject constructor(
     // One job for the network fetch, one for the ongoing observers
     private var loadJob: Job? = null
     private var observersJob: Job? = null
+    private var batchPreparationJob: Job? = null
 
     fun load(slug: String, source: MangaSource, rawSourceId: String = source.id) {
         // Skip if already loaded and nothing changed
@@ -87,20 +88,19 @@ class MangaDetailViewModel @Inject constructor(
 
         currentSlug = slug
         currentSource = source
-        currentRawSourceId = rawSourceId
-        // For imported/downloaded manga, the slug IS the mangaId (starts with "imported_")
+        currentRawSourceId = rawSourceId        // For imported/downloaded manga, the slug IS the mangaId (starts with "imported_")
         currentMangaId = if (slug.startsWith("imported_")) slug else "${source.id}_$slug"
 
         // Cancel previous work (including infinite collectors)
         observersJob?.cancel()
         loadJob?.cancel()
+        batchPreparationJob?.cancel()
 
-        // All manga live on disk: imported manga is always local;
-        // downloaded manga uses local metadata.json + chapter dirs until
-        // the user explicitly refreshes from the online source.
-        // rawSourceId == "local" means it was routed from LocalStorageScreen for imported manga
+        // Imported manga is always local. Downloaded online manga still loads its remote detail
+        // so the screen can show the complete chapter catalogue and merely overlay offline state.
+        // rawSourceId == "local" means it was routed from LocalStorageScreen for imported manga.
         val isLocalManga = rawSourceId == "local" || rawSourceId == "imported"
-            || slug.startsWith("imported_") || hasLocalData(currentMangaId)
+            || slug.startsWith("imported_")
         if (isLocalManga) {
             loadFromLocalDisk(slug, source)
             return
@@ -134,13 +134,14 @@ class MangaDetailViewModel @Inject constructor(
                         val mangaId = currentMangaId   // capture before any re-load
 
                         launch {
-                            libraryRepo.isFavoriteFlow(mangaId)
-                                .collect { fav -> _state.update { it.copy(isFavorite = fav) } }
-                        }
-                        launch {
-                            // Load initial reading status from favorite entity
-                            val favorite = libraryRepo.getFavorites().first().find { it.mangaId == mangaId }
-                            _state.update { it.copy(readingStatus = favorite?.readingStatus) }
+                            libraryRepo.observeLibraryEntry(mangaId).collect { entry ->
+                                _state.update {
+                                    it.copy(
+                                        isFavorite = entry?.isFavorite == true,
+                                        readingStatus = entry?.readingStatus
+                                    )
+                                }
+                            }
                         }
                         launch {
                             libraryRepo.getReadChapters(mangaId)
@@ -160,6 +161,18 @@ class MangaDetailViewModel @Inject constructor(
                             _state.update { it.copy(downloadedChapters = downloaded) }
                         }
                         launch {
+                            downloadQueueManager.observeTasks()
+                                .map { tasks ->
+                                    tasks.asSequence()
+                                        .filter { it.mangaId == mangaId }
+                                        .map { it.id to it.status }
+                                        .sortedBy { it.first }
+                                        .toList()
+                                }
+                                .distinctUntilChanged()
+                                .collect { refreshDownloadedSet(mangaId) }
+                        }
+                        launch {
                             val matches = loadOtherSourceMatches(detail)
                             _state.update { it.copy(otherSourceMatches = matches) }
                         }
@@ -171,22 +184,41 @@ class MangaDetailViewModel @Inject constructor(
                     }
                 }
                 .onFailure { e ->
-                    _state.update {
-                        it.copy(
-                            isLoading = false,
-                            error = if (it.manga == null) (e.message ?: context.getString(R.string.download_error)) else null,
-                            cloudflareUrl = if (e is CloudflareChallengeException) e.targetUrl else null,
-                            cloudflareDomain = if (e is CloudflareChallengeException) e.domain else null
-                        )
+                    // Preserve offline reading when the source is unavailable, without making
+                    // local metadata the default source for every downloaded online manga.
+                    viewModelScope.launch {
+                        if (hasLocalData(currentMangaId)) {
+                            loadFromLocalDisk(slug, source)
+                        } else {
+                            _state.update {
+                                it.copy(
+                                    isLoading = false,
+                                    error = if (it.manga == null) (e.message ?: context.getString(R.string.download_error)) else null,
+                                    cloudflareUrl = if (e is CloudflareChallengeException) e.targetUrl else null,
+                                    cloudflareDomain = if (e is CloudflareChallengeException) e.domain else null
+                                )
+                            }
+                        }
                     }
                 }
         }
     }
 
+    /**
+     * Reloads using the exact slug/source/rawSourceId of the original request, so
+     * retrying an imported ("local") load re-checks disk instead of hitting the
+     * AZORA fallback source over the network.
+     */
+    fun retry() {
+        if (currentSlug.isBlank()) return
+        _state.update { it.copy(manga = null) }
+        load(currentSlug, currentSource, currentRawSourceId)
+    }
+
     /** Check whether a manga directory with metadata.json exists on disk. */
-    private fun hasLocalData(mangaId: String): Boolean {
+    private suspend fun hasLocalData(mangaId: String): Boolean = withContext(Dispatchers.IO) {
         val dir = File(downloadQueueManager.getMangaDirPath(mangaId))
-        return dir.exists() && File(dir, "metadata.json").exists()
+        dir.exists() && File(dir, "metadata.json").exists()
     }
 
     /**
@@ -196,6 +228,8 @@ class MangaDetailViewModel @Inject constructor(
     private fun loadFromLocalDisk(slug: String, source: MangaSource) {
         loadJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
+            // Metadata read + recursive directory scans belong on IO (M-review).
+            withContext(Dispatchers.IO) {
             try {
                 val mangaDirPath = downloadQueueManager.getMangaDirPath(currentMangaId)
                 val mangaDir = File(mangaDirPath)
@@ -264,8 +298,14 @@ class MangaDetailViewModel @Inject constructor(
                 observersJob?.cancel()
                 observersJob = viewModelScope.launch {
                     launch {
-                        libraryRepo.isFavoriteFlow(currentMangaId)
-                            .collect { fav -> _state.update { it.copy(isFavorite = fav) } }
+                        libraryRepo.observeLibraryEntry(currentMangaId).collect { entry ->
+                            _state.update {
+                                it.copy(
+                                    isFavorite = entry?.isFavorite == true,
+                                    readingStatus = entry?.readingStatus
+                                )
+                            }
+                        }
                     }
                     launch {
                         libraryRepo.getReadChapters(currentMangaId)
@@ -279,10 +319,24 @@ class MangaDetailViewModel @Inject constructor(
                         }
                         _state.update { it.copy(downloadedChapters = downloaded) }
                     }
+                    launch {
+                        val mangaId = currentMangaId
+                        downloadQueueManager.observeTasks()
+                            .map { tasks ->
+                                tasks.asSequence()
+                                    .filter { it.mangaId == mangaId }
+                                    .map { it.id to it.status }
+                                    .sortedBy { it.first }
+                                    .toList()
+                            }
+                            .distinctUntilChanged()
+                            .collect { refreshDownloadedSet(mangaId) }
+                    }
                 }
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false, error = e.message ?: context.getString(R.string.local_manga_load_error)) }
             }
+            } // withContext(Dispatchers.IO)
         }
     }
 
@@ -312,17 +366,19 @@ class MangaDetailViewModel @Inject constructor(
     fun setReadingStatus(status: String?) {
         val manga = _state.value.manga ?: return
         viewModelScope.launch {
-            // Ensure manga is in favourites first
-            if (!_state.value.isFavorite) {
-                libraryRepo.addFavorite(
+            // Reading-list membership is independent from favourites. Persist metadata without
+            // changing the current favourite state when a list entry is first created.
+            if (status != null) {
+                libraryRepo.ensureLibraryEntry(
                     FavoriteManga(
                         mangaId = currentMangaId, slug = manga.slug,
                         title = manga.title, coverUrl = manga.coverUrl,
-                        source = manga.source, totalChapters = manga.totalChapters
+                        source = manga.source, totalChapters = manga.totalChapters,
+                        isFavorite = _state.value.isFavorite
                     )
                 )
-                runCatching { firebaseTopicManager.subscribeToManga(currentMangaId) }
             }
+            if (status == null && _state.value.readingStatus == null) return@launch
             // Update status
             libraryRepo.updateReadingStatus(currentMangaId, status)
             _state.update { it.copy(readingStatus = status) }
@@ -517,21 +573,83 @@ class MangaDetailViewModel @Inject constructor(
         }
     }
 
-    /** Enqueue a list of chapters for download (e.g. all unread). */
+    /**
+     * Resolves pages in a bounded, sequential preparation step, then persists a single durable
+     * WorkManager chain for this manga. Resolution failures are represented as retryable rows,
+     * rather than silently dropping chapters or flooding WorkManager with individual requests.
+     */
     fun downloadChapters(chapters: List<Chapter>) {
-        if (chapters.isEmpty()) return
-        // Batch: limit concurrent downloads to prevent WorkManager overflow and OOM
-        viewModelScope.launch {
-            val batchSize = 10
-            chapters.chunked(batchSize).forEach { batch ->
-                batch.forEach { chapter ->
-                    if (!_state.value.downloadingChapters.contains(chapter.number)) {
-                        downloadChapter(chapter)
+        if (batchPreparationJob?.isActive == true) return
+        val manga = _state.value.manga ?: return
+        val mangaId = currentMangaId
+        val mangaSlug = currentSlug
+        val source = currentSource
+        val selected = chapters
+            .filterNot { it.isDownloaded || it.number in _state.value.downloadingChapters }
+            .distinctBy { it.url }
+        if (selected.isEmpty()) return
+
+        _state.update { it.copy(downloadingChapters = it.downloadingChapters + selected.map { chapter -> chapter.number }) }
+        batchPreparationJob = viewModelScope.launch {
+            try {
+                val wifiOnly = settingsRepo.getAppSettings().first().downloadOnWifiOnly
+                val ready = mutableListOf<PreparedChapterDownload>()
+                val failed = mutableListOf<FailedChapterDownload>()
+
+                for (chapter in selected) {
+                    ensureActive()
+                    val result = withContext(Dispatchers.IO) {
+                        mangaRepo.getChapterPages(mangaSlug, chapter.url, source)
+                    }
+                    val chapterTitle = chapter.title
+                        ?: context.getString(R.string.fmt_059, chapter.displayNumber)
+                    val pages = result.getOrNull()
+                    if (pages.isNullOrEmpty()) {
+                        failed += FailedChapterDownload(
+                            chapterUrl = chapter.url,
+                            chapterTitle = chapterTitle,
+                            errorMessage = context.getString(R.string.download_error)
+                        )
+                    } else {
+                        ready += PreparedChapterDownload(
+                            chapterUrl = chapter.url,
+                            chapterTitle = chapterTitle,
+                            pages = pages,
+                            referer = pages.firstOrNull()?.headers?.get("Referer")
+                                ?.takeIf { it.isNotBlank() }
+                                ?: chapter.url
+                        )
                     }
                 }
-                // Small delay between batches to avoid overwhelming the system
-                if (chapters.size > batchSize) {
-                    kotlinx.coroutines.delay(500)
+
+                val metadata = com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity(
+                    mangaId = mangaId,
+                    slug = manga.slug,
+                    title = manga.title,
+                    coverUrl = manga.coverUrl,
+                    sourceId = source.id,
+                    totalChapters = manga.totalChapters,
+                    genresJson = org.json.JSONArray(manga.genres).toString(),
+                    statusStr = manga.status.name,
+                    typeStr = manga.type.name,
+                    description = manga.description
+                )
+                downloadQueueManager.enqueueBatch(
+                    mangaId = mangaId,
+                    mangaTitle = manga.title,
+                    mangaSlug = mangaSlug,
+                    sourceId = source.id,
+                    ready = ready,
+                    failed = failed,
+                    wifiOnly = wifiOnly,
+                    mangaMetadata = metadata
+                )
+            } finally {
+                if (mangaId == currentMangaId) {
+                    _state.update {
+                        it.copy(downloadingChapters = it.downloadingChapters - selected.map { chapter -> chapter.number }.toSet())
+                    }
+                    refreshDownloadedSet(mangaId)
                 }
             }
         }
@@ -590,10 +708,9 @@ class MangaDetailViewModel @Inject constructor(
         val mangaId = currentMangaId
         val chapters = _state.value.manga?.chapters ?: return
         viewModelScope.launch {
-            for (ch in chapters) {
-                libraryRepo.markChapterRead(mangaId, ch.number)
-            }
-            _state.update { it.copy(readChapters = chapters.map { it.number }.toSet()) }
+            // One batched insert instead of N sequential DAO round-trips.
+            libraryRepo.markAllChaptersRead(mangaId, chapters.map { it.number })
+            _state.update { it.copy(readChapters = chapters.map { ch -> ch.number }.toSet()) }
         }
     }
 
@@ -601,9 +718,7 @@ class MangaDetailViewModel @Inject constructor(
         val mangaId = currentMangaId
         val chapters = _state.value.manga?.chapters ?: return
         viewModelScope.launch {
-            for (ch in chapters) {
-                libraryRepo.markChapterUnread(mangaId, ch.number)
-            }
+            libraryRepo.markAllChaptersUnread(mangaId, chapters.map { it.number })
             _state.update { it.copy(readChapters = emptySet()) }
         }
     }
@@ -618,9 +733,9 @@ class MangaDetailViewModel @Inject constructor(
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
-    private suspend fun refreshDownloadedSet() {
+    private suspend fun refreshDownloadedSet(mangaId: String = currentMangaId) {
+        if (mangaId != currentMangaId) return
         val chapters = _state.value.manga?.chapters ?: return
-        val mangaId = currentMangaId
         val downloaded = withContext(Dispatchers.IO) {
             chapters.filter { ch ->
                 downloadQueueManager.isChapterDownloaded(mangaId, ch.url)

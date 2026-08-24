@@ -17,6 +17,7 @@ import com.exapps.mangaworld.presentation.browse.BrowseScreen
 import com.exapps.mangaworld.presentation.cloud.CloudSyncScreen
 import com.exapps.mangaworld.presentation.community.CommunityChatScreen
 import com.exapps.mangaworld.presentation.community.ModerationDashboardScreen
+import com.exapps.mangaworld.presentation.community.CommunityRepliesScreen
 import com.exapps.mangaworld.presentation.community.CommunityScreen
 import com.exapps.mangaworld.presentation.detail.MangaDetailScreen
 import com.exapps.mangaworld.presentation.diagnostics.DiagnosticsScreen
@@ -101,6 +102,20 @@ sealed class Screen(val route: String) {
             val encoded = chapterUrl?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
             val encodedComment = commentId?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
             return "community/$sourceId/$mangaId/$slug?chapterUrl=$encoded&commentId=$encodedComment"
+        }
+    }
+    object CommunityReplies : Screen("community_replies/{sourceId}/{mangaId}/{slug}/{rootId}?chapterUrl={chapterUrl}&reviewId={reviewId}") {
+        fun createRoute(
+            sourceId: String,
+            mangaId: String,
+            slug: String,
+            rootId: String,
+            chapterUrl: String? = null,
+            reviewId: String? = null
+        ): String {
+            val encodedChapterUrl = chapterUrl?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
+            val encodedReviewId = reviewId?.let { java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
+            return "community_replies/$sourceId/$mangaId/$slug/$rootId?chapterUrl=$encodedChapterUrl&reviewId=$encodedReviewId"
         }
     }
     object Detail : Screen("detail/{sourceId}/{slug}") {
@@ -211,9 +226,8 @@ fun MangaNavGraph(
                 navArgument("title") { type = NavType.StringType; defaultValue = "live_chat" }
             )
         ) { back ->
-            // NavType.StringType does NOT auto-decode URL-encoded query params
-            val roomId = java.net.URLDecoder.decode(back.arguments?.getString("roomId") ?: "global", "UTF-8")
-            val title = java.net.URLDecoder.decode(back.arguments?.getString("title") ?: "", "UTF-8")
+            // roomId/title are reserved for the chat screen's future room switcher;
+            // nothing consumes them today, so skip decoding entirely (M-review).
             CommunityChatScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.Settings.route)    {
@@ -244,7 +258,7 @@ fun MangaNavGraph(
         composable(
             route = Screen.Downloads.route,
             deepLinks = listOf(navDeepLink { uriPattern = "mangaworld://screen/downloads" })
-        ) { DownloadsScreen() }
+        ) { DownloadsScreen(onBack = { navController.popBackStack() }) }
         composable(
             route = Screen.LatestUpdates.route,
             deepLinks = listOf(
@@ -373,47 +387,15 @@ fun MangaNavGraph(
             val state by viewModel.uiState.collectAsStateWithLifecycle()
             val context = LocalContext.current
 
-            val googleLauncher = rememberLauncherForActivityResult(
-                contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
-            ) { result ->
-                try {
-                    val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
-                    val idToken = task.result?.idToken
-                    if (idToken != null) {
-                        viewModel.signInWithGoogleIdToken(idToken)
-                    } else {
-                        viewModel.clearError()
-                    }
-                } catch (_: Exception) {
-                    viewModel.clearError() // user cancelled or error
+            // Shared Google/Facebook wiring — was duplicated between login & sign-up.
+            val launchGoogleSignIn = SocialAuthEffects(
+                viewModel = viewModel,
+                googleSignInClient = googleSignInClient,
+                setFacebookCallbackManager = setFacebookCallbackManager
+            ) {
+                navController.navigate(Screen.Home.route) {
+                    popUpTo(Screen.Login.route) { inclusive = true }
                 }
-            }
-
-            // Auto-navigate on successful sign-in
-            LaunchedEffect(state.isSignedIn) {
-                if (state.isSignedIn) {
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                }
-            }
-
-            // Keep the SDK registration scoped to the login destination.
-            val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
-            DisposableEffect(facebookCallbackManager) {
-                val loginManager = com.facebook.login.LoginManager.getInstance()
-                val callback = object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
-                    override fun onSuccess(loginResult: com.facebook.login.LoginResult) {
-                        viewModel.signInWithFacebook(loginResult.accessToken.token)
-                    }
-                    override fun onCancel() = Unit
-                    override fun onError(error: com.facebook.FacebookException) {
-                        viewModel.clearError()
-                    }
-                }
-                setFacebookCallbackManager(facebookCallbackManager)
-                loginManager.registerCallback(facebookCallbackManager, callback)
-                onDispose { loginManager.unregisterCallback(facebookCallbackManager) }
             }
 
             LoginScreen(
@@ -424,17 +406,8 @@ fun MangaNavGraph(
                 onEmailChanged = viewModel::onEmailChanged,
                 onPasswordChanged = viewModel::onPasswordChanged,
                 onLoginClick = viewModel::signInWithEmail,
-                onGoogleSignInClick = {
-                    googleLauncher.launch(googleSignInClient.signInIntent)
-                },
-                onFacebookLoginClick = {
-                    val activity = context as? android.app.Activity
-                    if (activity != null) {
-                        com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
-                            activity, listOf("email", "public_profile")
-                        )
-                    }
-                },
+                onGoogleSignInClick = launchGoogleSignIn,
+                onFacebookLoginClick = { launchFacebookLogin(context) },
                 onForgotPasswordClick = { navController.navigate(Screen.ForgotPassword.route) },
                 onSignUpClick = { navController.navigate(Screen.SignUp.route) }
             )
@@ -444,61 +417,21 @@ fun MangaNavGraph(
             val state by viewModel.uiState.collectAsStateWithLifecycle()
             val signUpContext = LocalContext.current
 
-            val googleLauncher = rememberLauncherForActivityResult(
-                contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
-            ) { result ->
-                try {
-                    val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
-                    val idToken = task.result?.idToken
-                    if (idToken != null) {
-                        viewModel.signInWithGoogleIdToken(idToken)
-                    } else {
-                        viewModel.clearError()
-                    }
-                } catch (_: Exception) {
-                    viewModel.clearError()
+            val launchGoogleSignIn = SocialAuthEffects(
+                viewModel = viewModel,
+                googleSignInClient = googleSignInClient,
+                setFacebookCallbackManager = setFacebookCallbackManager
+            ) {
+                navController.navigate(Screen.Home.route) {
+                    popUpTo(Screen.Login.route) { inclusive = true }
                 }
-            }
-
-            // Auto-navigate on successful sign-in
-            LaunchedEffect(state.isSignedIn) {
-                if (state.isSignedIn) {
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                }
-            }
-
-            // Keep the SDK registration scoped to the sign-up destination.
-            val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
-            DisposableEffect(facebookCallbackManager) {
-                val loginManager = com.facebook.login.LoginManager.getInstance()
-                val callback = object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
-                    override fun onSuccess(loginResult: com.facebook.login.LoginResult) {
-                        viewModel.signInWithFacebook(loginResult.accessToken.token)
-                    }
-                    override fun onCancel() = Unit
-                    override fun onError(error: com.facebook.FacebookException) {
-                        viewModel.clearError()
-                    }
-                }
-                setFacebookCallbackManager(facebookCallbackManager)
-                loginManager.registerCallback(facebookCallbackManager, callback)
-                onDispose { loginManager.unregisterCallback(facebookCallbackManager) }
             }
 
             com.exapps.mangaworld.presentation.auth.signup.SignUpScreen(
                 onBack = { navController.popBackStack() },
                 onSignUp = viewModel::signUpWithEmail,
-                onGoogleSignInClick = { googleLauncher.launch(googleSignInClient.signInIntent) },
-                onFacebookLoginClick = {
-                    val activity = signUpContext as? android.app.Activity
-                    if (activity != null) {
-                        com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
-                            activity, listOf("email", "public_profile")
-                        )
-                    }
-                },
+                onGoogleSignInClick = launchGoogleSignIn,
+                onFacebookLoginClick = { launchFacebookLogin(signUpContext) },
                 isLoading = state.isLoading,
                 error = state.error
             )
@@ -526,7 +459,8 @@ fun MangaNavGraph(
         ) { back ->
             val sourceId = back.arguments?.getString("sourceId") ?: return@composable
             val slug     = back.arguments?.getString("slug") ?: return@composable
-            val source = MangaSource.fromIdOrNull(sourceId) ?: MangaSource.fromId(sourceId)
+            // Unknown source ids must not silently render Azora content (L-review).
+            val source = MangaSource.fromIdOrNull(sourceId) ?: return@composable
             MangaDetailScreen(
                 source = source, slug = slug,
                 rawSourceId = sourceId,
@@ -558,19 +492,21 @@ fun MangaNavGraph(
             val chapterUrl = java.net.URLDecoder.decode(
                 back.arguments?.getString("chapterUrl") ?: "", "UTF-8"
             )
-            val source = MangaSource.fromIdOrNull(sourceId) ?: MangaSource.fromId(sourceId)
-            val isImported = mangaId.startsWith("imported_") || sourceId == "local"
+            val source = MangaSource.fromIdOrNull(sourceId) ?: return@composable
+            val isImported = mangaId.startsWith("imported_") || MangaSource.isLocalSource(sourceId)
             val slug = mangaId.substringAfter("${sourceId}_").ifBlank { mangaId }
             ReaderScreen(
                 source = source, mangaId = mangaId,
                 chapterUrl = chapterUrl,
+                communityEnabled = !isImported,
+                isSignedIn = isSignedIn,
                 onBack = {
                     // Always navigate back to detail screen (works for both normal and deep link paths)
                     navController.navigate(Screen.Detail.createRoute(sourceId, slug)) {
                         popUpTo(Screen.Detail.createRoute(sourceId, slug)) { inclusive = true }
                     }
                 },
-                onOpenCommunity = if (isImported) {{}} else {
+                onOpenCommunity = if (isImported) {} else {
                     { navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl)) }
                 }
             )
@@ -594,18 +530,30 @@ fun MangaNavGraph(
                 back.arguments?.getString("chapterUrl") ?: "", "UTF-8"
             )
             val source = MangaSource.fromIdOrNull(sourceId) ?: return@composable
-            val isImported = mangaId.startsWith("imported_") || sourceId == "local"
+            val isImported = mangaId.startsWith("imported_") || MangaSource.isLocalSource(sourceId)
             val slug = mangaId.substringAfter("${sourceId}_").ifBlank { mangaId }
+
+            // Deep links are exported — an attacker-supplied chapterUrl must not
+            // make the app fetch arbitrary hosts through the scraper pipeline.
+            if (!isTrustedChapterHost(chapterUrl, source.baseUrl)) {
+                navController.navigate(Screen.Detail.createRoute(sourceId, slug)) {
+                    popUpTo(Screen.Home.route)
+                }
+                return@composable
+            }
+
             ReaderScreen(
                 source = source,
                 mangaId = mangaId,
                 chapterUrl = chapterUrl,
+                communityEnabled = !isImported,
+                isSignedIn = isSignedIn,
                 onBack = {
                     navController.navigate(Screen.Detail.createRoute(sourceId, slug)) {
                         popUpTo(Screen.Detail.createRoute(sourceId, slug)) { inclusive = true }
                     }
                 },
-                onOpenCommunity = if (isImported) {{}} else {
+                onOpenCommunity = if (isImported) {} else {
                     { navController.navigate(Screen.Community.createRoute(sourceId, mangaId, mangaId.substringAfter("${sourceId}_"), chapterUrl)) }
                 }
             )
@@ -621,12 +569,126 @@ fun MangaNavGraph(
             )
         ) {
             val mangaId = it.arguments?.getString("mangaId") ?: "global"
-            val slug = it.arguments?.getString("slug") ?: LocalContext.current.getString(R.string.chat)
+            // Raw id fallback — a localized string must never become a data slug.
+            val slug = it.arguments?.getString("slug") ?: mangaId
+            val sourceId = it.arguments?.getString("sourceId") ?: return@composable
             CommunityScreen(
+                isSignedIn = isSignedIn,
                 onBack = { navController.popBackStack() },
                 onOpenChat = { navController.navigate(Screen.CommunityChat.createRoute(mangaId, slug)) },
+                onOpenProfile = { userId -> navController.navigate(Screen.PublicProfile.createRoute(userId)) },
+                onOpenReplies = { rootId, reviewId, chapterUrl ->
+                    navController.navigate(
+                        Screen.CommunityReplies.createRoute(
+                            sourceId = sourceId,
+                            mangaId = mangaId,
+                            slug = slug,
+                            rootId = rootId,
+                            chapterUrl = chapterUrl,
+                            reviewId = reviewId
+                        )
+                    )
+                }
+            )
+        }
+        composable(
+            route = Screen.CommunityReplies.route,
+            arguments = listOf(
+                navArgument("sourceId") { type = NavType.StringType },
+                navArgument("mangaId") { type = NavType.StringType },
+                navArgument("slug") { type = NavType.StringType },
+                navArgument("rootId") { type = NavType.StringType },
+                navArgument("chapterUrl") { type = NavType.StringType; nullable = true; defaultValue = "" },
+                navArgument("reviewId") { type = NavType.StringType; nullable = true; defaultValue = "" }
+            )
+        ) {
+            CommunityRepliesScreen(
+                isSignedIn = isSignedIn,
+                onBack = { navController.popBackStack() },
                 onOpenProfile = { userId -> navController.navigate(Screen.PublicProfile.createRoute(userId)) }
             )
         }
     }
+}
+
+
+// ─── Shared social-auth wiring (login & sign-up) ─────────────────────────────
+
+/**
+ * Registers the Google result launcher and Facebook callback for an auth
+ * destination and auto-navigates via [onSignedIn] once the VM reports success.
+ * Returns a lambda that launches the Google sign-in intent.
+ */
+@Composable
+private fun SocialAuthEffects(
+    viewModel: com.exapps.mangaworld.presentation.auth.LoginViewModel,
+    googleSignInClient: com.google.android.gms.auth.api.signin.GoogleSignInClient,
+    setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit,
+    onSignedIn: () -> Unit
+): () -> Unit {
+    val googleLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        try {
+            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            val idToken = task.result?.idToken
+            if (idToken != null) {
+                viewModel.signInWithGoogleIdToken(idToken)
+            } else {
+                viewModel.clearError()
+            }
+        } catch (_: Exception) {
+            viewModel.clearError() // user cancelled or error
+        }
+    }
+
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(state.isSignedIn) {
+        if (state.isSignedIn) onSignedIn()
+    }
+
+    // Keep SDK registration scoped to the current auth destination.
+    val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
+    DisposableEffect(facebookCallbackManager) {
+        val loginManager = com.facebook.login.LoginManager.getInstance()
+        val callback = object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+            override fun onSuccess(loginResult: com.facebook.login.LoginResult) {
+                viewModel.signInWithFacebook(loginResult.accessToken.token)
+            }
+            override fun onCancel() = Unit
+            override fun onError(error: com.facebook.FacebookException) {
+                viewModel.clearError()
+            }
+        }
+        setFacebookCallbackManager(facebookCallbackManager)
+        loginManager.registerCallback(facebookCallbackManager, callback)
+        onDispose { loginManager.unregisterCallback(facebookCallbackManager) }
+    }
+
+    return { googleLauncher.launch(googleSignInClient.signInIntent) }
+}
+
+private fun launchFacebookLogin(context: android.content.Context) {
+    val activity = context as? android.app.Activity ?: return
+    com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
+        activity, listOf("email", "public_profile")
+    )
+}
+
+/**
+ * Deep-link trust check: the chapter URL's host must match the resolved
+ * source's host (relative URLs resolve against it inside the reader). Prevents
+ * exported `mangaworld://reader` links from pointing the scraper pipeline at
+ * arbitrary attacker hosts.
+ *
+ * Uses OkHttp's lenient parser — java.net.URI throws on the non-ASCII paths
+ * these sources legitimately produce, and treating a parse failure as
+ * "relative" would let hostile absolute URLs through.
+ */
+private fun isTrustedChapterHost(chapterUrl: String, baseUrl: String): Boolean {
+    val linkHost = okhttp3.HttpUrl.Companion.toHttpUrlOrNull(chapterUrl)?.host
+        ?: return true // not an absolute http(s) URL — resolved against source.baseUrl by the reader
+    val expectedHost = okhttp3.HttpUrl.Companion.toHttpUrlOrNull(baseUrl)?.host
+        ?: return false
+    return linkHost.equals(expectedHost, ignoreCase = true)
 }

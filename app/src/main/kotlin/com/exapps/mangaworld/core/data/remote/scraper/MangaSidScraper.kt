@@ -28,8 +28,10 @@ class MangaSidScraper @Inject constructor(
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
         val url = "${source.baseUrl}/manga/$slug"
+        // Single fetch: island props live in <script> tags, which outerHtml
+        // preserves — the second network request for raw HTML was redundant.
         val doc = fetchDocument(url)
-        val rawHtml = fetchRawHtml(url)
+        val rawHtml = doc.outerHtml()
 
         val meta = linkedMapOf<String, String>()
         doc.select(".flex.justify-between.items-center").forEach { row ->
@@ -215,6 +217,9 @@ class MangaSidScraper @Inject constructor(
     ): Result<List<MangaItem>> = runCatching {
         val sort = when (sortBy) {
             SortBy.POPULARITY -> "views"
+            // Site API has no rating sort — order by views explicitly rather
+            // than silently falling through to "latest" (L-review).
+            SortBy.RATING -> "views"
             SortBy.OLDEST -> "title&sortOrder=ASC"
             else -> "latest"
         }
@@ -298,25 +303,6 @@ class MangaSidScraper @Inject constructor(
                 url = href
             ) to latestChapter
         }.distinctBy { it.first.id }
-    }
-
-    private suspend fun fetchRawHtml(url: String): String = withContext(Dispatchers.IO) {
-        val cookies = getCookiesForDomain(url)
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", USER_AGENT)
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-            .header("Accept-Language", "ar,en;q=0.9")
-            .header("Referer", source.baseUrl + "/")
-            .header("Sec-Fetch-Dest", "document")
-            .header("Sec-Fetch-Mode", "navigate")
-            .header("Sec-Fetch-Site", "same-origin")
-            .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
-            .build()
-        val response = client.newCall(request).execute()
-        val body = response.body?.string() ?: ""
-        response.close()
-        body
     }
 
     private fun extractIslandProps(rawHtml: String, componentToken: String): JSONObject? {

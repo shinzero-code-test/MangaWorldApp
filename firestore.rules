@@ -10,18 +10,205 @@ service cloud.firestore {
     }
 
     function canWriteCommunity(authorUid) {
-      return signedIn() && request.auth.uid == authorUid;
+      return signedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && request.auth.uid == authorUid;
     }
 
     function canModerate() {
       return signedIn() && request.auth.token.role in ['moderator', 'super-admin'];
     }
 
-    function hasInitialCommentCounters() {
+    function hasInitialContentCounters() {
       return (!request.resource.data.keys().hasAny(['likes']) || request.resource.data.likes == 0)
         && (!request.resource.data.keys().hasAny(['dislikes']) || request.resource.data.dislikes == 0)
         && request.resource.data.replyCount == 0
         && request.resource.data.reportedCount == 0;
+    }
+
+    function authorOnlyCommentEdit() {
+      return canWriteCommunity(resource.data.authorUid)
+        && request.resource.data.authorUid == resource.data.authorUid
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['text', 'spoiler', 'mentions', 'isDeleted', 'editedAt', 'authorName', 'authorUsername', 'authorAvatarUrl'])
+        && request.resource.data.text is string
+        && request.resource.data.spoiler is bool
+        && request.resource.data.mentions is list
+        && request.resource.data.mentions.size() <= 10
+        && authorSnapshotMatchesPublicProfile()
+        // Soft-deleted content remains as an immutable thread anchor.
+        && (!resource.data.keys().hasAny(['isDeleted']) || resource.data.isDeleted == false)
+        && (
+          !request.resource.data.keys().hasAny(['isDeleted'])
+          || request.resource.data.isDeleted == false
+          || (
+            request.resource.data.isDeleted == true
+            && request.resource.data.text == ''
+            && request.resource.data.mentions.size() == 0
+          )
+        );
+    }
+
+    function authorOnlyReviewEdit() {
+      return canWriteCommunity(resource.data.authorUid)
+        && request.resource.data.authorUid == resource.data.authorUid
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.title is string
+        && request.resource.data.body is string
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['rating', 'title', 'body', 'isDeleted', 'updatedAt', 'authorName', 'authorUsername', 'authorAvatarUrl'])
+        && authorSnapshotMatchesPublicProfile()
+        // Soft-deleted reviews also remain immutable so their replies retain a stable root.
+        && (!resource.data.keys().hasAny(['isDeleted']) || resource.data.isDeleted == false)
+        && (
+          !request.resource.data.keys().hasAny(['isDeleted'])
+          || request.resource.data.isDeleted == false
+          || (
+            request.resource.data.isDeleted == true
+            && request.resource.data.title == ''
+            && request.resource.data.body == ''
+          )
+        );
+    }
+
+    // A profile update may refresh the denormalized author snapshot on the user's existing
+    // comments and reviews. Only accept it when the new snapshot equals that public profile.
+    function authorSnapshotMatchesPublicProfile() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['authorName', 'authorUsername', 'authorAvatarUrl'])
+        || (
+          exists(/databases/$(database)/documents/publicProfiles/$(resource.data.authorUid))
+          && request.resource.data.authorName
+            == get(/databases/$(database)/documents/publicProfiles/$(resource.data.authorUid)).data.displayName
+          && request.resource.data.authorUsername
+            == get(/databases/$(database)/documents/publicProfiles/$(resource.data.authorUid)).data.username
+          && request.resource.data.authorAvatarUrl
+            == get(/databases/$(database)/documents/publicProfiles/$(resource.data.authorUid)).data.avatarUrl
+        );
+    }
+
+    function isMangaCommentRoot(mangaId, rootId) {
+      return rootId is string
+        && exists(/databases/$(database)/documents/community_manga/$(mangaId)/comments/$(rootId))
+        && get(/databases/$(database)/documents/community_manga/$(mangaId)/comments/$(rootId)).data.id == rootId
+        && (!get(/databases/$(database)/documents/community_manga/$(mangaId)/comments/$(rootId)).data.keys().hasAny(['parentId'])
+          || get(/databases/$(database)/documents/community_manga/$(mangaId)/comments/$(rootId)).data.parentId == null)
+        && (!get(/databases/$(database)/documents/community_manga/$(mangaId)/comments/$(rootId)).data.keys().hasAny(['reviewId'])
+          || get(/databases/$(database)/documents/community_manga/$(mangaId)/comments/$(rootId)).data.reviewId == null);
+    }
+
+    function matchesMangaRootRecipient(mangaId, rootId) {
+      return request.resource.data.replyToUid == null
+          || request.resource.data.replyToUid == get(/databases/$(database)/documents/community_manga/$(mangaId)/comments/$(rootId)).data.authorUid;
+    }
+
+    function matchesMangaRootUsername(mangaId, rootId) {
+      return request.resource.data.replyToUsername == null
+          || request.resource.data.replyToUsername == get(/databases/$(database)/documents/community_manga/$(mangaId)/comments/$(rootId)).data.authorUsername;
+    }
+
+    function isMangaReviewRoot(mangaId, reviewId) {
+      return reviewId is string
+        && exists(/databases/$(database)/documents/community_manga/$(mangaId)/reviews/$(reviewId))
+        && get(/databases/$(database)/documents/community_manga/$(mangaId)/reviews/$(reviewId)).data.id == reviewId;
+    }
+
+    function matchesMangaReviewRecipient(mangaId, reviewId) {
+      return request.resource.data.replyToUid == null
+          || request.resource.data.replyToUid == get(/databases/$(database)/documents/community_manga/$(mangaId)/reviews/$(reviewId)).data.authorUid;
+    }
+
+    function matchesMangaReviewUsername(mangaId, reviewId) {
+      return request.resource.data.replyToUsername == null
+          || request.resource.data.replyToUsername == get(/databases/$(database)/documents/community_manga/$(mangaId)/reviews/$(reviewId)).data.authorUsername;
+    }
+
+    function isChapterCommentRoot(mangaId, chapterKey, rootId) {
+      return rootId is string
+        && exists(/databases/$(database)/documents/community_manga/$(mangaId)/chapters/$(chapterKey)/comments/$(rootId))
+        && get(/databases/$(database)/documents/community_manga/$(mangaId)/chapters/$(chapterKey)/comments/$(rootId)).data.id == rootId
+        && (!get(/databases/$(database)/documents/community_manga/$(mangaId)/chapters/$(chapterKey)/comments/$(rootId)).data.keys().hasAny(['parentId'])
+          || get(/databases/$(database)/documents/community_manga/$(mangaId)/chapters/$(chapterKey)/comments/$(rootId)).data.parentId == null)
+        && (!get(/databases/$(database)/documents/community_manga/$(mangaId)/chapters/$(chapterKey)/comments/$(rootId)).data.keys().hasAny(['reviewId'])
+          || get(/databases/$(database)/documents/community_manga/$(mangaId)/chapters/$(chapterKey)/comments/$(rootId)).data.reviewId == null);
+    }
+
+    function matchesChapterRootRecipient(mangaId, chapterKey, rootId) {
+      return request.resource.data.replyToUid == null
+          || request.resource.data.replyToUid == get(/databases/$(database)/documents/community_manga/$(mangaId)/chapters/$(chapterKey)/comments/$(rootId)).data.authorUid;
+    }
+
+    function matchesChapterRootUsername(mangaId, chapterKey, rootId) {
+      return request.resource.data.replyToUsername == null
+          || request.resource.data.replyToUsername == get(/databases/$(database)/documents/community_manga/$(mangaId)/chapters/$(chapterKey)/comments/$(rootId)).data.authorUsername;
+    }
+
+    function validCommentBase(mangaId, commentId) {
+      return canWriteCommunity(request.resource.data.authorUid)
+        && request.resource.data.id == commentId
+        && request.resource.data.mangaId == mangaId
+        && request.resource.data.text is string
+        && request.resource.data.mentions is list
+        && request.resource.data.mentions.size() <= 10
+        && request.resource.data.spoiler is bool
+        && request.resource.data.isDeleted == false
+        && hasInitialContentCounters();
+    }
+
+    function validMangaCommentStructure(mangaId) {
+      return (
+          request.resource.data.parentId == null
+          && request.resource.data.threadRootId == null
+          && request.resource.data.reviewId == null
+          && request.resource.data.replyToUid == null
+          && request.resource.data.replyToUsername == null
+        ) || (
+          request.resource.data.parentId is string
+          && request.resource.data.threadRootId == request.resource.data.parentId
+          && request.resource.data.reviewId == null
+          && isMangaCommentRoot(mangaId, request.resource.data.parentId)
+          && matchesMangaRootRecipient(mangaId, request.resource.data.parentId)
+          && matchesMangaRootUsername(mangaId, request.resource.data.parentId)
+        ) || (
+          request.resource.data.parentId == null
+          && request.resource.data.threadRootId == null
+          && isMangaReviewRoot(mangaId, request.resource.data.reviewId)
+          && matchesMangaReviewRecipient(mangaId, request.resource.data.reviewId)
+          && matchesMangaReviewUsername(mangaId, request.resource.data.reviewId)
+        );
+    }
+
+    function validChapterCommentStructure(mangaId, chapterKey) {
+      return (
+          request.resource.data.parentId == null
+          && request.resource.data.threadRootId == null
+          && request.resource.data.reviewId == null
+          && request.resource.data.replyToUid == null
+          && request.resource.data.replyToUsername == null
+        ) || (
+          request.resource.data.parentId is string
+          && request.resource.data.threadRootId == request.resource.data.parentId
+          && request.resource.data.reviewId == null
+          && isChapterCommentRoot(mangaId, chapterKey, request.resource.data.parentId)
+          && matchesChapterRootRecipient(mangaId, chapterKey, request.resource.data.parentId)
+          && matchesChapterRootUsername(mangaId, chapterKey, request.resource.data.parentId)
+        );
+    }
+
+    function validReviewCreate(mangaId, reviewId) {
+      return canWriteCommunity(request.resource.data.authorUid)
+        && request.auth.uid == reviewId
+        && request.resource.data.id == reviewId
+        && request.resource.data.mangaId == mangaId
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.title is string
+        && request.resource.data.body is string
+        && request.resource.data.isDeleted == false
+        && hasInitialContentCounters();
     }
 
     match /users/{userId} {
@@ -75,9 +262,9 @@ service cloud.firestore {
     match /publicProfiles/{userId} {
       allow read: if resource.data.isPublic == true || owner(userId);
       allow create: if owner(userId)
-        && request.resource.data.keys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'role', 'updatedAt']);
+        && request.resource.data.keys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'badgeLabel', 'updatedAt']);
       allow update: if owner(userId)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'role', 'updatedAt']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'badgeLabel', 'updatedAt']);
       allow delete: if owner(userId);
     }
 
@@ -95,11 +282,11 @@ service cloud.firestore {
 
       match /comments/{commentId} {
         allow read: if true;
-        allow create: if canWriteCommunity(request.resource.data.authorUid)
-          && request.resource.data.id == commentId
-          && hasInitialCommentCounters();
-        allow update: if false;
-        allow delete: if canWriteCommunity(resource.data.authorUid);
+        allow create: if validCommentBase(mangaId, commentId)
+          && request.resource.data.chapterUrl == null
+          && validMangaCommentStructure(mangaId);
+        allow update: if authorOnlyCommentEdit();
+        allow delete: if false;
 
         match /votes/{voterUid} {
           allow read, write: if false;
@@ -108,19 +295,22 @@ service cloud.firestore {
 
       match /reviews/{reviewId} {
         allow read: if true;
-        allow create: if canWriteCommunity(request.resource.data.authorUid);
-        allow update: if canWriteCommunity(resource.data.authorUid)
-          && request.resource.data.authorUid == resource.data.authorUid;
-        allow delete: if canWriteCommunity(resource.data.authorUid);
+        allow create: if validReviewCreate(mangaId, reviewId);
+        allow update: if authorOnlyReviewEdit();
+        allow delete: if false;
+
+        match /votes/{voterUid} {
+          allow read, write: if false;
+        }
       }
 
       match /chapters/{chapterKey}/comments/{commentId} {
         allow read: if true;
-        allow create: if canWriteCommunity(request.resource.data.authorUid)
-          && request.resource.data.id == commentId
-          && hasInitialCommentCounters();
-        allow update: if false;
-        allow delete: if canWriteCommunity(resource.data.authorUid);
+        allow create: if validCommentBase(mangaId, commentId)
+          && request.resource.data.chapterUrl is string
+          && validChapterCommentStructure(mangaId, chapterKey);
+        allow update: if authorOnlyCommentEdit();
+        allow delete: if false;
 
         match /votes/{voterUid} {
           allow read, write: if false;
@@ -146,7 +336,18 @@ service cloud.firestore {
     }
 
     match /moderationReports/{reportId} {
-      allow create: if signedIn() && request.resource.data.reporterUid == request.auth.uid;
+      allow create: if canWriteCommunity(request.resource.data.reporterUid)
+        && request.resource.data.id == reportId
+        && request.resource.data.targetType in ['comment', 'review']
+        && request.resource.data.commentId is string
+        && (!request.resource.data.keys().hasAny(['targetId']) || (
+          request.resource.data.targetId is string
+          && request.resource.data.targetId == request.resource.data.commentId
+        ))
+        && request.resource.data.mangaId is string
+        && request.resource.data.reportedUid is string
+        && request.resource.data.reason is string
+        && request.resource.data.status == 'open';
       allow read, update, delete: if canModerate();
     }
 

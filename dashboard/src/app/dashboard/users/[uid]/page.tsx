@@ -24,27 +24,37 @@ export default function UserDetailPage() {
   const [roleSaved,setRoleSaved] = useState(false);
   const [banOpen,setBanOpen]     = useState(false);
   const [banLoading,setBanLoading] = useState(false);
+  const [canManage,setCanManage]   = useState(false);
+  const [roleError,setRoleError]   = useState("");
 
   useEffect(() => {
     if (!uid) return;
     fetch(`/api/users/${uid}`)
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error("failed"); return r.json(); })
       .then(d => { setUser(d); setRole(d.role ?? "viewer"); setLoading(false); })
       .catch(() => { setLoading(false); router.back(); });
+    // Resolve viewer's own role to gate privileged panels.
+    fetch("/api/auth/me")
+      .then(r => (r.ok ? r.json() : null))
+      .then(u => setCanManage(u?.role === "moderator" || u?.role === "super-admin"))
+      .catch(() => setCanManage(false));
   }, [uid, router]);
 
   const handleRoleSave = async () => {
     if (!user) return;
     setRoleLoading(true);
     try {
-      await fetch(`/api/users/${uid}`, {
+      const res = await fetch(`/api/users/${uid}`, {
         method:"PATCH",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ role }),
       });
+      if (!res.ok) { setRoleError("تعذر حفظ الدور — تحقق من صلاحياتك."); return; }
       setUser(p => p ? { ...p, role } : p);
       setRoleSaved(true);
       setTimeout(() => setRoleSaved(false), 2000);
+    } catch {
+      setRoleError("خطأ في الاتصال أثناء حفظ الدور.");
     } finally { setRoleLoading(false); }
   };
 
@@ -52,12 +62,13 @@ export default function UserDetailPage() {
     if (!user) return;
     setBanLoading(true);
     try {
-      await fetch(`/api/users/${uid}/ban`, {
+      const res = await fetch(`/api/users/${uid}/ban`, {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ banned: !user.disabled }),
       });
-      setUser(p => p ? { ...p, disabled: !p.disabled } : p);
+      // Flip local state only when the server accepted the change.
+      if (res.ok) setUser(p => p ? { ...p, disabled: !p.disabled } : p);
     } finally { setBanLoading(false); setBanOpen(false); }
   };
 
@@ -167,8 +178,10 @@ export default function UserDetailPage() {
           </div>
         </div>
 
-        {/* Right: actions */}
+        {/* Right: actions — hidden from viewers; the API enforces the same rule server-side */}
         <div className="space-y-4">
+          {canManage ? (
+          <>
           <div className="rounded-[var(--radius-lg)] border p-5" style={{ background:"var(--card)", borderColor:"var(--border)" }}>
             <p className="font-semibold text-sm mb-4">إدارة الصلاحيات</p>
             <div className="space-y-3">
@@ -180,6 +193,9 @@ export default function UserDetailPage() {
                   <option value="super-admin">مدير عام</option>
                 </select>
               </div>
+              {roleError && (
+                <p className="text-xs" style={{ color:"var(--destructive)" }}>{roleError}</p>
+              )}
               <button onClick={handleRoleSave} disabled={roleLoading || role === user.role}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
                 style={{ background:"var(--primary)", color:"var(--primary-foreground)" }}>
@@ -203,6 +219,12 @@ export default function UserDetailPage() {
               {user.disabled ? "إلغاء الحظر" : "حظر المستخدم"}
             </button>
           </div>
+          </>
+          ) : (
+            <div className="rounded-[var(--radius-lg)] border p-5 text-sm" style={{ background:"var(--card)", borderColor:"var(--border)", color:"var(--muted-foreground)" }}>
+              إدارة الصلاحيات متاحة للمشرفين والمديرين فقط.
+            </div>
+          )}
         </div>
       </div>
 

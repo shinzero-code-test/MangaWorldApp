@@ -127,42 +127,42 @@ class NotificationCenterViewModel @Inject constructor(
     fun markRead(id: String) {
         viewModelScope.launch {
             runCatching { communityRepository.markNotificationRead(id) }
-            // Also mark local notifications as read in SharedPreferences
-            val prefs = context.getSharedPreferences("local_notifications", android.content.Context.MODE_PRIVATE)
-            val json = prefs.getString("notifications", "[]") ?: "[]"
-            val arr = try { org.json.JSONArray(json) } catch (_: Exception) { org.json.JSONArray() }
-            var changed = false
-            for (i in 0 until arr.length()) {
-                val obj = arr.optJSONObject(i) ?: continue
-                if (obj.optString("id", "") == id) {
-                    obj.put("read", true)
-                    changed = true
+            // Mutex-serialized read-modify-write — raw prefs races lost updates (M-review).
+            val changed = com.exapps.mangaworld.core.data.NotificationCenterStore.update(context) { arr ->
+                var changed = false
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    if (obj.optString("id", "") == id) {
+                        obj.put("read", true)
+                        changed = true
+                    }
                 }
+                changed
             }
-            if (changed) {
-                prefs.edit().putString("notifications", arr.toString()).apply()
-                _refreshTrigger.tryEmit(Unit)
-            }
+            if (changed) _refreshTrigger.tryEmit(Unit)
         }
     }
 
     fun markAllRead() {
         viewModelScope.launch {
-            notifications.value.forEach { item ->
-                if (!item.read) {
-                    runCatching { communityRepository.markNotificationRead(item.id) }
-                    // Also mark local notifications
-                    val prefs = context.getSharedPreferences("local_notifications", android.content.Context.MODE_PRIVATE)
-                    val json = prefs.getString("notifications", "[]") ?: "[]"
-                    val arr = try { org.json.JSONArray(json) } catch (_: Exception) { org.json.JSONArray() }
+            val unread = notifications.value.filterNot { it.read }
+            // Local types never exist in Firestore; only community ids go to the batch.
+            val localTypes = setOf("chapter_update", "suggestion", "reminder")
+            val communityIds = unread.filter { it.type !in localTypes }.map { it.id }
+
+            kotlinx.coroutines.supervisorScope {
+                launch { runCatching { communityRepository.markNotificationsRead(communityIds) } }
+                // One serialized prefs pass instead of O(n²) rewrites inside the loop.
+                com.exapps.mangaworld.core.data.NotificationCenterStore.update(context) { arr ->
+                    val ids = unread.map { it.id }.toSet()
                     for (i in 0 until arr.length()) {
                         val obj = arr.optJSONObject(i) ?: continue
-                        if (obj.optString("id", "") == item.id) obj.put("read", true)
+                        if (obj.optString("id", "") in ids) obj.put("read", true)
                     }
-                    prefs.edit().putString("notifications", arr.toString()).apply()
-                    _refreshTrigger.tryEmit(Unit)
                 }
             }
+            // Single refresh at the end.
+            _refreshTrigger.tryEmit(Unit)
         }
     }
 }

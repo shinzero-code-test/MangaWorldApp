@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await verifyAppIdToken(request);
     const clientKey = `${user.uid}:${request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown"}`;
-    if (!allowAppMutation(clientKey, 20, 60 * 60 * 1000)) {
+    if (!(await allowAppMutation(clientKey, 20, 60 * 60 * 1000))){
       return NextResponse.json({ error: "Too many uploads" }, { status: 429 });
     }
 

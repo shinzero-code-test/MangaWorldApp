@@ -39,7 +39,7 @@ class FirebaseSyncManager @Inject constructor(
 
     suspend fun pushLocalSnapshot() = syncMutex.withLock {
         val uid = sessionManager.ensureFirebaseSession() ?: return@withLock
-        val favorites = favoriteDao.getFavoritesList()
+        val favorites = favoriteDao.getAllLibraryEntries()
         val history = historyDao.getAll()
         val annotations = readerAnnotationDao.getAll()
         val tombstones = prefs.getSyncTombstones()
@@ -61,7 +61,7 @@ class FirebaseSyncManager @Inject constructor(
                 "enabledSources" to settings.enabledSources.toList(),
                 "theme" to settings.theme.name,
                 "useDynamicColors" to settings.useDynamicColors,
-                "biometricLockEnabled" to settings.biometricLockEnabled,
+                // biometricLockEnabled is device-local (never pushed/pulled, L-review)
                 "secureReaderEnabled" to settings.secureReaderEnabled,
                 "notificationDeliveryMode" to settings.notificationDeliveryMode.name,
                 "autoCleanupReadDownloads" to settings.autoCleanupReadDownloads,
@@ -171,7 +171,9 @@ class FirebaseSyncManager @Inject constructor(
                 settingsRepository.setEnabledSources(sourceIds)
             }
             profile.getBoolean("useDynamicColors")?.let { settingsRepository.setDynamicColors(it) }
-            profile.getBoolean("biometricLockEnabled")?.let { settingsRepository.setBiometricLock(it) }
+            // Security-sensitive: biometric lock is DEVICE-LOCAL and never pulled
+            // from cloud — a hijacked session must not be able to disable it (L-review).
+            // profile.getBoolean("biometricLockEnabled") intentionally not applied.
             profile.getBoolean("secureReaderEnabled")?.let { settingsRepository.setSecureReader(it) }
             profile.getString("notificationDeliveryMode")?.let { name ->
                 com.exapps.mangaworld.domain.model.NotificationDeliveryMode.entries.firstOrNull { it.name == name }?.let { mode ->
@@ -232,7 +234,7 @@ class FirebaseSyncManager @Inject constructor(
         val remoteHistory = fetchAllCollection(userRef.collection("readingHistory")).mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
         val remoteAnnotations = fetchAllCollection(userRef.collection("readerAnnotations")).mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
 
-        val localFavorites = favoriteDao.getFavoritesList()
+        val localFavorites = favoriteDao.getAllLibraryEntries()
         val localHistory = historyDao.getAll()
         val localAnnotations = readerAnnotationDao.getAll()
         val localTheme = settingsRepository.getAppSettings().first().theme
@@ -287,7 +289,7 @@ class FirebaseSyncManager @Inject constructor(
             remoteTombstones.forEach { prefs.markSyncTombstone(it.collection, it.documentId, it.deletedAt) }
             val tombstones = newestTombstones(prefs.getSyncTombstones())
             applyTombstones(tombstones)
-            FirebaseSyncMerge.favorites(favoriteDao.getFavoritesList(), remoteFavorites)
+            FirebaseSyncMerge.favorites(favoriteDao.getAllLibraryEntries(), remoteFavorites)
                 .filterNot { isTombstoned("favorites", it.mangaId, it.addedAt, tombstones) }
                 .forEach { favoriteDao.insert(it) }
             FirebaseSyncMerge.history(historyDao.getAll(), remoteHistory)

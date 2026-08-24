@@ -41,6 +41,10 @@ class CloudflareChallengeException(
     message: String = "Cloudflare challenge required for $domain"
 ) : RuntimeException(message)
 
+/** Non-Cloudflare HTTP failure from a source (4xx/5xx) — surfaced instead of parsed-as-content. */
+class SourceHttpException(val code: Int, val url: String) :
+    RuntimeException("HTTP $code from $url")
+
 abstract class BaseScraperImpl(
     protected val client: OkHttpClient,
     override val source: MangaSource,
@@ -49,7 +53,12 @@ abstract class BaseScraperImpl(
 
     protected suspend fun fetchDocument(url: String, extraHeaders: Map<String, String> = emptyMap()): Document =
         withContext(Dispatchers.IO) {
-            val domain = java.net.URI(url).host ?: source.baseUrl.removePrefix("https://").removePrefix("http://")
+            // Strict URI parsing throws on non-ASCII/space characters that are
+            // perfectly legal for OkHttp — guard it so scraped Arabic hrefs don't
+            // become hard failures (M-review; root amplifier of genre bugs).
+            val domain = runCatching { java.net.URI(url).host }
+                .getOrNull()
+                ?: source.baseUrl.removePrefix("https://").removePrefix("http://")
             val cookies = resolveCookieForUrl(settingsRepo, url)
 
             val requestBuilder = Request.Builder()
@@ -66,8 +75,10 @@ abstract class BaseScraperImpl(
 
             val request = requestBuilder.build()
 
-            val (body, code) = client.newCall(request).execute().use { response ->
-                (response.body?.string() ?: "") to response.code
+            val (body, code) = client.newCall(request).use { call ->
+                call.execute().use { response ->
+                    (response.body?.string() ?: "") to response.code
+                }
             }
             val doc = Jsoup.parse(body, url)
             val title = doc.title().lowercase()
@@ -77,6 +88,11 @@ abstract class BaseScraperImpl(
                 body.contains("cf-chl", ignoreCase = true)
             if (isCf) {
                 throw CloudflareChallengeException(source.baseUrl.removePrefix("https://").removePrefix("http://"), url)
+            }
+            // Server error bodies used to be parsed as content → silent empty results.
+            // Fail loudly so repositories can fall back to cache instead.
+            if (code >= 400) {
+                throw SourceHttpException(code, url.takeWhile { it != '?' })
             }
             doc
         }

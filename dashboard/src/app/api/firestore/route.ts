@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
+import { validateFirestoreDoc } from "@/lib/validate";
+import { genericErrorResponse } from "@/lib/security";
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,8 +27,9 @@ export async function GET(request: NextRequest) {
     const hasMore = snapshot.docs.length > limit;
 
     return NextResponse.json({ docs, hasMore, collection: "publicProfiles" });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }
 
@@ -45,6 +48,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Collection not allowed" }, { status: 403 });
     }
 
+    // Shape guard even inside whitelisted collections (M-6): plain object,
+    // bounded size, no reserved field names.
+    const docCheck = validateFirestoreDoc(data);
+    if (!docCheck.ok) {
+      return NextResponse.json({ error: docCheck.error }, { status: 400 });
+    }
+    if (docId !== undefined && (typeof docId !== "string" || docId.length < 1 || docId.length > 512 || docId.includes("/"))) {
+      return NextResponse.json({ error: "Invalid docId" }, { status: 400 });
+    }
+
     let ref;
     if (docId) {
       const db = getAdminDb();
@@ -56,7 +69,8 @@ export async function POST(request: NextRequest) {
 
     const id = (await ref).id || docId;
     return NextResponse.json({ success: true, id });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }

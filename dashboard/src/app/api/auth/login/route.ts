@@ -1,15 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
-import { clearMfaGrantCookie } from "@/lib/auth";
+import { clearMfaGrantCookie, deleteCurrentMfaGrant } from "@/lib/auth";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
+import { consumeRateLimit } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
+
+function clientIp(request: NextRequest): string {
+  return (
+    request.headers.get("x-real-ip")?.split(",")[0]?.trim() ||
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown"
+  );
+}
 
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
+    if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
+      return NextResponse.json({ error: "بيانات غير صالحة" }, { status: 400 });
+    }
 
-    const apiKey = process.env.NEXT_PUBLIC_FIREBASE_CLIENT_API_KEY ||
-                   process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+    // Credential-stuffing throttle: keyed per IP and per email before we ever
+    // hit Identity Toolkit (M-1).
+    const ipAttempt = await consumeRateLimit("login-ip", clientIp(request), 20, 15 * 60 * 1000);
+    const emailAttempt = await consumeRateLimit(
+      "login-email",
+      email.trim().toLowerCase().replace(/[^a-zA-Z0-9@._\-]/g, "_"),
+      10,
+      15 * 60 * 1000
+    );
+    if (!ipAttempt.allowed || !emailAttempt.allowed) {
+      return NextResponse.json(
+        { error: "تم إرسال عدد كبير من المحاولات. حاول مرة أخرى لاحقاً." },
+        { status: 429 }
+      );
+    }
+
+    // Canonical client key — the NEXT_PUBLIC_FIREBASE_API_KEY alias was removed to avoid drift.
+    const apiKey = process.env.NEXT_PUBLIC_FIREBASE_CLIENT_API_KEY;
     const signInRes = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
       {
@@ -60,12 +88,15 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error("Dashboard password login error:", error);
+    console.error("[login] failure:", error instanceof Error ? error.message : error);
     return NextResponse.json({ error: "خطأ في تسجيل الدخول" }, { status: 500 });
   }
 }
 
 export async function DELETE() {
+  // Revoke the server-side grant too, so a captured cookie value cannot be
+  // replayed for the remainder of its TTL after logout.
+  await deleteCurrentMfaGrant();
   const response = NextResponse.json({ success: true });
   response.cookies.set("session", "", { httpOnly: true, secure: true, maxAge: 0, path: "/" });
   clearMfaGrantCookie(response);

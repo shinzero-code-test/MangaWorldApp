@@ -30,7 +30,7 @@ class LatestUpdatesWidget : GlanceAppWidget() {
         val settings = entryPoint.widgetSettingsManager()
         val snapshot = try { entryPoint.widgetDataRepository().getRemoteSnapshot() } catch (_: Exception) { null }
         if (snapshot == null) {
-            provideContent { Text(text = "Loading...") }
+            provideContent { Text(text = context.getString(R.string.widget_loading)) }
             return
         }
         provideContent {
@@ -68,7 +68,6 @@ private fun LatestUpdatesContent(
                 subtitle = LocalContext.current.getString(R.string.widget_empty_latest_hint),
                 intent = AppLaunchIntents.latestUpdates(context),
                 actionLabel = LocalContext.current.getString(R.string.widget_view_updates),
-                retryIntent = AppLaunchIntents.latestUpdates(context)
             )
             return@WidgetCard
         }

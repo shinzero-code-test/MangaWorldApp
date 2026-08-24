@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -102,10 +103,11 @@ class AzoraScraper @Inject constructor(
                 .header("Accept-Language", "ar,en;q=0.9")
                 .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
                 .build()
-            val resp = client.newCall(req).execute()
-            val body = resp.body?.string() ?: ""
-            resp.close()
-            body
+            client.newCall(req).execute().use { resp ->
+                resp.body?.string() ?: ""
+            }
+        }.onFailure {
+            FirebaseTelemetry.logScraperFailure(source.id, "raw_html", it)
         }.getOrDefault("")
     }
 
@@ -186,9 +188,9 @@ class AzoraScraper @Inject constructor(
                 .header("Referer", "${source.baseUrl}/")
                 .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
                 .build()
-            val resp = client.newCall(req).execute()
-            val body = resp.body?.string() ?: ""
-            resp.close()
+            val body = client.newCall(req).execute().use { resp ->
+                resp.body?.string() ?: ""
+            }
             if (body.isBlank() || !body.trimStart().startsWith("{")) null
             else JSONObject(body)
         }.getOrNull()
@@ -437,7 +439,8 @@ class AzoraScraper @Inject constructor(
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val enc   = java.net.URLEncoder.encode(query, "UTF-8")
-        val json  = apiGet("https://api.azorafly.com/api/query?searchTerm=$enc&perPage=30")
+        // Page must reach the API or every page returns identical results (H-review).
+        val json  = apiGet("https://api.azorafly.com/api/query?searchTerm=$enc&perPage=30&page=$page")
             ?: return@runCatching emptyList()
         val posts = json.optJSONArray("posts") ?: return@runCatching emptyList()
         val result = mutableListOf<MangaItem>()
@@ -525,9 +528,14 @@ class AzoraScraper @Inject constructor(
         val items = parseMangaListPage(fetchDocument(baseUrl))
             .filter { status == null || it.status == status || it.status == MangaStatus.UNKNOWN }
             .filter { type == null || it.type == type || it.type == MangaType.UNKNOWN }
+        // The old when-block computed a sort and threw it away — browse was
+        // always LATEST order regardless of selection.
         when (sortBy) {
             SortBy.RATING -> items.sortedByDescending { it.rating ?: 0f }
-            SortBy.POPULARITY -> items.sortedByDescending { it.latestChapter ?: 0 }
+            SortBy.POPULARITY -> items.sortedByDescending {
+                it.views?.trimStart()?.takeWhile(Char::isDigit)?.toLongOrNull()
+                    ?: it.latestChapter?.toLong() ?: 0L
+            }
             SortBy.OLDEST -> items.sortedBy { it.title.lowercase() }
             SortBy.LATEST -> items
         }
@@ -618,7 +626,4 @@ class AzoraScraper @Inject constructor(
         }
         return items
     }
-
-    private fun String?.ifNullOrBlank(block: () -> String?): String? =
-        if (this.isNullOrBlank()) block() else this
 }

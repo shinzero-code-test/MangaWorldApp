@@ -89,7 +89,6 @@ fun HomeScreen(
 
                 val layoutVariant = state.homeLayoutVariant.lowercase()
                 val trendingFirst = layoutVariant.contains("trending_first")
-                val useLatestGrid = layoutVariant.contains("grid")
                 if (trendingFirst && state.trending.isNotEmpty()) {
                     item {
                         SectionHeader(
@@ -115,31 +114,21 @@ fun HomeScreen(
                     )
                 }
 
-                if (useLatestGrid) {
-                    if (state.latestChapters.isEmpty()) {
-                        item {
-                            Text(stringResource(R.string.home_empty_chapters), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-                        }
-                    } else {
-                        item {
-                            LatestChapterGrid(
-                                items = state.latestChapters.take(10),
-                                onMangaClick = { item -> onMangaClick(item.source.id, item.mangaSlug) }
-                            )
-                        }
+                if (state.latestChapters.isEmpty()) {
+                    item {
+                        Text(
+                            stringResource(R.string.home_empty_chapters),
+                            color = MangaColors.OnSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                        )
                     }
                 } else {
-                    if (state.latestChapters.isEmpty()) {
-                        item {
-                            Text(stringResource(R.string.home_empty_chapters), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-                        }
-                    } else {
-                        items(state.latestChapters.take(15), key = { "${it.source.id}_${it.chapterUrl}" }) { item ->
-                            LatestChapterRow(
-                                item = item,
-                                onClick = { onMangaClick(item.source.id, item.mangaSlug) }
-                            )
-                        }
+                    item {
+                        LatestChapterGrid(
+                            items = state.latestChapters.take(12),
+                            onMangaClick = { item -> onMangaClick(item.source.id, item.mangaSlug) }
+                        )
                     }
                 }
 
@@ -207,11 +196,23 @@ private fun SourceSelectorRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(sources, key = { it.id }) { source ->
-            GenreChip(
-                label = source.displayName,
-                selected = source == active,
-                onClick = { onSelect(source) }
-            )
+            val selected = source == active
+            NeonGlassPanel(
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(100.dp))
+                    .clickable { onSelect(source) },
+                shape = RoundedCornerShape(100.dp),
+                cornerRadius = 100.dp,
+                glowColors = if (selected) MangaColors.GradientPurpleCyan else listOf(MangaColors.OutlineVariant, MangaColors.OutlineVariant)
+            ) {
+                Text(
+                    source.displayName,
+                    color = if (selected) Color.White else MangaColors.MutedLight,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
+                )
+            }
         }
     }
 }
@@ -228,7 +229,7 @@ private fun FeaturedCarousel(
     val pagerState = rememberPagerState { items.size }
 
     // Auto-scroll — pause when user is interacting
-    LaunchedEffect(pagerState) {
+    LaunchedEffect(pagerState, items.size) {
         while (true) {
             delay(4000)
             if (!pagerState.isScrollInProgress) {
@@ -257,12 +258,16 @@ private fun FeaturedCarousel(
         ) {
             repeat(items.size) { i ->
                 val isActive = i == pagerState.currentPage
+                val width by animateDpAsState(
+                    targetValue = if (isActive) 28.dp else 7.dp,
+                    label = "featured_indicator_width"
+                )
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 3.dp)
-                        .size(if (isActive) 20.dp else 6.dp, 6.dp)
+                        .size(width, 7.dp)
                         .clip(CircleShape)
-                        .background(if (isActive) MangaColors.Primary else MangaColors.OutlineVariant)
+                        .background(if (isActive) Brush.horizontalGradient(MangaColors.GradientPurpleCyan) else Brush.linearGradient(listOf(MangaColors.OutlineVariant, MangaColors.OutlineVariant)))
                 )
             }
         }
@@ -272,11 +277,13 @@ private fun FeaturedCarousel(
 @Composable
 private fun FeaturedCard(manga: MangaItem, onClick: () -> Unit) {
     val ctx = LocalContext.current
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(180.dp),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(4.dp)
+    NeonGlassPanel(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(224.dp)
+            .clickable(onClickLabel = manga.title, onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        cornerRadius = 24.dp
     ) {
         Box(Modifier.fillMaxSize()) {
             AsyncImage(
@@ -299,9 +306,15 @@ private fun FeaturedCard(manga: MangaItem, onClick: () -> Unit) {
                     )
                 )
             )
-            // Type badge
+            // Type/source badge
             if (manga.type != MangaType.UNKNOWN) {
-                TypeBadge(manga.type, Modifier.align(Alignment.TopStart).padding(10.dp))
+                Row(
+                    modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    TypeBadge(manga.type)
+                    SourceBadge(manga.source)
+                }
             }
             // Content
             Column(
@@ -336,80 +349,35 @@ private fun FeaturedCard(manga: MangaItem, onClick: () -> Unit) {
 // ─── Latest Chapter Row ───────────────────────────────────────────────────────
 
 @Composable
-private fun LatestChapterRow(item: LatestChapterItem, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        MangaCover(
-            url = item.coverUrl,
-            contentDescription = item.mangaTitle,
-            modifier = Modifier.size(56.dp, 78.dp).clip(RoundedCornerShape(8.dp))
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                item.mangaTitle,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MangaColors.OnSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                stringResource(R.string.fmt_058, item.chapterNumber.let { if (it == it.toInt().toFloat()) it.toInt() else it }),
-                style = MaterialTheme.typography.bodySmall,
-                color = MangaColors.PrimaryLight
-            )
-            Spacer(Modifier.height(4.dp))
-            SourceBadge(item.source)
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            Text(item.timeAgo, style = MaterialTheme.typography.labelSmall, color = MangaColors.Muted)
-            if (item.isNew) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    stringResource(R.string.new_label),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    modifier = Modifier
-                        .background(MangaColors.Pink, RoundedCornerShape(100.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-            }
-        }
-    }
-    GradientDivider(Modifier.padding(horizontal = 16.dp))
-}
-
-@Composable
 private fun LatestChapterGrid(
     items: List<LatestChapterItem>,
     onMangaClick: (LatestChapterItem) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        items.chunked(2).forEach { rowItems ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                rowItems.forEach { item ->
-                    LatestChapterGridCard(
-                        item = item,
-                        onClick = { onMangaClick(item) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                if (rowItems.size == 1) {
-                    Spacer(Modifier.weight(1f))
+        val columnCount = if (maxWidth >= 600.dp) 3 else 2
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items.chunked(columnCount).forEach { rowItems ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    rowItems.forEach { item ->
+                        LatestChapterGridCard(
+                            item = item,
+                            onClick = { onMangaClick(item) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    repeat(columnCount - rowItems.size) {
+                        Spacer(Modifier.weight(1f))
+                    }
                 }
             }
         }
@@ -422,22 +390,38 @@ private fun LatestChapterGridCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        onClick = onClick,
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MangaColors.CardBg),
-        shape = RoundedCornerShape(14.dp)
+    NeonGlassPanel(
+        modifier = modifier
+            .height(224.dp)
+            .clickable(onClickLabel = item.mangaTitle, onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        cornerRadius = 20.dp
     ) {
-        Column(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxSize()) {
             MangaCover(
                 url = item.coverUrl,
                 contentDescription = item.mangaTitle,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
+                    .align(Alignment.TopStart)
+                    .padding(10.dp)
+                    .width(74.dp)
+                    .height(148.dp)
+                    .clip(RoundedCornerShape(14.dp))
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color(0x66000000))
+                        )
+                    )
             )
             Column(
-                modifier = Modifier.padding(12.dp),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .fillMaxWidth()
+                    .padding(start = 92.dp, end = 12.dp, top = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
@@ -454,6 +438,27 @@ private fun LatestChapterGridCard(
                     color = MangaColors.PrimaryLight
                 )
                 SourceBadge(item.source)
+            }
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Filled.BookmarkBorder,
+                    contentDescription = null,
+                    tint = MangaColors.PrimaryLight,
+                    modifier = Modifier.size(20.dp)
+                )
+                Icon(
+                    Icons.Filled.MenuBook,
+                    contentDescription = null,
+                    tint = MangaColors.PrimaryLight,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }

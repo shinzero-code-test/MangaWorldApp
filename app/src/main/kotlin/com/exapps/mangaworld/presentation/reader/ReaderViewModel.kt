@@ -2,7 +2,6 @@ package com.exapps.mangaworld.presentation.reader
 
 import android.content.Context
 import com.exapps.mangaworld.R
-import androidx.compose.ui.res.stringResource
 
 import android.app.Application
 import androidx.work.Data
@@ -18,6 +17,7 @@ import com.exapps.mangaworld.core.data.ReadingStatsStore
 import com.exapps.mangaworld.core.data.AchievementManager
 import com.exapps.mangaworld.core.data.toDetail
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
+import com.exapps.mangaworld.core.data.download.ChapterDownloadWorker
 import com.exapps.mangaworld.core.data.download.ChapterCleanupWorker
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
@@ -76,6 +76,9 @@ data class ReaderUiState(
     val webtoonAutoStitch: Boolean = true,
     val spoilerCollapseDefault: Boolean = true,
     val chapterComments: List<CommunityComment> = emptyList(),
+    /** Typed download-failure signal for the retry affordance — never derive UI from display text. */
+    val lastDownloadFailed: Boolean = false,
+    val chapterCommentError: String? = null,
     val lastTapNormalizedX: Float = 0.5f,
     val lastTapNormalizedY: Float = 0.5f
 )
@@ -105,15 +108,19 @@ class ReaderViewModel @Inject constructor(
     val state: StateFlow<ReaderUiState> = _state.asStateFlow()
 
     private var currentSource: MangaSource = MangaSource.STARZ
-    private var activeSessionKey: String? = null
     private var sessionCheckpointAt: Long? = null
+    // Scope that outlives viewModelScope cancellation so end-of-session flushes
+    // (presence-off, reading-time) actually run from onCleared.
+    private val flushScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var annotationsJob: Job? = null
     private var presenceJob: Job? = null
     private var reactionsJob: Job? = null
     private var commentsJob: Job? = null
+    private var downloadTaskJob: Job? = null
     private var prefetchedNextChapterUrl: String? = null
     private var lastReadAnalyticsKey: String? = null
     private var periodicSaveJob: kotlinx.coroutines.Job? = null
+    private val activeDownloadStatuses = setOf("queued", "running", "paused")
 
     init {
         viewModelScope.launch {
@@ -173,7 +180,9 @@ class ReaderViewModel @Inject constructor(
         val isLocal = mangaId.startsWith("imported_") || source.id == "local" || source.id == "imported"
         if (isLocal) {
             viewModelScope.launch {
-                val localPages = downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
+                val localPages = withContext(Dispatchers.IO) {
+                    downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
+                }
                 if (localPages.isNotEmpty()) {
                     _state.update {
                         it.copy(
@@ -199,7 +208,9 @@ class ReaderViewModel @Inject constructor(
         }
         viewModelScope.launch {
             val chapterMeta = resolveChapterMeta(mangaId, chapterUrl, source)
-            val localPages = downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
+            val localPages = withContext(Dispatchers.IO) {
+                downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
+            }
             if (localPages.isNotEmpty()) {
                 val currentChapterNumber = chapterMeta?.number ?: parseFallbackChapterNumber(chapterUrl)
                 _state.update {
@@ -282,7 +293,13 @@ class ReaderViewModel @Inject constructor(
         _state.update { it.copy(currentPage = page) }
         // Save progress & mark read at last page
         viewModelScope.launch {
-            val chNum = st.chapterNumber ?: resolveChapterMeta(st.mangaId, st.chapterUrl, currentSource)?.number ?: parseFallbackChapterNumber(st.chapterUrl)
+            // Resolve once, then cache in state so fast page-flips never re-hit
+            // the network for chapter metadata.
+            val cachedNumber = st.chapterNumber
+            val chNum = cachedNumber
+                ?: (resolveChapterMeta(st.mangaId, st.chapterUrl, currentSource)?.number
+                    ?: parseFallbackChapterNumber(st.chapterUrl))
+                .also { resolved -> if (cachedNumber == null) _state.update { it.copy(chapterNumber = resolved) } }
             trackReadingTime()
             if (!st.incognitoMode) {
                 libraryRepo.saveReadingProgress(st.mangaId, chNum, page, st.totalPages)
@@ -342,8 +359,8 @@ class ReaderViewModel @Inject constructor(
                     ?: resolveDetailForChapter(st.mangaId, currentSource)?.title
                     ?: st.mangaId.substringAfter("_").ifBlank { st.mangaId }
             }
-            _state.update { it.copy(downloadInProgress = true, downloadProgress = 0f, downloadMessage = context.getString(R.string.starting_download), activeDownloadTaskId = taskId) }
-            downloadQueueManager.enqueueAndRun(
+            _state.update { it.copy(downloadInProgress = true, downloadProgress = 0f, downloadMessage = context.getString(R.string.starting_download), lastDownloadFailed = false, activeDownloadTaskId = taskId) }
+            val wasEnqueued = downloadQueueManager.enqueueAndRun(
                 taskId = taskId,
                 mangaId = st.mangaId,
                 mangaTitle = mangaTitle,
@@ -353,6 +370,31 @@ class ReaderViewModel @Inject constructor(
                 wifiOnly = st.downloadOnWifiOnly,
                 referer = referer
             )
+            if (wasEnqueued) {
+                observeDownloadTask(taskId)
+            } else {
+                val existingTaskId = downloadQueueManager.pendingTaskId(st.mangaId, st.chapterUrl)
+                if (existingTaskId != null) {
+                    _state.update { it.copy(activeDownloadTaskId = existingTaskId) }
+                    observeDownloadTask(existingTaskId)
+                } else {
+                    // Disk scan must leave the Main thread; resolve before updating state.
+                    val alreadyOwned = withContext(Dispatchers.IO) {
+                        downloadQueueManager.isChapterDownloaded(st.mangaId, st.chapterUrl, mangaTitle)
+                    }
+                    _state.update {
+                        it.copy(
+                            downloadInProgress = false,
+                            activeDownloadTaskId = null,
+                            downloadMessage = if (alreadyOwned) {
+                                context.getString(R.string.read_offline)
+                            } else {
+                                context.getString(R.string.pending)
+                            }
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -367,10 +409,54 @@ class ReaderViewModel @Inject constructor(
         downloadCurrentChapter()
     }
 
+    private fun observeDownloadTask(taskId: String) {
+        downloadTaskJob?.cancel()
+        downloadTaskJob = viewModelScope.launch {
+            downloadQueueManager.observeTask(taskId).collect { task ->
+                if (task == null || _state.value.activeDownloadTaskId != taskId) return@collect
+                _state.update {
+                    it.copy(
+                        downloadInProgress = task.status in activeDownloadStatuses,
+                        downloadProgress = task.progress,
+                        downloadMessage = task.errorMessage.toDownloadCodeMessage()
+                            ?: task.errorMessage?.takeIf { it.isNotBlank() }
+                            ?: task.status.toDownloadMessage(),
+                        // Typed signal drives the retry affordance (never string comparison).
+                        lastDownloadFailed = task.status == "failed",
+                        activeDownloadTaskId = task.id
+                    )
+                }
+            }
+        }
+    }
+
+    private fun String.toDownloadMessage(): String? = when (this) {
+        "queued" -> context.getString(R.string.pending)
+        "running" -> context.getString(R.string.starting_download)
+        "paused" -> context.getString(R.string.stopped)
+        "cancelled" -> context.getString(R.string.cancelled)
+        "failed" -> context.getString(R.string.download_error)
+        else -> null
+    }
+
+    /**
+     * Translates stable, language-neutral error codes persisted in Room into localized text.
+     * Returns null for anything else so legacy rows (which stored human-readable, already
+     * localized messages) keep rendering verbatim.
+     */
+    private fun String?.toDownloadCodeMessage(): String? = when (this) {
+        ChapterDownloadWorker.ERROR_CANCELLED -> context.getString(R.string.cancelled)
+        ChapterDownloadWorker.ERROR_RETRY_UNAVAILABLE -> context.getString(R.string.download_retry_unavailable)
+        ChapterDownloadWorker.ERROR_DOWNLOAD_FAILED -> context.getString(R.string.download_error)
+        else -> null
+    }
+
     fun postReaderComment(text: String, spoiler: Boolean) {
         val st = _state.value
         val slug = st.mangaId.substringAfter('_')
         viewModelScope.launch {
+            // Surface failures — a silent runCatching left guests (or flaky networks)
+            // staring at a cleared composer with zero feedback.
             runCatching {
                 communityRepository.postChapterComment(
                     mangaId = st.mangaId,
@@ -380,6 +466,10 @@ class ReaderViewModel @Inject constructor(
                     text = text,
                     spoiler = spoiler
                 )
+            }.onFailure {
+                _state.update {
+                    it.copy(chapterCommentError = context.getString(R.string.error_generic))
+                }
             }
         }
     }
@@ -551,12 +641,14 @@ class ReaderViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        downloadTaskJob?.cancel()
         stopCommunityPresenceAsync(_state.value.mangaId, _state.value.chapterUrl)
         finishSessionAsync()
+        // Flushes above were handed to flushScope; only now is it safe to cancel.
+        flushScope.cancel()
     }
 
     private fun beginSession(mangaId: String, chapterUrl: String) {
-        activeSessionKey = "$mangaId|$chapterUrl"
         sessionCheckpointAt = System.currentTimeMillis()
         // Periodically save reading time to prevent data loss on force-kill (every 30 seconds)
         periodicSaveJob?.cancel()
@@ -680,18 +772,17 @@ class ReaderViewModel @Inject constructor(
         periodicSaveJob = null
         if (_state.value.incognitoMode) {
             sessionCheckpointAt = null
-            activeSessionKey = null
             return
         }
         val checkpoint = sessionCheckpointAt ?: return
         val now = System.currentTimeMillis()
         val delta = (now - checkpoint).coerceIn(0L, 2 * 60_000L)
         sessionCheckpointAt = null
-        activeSessionKey = null
         if (delta >= 1_000L) {
-            viewModelScope.launch {
-                readingStatsStore.addReadingTime(delta)
-                widgetShortcutCoordinator.refreshWidgets()
+            // viewModelScope is already cancelled inside onCleared — use flushScope.
+            flushScope.launch {
+                runCatching { readingStatsStore.addReadingTime(delta) }
+                runCatching { widgetShortcutCoordinator.refreshWidgets() }
             }
         }
     }
@@ -701,7 +792,7 @@ class ReaderViewModel @Inject constructor(
         presenceJob?.cancel()
         reactionsJob?.cancel()
         commentsJob?.cancel()
-        viewModelScope.launch {
+        flushScope.launch {
             runCatching { communityRepository.setReaderPresence(mangaId, chapterUrl, false) }
         }
     }

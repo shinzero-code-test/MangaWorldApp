@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import okhttp3.FormBody
@@ -217,10 +218,9 @@ class StarzScraper @Inject constructor(
             val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
             val chText = chLink.text().cleanText()
 
-            // Extract chapter number: "الفصل 18" or just "18"
-            val chNumStr = chText.replace("الفصل", "").replace("[^0-9.]".toRegex(), "").trim()
-            val chNum = chNumStr.toFloatOrNull()
-                ?: chHref.trimEnd('/').substringAfterLast("/").toFloatOrNull()
+            // First-number extraction — "الفصل 12 : 3" must stay 12, not 123.
+            val chNum = ScraperText.firstChapterNumber(chText)
+                ?: ScraperText.lastSegmentNumber(chHref)
                 ?: return@mapNotNull null
 
             // Date: .chapter-release-date
@@ -244,8 +244,8 @@ class StarzScraper @Inject constructor(
                 if (hrefRaw.isBlank() || hrefRaw == "#") return@mapNotNull null
                 val href = if (hrefRaw.startsWith("http")) hrefRaw else hrefRaw.absoluteUrl()
                 val text = opt.text().cleanText()
-                val num = text.replace("الفصل", "").replace("[^0-9.]".toRegex(), "").toFloatOrNull()
-                    ?: href.trimEnd('/').substringAfterLast("/").toFloatOrNull()
+                val num = ScraperText.firstChapterNumber(text)
+                    ?: ScraperText.lastSegmentNumber(href)
                     ?: return@mapNotNull null
                 Chapter(
                     id = "${slug}_$num",
@@ -284,9 +284,9 @@ class StarzScraper @Inject constructor(
                         .post(formBody)
                         .build()
 
-                    val response = client.newCall(ajaxRequest).execute()
-                    val bodyStr = response.body?.string() ?: "{}"
-                    response.close()
+                    val bodyStr = client.newCall(ajaxRequest).execute().use { response ->
+                        response.body?.string() ?: "{}"
+                    }
 
                     val json = JSONObject(bodyStr)
                     if (json.optBoolean("success", false)) {
@@ -298,9 +298,8 @@ class StarzScraper @Inject constructor(
                                 chLink.attr("href").absoluteUrl()
                             }
                             val chText = chLink.text().cleanText()
-                            val chNumStr = chText.replace("الفصل", "").replace("[^0-9.]".toRegex(), "").trim()
-                            val chNum = chNumStr.toFloatOrNull()
-                                ?: chHref.trimEnd('/').substringAfterLast("/").toFloatOrNull()
+                            val chNum = ScraperText.firstChapterNumber(chText)
+                                ?: ScraperText.lastSegmentNumber(chHref)
                                 ?: return@mapNotNull null
                             val dateEl = li.selectFirst(".chapter-release-date i, .chapter-release-date span")
                             val (dateText, dateLong) = parseChapterDate(dateEl)
@@ -320,14 +319,12 @@ class StarzScraper @Inject constructor(
                 chapters
             } else emptyList()
         } catch (e: Exception) {
+            FirebaseTelemetry.logScraperFailure(source.id, "detail_chapters_api", e)
             emptyList()
         }
 
         // Views from post-content_item or page body
-        val viewsText = doc.body().text().let { text ->
-            Regex("(\\d[\\d,]*)\\s*(مشاهدة|view)").find(text)?.groupValues?.get(1)
-                ?.replace(",", "")
-        }
+        val viewsText = ScraperText.extractViews(doc.body().text())?.toString()
 
         val chapters = (listChapters + optionChapters + ajaxChapters)
             .distinctBy { it.url }
@@ -383,10 +380,16 @@ class StarzScraper @Inject constructor(
         // .reading-content img or .page-break img
         val pages = doc.select(".reading-content img[src], .reading-content img[data-src], .page-break img[src], .page-break img[data-src]")
             .mapNotNull { img ->
-                val src = img.attr("abs:src").ifEmpty {
-                    img.attr("data-src").ifEmpty { img.attr("src") }.absoluteUrl()
-                }.encodeForUrl()
-                src.takeIf { it.isNotBlank() }
+                // Lazy-loading rule: abs:src may BE a base64 placeholder — prefer
+                // data-src and skip any data: URI (H-review).
+                val absSrc = img.attr("abs:src")
+                val dataSrc = img.attr("data-src").ifEmpty { img.attr("data-lazy-src") }
+                val plainSrc = img.attr("src")
+                val chosen = dataSrc.ifBlank {
+                    absSrc.takeUnless { it.isBlank() || it.startsWith("data:") } ?: plainSrc
+                }
+                if (chosen.startsWith("data:")) return@mapNotNull null
+                chosen.absoluteUrl().encodeForUrl().takeIf { it.isNotBlank() && !it.startsWith("data:") }
             }
             .distinct()
             .mapIndexed { index, src ->
@@ -410,7 +413,9 @@ class StarzScraper @Inject constructor(
     }
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
-        val url = "${source.baseUrl}/manga/?genre=$genre&page=$page"
+        // Genres are Arabic — raw insertion throws inside java.net.URI (H-review).
+        val encodedGenre = java.net.URLEncoder.encode(genre, "UTF-8")
+        val url = "${source.baseUrl}/manga/?genre=$encodedGenre&page=$page"
         val doc = fetchDocument(url)
         parseMangaGrid(doc)
     }

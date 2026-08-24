@@ -1,13 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminMessaging, getAdminDb } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
+import { boundedString, isPlainObject } from "@/lib/validate";
+import { genericErrorResponse } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
     await requireRole("super-admin");
-    const { title, body: msgBody, topic, tokens } = await request.json();
+    const raw = await request.json();
+    if (!isPlainObject(raw)) {
+      return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+    }
+    // FCM-aligned bounds; validated before touching the Messaging API (M-6).
+    const title = boundedString(raw.title, 120);
+    const msgBody = boundedString(raw.body, 300);
+    if (title === null || msgBody === null) {
+      return NextResponse.json({ error: "title/body required (max 120 / 300 chars)" }, { status: 400 });
+    }
+
+    let tokens: string[] | null = null;
+    if (raw.tokens != null) {
+      if (!Array.isArray(raw.tokens) || raw.tokens.length > 500 ||
+          !raw.tokens.every((t: unknown) => typeof t === "string" && t.length >= 10)) {
+        return NextResponse.json({ error: "invalid tokens array" }, { status: 400 });
+      }
+      tokens = raw.tokens as string[];
+    }
 
     // If tokens are explicitly provided (e.g. testing or specific users)
     if (tokens && tokens.length > 0) {
@@ -40,7 +60,8 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true, sent: successCount, failed: failureCount });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }

@@ -1,18 +1,21 @@
 package com.exapps.mangaworld.core.data.download
 
 import android.content.Context
+import android.net.ConnectivityManager
+import com.exapps.mangaworld.R
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
-import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 
 @HiltWorker
 class AutoDownloadWorker @AssistedInject constructor(
@@ -20,7 +23,6 @@ class AutoDownloadWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val favoriteDao: FavoriteDao,
     private val readChapterDao: ReadChapterDao,
-    private val cacheDao: MangaCacheDao,
     private val downloadQueueManager: DownloadQueueManager,
     private val mangaRepository: MangaRepository,
     private val settingsRepository: SettingsRepository
@@ -29,10 +31,9 @@ class AutoDownloadWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val settings = settingsRepository.getAppSettings().first()
         if (!settings.autoDownloadNewChapters) return Result.success()
-        if (settings.downloadOnWifiOnly && !isNetworkMetered().not()) return Result.success()
+        if (settings.downloadOnWifiOnly && isNetworkMetered()) return Result.success()
 
         val favorites = favoriteDao.getFavoritesList()
-        val chaptersDownloaded = mutableListOf<String>()
 
         for (favorite in favorites) {
             try {
@@ -63,19 +64,23 @@ class AutoDownloadWorker @AssistedInject constructor(
 
                     if (pages.isNotEmpty()) {
                         downloadQueueManager.enqueueAndRun(
-                            taskId = "auto_${System.currentTimeMillis()}_${chapter.number}",
+                            taskId = "auto_${UUID.randomUUID()}",
                             mangaId = favorite.mangaId,
                             mangaTitle = favorite.title,
                             chapterUrl = chapter.url,
-                            chapterTitle = chapter.title ?: "الفصل ${chapter.displayNumber}",
+                            chapterTitle = chapter.title
+                                ?: applicationContext.getString(R.string.fmt_059, chapter.displayNumber),
                             pages = pages,
-                            wifiOnly = true,
-                            referer = chapter.url
+                            wifiOnly = settings.downloadOnWifiOnly,
+                            referer = chapter.url,
+                            sourceId = source.id,
+                            mangaSlug = favorite.slug
                         )
-                        chaptersDownloaded.add("${favorite.title} - ${chapter.displayNumber}")
                     }
                 }
-            } catch (e: Exception) {
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (_: Exception) {
                 // Skip this manga on error
                 continue
             }
@@ -84,17 +89,17 @@ class AutoDownloadWorker @AssistedInject constructor(
         return Result.success()
     }
 
-    private suspend fun isNetworkMetered(): Boolean {
-        // Simplified check - actual implementation would use ConnectivityManager
-        return false
-    }
+    private fun isNetworkMetered(): Boolean =
+        applicationContext.getSystemService(ConnectivityManager::class.java)
+            ?.isActiveNetworkMetered
+            ?: true
 
     companion object {
         private const val WORK_NAME = "auto_download_periodic"
 
         fun schedule(context: Context) {
             val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.UNMETERED)
+                .setRequiredNetworkType(NetworkType.CONNECTED)
                 .setRequiresBatteryNotLow(true)
                 .build()
 

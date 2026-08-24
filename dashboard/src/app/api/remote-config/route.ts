@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
+import { validateRemoteConfigParams } from "@/lib/validate";
+import { genericErrorResponse } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
 
@@ -34,8 +36,9 @@ export async function GET() {
         etag: template.etag,
       },
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }
 
@@ -43,6 +46,11 @@ export async function PUT(request: NextRequest) {
   try {
     await requireRole("super-admin");
     const { parameters } = await request.json();
+    // Config-injection guard before anything reaches the live template (M-6).
+    const validation = validateRemoteConfigParams(parameters);
+    if (!validation.ok) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
     const { getApps } = await import("firebase-admin/app");
     const { getRemoteConfig } = await import("firebase-admin/remote-config");
 
@@ -61,7 +69,8 @@ export async function PUT(request: NextRequest) {
 
     await rc.publishTemplate(template);
     return NextResponse.json({ success: true, etag: template.etag });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error, "فشل نشر الإعدادات");
+    return NextResponse.json(body, { status });
   }
 }

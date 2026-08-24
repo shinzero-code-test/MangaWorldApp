@@ -1,20 +1,21 @@
 import { createHash, randomUUID } from "crypto";
-import { FieldValue, type Firestore } from "firebase-admin/firestore";
+import { FieldValue, type CollectionReference, type Firestore } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAppIdToken } from "@/lib/app-auth";
 import { allowAppMutation } from "@/lib/app-rate-limit";
 import { getAdminDb, getAdminMessaging } from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
+const MAX_MENTION_RECIPIENTS = 10;
 
 export async function POST(request: NextRequest) {
   try {
     const user = await verifyAppIdToken(request);
-    if (!allowAppMutation(`comment-notification:${user.uid}`, 60, 60 * 60 * 1000)) {
+    if (!(await allowAppMutation(`comment-notification:${user.uid}`, 60, 60 * 60 * 1000))){
       return NextResponse.json({ error: "Too many notification requests" }, { status: 429 });
     }
     const { mangaId, chapterUrl, commentId } = await request.json();
-    if (!isIdentifier(mangaId) || !isIdentifier(commentId) || (chapterUrl !== undefined && typeof chapterUrl !== "string")) {
+    if (!isIdentifier(mangaId) || !isIdentifier(commentId) || !isValidChapterUrl(chapterUrl)) {
       return NextResponse.json({ error: "A valid comment event is required" }, { status: 400 });
     }
 
@@ -29,18 +30,22 @@ export async function POST(request: NextRequest) {
 
     const recipients = new Map<string, { type: "REPLY" | "MENTION"; title: string; body: string }>();
     const parentId = typeof comment.parentId === "string" ? comment.parentId : null;
-    if (parentId) {
-      const parent = await comments.doc(parentId).get();
-      const parentUid = parent.data()?.authorUid;
-      if (typeof parentUid === "string" && parentUid !== user.uid) {
-        recipients.set(parentUid, {
+    const threadRootId = isIdentifier(comment.threadRootId) ? comment.threadRootId : parentId;
+    const reviewId = isIdentifier(comment.reviewId) ? comment.reviewId : null;
+    const replyBody = `${String(comment.authorName ?? "مشاهد")}: ${String(comment.text ?? "").slice(0, 80)}`;
+    const addReplyRecipient = (targetUid: unknown) => {
+      if (typeof targetUid === "string" && targetUid !== user.uid) {
+        recipients.set(targetUid, {
           type: "REPLY",
           title: "رد جديد على تعليقك",
-          body: `${String(comment.authorName ?? "مشاهد")}: ${String(comment.text ?? "").slice(0, 80)}`,
+          body: replyBody,
         });
       }
-    }
-    const mentions = Array.isArray(comment.mentions) ? comment.mentions.filter((name): name is string => typeof name === "string") : [];
+    };
+
+    const mentions = Array.isArray(comment.mentions)
+      ? [...new Set(comment.mentions.filter((name): name is string => typeof name === "string"))].slice(0, MAX_MENTION_RECIPIENTS)
+      : [];
     await Promise.all(mentions.map(async (username) => {
       const target = await db.collection("usernames").doc(username.toLowerCase()).get();
       const targetUid = target.data()?.uid;
@@ -52,35 +57,61 @@ export async function POST(request: NextRequest) {
         });
       }
     }));
-    if (recipients.size === 0) return NextResponse.json({ success: true, sent: 0 });
-
+    // An explicit @mention is the only way to override the default recipient. Otherwise derive
+    // the root author from Firestore rather than trusting client-provided replyToUid metadata.
+    let rootCommentId: string | null = null;
+    if (mentions.length === 0 && reviewId) {
+      const review = await db.collection("community_manga").doc(mangaId).collection("reviews").doc(reviewId).get();
+      addReplyRecipient(review.data()?.authorUid);
+    } else if (mentions.length === 0 && threadRootId) {
+      // New replies carry threadRootId. Follow legacy parent chains as well so old nested
+      // comments still notify and count against the true root author.
+      const root = await resolveCommentThreadRoot(comments, threadRootId);
+      if (root.exists) {
+        rootCommentId = root.id;
+        addReplyRecipient(root.data()?.authorUid);
+      }
+    } else if (threadRootId) {
+      const root = await resolveCommentThreadRoot(comments, threadRootId);
+      if (root.exists) rootCommentId = root.id;
+    }
     const dispatchRef = db.collection("commentNotificationDispatches").doc(dispatchId(mangaId, chapterUrl, commentId));
+    const slug = typeof comment.slug === "string" ? comment.slug : "";
+    const sourceId = typeof comment.sourceId === "string" ? comment.sourceId : "";
+    const notificationEntries = [...recipients.entries()].map(([targetUid, notification]) => ({
+      targetUid,
+      notification,
+      ref: db.collection("users").doc(targetUid).collection("notifications").doc(randomUUID()),
+    }));
     const shouldDispatch = await db.runTransaction(async (transaction) => {
       if ((await transaction.get(dispatchRef)).exists) return false;
       transaction.create(dispatchRef, { authorUid: user.uid, createdAt: Date.now() });
-      if (parentId) transaction.update(comments.doc(parentId), { replyCount: FieldValue.increment(1) });
+      if (reviewId) {
+        transaction.update(
+          db.collection("community_manga").doc(mangaId).collection("reviews").doc(reviewId),
+          { replyCount: FieldValue.increment(1) },
+        );
+      } else if (rootCommentId) {
+        transaction.update(comments.doc(rootCommentId), { replyCount: FieldValue.increment(1) });
+      }
+      notificationEntries.forEach(({ ref, notification }) => {
+        transaction.set(ref, {
+          type: notification.type,
+          title: notification.title,
+          body: notification.body,
+          mangaId,
+          slug,
+          sourceId,
+          chapterUrl: chapterUrl ?? null,
+          commentId,
+          createdAt: Date.now(),
+          read: false,
+        });
+      });
       return true;
     });
     if (!shouldDispatch) return NextResponse.json({ success: true, sent: 0 });
-
-    const slug = typeof comment.slug === "string" ? comment.slug : "";
-    const sourceId = typeof comment.sourceId === "string" ? comment.sourceId : "";
-    const notificationBatch = db.batch();
-    for (const [targetUid, notification] of recipients) {
-      notificationBatch.set(db.collection("users").doc(targetUid).collection("notifications").doc(randomUUID()), {
-        type: notification.type,
-        title: notification.title,
-        body: notification.body,
-        mangaId,
-        slug,
-        sourceId,
-        chapterUrl: chapterUrl ?? null,
-        commentId,
-        createdAt: Date.now(),
-        read: false,
-      });
-    }
-    await notificationBatch.commit();
+    if (recipients.size === 0) return NextResponse.json({ success: true, sent: 0 });
 
     const data = compactData({ mangaId, slug, sourceId, chapterUrl, commentId });
     const sent = await Promise.all([...recipients.entries()].map(async ([targetUid, notification]) => {
@@ -97,9 +128,24 @@ export async function POST(request: NextRequest) {
 
 function commentCollection(db: Firestore, mangaId: string, chapterUrl?: string) {
   const manga = db.collection("community_manga").doc(mangaId);
-  return chapterUrl
+  return chapterUrl !== undefined
     ? manga.collection("chapters").doc(stableChapterKey(chapterUrl)).collection("comments")
     : manga.collection("comments");
+}
+
+async function resolveCommentThreadRoot(
+  comments: CollectionReference,
+  initialId: string,
+) {
+  let currentId = initialId;
+  for (let depth = 0; depth < 10; depth += 1) {
+    const snapshot = await comments.doc(currentId).get();
+    if (!snapshot.exists) return snapshot;
+    const parentId = snapshot.data()?.parentId;
+    if (!isIdentifier(parentId)) return snapshot;
+    currentId = parentId;
+  }
+  return comments.doc(currentId).get();
 }
 
 async function sendPush(tokens: string[], title: string, body: string, data: Record<string, string>): Promise<number> {
@@ -109,6 +155,10 @@ async function sendPush(tokens: string[], title: string, body: string, data: Rec
     sent += response.successCount;
   }
   return sent;
+}
+
+function isValidChapterUrl(value: unknown): value is string | undefined {
+  return value === undefined || (typeof value === "string" && value.length >= 1 && value.length <= 4_096);
 }
 
 function compactData(values: Record<string, unknown>): Record<string, string> {

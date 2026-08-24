@@ -5,11 +5,11 @@ import com.exapps.mangaworld.domain.repository.SettingsRepository
 import okhttp3.OkHttpClient
 import javax.inject.Inject
 
-/** 3asq.org — Madara theme, Arabic */
+/** 3asq.online — Madara theme, Arabic */
 class Asq3Scraper @Inject constructor(client: OkHttpClient, settingsRepo: SettingsRepository) :
     MadaraBaseScraper(client, MangaSource.ASQ3, settingsRepo, datePattern = "d MMMM، yyyy")
 
-/** lek-manga.net — Madara theme, Arabic */
+/** mangalik.net — Madara theme, Arabic */
 class LekMangaScraper @Inject constructor(client: OkHttpClient, settingsRepo: SettingsRepository) :
     MadaraBaseScraper(client, MangaSource.LEKMANGA, settingsRepo)
 

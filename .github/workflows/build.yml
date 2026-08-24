@@ -231,6 +231,16 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Upload x86 Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MangaWorld-debug-x86
+          path: |
+            app/build/outputs/apk/debug/*x86*.apk
+            !app/build/outputs/apk/debug/*x86_64*.apk
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Upload Universal Debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -412,7 +422,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MangaWorld-release-x86
-          path: app/build/outputs/apk/release/*x86*.apk
+          path: |
+            app/build/outputs/apk/release/*x86*.apk
+            !app/build/outputs/apk/release/*x86_64*.apk
           if-no-files-found: warn
           retention-days: 90
 
@@ -481,9 +493,24 @@ jobs:
             | جميع الأجهزة (universal) | `MangaWorld-release-universal` |
 
             ### المصادر المدعومة
-            - ✅ Olympus Staff (olympustaff.com)
-            - ✅ Azora Moon (azoramoon.com)
+            - ✅ Olympus Staff / تيم اكس (olympustaff.com)
+            - ✅ Azora Moon (azorafly.com)
             - ✅ Manga Starz (manga-starz.net)
+            - ✅ MangaSid (mangasid.com)
+            - ✅ MeshManga / مانجا سوات (meshmanga.com)
+            - ✅ مانجا العاشق (3asq.online)
+            - ✅ مانجا ليك (mangalik.net)
+            - ✅ مانجا ليك اونلاين (lekmanga.online)
+            - ✅ مانجا لايك (like-manga.net)
+            - ✅ مانجا لينك (link-manga.net)
+            - ✅ مانجا ليكو (manga-leko.site)
+            - ✅ مانجا ليونز (manga-lionz.org)
+            - ✅ آريا مانجا (ar.kenmanga.com)
+            - ✅ حجالة مانجا (hijala.com)
+            - ✅ لاڤا سكانز (lavascans.com)
+            - ✅ StellarSaber (stellarsaber.pro)
+            - ✅ ProChan (procomic.pro)
+            - ✅ روكس مانجا (rocksmanga.com)
 
             ### المتطلبات
             - Android 8.0+ (API 26)

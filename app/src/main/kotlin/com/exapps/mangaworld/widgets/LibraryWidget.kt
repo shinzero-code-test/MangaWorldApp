@@ -64,7 +64,6 @@ private fun LibraryWidgetContent(
                 subtitle = LocalContext.current.getString(R.string.widget_empty_library_hint),
                 intent = AppLaunchIntents.home(context),
                 actionLabel = LocalContext.current.getString(R.string.widget_browse),
-                retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
         }

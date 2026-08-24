@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { DASHBOARD_ROLES, requireRole } from "@/lib/auth";
+import { genericErrorResponse } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
 
@@ -76,9 +77,9 @@ export async function GET(request: NextRequest) {
       limit,
       hasMore,
     });
-  } catch (error: any) {
-    const status = error.message === "Forbidden" ? 403 : error.message === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: error.message }, { status });
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }
 
@@ -106,9 +107,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    const status = error.message === "Forbidden" ? 403 : error.message === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: error.message }, { status });
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }
 
@@ -116,7 +117,9 @@ export async function DELETE(request: NextRequest) {
   try {
     await requireRole("super-admin");
     const { uid } = await request.json();
-    if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+    if (typeof uid !== "string" || uid.length < 1 || uid.length > 128) {
+      return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+    }
 
     // Delete user from Auth
     await getAdminAuth().deleteUser(uid);
@@ -124,13 +127,17 @@ export async function DELETE(request: NextRequest) {
     // Delete profile
     await getAdminDb().collection("publicProfiles").doc(uid).delete();
 
-    // Delete user subcollections
+    // Delete user subcollections — paginate to completion so residual PII
+    // doesn't survive when a subcollection exceeds the first page.
     const subcols = ["favorites", "readingHistory", "readerAnnotations"];
     for (const subcol of subcols) {
-      const snap = await getAdminDb().collection("users").doc(uid).collection(subcol).limit(500).get();
-      const batch = getAdminDb().batch();
-      snap.docs.forEach((doc: any) => batch.delete(doc.ref));
-      await batch.commit();
+      for (;;) {
+        const snap = await getAdminDb().collection("users").doc(uid).collection(subcol).limit(500).get();
+        if (snap.empty) break;
+        const batch = getAdminDb().batch();
+        snap.docs.forEach((doc: any) => batch.delete(doc.ref));
+        await batch.commit();
+      }
     }
 
     // Delete user doc
@@ -138,6 +145,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const status = error.message === "Forbidden" ? 403 : error.message === "Unauthorized" ? 401 : 500;
+    return NextResponse.json({ error: error.message === "Forbidden" ? "Forbidden" : error.message === "Unauthorized" ? "Unauthorized" : "فشل حذف المستخدم" }, { status });
   }
 }

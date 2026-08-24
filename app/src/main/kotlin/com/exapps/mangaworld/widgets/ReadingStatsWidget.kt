@@ -22,6 +22,7 @@ import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -73,16 +74,15 @@ private fun ReadingStatsContent(
                 subtitle = LocalContext.current.getString(R.string.widget_empty_stats_hint),
                 intent = AppLaunchIntents.home(context),
                 actionLabel = LocalContext.current.getString(R.string.widget_start_reading),
-                retryIntent = AppLaunchIntents.home(context)
             )
             return@WidgetCard
         }
 
-        StatsRow(icon = "🔥", label = LocalContext.current.getString(R.string.widget_reading_streak), value = "${stats.readingStreakDays} يوم")
+        StatsRow(icon = "🔥", label = LocalContext.current.getString(R.string.widget_reading_streak), value = ctx.getString(R.string.widget_streak_days, stats.readingStreakDays))
         Spacer(GlanceModifier.height(8.dp))
         StatsRow(icon = "📖", label = LocalContext.current.getString(R.string.widget_chapters_read), value = stats.totalChaptersRead.toString())
         Spacer(GlanceModifier.height(8.dp))
-        StatsRow(icon = "⏱️", label = LocalContext.current.getString(R.string.widget_reading_time), value = formatMinutes(stats.totalReadingMinutes))
+        StatsRow(icon = "⏱️", label = LocalContext.current.getString(R.string.widget_reading_time), value = formatMinutes(ctx, stats.totalReadingMinutes))
     }
 }
 
@@ -112,7 +112,7 @@ private fun StatsRow(icon: String, label: String, value: String) {
                 color = GlanceTheme.colors.onSurfaceVariant,
                 fontSize = 13.sp
             ),
-            modifier = GlanceModifier.fillMaxWidth()
+            modifier = GlanceModifier.defaultWeight()
         )
         Spacer(GlanceModifier.width(8.dp))
         Text(
@@ -126,8 +126,9 @@ private fun StatsRow(icon: String, label: String, value: String) {
     }
 }
 
-private fun formatMinutes(totalMinutes: Long): String {
+private fun formatMinutes(context: Context, totalMinutes: Long): String {
     val hours = totalMinutes / 60
     val minutes = totalMinutes % 60
-    return if (hours > 0) "${hours}س ${minutes}د" else "${minutes} دقيقة"
+    return if (hours > 0) context.getString(R.string.widget_time_hm, hours.toString(), minutes.toString())
+    else context.getString(R.string.widget_time_m, minutes.toString())
 }

@@ -4,7 +4,7 @@ import { getAdminAuth, getAdminDb } from "./firebase-admin";
 
 export const DASHBOARD_ROLES = ["viewer", "moderator", "super-admin"] as const;
 export type DashboardRole = (typeof DASHBOARD_ROLES)[number];
-export interface AuthUser { uid: string; email: string; role: DashboardRole; mfaVerified: boolean; }
+export interface AuthUser { uid: string; email: string; role: DashboardRole; mfaVerified: boolean; /** ms epoch of the session's original authentication — used for fresh-auth checks */ authTime?: number; }
 
 const ROLE_RANK: Record<DashboardRole, number> = {
   viewer: 0,
@@ -17,10 +17,10 @@ const MFA_GRANT_TTL_SECONDS = 8 * 60 * 60;
 export class MfaRequiredError extends Error {}
 
 export async function getCurrentUser(options: { requireMfa?: boolean } = {}): Promise<AuthUser> {
-  const { session, uid, email, role } = await sessionContext();
+  const { session, uid, email, role, authTime } = await sessionContext();
   const mfaVerified = await hasValidMfaGrant(uid, session);
   if (options.requireMfa && !mfaVerified) throw new MfaRequiredError("MFA verification required");
-  return { uid, email, role, mfaVerified };
+  return { uid, email, role, mfaVerified, authTime };
 }
 
 export async function requireRole(minRole: DashboardRole): Promise<AuthUser> {
@@ -53,7 +53,34 @@ export async function createMfaGrant(user: AuthUser): Promise<string> {
     expiresAt: Date.now() + MFA_GRANT_TTL_SECONDS * 1000,
     verifiedAt: Date.now(),
   });
+  // Opportunistic hygiene: purge up to 20 expired grants so revoked logouts and
+  // rotated sessions don't leave replayable rows behind until their TTL lapses.
+  try {
+    const expired = await getAdminDb()
+      .collection("adminMfaSessions")
+      .where("expiresAt", "<", Date.now())
+      .limit(20)
+      .get();
+    if (!expired.empty) {
+      const batch = getAdminDb().batch();
+      expired.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+    }
+  } catch {
+    /* non-fatal */
+  }
   return grantId;
+}
+
+/** Deletes the caller's current MFA grant document — used on logout (L-3). */
+export async function deleteCurrentMfaGrant(): Promise<void> {
+  try {
+    const grantId = (await cookies()).get(MFA_GRANT_COOKIE)?.value;
+    if (!grantId) return;
+    await getAdminDb().collection("adminMfaSessions").doc(grantId).delete();
+  } catch {
+    /* non-fatal */
+  }
 }
 
 export function setMfaGrantCookie(response: Response, grantId: string) {
@@ -73,7 +100,7 @@ export function clearMfaGrantCookie(response: Response) {
   nextResponse.cookies.set(MFA_GRANT_COOKIE, "", { httpOnly: true, secure: true, maxAge: 0, path: "/" });
 }
 
-async function sessionContext(): Promise<{ session: string; uid: string; email: string; role: DashboardRole }> {
+async function sessionContext(): Promise<{ session: string; uid: string; email: string; role: DashboardRole; authTime?: number }> {
   const store = await cookies();
   const session = store.get("session")?.value;
   if (!session) throw new Error("Unauthorized");
@@ -86,7 +113,10 @@ async function sessionContext(): Promise<{ session: string; uid: string; email: 
   }
   const role = decoded.role;
   if (role !== undefined && !isDashboardRole(role)) throw new Error("Invalid dashboard role");
-  return { session, uid: decoded.uid, email: decoded.email ?? "", role: role ?? "viewer" };
+  // auth_time (seconds) marks the original credential authentication — enables
+  // "fresh re-auth" checks for sensitive flows such as 2FA enrollment.
+  const authTime = typeof decoded.auth_time === "number" ? decoded.auth_time * 1000 : undefined;
+  return { session, uid: decoded.uid, email: decoded.email ?? "", role: role ?? "viewer", authTime };
 }
 
 async function hasValidMfaGrant(uid: string, session: string): Promise<boolean> {

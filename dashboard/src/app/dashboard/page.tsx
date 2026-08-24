@@ -6,7 +6,6 @@ import {
   Users, MessageSquare, Star, Shield, TrendingUp, Bell,
   Trophy, Settings2, Activity, ArrowUpRight
 } from "lucide-react";
-import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { SkeletonCard, StatusBadge } from "@/components/ui";
 import { formatAr } from "@/lib/utils";
 
@@ -29,11 +28,6 @@ const QUICK_ACTIONS = [
   { label:"الإشعارات", icon:Bell, href:"/dashboard/notifications", color:"#3b82f6", bg:"rgba(59,130,246,0.1)" },
   { label:"الإنجازات", icon:Trophy, href:"/dashboard/achievements", color:"#f59e0b", bg:"rgba(245,158,11,0.1)" },
 ];
-
-function buildSparkline(value: number, points = 8) {
-  const base = Math.max(value, 1);
-  return Array.from({ length: points }, (_, i) => ({ v: base * (0.6 + (i / points) * 0.4) }));
-}
 
 export default function DashboardOverview() {
   const [kpis, setKpis] = useState<KPIData | null>(null);
@@ -71,7 +65,6 @@ export default function DashboardOverview() {
         {loading ? Array.from({length:4}).map((_,i) => <SkeletonCard key={i} />) :
           kpiConfig.map((cfg, idx) => {
             const value = (kpis?.[cfg.key] as number) ?? 0;
-            const spark = buildSparkline(value);
             const Icon = cfg.icon;
             return (
               <Link key={cfg.key} href={cfg.href}
@@ -92,13 +85,8 @@ export default function DashboardOverview() {
                 </div>
                 <p className="text-sm mb-1" style={{ color:"var(--muted-foreground)" }}>{cfg.label}</p>
                 <p className="text-3xl font-bold tracking-tight">{formatAr(value)}</p>
-                <div className="mt-3 h-8 opacity-50">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={spark}>
-                      <Area dataKey="v" stroke={cfg.color} fill={cfg.color} fillOpacity={0.15} strokeWidth={1.5} dot={false} isAnimationActive />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                {/* No fabricated trend lines: sparklines only render once real time-series
+                    data is available from the analytics API. */}
               </Link>
             );
           })}

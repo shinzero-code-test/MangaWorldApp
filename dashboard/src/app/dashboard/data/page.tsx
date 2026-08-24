@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  Database, Users, BookOpen, MessageSquare, Star, Shield,
+  Database, Users, MessageSquare, Shield, Trophy,
   Eye, Trash2, Plus, RefreshCcw, ChevronLeft, X, Loader2
 } from "lucide-react";
 import { PageHeader, ConfirmDialog, EmptyState, Spinner } from "@/components/ui";
@@ -15,12 +15,14 @@ interface Collection {
   icon:        React.ComponentType<any>;
 }
 
+// Only collections that actually exist in this project's Firestore topology.
+// Keep in sync with ALLOWED_COLLECTIONS in /api/firestore/[collection]/route.ts.
 const COLLECTIONS: Collection[] = [
-  { id: "users",    label: "المستخدمون", description: "بيانات حسابات المستخدمين", icon: Users },
-  { id: "manga",    label: "المانجا",    description: "فهرس المانجا والمصادر",    icon: BookOpen },
-  { id: "comments", label: "التعليقات", description: "تعليقات المستخدمين",       icon: MessageSquare },
-  { id: "reviews",  label: "المراجعات", description: "تقييمات المستخدمين",       icon: Star },
-  { id: "reports",  label: "البلاغات",  description: "تقارير المخالفات",         icon: Shield },
+  { id: "publicProfiles",    label: "الملفات العامة", description: "ملفات المستخدمين العامة",        icon: Users },
+  { id: "community_manga",   label: "المجتمع",        description: "مانجا المجتمع وتعليقاتها",       icon: MessageSquare },
+  { id: "moderationReports", label: "البلاغات",       description: "تقارير المخالفات",               icon: Shield },
+  { id: "user_achievements", label: "الإنجازات",      description: "إنجازات المستخدمين",             icon: Trophy },
+  { id: "cloudinaryAssets",  label: "الأصول",         description: "أصول الصور المرفوعة على Cloudinary", icon: Database },
 ];
 
 interface DocRow {
@@ -76,8 +78,9 @@ export default function DataBrowserPage() {
     if (!deleteId) return;
     setDeleteLoading(true);
     try {
-      await fetch(`/api/firestore/${selected}/${deleteId}`, { method: "DELETE" });
-      setDocs((prev) => prev.filter((d) => d.id !== deleteId));
+      const res = await fetch(`/api/firestore/${selected}/${deleteId}`, { method: "DELETE" });
+      // Remove the row only when the server actually deleted it.
+      if (res.ok) setDocs((prev) => prev.filter((d) => d.id !== deleteId));
     } finally {
       setDeleteLoading(false);
       setDeleteId(null);
@@ -97,6 +100,7 @@ export default function DataBrowserPage() {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ id: newId || undefined, data: parsed }),
       });
+      if (!res.ok) { setJsonError("فشل إنشاء المستند"); return; }
       const d = await res.json();
       setDocs((prev) => [{ id: d.id ?? newId, fields: parsed }, ...prev]);
       setCreateOpen(false);

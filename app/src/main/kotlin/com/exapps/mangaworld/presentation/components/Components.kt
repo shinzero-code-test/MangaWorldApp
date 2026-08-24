@@ -169,7 +169,7 @@ fun TypeBadge(type: MangaType, modifier: Modifier = Modifier) {
     val (bg, text) = when (type) {
         MangaType.MANGA  -> Color(0xCC000033) to LocalContext.current.getString(R.string.manga)    // 80% alpha for contrast
         MangaType.MANHWA -> Color(0xCC001133) to LocalContext.current.getString(R.string.manhwa)
-        MangaType.MANHUA -> Color(0xCC330011) to LocalContext.current.getString(R.string.manhwa)
+        MangaType.MANHUA -> Color(0xCC330011) to LocalContext.current.getString(R.string.manhua)
         else             -> return
     }
     Text(

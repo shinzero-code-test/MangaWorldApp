@@ -65,9 +65,26 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideImageLoader(@ApplicationContext ctx: Context, okHttpClient: OkHttpClient): ImageLoader =
-        ImageLoader.Builder(ctx)
-            .okHttpClient(okHttpClient)
+    fun provideImageLoader(@ApplicationContext ctx: Context): ImageLoader {
+        // Dedicated image client: the shared scraper client's Firebase perf
+        // interceptor + retry-on-IOException added trace spam and retry storms
+        // to every cover request (M-review). Images get a lean client instead.
+        val imageClient = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .connectionPool(ConnectionPool(10, 5, TimeUnit.MINUTES))
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .header("User-Agent", BaseScraperImpl.USER_AGENT)
+                        .header("Accept-Language", "ar,en;q=0.9")
+                        .build()
+                )
+            }
+            .build()
+
+        return ImageLoader.Builder(ctx)
+            .okHttpClient(imageClient)
             .diskCache {
                 DiskCache.Builder()
                     .directory(File(ctx.cacheDir, "coil_image_cache"))
@@ -76,6 +93,7 @@ object NetworkModule {
             }
             .crossfade(true)
             .build()
+    }
 }
 
 @Module
@@ -138,7 +156,7 @@ object ScraperModule {
     // ─── v4.0.0 — MangaReader Theme Sources ───────────────────────────────────
 
     @Provides @Singleton @IntoMap @StringKey("areascans")
-    fun provideAreaScansScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = AreaScansScraper(client, settingsRepo)
+    fun provideAreaScansScraper(client: OkHttpClient, settingsRepo: SettingsRepository, @ApplicationContext context: Context): MangaScraper = AreaScansScraper(client, settingsRepo, context)
 
     @Provides @Singleton @IntoMap @StringKey("hijala")
     fun provideHijalaScraper(client: OkHttpClient, settingsRepo: SettingsRepository): MangaScraper = HijalaScraper(client, settingsRepo)
@@ -178,7 +196,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): MangaDatabase =
         Room.databaseBuilder(ctx, MangaDatabase::class.java, "mangaworld.db")
-            .addMigrations(MangaDatabase.MIGRATION_8_9, MangaDatabase.MIGRATION_9_10, MangaDatabase.MIGRATION_10_11, MangaDatabase.MIGRATION_11_12, MangaDatabase.MIGRATION_12_13)
+            .addMigrations(MangaDatabase.MIGRATION_8_9, MangaDatabase.MIGRATION_9_10, MangaDatabase.MIGRATION_10_11, MangaDatabase.MIGRATION_11_12, MangaDatabase.MIGRATION_12_13, MangaDatabase.MIGRATION_13_14)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
@@ -189,6 +207,7 @@ object DatabaseModule {
     @Provides fun provideReaderAnnotationDao(db: MangaDatabase) = db.readerAnnotationDao()
     @Provides fun provideCacheDao(db: MangaDatabase) = db.mangaCacheDao()
     @Provides fun provideDownloadTaskDao(db: MangaDatabase) = db.downloadTaskDao()
+    @Provides fun provideDownloadBatchDao(db: MangaDatabase) = db.downloadBatchDao()
     @Provides fun provideDownloadedMangaDao(db: MangaDatabase) = db.downloadedMangaDao()
 }
 

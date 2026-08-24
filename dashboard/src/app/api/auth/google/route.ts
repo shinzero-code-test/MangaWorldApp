@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clearMfaGrantCookie, DASHBOARD_ROLES, type DashboardRole } from "@/lib/auth";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
+import { logSecurityEvent } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
 
@@ -14,9 +15,18 @@ export async function POST(request: NextRequest) {
     const decoded = await getAdminAuth().verifyIdToken(idToken);
     const adminAuth = getAdminAuth();
     const configuredSuperAdmin = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
-    if (configuredSuperAdmin && decoded.email?.trim().toLowerCase() === configuredSuperAdmin && decoded.role !== "super-admin") {
+    // email_verified is mandatory: during config drift (typo'd env var, freed and
+    // re-registered address) an unverified account matching the configured email
+    // must never be elevated.
+    if (
+      configuredSuperAdmin &&
+      decoded.email?.trim().toLowerCase() === configuredSuperAdmin &&
+      decoded.email_verified === true &&
+      decoded.role !== "super-admin"
+    ) {
       const user = await adminAuth.getUser(decoded.uid);
       await adminAuth.setCustomUserClaims(decoded.uid, { ...user.customClaims, role: "super-admin" });
+      await logSecurityEvent("super_admin_auto_promotion", { uid: decoded.uid, email: decoded.email });
       return NextResponse.json({ refreshRequired: true });
     }
     const role = DASHBOARD_ROLES.includes(decoded.role as DashboardRole)

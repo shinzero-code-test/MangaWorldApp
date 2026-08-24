@@ -114,13 +114,17 @@ data class MangaCacheEntity(
 )
 
 @Entity(tableName = "download_tasks",
-    indices = [Index("mangaId"), Index("chapterUrl"), Index("status"), Index("updatedAt")])
+    indices = [Index("mangaId"), Index("chapterUrl"), Index("batchId"), Index("status"), Index("updatedAt")])
 data class DownloadTaskEntity(
     @PrimaryKey val id: String,
     val mangaId: String,
     val mangaTitle: String? = null,
     val chapterUrl: String,
     val chapterTitle: String? = null,
+    val sourceId: String = "",
+    val mangaSlug: String = "",
+    val batchId: String? = null,
+    val wifiOnly: Boolean = true,
     val targetDir: String,
     val referer: String = "",
     val pagesJson: String = "[]",
@@ -129,7 +133,21 @@ data class DownloadTaskEntity(
     val totalPages: Int = 0,
     val downloadedPages: Int = 0,
     val retries: Int = 0,
+    val failureNotified: Boolean = false,
     val errorMessage: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "download_batches", indices = [Index("mangaId"), Index("updatedAt")])
+data class DownloadBatchEntity(
+    @PrimaryKey val id: String,
+    val mangaId: String,
+    val mangaTitle: String,
+    val totalChapters: Int,
+    val completedChapters: Int = 0,
+    val failedChapters: Int = 0,
+    val completionNotified: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

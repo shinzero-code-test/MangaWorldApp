@@ -137,9 +137,15 @@ class OlympusScraper @Inject constructor(
         val url = "${source.baseUrl}/series/$slug"
         val doc = fetchDocument(url)
 
-        val coverUrl = doc.selectFirst("img[alt=\"Manga Image\"]")
-            ?.attr("abs:src")
-            ?: doc.selectFirst(".text-right img.shadow-sm, .shadow-sm")?.attr("abs:src")
+        fun Element?.lazySrc(): String? {
+            val el = this ?: return null
+            val dataSrc = el.attr("data-src").ifBlank { el.attr("data-lazy-src") }
+            val abs = el.attr("abs:src")
+            return sequenceOf(dataSrc, abs.takeUnless { it.startsWith("data:") }, el.attr("src").takeUnless { it.startsWith("data:") })
+                .filterNotNull().firstOrNull { it.isNotBlank() }
+        }
+        val coverUrl = doc.selectFirst("img[alt=\"Manga Image\"]").lazySrc()
+            ?: doc.selectFirst(".text-right img.shadow-sm, .shadow-sm").lazySrc()
             ?: ""
 
         // Title: h1 is the most reliable; .col-md-9 doesn't exist in real HTML
@@ -234,10 +240,7 @@ class OlympusScraper @Inject constructor(
         val chapters = chaptersMap.values.sortedByDescending { it.number }
 
         // Views: "X views" text in info area, or sum chapter views
-        val viewsText = doc.body().text().let { text ->
-            Regex("(\\d[\\d,]*)\\s*(مشاهدة|view)").find(text)?.groupValues?.get(1)
-                ?.replace(",", "")
-        }
+        val viewsText = ScraperText.extractViews(doc.body().text())?.toString()
 
         val totalChapters = doc.selectFirst(".enhanced-chapters-section h5")
             ?.text()
@@ -274,9 +277,14 @@ class OlympusScraper @Inject constructor(
         // Pages: .reading-content .page-break img.manga-chapter-img
         val pages = doc.select(".reading-content .page-break img.manga-chapter-img, .reading-content img")
             .mapNotNull { img ->
-                val raw = img.attr("data-src").ifEmpty { img.attr("src") }
-                val src = img.attr("abs:src").ifEmpty { raw.absoluteUrl() }.encodeForUrl()
-                src.takeIf { it.isNotBlank() }
+                // abs:src may be a base64 lazy placeholder — data-src wins; skip data: URIs.
+                val absSrc = img.attr("abs:src")
+                val dataSrc = img.attr("data-src").ifEmpty { img.attr("data-lazy-src") }
+                val chosen = dataSrc.ifBlank {
+                    absSrc.takeUnless { it.isBlank() || it.startsWith("data:") } ?: img.attr("src")
+                }
+                if (chosen.isBlank() || chosen.startsWith("data:")) return@mapNotNull null
+                chosen.absoluteUrl().encodeForUrl().takeIf { it.isNotBlank() && !it.startsWith("data:") }
             }
             .distinct()
             .mapIndexed { index, src ->
@@ -442,101 +450,10 @@ class OlympusScraper @Inject constructor(
         return (homeStyle + seriesListStyle).distinctBy { it.url }
     }
 
-    /**
-     * Parses the JSON response from /ajax/search.
-     *
-     * Handles both array format: [{"title":…,"url":…,"thumbnail":…}, …]
-     * and object format: {"data":[…]} / {"results":[…]}
-     *
-     * Common field aliases across different server implementations:
-     *   title       → title, name
-     *   url/href    → url, href, link, permalink
-     *   cover image → thumbnail, image, cover, img, photo
-     */
-    private fun parseJsonSearchResults(body: String): List<MangaItem> {
-        fun parseItem(obj: JSONObject): MangaItem? {
-            val title = obj.optString("title").ifBlank { obj.optString("name") }.trim()
-            if (title.isBlank()) return null
-
-            val rawUrl = obj.optString("url").ifBlank {
-                obj.optString("href").ifBlank {
-                    obj.optString("link").ifBlank { obj.optString("permalink") }
-                }
-            }
-            val href = when {
-                rawUrl.startsWith("http") -> rawUrl
-                rawUrl.startsWith("/")    -> "${source.baseUrl}$rawUrl"
-                rawUrl.isNotBlank()       -> "${source.baseUrl}/$rawUrl"
-                else                      -> return null
-            }
-            val slug = href.substringAfterLast("/series/").trimEnd('/').ifBlank { return null }
-
-            val rawCover = obj.optString("thumbnail").ifBlank {
-                obj.optString("image").ifBlank {
-                    obj.optString("cover").ifBlank {
-                        obj.optString("img").ifBlank { obj.optString("photo") }
-                    }
-                }
-            }
-            val coverUrl = when {
-                rawCover.startsWith("http") -> rawCover
-                rawCover.startsWith("/")    -> "${source.baseUrl}$rawCover"
-                else                        -> rawCover
-            }
-
-            return MangaItem(
-                id = "olympus_$slug", slug = slug, title = title.cleanText(),
-                coverUrl = coverUrl, source = source, url = href
-            )
-        }
-
-        return runCatching {
-            val trimmed = body.trimStart()
-            val array: JSONArray = when {
-                trimmed.startsWith("[") -> JSONArray(body)
-                else -> {
-                    val obj = JSONObject(body)
-                    // Try common wrapper keys
-                    listOf("data", "results", "items", "manga", "series")
-                        .firstNotNullOfOrNull { key ->
-                            runCatching { obj.getJSONArray(key) }.getOrNull()
-                        } ?: JSONArray()
-                }
-            }
-            (0 until array.length()).mapNotNull { i ->
-                runCatching { parseItem(array.getJSONObject(i)) }.getOrNull()
-            }
-        }.getOrElse { emptyList() }
-    }
-
-    private fun parseAjaxSearchHtml(body: String): List<MangaItem> {
-        val doc = Jsoup.parse(body, source.baseUrl)
-        // Olympus search returns <a href="/series/..."> with flex items
-        return doc.select("a[href*='/series/']").mapNotNull { a ->
-            val href = a.attr("abs:href").ifEmpty { a.attr("href").absoluteUrl() }
-            val slug = href.substringAfterLast("/series/").trimEnd('/').takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val title = a.selectFirst("h4")?.text()?.cleanText()
-                ?: a.selectFirst("img[alt]")?.attr("alt")?.cleanText()
-                ?: a.attr("title").cleanText().ifEmpty { return@mapNotNull null }
-            val coverUrl = a.selectFirst("img")?.let { img ->
-                img.attr("abs:src").ifEmpty {
-                    img.attr("data-src").ifEmpty { img.attr("src") }.absoluteUrl()
-                }
-            }?.encodeForUrl().orEmpty()
-            MangaItem(
-                id = "olympus_$slug",
-                slug = slug,
-                title = title,
-                coverUrl = coverUrl,
-                source = source,
-                url = href
-            )
-        }.distinctBy { it.url }
-    }
-
     private fun applyBrowseSort(items: List<MangaItem>, sortBy: SortBy): List<MangaItem> = when (sortBy) {
         SortBy.RATING -> items.sortedByDescending { it.rating ?: 0f }
-        SortBy.POPULARITY -> items.sortedByDescending { it.latestChapter ?: 0 }
+        // Prefer real view counts when parsed; latestChapter is only a last-resort proxy.
+        SortBy.POPULARITY -> items.sortedByDescending { it.views?.toLongOrNull() ?: it.latestChapter?.toLong() ?: 0L }
         SortBy.OLDEST -> items.sortedBy { it.title.lowercase() }
         SortBy.LATEST -> items
     }

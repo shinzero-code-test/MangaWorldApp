@@ -72,14 +72,7 @@ fun LibraryBottomSheet(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(MangaColors.SurfaceContainer)
-                    .clickable {
-                        if (isFavourite) {
-                            onSetStatus(null)
-                            onToggleFavourite()
-                        } else {
-                            onToggleFavourite()
-                        }
-                    }
+                    .clickable(onClick = onToggleFavourite)
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)

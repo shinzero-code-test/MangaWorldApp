@@ -39,6 +39,8 @@ interface LibraryRepository {
     suspend fun removeFavorite(mangaId: String)
     suspend fun isFavorite(mangaId: String): Boolean
     fun isFavoriteFlow(mangaId: String): Flow<Boolean>
+    fun observeLibraryEntry(mangaId: String): Flow<FavoriteManga?>
+    suspend fun ensureLibraryEntry(manga: FavoriteManga)
     suspend fun getFavoritesByStatus(status: String): List<FavoriteManga>
     suspend fun updateReadingStatus(mangaId: String, status: String?)
 
@@ -54,6 +56,9 @@ interface LibraryRepository {
     // Read Chapters
     suspend fun markChapterRead(mangaId: String, chapterNumber: Float)
     suspend fun markChapterUnread(mangaId: String, chapterNumber: Float)
+    /** Batch variants — one round-trip instead of N sequential calls (long manga). */
+    suspend fun markAllChaptersRead(mangaId: String, chapterNumbers: Collection<Float>)
+    suspend fun markAllChaptersUnread(mangaId: String, chapterNumbers: Collection<Float>)
     suspend fun isChapterRead(mangaId: String, chapterNumber: Float): Boolean
     fun getReadChapters(mangaId: String): Flow<Set<Float>>
     suspend fun saveReadingProgress(mangaId: String, chapterNumber: Float, page: Int, totalPages: Int)
@@ -67,6 +72,13 @@ interface LibraryRepository {
 
 interface SettingsRepository {
     fun getAppSettings(): Flow<AppSettings>
+
+    /**
+     * The enabled-sources set exactly as stored, WITHOUT the Remote-Config filter applied by
+     * [getAppSettings]. Backups must persist this raw value so a temporarily server-disabled
+     * source is not permanently disabled after a backup round-trip.
+     */
+    suspend fun getStoredEnabledSources(): Set<String>
     suspend fun updateTheme(theme: AppTheme)
     suspend fun setOnboardingCompleted(completed: Boolean)
     suspend fun setDownloadOnWifiOnly(enabled: Boolean)
@@ -84,6 +96,9 @@ interface SettingsRepository {
     suspend fun setContentBlacklist(values: Set<String>)
     suspend fun setSpoilerCollapseDefault(enabled: Boolean)
     suspend fun setMutedUserIds(values: Set<String>)
+    /** Atomic single-user mute toggles — avoid read-then-set races. */
+    suspend fun addMutedUser(uid: String)
+    suspend fun removeMutedUser(uid: String)
     suspend fun setReadingListStatus(status: String?)
     suspend fun setShowLibraryPublic(enabled: Boolean)
 
@@ -143,16 +158,23 @@ interface CommunityRepository {
     suspend fun deleteList(listId: String)
     suspend fun addMangaToList(listId: String, item: CustomUserListItem)
     suspend fun removeMangaFromList(listId: String, mangaId: String)
-    suspend fun postMangaComment(mangaId: String, slug: String, sourceId: String, text: String, spoiler: Boolean = false, parentId: String? = null)
-    suspend fun postChapterComment(mangaId: String, slug: String, sourceId: String, chapterUrl: String, text: String, spoiler: Boolean = false, parentId: String? = null)
+    suspend fun postMangaComment(mangaId: String, slug: String, sourceId: String, text: String, spoiler: Boolean = false, replyTarget: CommunityReplyTarget? = null)
+    suspend fun postChapterComment(mangaId: String, slug: String, sourceId: String, chapterUrl: String, text: String, spoiler: Boolean = false, replyTarget: CommunityReplyTarget? = null)
     suspend fun upsertReview(mangaId: String, slug: String, sourceId: String, rating: Int, title: String, body: String)
+    suspend fun updateComment(comment: CommunityComment, text: String, spoiler: Boolean)
+    suspend fun deleteComment(comment: CommunityComment)
+    suspend fun deleteReview(review: MangaReview)
     suspend fun sendPageReaction(mangaId: String, chapterUrl: String, pageIndex: Int, emoji: String, normalizedX: Float, normalizedY: Float)
     suspend fun sendChatMessage(roomId: String = "global", text: String)
     suspend fun reportComment(comment: CommunityComment, reason: String)
+    suspend fun reportReview(review: MangaReview, reason: String)
     suspend fun likeComment(commentId: String)
     suspend fun dislikeComment(commentId: String)
+    suspend fun likeReview(mangaId: String, reviewId: String)
+    suspend fun dislikeReview(mangaId: String, reviewId: String)
     suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean)
     suspend fun markNotificationRead(notificationId: String)
+    suspend fun markNotificationsRead(ids: List<String>)
 
     // Following
     suspend fun followUser(targetUid: String)

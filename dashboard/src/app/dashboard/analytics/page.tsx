@@ -27,10 +27,13 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/analytics/summary?period=${period}`)
-      .then(r => r.json())
+    const controller = new AbortController();
+    // Abort stale requests so rapid period switches can't resolve out of order.
+    fetch(`/api/analytics/summary?period=${period}`, { signal: controller.signal })
+      .then(r => { if (!r.ok) throw new Error("failed"); return r.json(); })
       .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch((e: Error) => { if (e.name !== "AbortError") setLoading(false); });
+    return () => controller.abort();
   }, [period]);
 
   // API shape: { overview: {totalUsers, openReports, totalLists, recentSignUps, roleDistribution},

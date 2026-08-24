@@ -133,6 +133,47 @@ class ReadingStatsStore @Inject constructor(
         }
     }
 
+    /** Full stats snapshot for local backup export. */
+    suspend fun snapshot(): JSONObject {
+        val prefs = dataStore.data.first()
+        return JSONObject().apply {
+            put("totalReadingTimeMs", prefs[totalReadingTimeKey] ?: 0L)
+            put("dailyPages", prefs[dailyPagesKey] ?: "{}")
+            put("dailyTimeMs", prefs[dailyTimeKey] ?: "{}")
+            put("lastReadDate", prefs[lastReadDateKey] ?: "")
+            put("currentStreak", prefs[currentStreakKey] ?: 0)
+            put("longestStreak", prefs[longestStreakKey] ?: 0)
+            put("totalMangaRead", prefs[totalMangaReadKey] ?: 0)
+        }
+    }
+
+    /** Restores a snapshot produced by [snapshot]; absent keys are left untouched. */
+    suspend fun restore(snapshot: JSONObject) {
+        dataStore.edit { prefs ->
+            if (snapshot.has("totalReadingTimeMs")) {
+                prefs[totalReadingTimeKey] = snapshot.getLong("totalReadingTimeMs")
+            }
+            if (snapshot.has("dailyPages")) {
+                prefs[dailyPagesKey] = snapshot.getString("dailyPages")
+            }
+            if (snapshot.has("dailyTimeMs")) {
+                prefs[dailyTimeKey] = snapshot.getString("dailyTimeMs")
+            }
+            if (snapshot.has("lastReadDate")) {
+                prefs[lastReadDateKey] = snapshot.getString("lastReadDate")
+            }
+            if (snapshot.has("currentStreak")) {
+                prefs[currentStreakKey] = snapshot.getInt("currentStreak")
+            }
+            if (snapshot.has("longestStreak")) {
+                prefs[longestStreakKey] = snapshot.getInt("longestStreak")
+            }
+            if (snapshot.has("totalMangaRead")) {
+                prefs[totalMangaReadKey] = snapshot.getInt("totalMangaRead")
+            }
+        }
+    }
+
     /** Parse a JSON object into a mutable Int map (used for page counts). */
     private fun parseMap(json: String): MutableMap<String, Int> {
         return try {

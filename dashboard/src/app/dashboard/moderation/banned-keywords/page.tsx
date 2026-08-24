@@ -8,6 +8,7 @@ export default function BannedKeywordsPage() {
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
   const [saved,     setSaved]     = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [newKw,     setNewKw]     = useState("");
 
   useEffect(() => {
@@ -28,13 +29,17 @@ export default function BannedKeywordsPage() {
   const saveKeywords = async (newList: string[]) => {
     setSaving(true);
     try {
-      await fetch("/api/moderation/banned-keywords", {
+      const res = await fetch("/api/moderation/banned-keywords", {
         method:"PUT",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ keywords: newList.join(",") }),
       });
+      if (!res.ok) { setSaveError("فشل حفظ الكلمات المحظورة."); return; }
+      setSaveError("");
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setSaveError("خطأ في الاتصال أثناء الحفظ.");
     } finally { setSaving(false); }
   };
 
@@ -60,7 +65,9 @@ export default function BannedKeywordsPage() {
         title="الكلمات المحظورة"
         subtitle={`${keywords.length} كلمة محظورة`}
         icon={Shield}
-        actions={saved ? (
+        actions={saveError ? (
+          <span className="text-sm" style={{ color:"var(--destructive)" }}>{saveError}</span>
+        ) : saved ? (
           <span className="flex items-center gap-1.5 text-sm" style={{ color:"var(--success)" }}>
             <CheckCircle2 size={15} /> تم الحفظ
           </span>

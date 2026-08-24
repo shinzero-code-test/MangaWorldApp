@@ -40,6 +40,7 @@ export default function RemoteConfigPage() {
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState(false);
   const [saved,    setSaved]    = useState(false);
+  const [publishError, setPublishError] = useState("");
   const [etag,     setEtag]     = useState("");
   const [paramCount,setParamCount] = useState(0);
 
@@ -76,13 +77,18 @@ export default function RemoteConfigPage() {
   const handlePublish = async () => {
     setSaving(true);
     try {
-      await fetch("/api/remote-config", {
+      const res = await fetch("/api/remote-config", {
         method:"PUT",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ parameters: values }),
       });
+      // Never claim success for a failed publish — operators must not believe broken config shipped.
+      if (!res.ok) { setPublishError("فشل نشر الإعدادات — لم يتم تطبيق أي تغييرات."); return; }
+      setPublishError("");
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setPublishError("خطأ في الاتصال أثناء النشر.");
     } finally { setSaving(false); }
   };
 
@@ -111,6 +117,9 @@ export default function RemoteConfigPage() {
               <span className="text-xs font-mono px-2 py-1 rounded-lg" style={{ background:"var(--muted)", color:"var(--muted-foreground)" }} dir="ltr">
                 {paramCount} معامل • ETag: {etag.slice(0,10)}…
               </span>
+            )}
+            {publishError && (
+              <span className="text-xs font-medium" style={{ color:"var(--destructive)" }}>{publishError}</span>
             )}
             <button onClick={handlePublish} disabled={saving}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition hover:opacity-90 disabled:opacity-60"
