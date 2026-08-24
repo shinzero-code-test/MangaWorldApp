@@ -28,3 +28,5 @@ sessions/
 # Local tooling / build artifacts
 dashboard/tsconfig.tsbuildinfo
 .mimocode/
+firebase-debug.log
+firebase-debug.*.log
