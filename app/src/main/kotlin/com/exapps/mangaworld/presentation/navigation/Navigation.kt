@@ -3,6 +3,7 @@ package com.exapps.mangaworld.presentation.navigation
 import android.content.Context
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
@@ -690,9 +691,9 @@ private fun launchFacebookLogin(context: android.content.Context) {
  * "relative" would let hostile absolute URLs through.
  */
 private fun isTrustedChapterHost(chapterUrl: String, baseUrl: String): Boolean {
-    val linkHost = okhttp3.HttpUrl.parse(chapterUrl)?.host
+    val linkHost = chapterUrl.toHttpUrlOrNull()?.host
         ?: return true // not an absolute http(s) URL — resolved against source.baseUrl by the reader
-    val expectedHost = okhttp3.HttpUrl.parse(baseUrl)?.host
+    val expectedHost = baseUrl.toHttpUrlOrNull()?.host
         ?: return false
     return linkHost.equals(expectedHost, ignoreCase = true)
 }

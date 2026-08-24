@@ -293,7 +293,7 @@ fun CommunityRepliesScreen(
                                 onEdit = { commentEditor = root.value },
                                 onDelete = { deleteTarget = root },
                                 onReport = { gatedReport(root) },
-                                onMute = gatedMute,
+                                onMute = { if (isSignedIn) viewModel.muteUser(root.value.authorUid) },
                                 onProfileClick = { onOpenProfile(root.value.authorUid) },
                                 onLike = { gatedLike(root.value.id) },
                                 onDislike = { gatedDislike(root.value.id) }
@@ -342,7 +342,7 @@ fun CommunityRepliesScreen(
                         onEdit = { commentEditor = reply },
                         onDelete = { deleteTarget = CommunityTarget.Comment(reply) },
                         onReport = { gatedReport(CommunityTarget.Comment(reply)) },
-                        onMute = gatedMute,
+                        onMute = { if (isSignedIn) viewModel.muteUser(reply.authorUid) },
                         onProfileClick = { onOpenProfile(reply.authorUid) },
                         onLike = { gatedLike(reply.id) },
                         onDislike = { gatedDislike(reply.id) }
