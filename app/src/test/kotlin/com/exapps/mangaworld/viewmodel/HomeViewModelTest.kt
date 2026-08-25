@@ -4,6 +4,7 @@ import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.domain.model.*
+import com.exapps.mangaworld.domain.repository.LibraryRepository
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.home.HomeViewModel
@@ -25,6 +26,7 @@ class HomeViewModelTest {
     private val testDispatcher = UnconfinedTestDispatcher()
     private val mangaRepo = mockk<MangaRepository>(relaxed = true)
     private val settingsRepo = mockk<SettingsRepository>(relaxed = true)
+    private val libraryRepo = mockk<LibraryRepository>(relaxed = true)
     private val remoteConfigManager = mockk<FirebaseRemoteConfigManager>(relaxed = true)
     private val analyticsManager = mockk<FirebaseAnalyticsManager>(relaxed = true)
     private val firebaseTelemetry = mockk<FirebaseTelemetry>(relaxed = true)
@@ -34,6 +36,7 @@ class HomeViewModelTest {
         Dispatchers.setMain(testDispatcher)
         val defaultSettings = AppSettings(enabledSources = setOf("azora", "olympus"))
         every { settingsRepo.getAppSettings() } returns flowOf(defaultSettings)
+        every { libraryRepo.getFavorites() } returns flowOf(emptyList())
         every { remoteConfigManager.remoteAlertMessage } returns MutableStateFlow("")
         every { remoteConfigManager.homeLayoutVariant } returns MutableStateFlow("default")
         coEvery { mangaRepo.getHomeData(any()) } returns Result.success(
@@ -55,6 +58,7 @@ class HomeViewModelTest {
         context = io.mockk.mockk(relaxed = true),
         repo = mangaRepo,
         settingsRepo = settingsRepo,
+        libraryRepo = libraryRepo,
         remoteConfigManager = remoteConfigManager,
         analyticsManager = analyticsManager,
         firebaseTelemetry = firebaseTelemetry
