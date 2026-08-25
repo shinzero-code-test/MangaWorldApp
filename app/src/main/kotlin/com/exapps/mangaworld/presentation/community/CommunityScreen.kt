@@ -293,7 +293,7 @@ class CommunityViewModel @Inject constructor(
                 )
                 pending.update {
                     it.copy(
-                        reviewEchoes = (it.reviewEchoes - it.reviewEchoes.firstOrNull { e -> e.authorUid == profile.uid }) + reviewEcho!!
+                        reviewEchoes = it.reviewEchoes.filterNot { e -> e.authorUid == profile.uid } + reviewEcho!!
                     )
                 }
             }

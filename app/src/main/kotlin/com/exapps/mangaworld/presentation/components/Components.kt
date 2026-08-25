@@ -50,7 +50,8 @@ fun MangaCard(
         modifier = modifier
             .glassSurface(
                 cornerRadius = 12.dp,
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                glowColors = MangaColors.GradientPurpleCyan
             )
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClickLabel = manga.title) { onClick() }

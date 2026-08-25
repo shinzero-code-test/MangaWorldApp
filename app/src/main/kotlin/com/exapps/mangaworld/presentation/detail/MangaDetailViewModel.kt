@@ -48,7 +48,7 @@ data class DetailUiState(
     val userLists: List<CustomUserList> = emptyList(),
     val showAddToListDialog: Boolean = false,
     /** Lists that already contain the current manga — drives the "Added" label (v8 #9). */
-    val listIdsContainingManga: Set<String> = emptyList(),
+    val listIdsContainingManga: Set<String> = emptySet(),
     /** Name of the list the manga was just added to; empty hides the banner (v8 #9). */
     val lastAddedListName: String = "",
     val listAddFailed: Boolean = false,
