@@ -25,6 +25,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -54,6 +55,7 @@ import com.exapps.mangaworld.domain.model.CommunityReplyTarget
 import com.exapps.mangaworld.domain.model.MangaReview
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import com.exapps.mangaworld.presentation.components.GlassCard
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
@@ -65,6 +67,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -87,6 +90,16 @@ data class RepliesUiState(
     val error: String? = null
 )
 
+/** Local overlay of a reply/edit until the authoritative snapshot lands (v8 #6). */
+@Immutable
+data class PendingReplyEdit(val text: String, val spoiler: Boolean, val at: Long)
+
+@Immutable
+private data class ReplyPending(
+    val echoes: List<CommunityComment> = emptyList(),
+    val edits: Map<String, PendingReplyEdit> = emptyMap()
+)
+
 @HiltViewModel
 class RepliesViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -102,6 +115,7 @@ class RepliesViewModel @Inject constructor(
     private val chapterUrl: String? = decodeCommunityRouteArgument(savedStateHandle.get<String>("chapterUrl"))
     private val selectedRecipientId = MutableStateFlow<String?>(null)
     private val error = MutableStateFlow<String?>(null)
+    private val pending = MutableStateFlow(ReplyPending())
 
     private val commentsFlow = if (chapterUrl == null) {
         communityRepository.observeMangaComments(mangaId)
@@ -115,28 +129,43 @@ class RepliesViewModel @Inject constructor(
         combine(commentsFlow, reviewsFlow, profileFlow, settingsRepository.getAppSettings()) { comments, reviews, profile, settings ->
             ReplyData(comments, reviews, profile, settings)
         },
-        selectedRecipientId,
-        error
-    ) { data, selectedId, currentError ->
+        combine(selectedRecipientId, error, pending) { selectedId, currentError, pd ->
+            ReplyBits(selectedId, currentError, pd)
+        }
+    ) { data, bits ->
         val root = if (reviewId == null) {
             data.comments.firstOrNull { it.id == rootId }?.let { CommunityTarget.Comment(it) }
         } else {
             data.reviews.firstOrNull { it.id == reviewId }?.let { CommunityTarget.Review(it) }
         }
-        val replies = filterMutedComments(
-            if (reviewId == null) flattenLegacyAndFlatReplies(data.comments, rootId)
-            else data.comments.filter { it.reviewId == reviewId }.sortedBy { it.createdAt },
-            data.settings.mutedUserIds
-        )
+        val now = System.currentTimeMillis()
+        // Optimistic overlays (v8 #6): apply pending edits, then append echoes that
+        // the snapshot has not reflected yet.
+        val liveReplies = flattenLegacyAndFlatReplies(
+            if (reviewId == null) data.comments
+            else data.comments.filter { it.reviewId == reviewId },
+            rootId
+        ).map { c ->
+            bits.pending.edits[c.id]
+                ?.takeIf { (c.editedAt ?: 0L) < it.at - EDIT_LANDED_TOLERANCE_MS }
+                ?.let { c.copy(text = it.text, spoiler = it.spoiler) }
+                ?: c
+        }
+        val echoed = bits.pending.echoes.filter { echo ->
+            now - echo.createdAt < ECHO_TTL_MS &&
+                liveReplies.none { it.authorUid == echo.authorUid && it.text == echo.text && !it.isDeleted }
+        }
+        val replies = filterMutedComments(liveReplies + echoed, data.settings.mutedUserIds)
+            .sortedBy { it.createdAt }
         val rootRecipient = root?.toRecipient()
         val recipients = listOfNotNull(rootRecipient) + replies.map(CommunityComment::toRecipient)
         RepliesUiState(
             root = root,
             replies = replies,
-            replyTo = recipients.firstOrNull { it.id == selectedId } ?: rootRecipient,
+            replyTo = recipients.firstOrNull { it.id == bits.selectedId } ?: rootRecipient,
             profile = data.profile,
             appSettings = data.settings,
-            error = currentError
+            error = bits.currentError
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, RepliesUiState())
 
@@ -148,6 +177,7 @@ class RepliesViewModel @Inject constructor(
 
     fun postReply(text: String, spoiler: Boolean) {
         val rootRecipient = state.value.root?.toRecipient() ?: return
+        val profile = state.value.profile
         val mentionsUser = USER_MENTION.containsMatchIn(text)
         val replyTarget = CommunityReplyTarget(
             parentId = rootId.takeIf { reviewId == null },
@@ -155,30 +185,70 @@ class RepliesViewModel @Inject constructor(
             replyToUid = rootRecipient.authorUid.takeIf { !mentionsUser },
             replyToUsername = rootRecipient.username.takeIf { !mentionsUser && it.isNotBlank() }
         )
+        var echo: CommunityComment? = null
         launchAction(R.string.community_error_post) {
-            if (chapterUrl == null) {
-                communityRepository.postMangaComment(mangaId, slug, sourceId, text, spoiler, replyTarget)
-            } else {
-                communityRepository.postChapterComment(mangaId, slug, sourceId, chapterUrl, text, spoiler, replyTarget)
+            if (profile != null && text.isNotBlank()) {
+                echo = CommunityComment(
+                    id = "pending_${java.util.UUID.randomUUID()}",
+                    mangaId = mangaId,
+                    chapterUrl = chapterUrl,
+                    slug = slug,
+                    sourceId = sourceId,
+                    parentId = replyTarget.parentId,
+                    threadRootId = replyTarget.parentId,
+                    reviewId = reviewId,
+                    replyToUid = replyTarget.replyToUid,
+                    replyToUsername = replyTarget.replyToUsername,
+                    authorUid = profile.uid,
+                    authorName = profile.displayName.ifBlank { profile.username },
+                    authorUsername = profile.username,
+                    authorAvatarUrl = profile.avatarUrl,
+                    text = text.trim(),
+                    spoiler = spoiler,
+                    createdAt = System.currentTimeMillis()
+                )
+                pending.update { it.copy(echoes = it.echoes + echo!!) }
             }
-            selectedRecipientId.value = null
+            try {
+                if (chapterUrl == null) {
+                    communityRepository.postMangaComment(mangaId, slug, sourceId, text, spoiler, replyTarget)
+                } else {
+                    communityRepository.postChapterComment(mangaId, slug, sourceId, chapterUrl, text, spoiler, replyTarget)
+                }
+                selectedRecipientId.value = null
+            } catch (t: Throwable) {
+                echo?.let { e -> pending.update { it.copy(echoes = it.echoes - e) } }
+                throw t
+            }
         }
     }
 
     fun updateComment(comment: CommunityComment, text: String, spoiler: Boolean) = launchAction(R.string.community_error_post) {
-        communityRepository.updateComment(comment, text, spoiler)
+        val at = System.currentTimeMillis()
+        pending.update { it.copy(edits = it.edits + (comment.id to PendingReplyEdit(text.trim(), spoiler, at))) }
+        try {
+            communityRepository.updateComment(comment, text, spoiler)
+        } catch (t: Throwable) {
+            pending.update { it.copy(edits = it.edits - comment.id) }
+            throw t
+        }
     }
 
-    fun deleteComment(comment: CommunityComment) = launchAction(R.string.error_generic) {
+    fun deleteComment(comment: CommunityComment) = launchAction(R.string.community_error_generic_action) {
         communityRepository.deleteComment(comment)
+        pending.update { it.copy(echoes = it.echoes.filterNot { e -> e.id == comment.id }) }
     }
 
-    fun deleteReview(review: MangaReview) = launchAction(R.string.error_generic) {
+    fun deleteReview(review: MangaReview) = launchAction(R.string.community_error_generic_action) {
         communityRepository.deleteReview(review)
     }
 
     fun upsertReview(rating: Int, title: String, body: String) = launchAction(R.string.str_338) {
         communityRepository.upsertReview(mangaId, slug, sourceId, rating, title, body)
+    }
+
+    fun dismissError() {
+        error.value = null
     }
 
     fun report(target: CommunityTarget, reason: String) = launchAction(R.string.community_error_report) {
@@ -229,8 +299,16 @@ class RepliesViewModel @Inject constructor(
         val settings: AppSettings
     )
 
+    private data class ReplyBits(
+        val selectedId: String?,
+        val currentError: String?,
+        val pending: ReplyPending
+    )
+
     private companion object {
         val USER_MENTION = Regex("@([A-Za-z0-9_]{3,30})")
+        const val ECHO_TTL_MS = 10_000L
+        const val EDIT_LANDED_TOLERANCE_MS = 2_000L
     }
 }
 
@@ -388,12 +466,28 @@ fun CommunityRepliesScreen(
                 )
             }
             state.error?.let { message ->
-                Text(
-                    message,
-                    color = MangaColors.Error,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+                // Prominent action banner (v8 #6) — replaces the invisible bottom caption.
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    glowColors = listOf(MangaColors.Error, MangaColors.Error)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Close, null, tint = MangaColors.Error, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            message,
+                            color = MangaColors.Error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = viewModel::dismissError) {
+                            Text(stringResource(R.string.dismiss), color = MangaColors.MutedLight)
+                        }
+                    }
+                }
             }
         }
     }

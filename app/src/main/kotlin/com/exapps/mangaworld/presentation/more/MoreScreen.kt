@@ -120,17 +120,18 @@ fun MoreScreen(
 
 @Composable
 private fun MoreGridCard(item: MoreGridItem) {
-    Card(
+    // v8 glass: each entry glows in its own accent color.
+    com.exapps.mangaworld.presentation.components.GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1f)
-            .clickable { item.onClick() },
-        colors = CardDefaults.cardColors(containerColor = MangaColors.Surface),
-        shape = RoundedCornerShape(20.dp)
+            .aspectRatio(1f),
+        cornerRadius = 20.dp,
+        glowColors = listOf(item.color, item.color)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .clickable { item.onClick() }
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center

@@ -47,6 +47,11 @@ data class DetailUiState(
     val cloudflareDomain: String? = null,
     val userLists: List<CustomUserList> = emptyList(),
     val showAddToListDialog: Boolean = false,
+    /** Lists that already contain the current manga — drives the "Added" label (v8 #9). */
+    val listIdsContainingManga: Set<String> = emptyList(),
+    /** Name of the list the manga was just added to; empty hides the banner (v8 #9). */
+    val lastAddedListName: String = "",
+    val listAddFailed: Boolean = false,
     val chapterSearchQuery: String = ""
 )
 
@@ -391,13 +396,27 @@ class MangaDetailViewModel @Inject constructor(
 
     fun toggleChaptersOrder() = _state.update { it.copy(chaptersReversed = !it.chaptersReversed) }
 
-    fun showAddToListDialog() = _state.update { it.copy(showAddToListDialog = true) }
+    fun showAddToListDialog() {
+        _state.update { it.copy(showAddToListDialog = true) }
+        // Resolve membership up-front so every row can show an accurate
+        // "already added" label (v8 #9).
+        viewModelScope.launch {
+            runCatching {
+                val containing = mutableSetOf<String>()
+                _state.value.userLists.forEach { list ->
+                    val items = communityRepository.observeListItems(list.id).first()
+                    if (items.any { it.mangaId == currentMangaId }) containing += list.id
+                }
+                _state.update { it.copy(listIdsContainingManga = containing) }
+            }
+        }
+    }
     fun hideAddToListDialog() = _state.update { it.copy(showAddToListDialog = false) }
 
     fun addCurrentMangaToList(listId: String) {
         val manga = _state.value.manga ?: return
         viewModelScope.launch {
-            runCatching {
+            val result = runCatching {
                 communityRepository.addMangaToList(
                     listId,
                     CustomUserListItem(
@@ -409,9 +428,21 @@ class MangaDetailViewModel @Inject constructor(
                     )
                 )
             }
-            _state.update { it.copy(showAddToListDialog = false) }
+            result.onSuccess {
+                _state.update {
+                    it.copy(
+                        listIdsContainingManga = it.listIdsContainingManga + listId,
+                        lastAddedListName = it.userLists.firstOrNull { l -> l.id == listId }?.name.orEmpty(),
+                        listAddFailed = false
+                    )
+                }
+            }.onFailure {
+                _state.update { it.copy(listAddFailed = true) }
+            }
         }
     }
+
+    fun clearListFeedback() = _state.update { it.copy(lastAddedListName = "", listAddFailed = false) }
 
     // ─── Source Comparison ─────────────────────────────────────────────────────
 

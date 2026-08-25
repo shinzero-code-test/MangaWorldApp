@@ -69,9 +69,12 @@ private fun LibraryWidgetContent(
         }
 
         entries.take(visibleCount).forEachIndexed { index, entry ->
+            // No static per-row subtitle: the repeated "from library" hint was
+            // noise (v8 review #1). The trailing badge already carries the
+            // only per-entry signal (new-chapter count).
             WidgetListItem(
                 title = entry.title,
-                subtitle = if (showTitles) LocalContext.current.getString(R.string.widget_library_hint) else null,
+                subtitle = null,
                 trailing = if (showBadge && entry.newChapterCount > 0) "+${entry.newChapterCount}" else null,
                 showTitle = showTitles,
                 showBadge = showBadge,

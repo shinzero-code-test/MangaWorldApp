@@ -38,6 +38,7 @@ import kotlinx.coroutines.delay
 fun HomeScreen(
     onMangaClick: (sourceId: String, slug: String) -> Unit,
     onSeeAllLatest: () -> Unit,
+    onReadChapter: (sourceId: String, mangaId: String, chapterUrl: String) -> Unit = { _, _, _ -> },
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -127,7 +128,10 @@ fun HomeScreen(
                     item {
                         LatestChapterGrid(
                             items = state.latestChapters.take(12),
-                            onMangaClick = { item -> onMangaClick(item.source.id, item.mangaSlug) }
+                            favoriteIds = state.favoriteIds,
+                            onMangaClick = { item -> onMangaClick(item.source.id, item.mangaSlug) },
+                            onToggleFavorite = viewModel::toggleFavorite,
+                            onReadChapter = onReadChapter
                         )
                     }
                 }
@@ -351,7 +355,10 @@ private fun FeaturedCard(manga: MangaItem, onClick: () -> Unit) {
 @Composable
 private fun LatestChapterGrid(
     items: List<LatestChapterItem>,
-    onMangaClick: (LatestChapterItem) -> Unit
+    favoriteIds: Set<String>,
+    onMangaClick: (LatestChapterItem) -> Unit,
+    onToggleFavorite: (LatestChapterItem) -> Unit,
+    onReadChapter: (sourceId: String, mangaId: String, chapterUrl: String) -> Unit
 ) {
     BoxWithConstraints(
         modifier = Modifier.fillMaxWidth()
@@ -371,7 +378,10 @@ private fun LatestChapterGrid(
                     rowItems.forEach { item ->
                         LatestChapterGridCard(
                             item = item,
+                            isFavorite = "${item.source.id}_${item.mangaSlug}" in favoriteIds,
                             onClick = { onMangaClick(item) },
+                            onToggleFavorite = { onToggleFavorite(item) },
+                            onRead = { onReadChapter(item.source.id, "${item.source.id}_${item.mangaSlug}", item.chapterUrl) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -387,7 +397,10 @@ private fun LatestChapterGrid(
 @Composable
 private fun LatestChapterGridCard(
     item: LatestChapterItem,
+    isFavorite: Boolean,
     onClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onRead: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     NeonGlassPanel(
@@ -439,6 +452,7 @@ private fun LatestChapterGridCard(
                 )
                 SourceBadge(item.source)
             }
+            // v8 (#12): these were decorative dead icons — both are functional now.
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -447,18 +461,26 @@ private fun LatestChapterGridCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Filled.BookmarkBorder,
-                    contentDescription = null,
-                    tint = MangaColors.PrimaryLight,
-                    modifier = Modifier.size(20.dp)
-                )
-                Icon(
-                    Icons.Filled.MenuBook,
-                    contentDescription = null,
-                    tint = MangaColors.PrimaryLight,
-                    modifier = Modifier.size(20.dp)
-                )
+                IconToggleButton(
+                    checked = isFavorite,
+                    onCheckedChange = { onToggleFavorite() },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        if (isFavorite) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                        contentDescription = stringResource(R.string.cd_toggle_favorite),
+                        tint = if (isFavorite) MangaColors.Primary else MangaColors.PrimaryLight,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                IconButton(onClick = onRead, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Filled.MenuBook,
+                        contentDescription = stringResource(R.string.cd_open_chapter),
+                        tint = MangaColors.Cyan,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }

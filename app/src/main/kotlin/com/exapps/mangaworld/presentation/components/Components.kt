@@ -44,14 +44,19 @@ fun MangaCard(
     modifier: Modifier = Modifier,
     showRating: Boolean = true
 ) {
-    Card(
-        onClick = onClick,
-        modifier = modifier.semantics(mergeDescendants = true) {
-            contentDescription = manga.title
-        },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MangaColors.CardBg),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    // Glass card (v8): translucent surface + glow + gradient hairline instead of
+    // an opaque elevated Card. Content structure unchanged.
+    Column(
+        modifier = modifier
+            .glassSurface(
+                cornerRadius = 12.dp,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClickLabel = manga.title) { onClick() }
+            .semantics(mergeDescendants = true) {
+                contentDescription = manga.title
+            }
     ) {
         Box {
             // Cover image
@@ -207,12 +212,19 @@ fun StatusBadge(status: MangaStatus, modifier: Modifier = Modifier) {
 
 @Composable
 fun SourceBadge(source: MangaSource, modifier: Modifier = Modifier) {
+    // Glass pill (v8): translucent fill + hairline border instead of opaque chip.
     Text(
         source.displayName,
         style = MaterialTheme.typography.labelSmall,
         color = MangaColors.MutedLight,
         modifier = modifier
-            .background(MangaColors.SurfaceHighest, RoundedCornerShape(4.dp))
+            .glassSurface(
+                cornerRadius = 4.dp,
+                shape = RoundedCornerShape(4.dp),
+                glowColors = listOf(MangaColors.OutlineVariant, MangaColors.OutlineVariant),
+                baseAlpha = 0.55f,
+                glowIntensity = 0.3f
+            )
             .padding(horizontal = 6.dp, vertical = 2.dp)
     )
 }
@@ -230,12 +242,22 @@ fun SectionHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MangaColors.OnSurface,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Glow accent bar — mirrors the widget card header language (v8).
+            Box(
+                Modifier
+                    .size(width = 4.dp, height = 18.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Brush.verticalGradient(MangaColors.GradientPurpleCyan))
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MangaColors.OnSurface,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            )
+        }
         if (onSeeAll != null) {
             TextButton(onClick = onSeeAll) {
                 Text(
@@ -352,10 +374,32 @@ fun GradientButton(
 ) {
     Box(
         modifier = modifier
+            .then(
+                if (enabled) {
+                    Modifier.glowHalo(
+                        cornerRadius = 12.dp,
+                        color = MangaColors.Primary,
+                        intensity = 0.55f
+                    )
+                } else {
+                    Modifier
+                }
+            )
             .clip(RoundedCornerShape(12.dp))
             .background(
                 if (enabled) Brush.horizontalGradient(MangaColors.GradientPurpleCyan)
                 else Brush.horizontalGradient(listOf(MangaColors.Muted, MangaColors.Muted))
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.horizontalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.35f),
+                        Color.Transparent,
+                        MangaColors.Cyan.copy(alpha = 0.35f)
+                    )
+                ),
+                shape = RoundedCornerShape(12.dp)
             )
             .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -385,12 +429,23 @@ fun GenreChip(
     else
         Brush.linearGradient(listOf(MangaColors.SurfaceContainer, MangaColors.SurfaceContainer))
     val textColor = if (selected) Color.White else MangaColors.MutedLight
-    val borderColor = if (selected) Color.Transparent else MangaColors.OutlineVariant
 
     Box(
         modifier = modifier
+            .then(
+                if (selected) {
+                    Modifier.glowHalo(cornerRadius = 100.dp, color = MangaColors.Cyan, intensity = 0.40f)
+                } else {
+                    Modifier.glassSurface(
+                        cornerRadius = 100.dp,
+                        shape = RoundedCornerShape(100.dp),
+                        glowColors = listOf(MangaColors.OutlineVariant, MangaColors.OutlineVariant),
+                        baseAlpha = 0.55f,
+                        glowIntensity = 0.35f
+                    )
+                }
+            )
             .clip(RoundedCornerShape(100.dp))
-            .border(if (selected) 0.dp else 1.dp, borderColor, RoundedCornerShape(100.dp))
             .background(bg)
             .clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 7.dp)

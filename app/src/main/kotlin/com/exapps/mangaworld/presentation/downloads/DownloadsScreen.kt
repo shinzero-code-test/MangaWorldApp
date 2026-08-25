@@ -383,12 +383,14 @@ private fun ChapterDownloadCard(
         else -> MangaColors.Yellow
     }
 
-    Card(
+    // v8 glass card — failed rows glow red, active ones cyan.
+    com.exapps.mangaworld.presentation.components.GlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp),
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = MangaColors.CardBg),
+        cornerRadius = 10.dp,
+        glowColors = if (task.status in listOf("failed", "cancelled")) listOf(MangaColors.Error, MangaColors.Error)
+                     else listOf(statusColor, statusColor)
     ) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -462,12 +464,12 @@ private fun ChapterDownloadCard(
 @Composable
 private fun CompletedChaptersSummary(count: Int, chapters: List<String> = emptyList()) {
     var expanded by remember { mutableStateOf(false) }
-    Card(
+    com.exapps.mangaworld.presentation.components.GlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp),
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = MangaColors.CardBg.copy(alpha = 0.5f)),
+        cornerRadius = 10.dp,
+        glowColors = listOf(MangaColors.Primary, MangaColors.Primary)
     ) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 10.dp),

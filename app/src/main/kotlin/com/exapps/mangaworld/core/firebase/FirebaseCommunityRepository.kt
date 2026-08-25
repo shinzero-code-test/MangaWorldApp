@@ -382,38 +382,46 @@ class FirebaseCommunityRepository @Inject constructor(
         }
         validateModeration(trimmedTitle)
         validateModeration(trimmedBody)
-        val review = MangaReview(
-            id = profile.uid,
-            mangaId = mangaId,
-            authorUid = profile.uid,
-            authorName = profile.displayName.ifBlank { profile.username },
-            authorUsername = profile.username,
-            authorAvatarUrl = profile.avatarUrl,
-            authorBadge = profile.badgeLabel,
-            rating = rating.coerceIn(1, 5),
-            title = trimmedTitle,
-            body = trimmedBody,
-            updatedAt = System.currentTimeMillis(),
-            isDeleted = false
-        )
+        val now = System.currentTimeMillis()
         val reviewRef = firestore.collection("community_manga").document(mangaId)
             .collection("reviews")
             .document(profile.uid)
         val existingReview = reviewRef.get().await()
-        if (existingReview.exists() && existingReview.getBoolean("isDeleted") == true) {
-            error(context.getString(R.string.community_error_deleted_review))
-        }
+
+        // v8 (#7/#8): one code path for create/edit/RECREATE. A soft-deleted
+        // review is resurrected in place (rules permit exactly this transition),
+        // so users can write a new review after deleting their old one instead
+        // of hitting the previous dead-end error.
         if (existingReview.exists()) {
             reviewRef.update(
                 mapOf(
-                    "rating" to review.rating,
-                    "title" to review.title,
-                    "body" to review.body,
+                    "rating" to rating.coerceIn(1, 5),
+                    "title" to trimmedTitle,
+                    "body" to trimmedBody,
+                    // Refresh the denormalized author snapshot so the card always
+                    // matches the current public profile (allowed by rules).
+                    "authorName" to (profile.displayName.ifBlank { profile.username }),
+                    "authorUsername" to profile.username,
+                    "authorAvatarUrl" to profile.avatarUrl,
                     "isDeleted" to false,
-                    "updatedAt" to review.updatedAt
+                    "updatedAt" to now
                 )
             ).await()
         } else {
+            val review = MangaReview(
+                id = profile.uid,
+                mangaId = mangaId,
+                authorUid = profile.uid,
+                authorName = profile.displayName.ifBlank { profile.username },
+                authorUsername = profile.username,
+                authorAvatarUrl = profile.avatarUrl,
+                authorBadge = profile.badgeLabel,
+                rating = rating.coerceIn(1, 5),
+                title = trimmedTitle,
+                body = trimmedBody,
+                updatedAt = now,
+                isDeleted = false
+            )
             reviewRef.set(review.toMap()).await()
         }
     }
@@ -439,34 +447,45 @@ class FirebaseCommunityRepository @Inject constructor(
     override suspend fun deleteComment(comment: CommunityComment) {
         val profile = currentProfileOrThrow()
         require(profile.uid == comment.authorUid) { context.getString(R.string.community_error_author_delete) }
-        // Retain the anchor document so replies remain available in their dedicated thread.
-        commentsCollection(comment.mangaId, comment.chapterUrl).document(comment.id)
-            .update(
+        val docRef = commentsCollection(comment.mangaId, comment.chapterUrl).document(comment.id)
+        if (comment.replyCount > 0) {
+            // Referenced by replies — retain the anchor document so the thread
+            // stays navigable; content is blanked and flagged.
+            docRef.update(
                 mapOf(
                     "text" to "",
                     "mentions" to emptyList<String>(),
                     "isDeleted" to true,
                     "editedAt" to System.currentTimeMillis()
                 )
-            )
-            .await()
+            ).await()
+        } else {
+            // v8 (#5): unreferenced content is removed PERMANENTLY instead of
+            // leaving a "[deleted]" husk behind.
+            docRef.delete().await()
+        }
     }
 
     override suspend fun deleteReview(review: MangaReview) {
         val profile = currentProfileOrThrow()
         require(profile.uid == review.authorUid) { context.getString(R.string.community_error_author_delete) }
-        // Retain the review document to preserve its replies thread.
-        firestore.collection("community_manga").document(review.mangaId)
+        val reviewRef = firestore.collection("community_manga").document(review.mangaId)
             .collection("reviews").document(review.id)
-            .update(
+        if (review.replyCount > 0) {
+            // Retain the review document to preserve its replies thread.
+            reviewRef.update(
                 mapOf(
                     "title" to "",
                     "body" to "",
                     "isDeleted" to true,
                     "updatedAt" to System.currentTimeMillis()
                 )
-            )
-            .await()
+            ).await()
+        } else {
+            // v8 (#5): permanent removal when nothing references it. Also frees
+            // the one-review-per-user slot for a fresh write (v8 #8).
+            reviewRef.delete().await()
+        }
     }
 
     override suspend fun sendPageReaction(mangaId: String, chapterUrl: String, pageIndex: Int, emoji: String, normalizedX: Float, normalizedY: Float) {

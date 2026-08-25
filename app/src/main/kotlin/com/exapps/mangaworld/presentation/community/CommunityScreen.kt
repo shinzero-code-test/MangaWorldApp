@@ -82,6 +82,7 @@ import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.MangaReview
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import com.exapps.mangaworld.presentation.components.GlassCard
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
@@ -93,6 +94,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -127,6 +129,29 @@ data class CommunityUiState(
     val error: String? = null
 )
 
+/** Local overlay of a mutation until the authoritative Firestore snapshot lands (v8 #6). */
+@Immutable
+data class PendingEdit(val text: String, val spoiler: Boolean, val at: Long)
+
+@Immutable
+data class PendingReviewEdit(val title: String, val body: String, val rating: Int, val at: Long)
+
+@Immutable
+private data class PendingUi(
+    val commentEchoes: List<CommunityComment> = emptyList(),
+    val reviewEchoes: List<MangaReview> = emptyList(),
+    val edits: Map<String, PendingEdit> = emptyMap(),
+    val reviewEdits: Map<String, PendingReviewEdit> = emptyMap()
+)
+
+@Immutable
+private data class UiBits(
+    val tab: CommunityTab,
+    val error: String?,
+    val title: String,
+    val pending: PendingUi
+)
+
 @HiltViewModel
 class CommunityViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -143,6 +168,7 @@ class CommunityViewModel @Inject constructor(
 
     private val tab = MutableStateFlow(if (chapterUrl == null) CommunityTab.REVIEWS else CommunityTab.COMMENTS)
     private val error = MutableStateFlow<String?>(null)
+    private val pending = MutableStateFlow(PendingUi())
     private val mangaTitle = flow {
         emit(mangaCacheDao.get(mangaId)?.title ?: slug)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, slug)
@@ -158,23 +184,46 @@ class CommunityViewModel @Inject constructor(
         combine(commentsFlow, reviewsFlow, profileFlow, settingsRepository.getAppSettings()) { comments, reviews, profile, settings ->
             CommunityData(comments, reviews, profile, settings)
         },
-        tab,
-        error,
-        mangaTitle
-    ) { data, selectedTab, currentError, title ->
+        combine(tab, error, mangaTitle, pending) { selectedTab, currentError, title, pd ->
+            UiBits(selectedTab, currentError, title, pd)
+        }
+    ) { data, bits ->
         val mutedUserIds = data.settings.mutedUserIds
+        val now = System.currentTimeMillis()
+        // Optimistic overlays (v8 #6): echoes vanish once the snapshot carries the
+        // real item; pending edits yield as soon as editedAt reflects the change.
+        val liveComments = data.comments.map { c ->
+            bits.pending.edits[c.id]
+                ?.takeIf { (c.editedAt ?: 0L) < it.at - EDIT_LANDED_TOLERANCE_MS }
+                ?.let { c.copy(text = it.text, spoiler = it.spoiler) }
+                ?: c
+        }
+        val echoedComments = bits.pending.commentEchoes.filter { echo ->
+            now - echo.createdAt < ECHO_TTL_MS &&
+                data.comments.none { it.authorUid == echo.authorUid && it.text == echo.text && !it.isDeleted }
+        }
+        val editedReviews = data.reviews.map { r ->
+            bits.pending.reviewEdits[r.id]
+                ?.takeIf { r.updatedAt < it.at - EDIT_LANDED_TOLERANCE_MS }
+                ?.let { r.copy(title = it.title, body = it.body, rating = it.rating) }
+                ?: r
+        }
+        val echoedReviews = bits.pending.reviewEchoes.filter { echo ->
+            now - echo.updatedAt < ECHO_TTL_MS &&
+                data.reviews.none { it.authorUid == echo.authorUid && it.title == echo.title && !it.isDeleted }
+        }
         CommunityUiState(
-            title = if (chapterUrl == null) context.getString(R.string.fmt_068, title) else context.getString(R.string.community_discussion),
+            title = if (chapterUrl == null) context.getString(R.string.fmt_068, bits.title) else context.getString(R.string.community_discussion),
             // The main screen intentionally contains roots only. Replies belong to their own stack screen.
-            comments = filterMutedComments(data.comments, mutedUserIds)
+            comments = (filterMutedComments(liveComments, mutedUserIds) + echoedComments)
                 .filter { it.parentId == null && it.reviewId == null },
-            reviews = data.reviews.filter { it.authorUid !in mutedUserIds },
+            reviews = (editedReviews.filter { it.authorUid !in mutedUserIds } + echoedReviews),
             profile = data.profile,
             appSettings = data.settings,
-            tab = selectedTab,
+            tab = bits.tab,
             chapterMode = chapterUrl != null,
             focusCommentId = focusCommentId,
-            error = currentError
+            error = bits.error
         )
     }.stateIn(
         viewModelScope,
@@ -189,29 +238,100 @@ class CommunityViewModel @Inject constructor(
         tab.value = value
     }
 
-    fun postComment(text: String, spoiler: Boolean) = launchCommunityAction(R.string.community_error_post) {
-        if (chapterUrl == null) {
-            communityRepository.postMangaComment(mangaId, slug, sourceId, text, spoiler)
-        } else {
-            communityRepository.postChapterComment(mangaId, slug, sourceId, chapterUrl, text, spoiler)
+    fun postComment(text: String, spoiler: Boolean) {
+        val profile = state.value.profile
+        var echo: CommunityComment? = null
+        launchCommunityAction(R.string.community_error_post) {
+            if (profile != null && text.isNotBlank()) {
+                echo = CommunityComment(
+                    id = "pending_${java.util.UUID.randomUUID()}",
+                    mangaId = mangaId,
+                    chapterUrl = chapterUrl,
+                    slug = slug,
+                    sourceId = sourceId,
+                    authorUid = profile.uid,
+                    authorName = profile.displayName.ifBlank { profile.username },
+                    authorUsername = profile.username,
+                    authorAvatarUrl = profile.avatarUrl,
+                    text = text.trim(),
+                    spoiler = spoiler,
+                    createdAt = System.currentTimeMillis()
+                )
+                pending.update { it.copy(commentEchoes = it.commentEchoes + echo!!) }
+            }
+            try {
+                if (chapterUrl == null) {
+                    communityRepository.postMangaComment(mangaId, slug, sourceId, text, spoiler)
+                } else {
+                    communityRepository.postChapterComment(mangaId, slug, sourceId, chapterUrl, text, spoiler)
+                }
+            } catch (t: Throwable) {
+                echo?.let { e -> pending.update { it.copy(commentEchoes = it.commentEchoes - e) } }
+                throw t
+            }
         }
     }
 
-    fun upsertReview(rating: Int, title: String, body: String) = launchCommunityAction(R.string.str_338) {
-        communityRepository.upsertReview(mangaId, slug, sourceId, rating, title, body)
+    fun upsertReview(rating: Int, title: String, body: String) {
+        val profile = state.value.profile
+        val existing = state.value.reviews.firstOrNull { it.authorUid == profile?.uid }
+        var reviewEcho: MangaReview? = null
+        launchCommunityAction(R.string.str_338) {
+            if (profile != null) {
+                reviewEcho = MangaReview(
+                    id = existing?.takeIf { !it.isDeleted }?.id ?: "pending_review_${java.util.UUID.randomUUID()}",
+                    mangaId = mangaId,
+                    authorUid = profile.uid,
+                    authorName = profile.displayName.ifBlank { profile.username },
+                    authorUsername = profile.username,
+                    authorAvatarUrl = profile.avatarUrl,
+                    rating = rating.coerceIn(1, 5),
+                    title = title.trim(),
+                    body = body.trim(),
+                    updatedAt = System.currentTimeMillis(),
+                    isDeleted = false
+                )
+                pending.update {
+                    it.copy(
+                        reviewEchoes = (it.reviewEchoes - it.reviewEchoes.firstOrNull { e -> e.authorUid == profile.uid }) + reviewEcho!!
+                    )
+                }
+            }
+            try {
+                communityRepository.upsertReview(mangaId, slug, sourceId, rating, title, body)
+            } catch (t: Throwable) {
+                reviewEcho?.let { e -> pending.update { s -> s.copy(reviewEchoes = s.reviewEchoes - e) } }
+                throw t
+            }
+        }
     }
 
     fun updateComment(comment: CommunityComment, text: String, spoiler: Boolean) =
         launchCommunityAction(R.string.community_error_post) {
-            communityRepository.updateComment(comment, text, spoiler)
+            val at = System.currentTimeMillis()
+            pending.update { it.copy(edits = it.edits + (comment.id to PendingEdit(text.trim(), spoiler, at))) }
+            try {
+                communityRepository.updateComment(comment, text, spoiler)
+            } catch (t: Throwable) {
+                pending.update { it.copy(edits = it.edits - comment.id) }
+                throw t
+            }
         }
 
-    fun deleteComment(comment: CommunityComment) = launchCommunityAction(R.string.error_generic) {
+    fun deleteComment(comment: CommunityComment) = launchCommunityAction(R.string.community_error_generic_action) {
         communityRepository.deleteComment(comment)
+        // Instant local removal; the snapshot confirms either way.
+        pending.update { it.copy(commentEchoes = it.commentEchoes.filterNot { e -> e.id == comment.id }) }
     }
 
-    fun deleteReview(review: MangaReview) = launchCommunityAction(R.string.error_generic) {
+    fun deleteReview(review: MangaReview) = launchCommunityAction(R.string.community_error_generic_action) {
         communityRepository.deleteReview(review)
+        pending.update { s ->
+            s.copy(
+                reviewEchoes = s.reviewEchoes.filterNot { e -> e.id == review.id },
+                reviewEdits = s.reviewEdits - review.id
+            )
+        }
     }
 
     fun report(target: CommunityTarget, reason: String) = launchCommunityAction(R.string.community_error_report) {
@@ -240,6 +360,17 @@ class CommunityViewModel @Inject constructor(
 
     fun dislikeReview(review: MangaReview) = launchCommunityAction(R.string.community_error_vote) {
         communityRepository.dislikeReview(review.mangaId, review.id)
+    }
+
+    fun dismissError() {
+        error.value = null
+    }
+
+    private companion object {
+        /** Optimistic echo lifetime before the snapshot is assumed authoritative. */
+        const val ECHO_TTL_MS = 10_000L
+        /** editedAt within this window of the local write counts as "landed". */
+        const val EDIT_LANDED_TOLERANCE_MS = 2_000L
     }
 
     private fun launchCommunityAction(fallbackRes: Int, block: suspend () -> Unit) {
@@ -318,11 +449,9 @@ fun CommunityScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
-                actions = {
-                    IconButton(onClick = onOpenChat) {
-                        Icon(Icons.Filled.Chat, stringResource(R.string.chat), tint = MangaColors.Cyan)
-                    }
-                },
+                // v8 (#4): the unlabeled chat icon sat in the RTL "top-left" slot and
+                // was constantly mistaken for a second comments button. Chat moved to
+                // a labeled chip in the tab row below.
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
             )
         }
@@ -331,7 +460,8 @@ fun CommunityScreen(
             CommunityTabs(
                 selected = state.tab,
                 chapterMode = state.chapterMode,
-                onTabSelected = viewModel::setTab
+                onTabSelected = viewModel::setTab,
+                onOpenChat = onOpenChat
             )
             when (state.tab) {
                 CommunityTab.COMMENTS -> CommentsContent(
@@ -389,12 +519,29 @@ fun CommunityScreen(
                 )
             }
             state.error?.let { message ->
-                Text(
-                    message,
-                    color = MangaColors.Error,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+                // Prominent action banner — the old bottom-aligned caption was
+                // invisible in practice, which read as "nothing happened" (v8 #6).
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    glowColors = listOf(MangaColors.Error, MangaColors.Error)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Close, null, tint = MangaColors.Error, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            message,
+                            color = MangaColors.Error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = viewModel::dismissError) {
+                            Text(stringResource(R.string.dismiss), color = MangaColors.MutedLight)
+                        }
+                    }
+                }
             }
         }
     }
@@ -449,7 +596,8 @@ fun CommunityScreen(
 private fun CommunityTabs(
     selected: CommunityTab,
     chapterMode: Boolean,
-    onTabSelected: (CommunityTab) -> Unit
+    onTabSelected: (CommunityTab) -> Unit,
+    onOpenChat: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -469,6 +617,17 @@ private fun CommunityTabs(
                 shape = RoundedCornerShape(12.dp)
             )
         }
+        // Labeled chat entry — text label prevents the old "duplicate comments
+        // button" confusion (v8 #4).
+        FilterChip(
+            selected = false,
+            onClick = onOpenChat,
+            label = { Text(stringResource(R.string.live_chat), color = MangaColors.Cyan) },
+            shape = RoundedCornerShape(12.dp),
+            leadingIcon = {
+                Icon(Icons.Filled.Chat, stringResource(R.string.chat), tint = MangaColors.Cyan, modifier = Modifier.size(16.dp))
+            }
+        )
     }
 }
 
@@ -613,10 +772,10 @@ internal fun CommunityCommentCard(
     onDislike: () -> Unit
 ) {
     var showOverflow by remember { mutableStateOf(false) }
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)
+        glowColors = if (isAuthor) MangaColors.GradientPurpleCyan
+                     else listOf(MangaColors.OutlineVariant, MangaColors.OutlineVariant)
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             CommunityAuthorHeader(
@@ -671,11 +830,7 @@ internal fun CommunityReviewCard(
     onDislike: () -> Unit
 ) {
     var showOverflow by remember { mutableStateOf(false) }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)
-    ) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             CommunityAuthorHeader(
                 name = review.authorName,

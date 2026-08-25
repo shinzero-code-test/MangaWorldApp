@@ -4,6 +4,7 @@
 
 - Don't use head or tail commands — always read the full output/log.
 - For every fix do a patch; for every new feature, do a minor; for important high-impact features, do a major version update.
+- Always use string resources. No hardcoded strings.
 - Never build the app locally. Always use CI/CD.
 - git, gh, vercel, Firebase, gcloud CLIs are already installed and authenticated — use them directly.
 - Always use skills, tools, and MCPs for better results.
@@ -13,7 +14,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 7.0.0 (versionCode 170)
+- **Current version**: 8.0.0 (versionCode 180)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 35 · **Compile SDK**: 35
 - **JDK**: 17 (required by CI and build)
 

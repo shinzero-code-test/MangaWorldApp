@@ -158,7 +158,10 @@ fun MangaNavGraph(
         ) {
             HomeScreen(
                 onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) },
-                onSeeAllLatest = { navController.navigate(Screen.LatestUpdates.route) }
+                onSeeAllLatest = { navController.navigate(Screen.LatestUpdates.route) },
+                onReadChapter = { src, mangaId, chapterUrl ->
+                    navController.navigate(Screen.Reader.createRoute(src, mangaId, chapterUrl))
+                }
             )
         }
         composable(Screen.Browse.route) {

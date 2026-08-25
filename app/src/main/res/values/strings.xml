@@ -882,7 +882,6 @@
     <string name="widget_recommendation_badge">اقتراح</string>
     <string name="widget_trending">الأكثر رواجاً</string>
     <string name="widget_trending_badge">ترند</string>
-    <string name="widget_library_hint">آخر فتح من المكتبة</string>
     <string name="widget_stats_section">إحصائيات القراءة</string>
     <string name="widget_theme_auto">تلقائي (افتراضي)</string>
     <string name="widget_theme_light">فاتح</string>
@@ -899,7 +898,7 @@
     <string name="community_edit_review">تعديل المراجعة</string>
     <string name="community_delete_comment">حذف التعليق</string>
     <string name="community_delete_review">حذف المراجعة</string>
-    <string name="community_delete_content_confirm">سيُحذف المحتوى مع الإبقاء على الردود المتصلة به.</string>
+    <string name="community_delete_content_confirm">يُحذف المحتوى نهائياً؛ وإذا وُجدت ردود مرتبطة به يُحتفظ به كمرجع للنقاش فقط.</string>
     <string name="community_reply_hint">اكتب ردّاً…</string>
     <string name="community_error_empty_content">لا يمكن أن يكون المحتوى فارغاً</string>
     <string name="community_error_empty_message">لا يمكن أن تكون الرسالة فارغة</string>
@@ -908,7 +907,6 @@
     <string name="community_error_banned_content">يحتوي المحتوى على كلمات محظورة</string>
     <string name="community_error_author_edit">يمكن للكاتب فقط تعديل هذا التعليق</string>
     <string name="community_error_author_delete">يمكن للكاتب فقط حذف هذا المحتوى</string>
-    <string name="community_error_deleted_review">لا يمكن إنشاء مراجعة جديدة بعد حذف مراجعتك لهذا العمل</string>
     <string name="community_error_sign_in">سجّل الدخول أولاً لإتمام هذا الإجراء</string>
     <string name="community_error_report_reason_required">أدخل سبب الإبلاغ</string>
     <string name="community_error_self_follow">لا يمكنك متابعة نفسك</string>
@@ -947,4 +945,21 @@
     <string name="suggestion_notif_extra">\nو %1$d أخرى</string>
     <string name="reminder_title">لم نرك منذ فترة!</string>
     <string name="reminder_continue_reading">هل تريد المتابعة في قراءة \"%1$s\"؟</string>
+
+    <!-- ─── v8.0.0 glass UI + community fixes ─────────────────────────────── -->
+    <string name="widget_preview_library_row1">Tower of God   +3</string>
+    <string name="widget_preview_library_row2">Nano Machine   +1</string>
+    <string name="list_item_added">في القائمة</string>
+    <string name="list_add_confirmation">تمت إضافة المانجا إلى قائمة \"%1$s\"</string>
+    <string name="list_add_failed">تعذر الإضافة إلى القائمة</string>
+    <string name="cd_open_chapter">فتح الفصل</string>
+    <string name="cd_toggle_favorite">إضافة أو إزالة من المفضلة</string>
+    <string name="community_error_generic_action">تعذر إتمام العملية، حاول مجدداً</string>
+    <string name="dismiss">إخفاء</string>
+    <string name="fcm_default_body">لديك تحديث جديد</string>
+    <string name="fcm_default_title">مانجا وورلد</string>
+    <string name="suggestion_notif_center_title">اقتراح جديد لك</string>
+    <string name="suggestion_channel_name">اقتراحات المانجا</string>
+    <string name="suggestion_channel_desc">اقتراحات مانجا قد تعجبك</string>
+    <string name="push_notification_type">إشعار</string>
 </resources>

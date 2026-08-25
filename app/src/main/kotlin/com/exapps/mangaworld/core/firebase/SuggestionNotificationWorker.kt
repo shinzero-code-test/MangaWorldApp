@@ -59,10 +59,10 @@ class SuggestionNotificationWorker @AssistedInject constructor(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 SUGGESTION_CHANNEL_ID,
-                "اقتراحات المانجا",
+                appContext.getString(com.exapps.mangaworld.R.string.suggestion_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "اقتراحات مانجا قد تعجبك"
+                description = appContext.getString(com.exapps.mangaworld.R.string.suggestion_channel_desc)
                 enableVibration(false)
                 setSound(null, null)
             }
@@ -172,6 +172,20 @@ class SuggestionNotificationWorker @AssistedInject constructor(
                 .build()
 
             notificationManager.notify(SUGGESTION_NOTIFICATION_ID, notification)
+
+            // v8 (#11): log into the Notification Centre like every other channel.
+            com.exapps.mangaworld.core.data.NotificationCenterStore.update(ctx) { arr ->
+                val obj = org.json.JSONObject().apply {
+                    put("id", "suggestion_${System.currentTimeMillis()}")
+                    put("title", ctx.getString(com.exapps.mangaworld.R.string.suggestion_notif_center_title))
+                    put("body", "$body$extraText")
+                    put("type", "suggestion")
+                    put("read", false)
+                    put("timestamp", System.currentTimeMillis())
+                }
+                arr.put(obj)
+                while (arr.length() > 100) { arr.remove(0) }
+            }
 
             // Update persistent suggestions
             val mangaSuggestions = newSuggestions.map { manga ->

@@ -28,6 +28,8 @@ data class HomeUiState(
     val suggested: List<MangaItem> = emptyList(),
     val availableSources: List<MangaSource> = MangaSource.entries.toList(),
     val activeSource: MangaSource = MangaSource.AZORA,
+    /** Library membership by mangaId — drives the bookmark state on chapter cards (#12). */
+    val favoriteIds: Set<String> = emptySet(),
     val remoteAlertMessage: String = "",
     val homeLayoutVariant: String = "default",
     val error: String? = null
@@ -38,6 +40,7 @@ class HomeViewModel @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
     private val repo: MangaRepository,
     private val settingsRepo: SettingsRepository,
+    private val libraryRepo: com.exapps.mangaworld.domain.repository.LibraryRepository,
     private val remoteConfigManager: FirebaseRemoteConfigManager,
     private val analyticsManager: FirebaseAnalyticsManager,
     private val firebaseTelemetry: FirebaseTelemetry
@@ -82,6 +85,36 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             remoteConfigManager.homeLayoutVariant.collect { variant ->
                 _state.update { it.copy(homeLayoutVariant = variant) }
+            }
+        }
+        // v8 (#12): observe library so the card bookmark buttons reflect real state.
+        viewModelScope.launch {
+            libraryRepo.getFavorites().collect { favorites ->
+                _state.update { it.copy(favoriteIds = favorites.mapTo(mutableSetOf()) { f -> f.mangaId }) }
+            }
+        }
+    }
+
+    /**
+     * Toggle favourite from a latest-chapter card (#12). Builds a minimal
+     * [FavoriteManga] from the card payload; the detail screen enriches it on
+     * first open via ensureLibraryEntry.
+     */
+    fun toggleFavorite(item: LatestChapterItem) {
+        viewModelScope.launch {
+            val mangaId = "${item.source.id}_${item.mangaSlug}"
+            if (mangaId in _state.value.favoriteIds) {
+                libraryRepo.removeFavorite(mangaId)
+            } else {
+                libraryRepo.ensureLibraryEntry(
+                    FavoriteManga(
+                        mangaId = mangaId,
+                        slug = item.mangaSlug,
+                        title = item.mangaTitle,
+                        coverUrl = item.coverUrl,
+                        source = item.source
+                    )
+                )
             }
         }
     }

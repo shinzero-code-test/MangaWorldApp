@@ -463,7 +463,10 @@ class DownloadQueueManager @Inject constructor(
 
     suspend fun retryTask(taskId: String) = queueMutex.withLock {
         val task = downloadTaskDao.getById(taskId) ?: return@withLock
-        resubmitTasks(listOf(task))
+        // v8 (#10): a MANUAL retry must not keep re-downloading the same stale
+        // cached page list — that is exactly the loop where failed chapters
+        // failed forever. Force fresh resolution from the source.
+        resubmitTasks(listOf(task), forceFreshPages = true)
     }
 
     private suspend fun pauseMangaTasks(mangaId: String, pausedTaskIds: Set<String>) {
@@ -505,11 +508,14 @@ class DownloadQueueManager @Inject constructor(
         tasks.mapNotNull(DownloadTaskEntity::batchId).distinct().forEach { reconcileBatchCompletion(it) }
     }
 
-    private suspend fun resubmitTasks(tasks: List<DownloadTaskEntity>) {
+    private suspend fun resubmitTasks(
+        tasks: List<DownloadTaskEntity>,
+        forceFreshPages: Boolean = false
+    ) {
         val queuedTasks = mutableListOf<DownloadTaskEntity>()
         val failedBatchIds = mutableSetOf<String>()
         tasks.forEach { task ->
-            val pages = resolvePagesForRetry(task)
+            val pages = resolvePagesForRetry(task, ignoreCache = forceFreshPages)
             if (pages.isEmpty()) {
                 downloadTaskDao.upsert(
                     task.copy(
@@ -520,6 +526,12 @@ class DownloadQueueManager @Inject constructor(
                 )
                 task.batchId?.let(failedBatchIds::add)
             } else {
+                // Fresh resolution may return a different URL list than the files
+                // already on disk (index-named). Wipe the partial dir so page-level
+                // resume cannot pair new URLs with old images or overcount "done".
+                if (forceFreshPages) {
+                    withContext(Dispatchers.IO) { deleteChapterDirectory(task.mangaId, task.chapterUrl, task.mangaTitle) }
+                }
                 val referer = pages.firstOrNull()?.headers?.get("Referer")
                     ?.takeIf { it.isNotBlank() }
                     ?: task.referer.ifBlank { task.chapterUrl }
@@ -549,12 +561,16 @@ class DownloadQueueManager @Inject constructor(
         enqueueBatchWorkers(downloadTaskDao.getQueuedByMangaId(mangaId))
     }
 
-    private suspend fun resolvePagesForRetry(task: DownloadTaskEntity): List<ChapterPage> {
-        val cachedPages = runCatching {
-            val array = JSONArray(task.pagesJson)
-            (0 until array.length()).map { index -> ChapterPage(index, array.getString(index)) }
-        }.getOrDefault(emptyList())
-        if (cachedPages.isNotEmpty()) return cachedPages
+    private suspend fun resolvePagesForRetry(task: DownloadTaskEntity, ignoreCache: Boolean = false): List<ChapterPage> {
+        // v8 (#10): manual retries pass ignoreCache=true so expired/rotated page
+        // URLs are re-resolved from the source instead of failing identically.
+        if (!ignoreCache) {
+            val cachedPages = runCatching {
+                val array = JSONArray(task.pagesJson)
+                (0 until array.length()).map { index -> ChapterPage(index, array.getString(index)) }
+            }.getOrDefault(emptyList())
+            if (cachedPages.isNotEmpty()) return cachedPages
+        }
 
         val source = MangaSource.fromIdOrNull(task.sourceId.ifBlank { task.mangaId.substringBefore('_') })
             ?: return emptyList()

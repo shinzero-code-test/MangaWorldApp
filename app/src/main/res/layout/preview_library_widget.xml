@@ -9,7 +9,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="مكتبتي"
+        android:text="@string/widget_library_title"
         android:textColor="#FFFFFF"
         android:textStyle="bold"
         android:textSize="16sp" />
@@ -20,7 +20,7 @@
         android:layout_marginTop="12dp"
         android:background="#3D3445"
         android:padding="12dp"
-        android:text="Tower of God   +3"
+        android:text="@string/widget_preview_library_row1"
         android:textColor="#FFFFFF" />
 
     <TextView
@@ -29,6 +29,6 @@
         android:layout_marginTop="8dp"
         android:background="#3D3445"
         android:padding="12dp"
-        android:text="Nano Machine   +1"
+        android:text="@string/widget_preview_library_row2"
         android:textColor="#FFFFFF" />
 </LinearLayout>

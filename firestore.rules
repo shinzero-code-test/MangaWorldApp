@@ -60,8 +60,18 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['rating', 'title', 'body', 'isDeleted', 'updatedAt', 'authorName', 'authorUsername', 'authorAvatarUrl'])
         && authorSnapshotMatchesPublicProfile()
-        // Soft-deleted reviews also remain immutable so their replies retain a stable root.
-        && (!resource.data.keys().hasAny(['isDeleted']) || resource.data.isDeleted == false)
+        // Soft-deleted reviews stay immutable EXCEPT for the exact resurrection
+        // transition (v8 #8): users may write a fresh review over their deleted
+        // one, restoring non-empty content with isDeleted back to false.
+        && (
+          !resource.data.keys().hasAny(['isDeleted'])
+          || resource.data.isDeleted == false
+          || (
+            resource.data.isDeleted == true
+            && request.resource.data.isDeleted == false
+            && (request.resource.data.title != '' || request.resource.data.body != '')
+          )
+        )
         && (
           !request.resource.data.keys().hasAny(['isDeleted'])
           || request.resource.data.isDeleted == false
@@ -286,7 +296,10 @@ service cloud.firestore {
           && request.resource.data.chapterUrl == null
           && validMangaCommentStructure(mangaId);
         allow update: if authorOnlyCommentEdit();
-        allow delete: if false;
+        // v8 (#5): authors may PERMANENTLY remove their own content when no
+        // replies reference it; anchored (replyCount > 0) docs stay soft-only.
+        allow delete: if canWriteCommunity(resource.data.authorUid)
+          && resource.data.replyCount == 0;
 
         match /votes/{voterUid} {
           allow read, write: if false;
@@ -297,7 +310,10 @@ service cloud.firestore {
         allow read: if true;
         allow create: if validReviewCreate(mangaId, reviewId);
         allow update: if authorOnlyReviewEdit();
-        allow delete: if false;
+        // v8 (#5): permanent delete for unreferenced reviews — also frees the
+        // one-review-per-user document slot.
+        allow delete: if canWriteCommunity(resource.data.authorUid)
+          && resource.data.replyCount == 0;
 
         match /votes/{voterUid} {
           allow read, write: if false;
@@ -310,7 +326,9 @@ service cloud.firestore {
           && request.resource.data.chapterUrl is string
           && validChapterCommentStructure(mangaId, chapterKey);
         allow update: if authorOnlyCommentEdit();
-        allow delete: if false;
+        // v8 (#5): same permanent-delete rule as manga comments.
+        allow delete: if canWriteCommunity(resource.data.authorUid)
+          && resource.data.replyCount == 0;
 
         match /votes/{voterUid} {
           allow read, write: if false;

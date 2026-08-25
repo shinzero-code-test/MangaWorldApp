@@ -157,6 +157,30 @@ fun MangaDetailScreen(
             containerColor = MangaColors.Surface,
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // v8 (#9): explicit confirmation / failure feedback.
+                    if (state.lastAddedListName.isNotBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.CheckCircle,
+                                null,
+                                tint = MangaColors.Green,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                stringResource(R.string.list_add_confirmation, state.lastAddedListName),
+                                color = MangaColors.Green,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    if (state.listAddFailed) {
+                        Text(
+                            stringResource(R.string.list_add_failed),
+                            color = MangaColors.Error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     if (state.userLists.isEmpty()) {
                         Text(
                             stringResource(R.string.create_list_first),
@@ -164,6 +188,7 @@ fun MangaDetailScreen(
                         )
                     } else {
                         state.userLists.forEach { list ->
+                            val alreadyIn = list.id in state.listIdsContainingManga
                             OutlinedButton(
                                 onClick = { viewModel.addCurrentMangaToList(list.id) },
                                 modifier = Modifier.fillMaxWidth(),
@@ -202,6 +227,21 @@ fun MangaDetailScreen(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
+                                }
+                                if (alreadyIn) {
+                                    // v8 (#9): visible "in list" marker per row.
+                                    Icon(
+                                        Icons.Filled.CheckCircle,
+                                        stringResource(R.string.list_item_added),
+                                        tint = MangaColors.Green,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        stringResource(R.string.list_item_added),
+                                        color = MangaColors.Green,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
                                 }
                             }
                         }
@@ -264,15 +304,21 @@ private fun DetailContent(
     LazyColumn(Modifier.fillMaxSize()) {
         // ── Header ──────────────────────────────────────────────────────────
         item {
-            Box(Modifier.fillMaxWidth().height(356.dp)) {
+            // v8 (#3): the old fixed 356dp box left a large empty blur band above
+            // the info panel. Wrap content instead — the panel defines the height,
+            // the blurred cover backdrop still fills it edge to edge.
+            Box(Modifier.fillMaxWidth()) {
                 AsyncImage(
                     model = ImageRequest.Builder(ctx).data(manga.coverUrl).crossfade(true).withFirebaseTrace("detail_cover").build(),
                     imageLoader = ctx.imageLoader,
                     contentDescription = null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().blur(28.dp)
+                    // matchParentSize: track the panel-defined box size WITHOUT
+                    // participating in measurement — a fillMaxSize child inside
+                    // a wrap-content Box would inflate it to the whole screen.
+                    modifier = Modifier.matchParentSize().blur(28.dp)
                 )
                 Box(
-                    Modifier.fillMaxSize().background(
+                    Modifier.matchParentSize().background(
                         Brush.verticalGradient(
                             listOf(
                                 (dominantColor ?: MangaColors.PrimaryDim).copy(alpha = 0.78f),

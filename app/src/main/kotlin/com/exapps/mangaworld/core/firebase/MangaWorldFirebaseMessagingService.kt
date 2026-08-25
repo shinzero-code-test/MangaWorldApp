@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
 import com.exapps.mangaworld.MangaWorldApp
+import com.exapps.mangaworld.core.data.NotificationCenterStore
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -44,8 +45,10 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
-        val title = message.notification?.title ?: message.data["title"] ?: "MangaWorld"
-        val body = message.notification?.body ?: message.data["body"] ?: "لديك تحديث جديد"
+        val title = message.notification?.title ?: message.data["title"]
+            ?: getString(com.exapps.mangaworld.R.string.fcm_default_title)
+        val body = message.notification?.body ?: message.data["body"]
+            ?: getString(com.exapps.mangaworld.R.string.fcm_default_body)
         val type = message.data["type"] ?: "generic"
         val mangaId = message.data["mangaId"]
         val imageUrl = message.notification?.imageUrl?.toString() ?: message.data["imageUrl"]
@@ -81,6 +84,11 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
             .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
             .setGroup("fcm_notifications")
 
+        // v8 (#11): persist EVERY displayed push to the Notification Centre —
+        // previously only local workers logged entries there, so cloud pushes
+        // were invisible in history.
+        logToNotificationCenter(title, body, mangaId)
+
         // Load bitmap on IO thread to avoid blocking the main thread (ANR)
         serviceScope.launch {
             val bitmap = loadNotificationBitmap(imageUrl)
@@ -101,6 +109,32 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
                     notificationId,
                     notificationBuilder.build()
                 )
+            }
+        }
+    }
+
+    /**
+     * Persist a displayed push into the shared `local_notifications` ring buffer
+     * via [NotificationCenterStore] (mutex-serialized). Type "push" keeps the
+     * Notification Centre's mark-all-read logic treating these as local entries.
+     */
+    private fun logToNotificationCenter(title: String, body: String, mangaId: String?) {
+        serviceScope.launch {
+            runCatching {
+                NotificationCenterStore.update(this@MangaWorldFirebaseMessagingService) { arr ->
+                    val obj = org.json.JSONObject().apply {
+                        put("id", "push_${System.currentTimeMillis()}_${(title + body).hashCode()}")
+                        put("title", title)
+                        put("body", body)
+                        put("type", "push")
+                        if (mangaId != null) put("mangaId", mangaId)
+                        put("read", false)
+                        put("timestamp", System.currentTimeMillis())
+                    }
+                    arr.put(obj)
+                    // Keep only last 100 local notifications (same cap as workers).
+                    while (arr.length() > 100) { arr.remove(0) }
+                }
             }
         }
     }

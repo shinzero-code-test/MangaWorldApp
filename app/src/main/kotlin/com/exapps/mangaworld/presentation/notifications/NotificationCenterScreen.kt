@@ -147,7 +147,8 @@ class NotificationCenterViewModel @Inject constructor(
         viewModelScope.launch {
             val unread = notifications.value.filterNot { it.read }
             // Local types never exist in Firestore; only community ids go to the batch.
-            val localTypes = setOf("chapter_update", "suggestion", "reminder")
+            // "push" added in v8 — FCM entries are persisted locally too (#11).
+            val localTypes = setOf("chapter_update", "suggestion", "reminder", "push")
             val communityIds = unread.filter { it.type !in localTypes }.map { it.id }
 
             kotlinx.coroutines.supervisorScope {
@@ -293,6 +294,8 @@ private fun NotificationCard(
         "chapter_update" -> Icons.Filled.NewReleases
         "suggestion" -> Icons.Filled.AutoAwesome
         "reminder" -> Icons.Filled.Timer
+        // v8 (#11): FCM pushes are now logged in the centre.
+        "push" -> Icons.Filled.NotificationsActive
         else -> Icons.Filled.Notifications
     }
 
@@ -306,6 +309,7 @@ private fun NotificationCard(
         "chapter_update" -> MangaColors.Cyan
         "suggestion" -> MangaColors.Yellow
         "reminder" -> MangaColors.Pink
+        "push" -> MangaColors.PrimaryLight
         else -> MangaColors.Muted
     }
 
@@ -319,66 +323,87 @@ private fun NotificationCard(
         "chapter_update" -> stringResource(R.string.home_latest)
         "suggestion" -> stringResource(R.string.more_suggestions)
         "reminder" -> stringResource(R.string.settings_notifications)
+        "push" -> stringResource(R.string.push_notification_type)
         else -> stringResource(R.string.notifications)
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (notification.read) MangaColors.SurfaceContainer else MangaColors.GlowPurple
-        )
-    ) {
-        Row(
-            Modifier.padding(14.dp),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+    // v8 glass: unread entries keep the purple glow accent; read ones go neutral.
+    if (notification.read) {
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)
         ) {
-            // Type icon
-            Box(
-                Modifier.size(36.dp).clip(CircleShape).background(typeColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(typeIcon, null, tint = typeColor, modifier = Modifier.size(18.dp))
+            NotificationCardRow(notification, typeIcon, typeColor, typeLabel)
+        }
+    } else {
+        com.exapps.mangaworld.presentation.components.GlassCard(
+            modifier = Modifier.fillMaxWidth(),
+            glowColors = listOf(MangaColors.PrimaryLight, MangaColors.PrimaryLight)
+        ) {
+            Box(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+                NotificationCardRow(notification, typeIcon, typeColor, typeLabel)
             }
+        }
+    }
+}
 
-            // Content
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        notification.title,
-                        color = MangaColors.OnSurface,
-                        fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (!notification.read) {
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(MangaColors.Primary))
-                    }
-                }
+@Composable
+private fun NotificationCardRow(
+    notification: UnifiedNotification,
+    typeIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    typeColor: Color,
+    typeLabel: String
+) {
+    Row(
+        Modifier.padding(14.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Type icon
+        Box(
+            Modifier.size(36.dp).clip(CircleShape).background(typeColor.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(typeIcon, null, tint = typeColor, modifier = Modifier.size(18.dp))
+        }
+
+        // Content
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    notification.body,
-                    color = MangaColors.OnSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    notification.title,
+                    color = MangaColors.OnSurface,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                if (!notification.read) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(MangaColors.Primary))
+                }
+            }
+            Text(
+                notification.body,
+                color = MangaColors.OnSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    Modifier.background(typeColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
-                    Box(
-                        Modifier.background(typeColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(typeLabel, color = typeColor, style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
-                    }
+                    Text(typeLabel, color = typeColor, style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
                 }
             }
         }
