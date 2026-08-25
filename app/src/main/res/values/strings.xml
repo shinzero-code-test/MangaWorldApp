@@ -947,8 +947,22 @@
     <string name="reminder_continue_reading">هل تريد المتابعة في قراءة \"%1$s\"؟</string>
 
     <!-- ─── v8.0.0 glass UI + community fixes ─────────────────────────────── -->
-    <string name="widget_preview_library_row1">Tower of God   +3</string>
-    <string name="widget_preview_library_row2">Nano Machine   +1</string>
+    <string name="widget_preview_library_row1">+3</string>
+    <string name="widget_preview_library_row2">+1</string>
+    <string name="widget_preview_library_row1_title">Tower of God</string>
+    <string name="widget_preview_library_row2_title">Nano Machine</string>
+    <string name="widget_preview_library_row3_title">Solo Leveling</string>
+    <string name="widget_preview_cr_title">Solo Leveling</string>
+    <string name="widget_preview_cr_chapter">الفصل 145</string>
+    <string name="widget_preview_cr_progress">62%</string>
+    <string name="widget_preview_rec_title">Omniscient Reader</string>
+    <string name="widget_preview_rec_badge">اقتراح</string>
+    <string name="widget_preview_latest_title">The Breaker</string>
+    <string name="widget_preview_latest_chapter">الفصل 122</string>
+    <string name="widget_preview_latest_time">قبل ساعة</string>
+    <string name="widget_preview_stats_chapters">الفصول المقروءة: 320</string>
+    <string name="widget_preview_stats_streak">سلسلة القراءة: 12 يوم</string>
+    <string name="widget_preview_stats_minutes">زمن القراءة: 54 ساعة</string>
     <string name="list_item_added">في القائمة</string>
     <string name="list_add_confirmation">تمت إضافة المانجا إلى قائمة \"%1$s\"</string>
     <string name="list_add_failed">تعذر الإضافة إلى القائمة</string>

@@ -202,3 +202,45 @@ fun GlassCard(
         content()
     }
 }
+
+/**
+ * The app's single bottom-sheet style (v8): translucent glass container,
+ * 28dp rounded top, built-in drag handle, edge-to-edge content padding.
+ * Every ModalBottomSheet in the app must go through this so sheets share
+ * one visual language instead of raw Material defaults.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun GlassBottomSheet(
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    sheetState: androidx.compose.material3.SheetState = androidx.compose.material3.rememberModalBottomSheetState(),
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
+) {
+    val colors = mangaColors()
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        modifier = modifier,
+        sheetState = sheetState,
+        containerColor = colors.Surface.copy(alpha = 0.96f),
+        contentColor = colors.OnSurface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 12.dp, bottom = 6.dp)
+                    .size(width = 44.dp, height = 4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                MangaColors.Primary.copy(alpha = 0.7f),
+                                MangaColors.Cyan.copy(alpha = 0.7f)
+                            )
+                        )
+                    )
+            )
+        },
+        content = content
+    )
+}

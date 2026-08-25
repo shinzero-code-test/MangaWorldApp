@@ -38,9 +38,8 @@ fun LibraryBottomSheet(
     onSetStatus: (String?) -> Unit,
     onDismiss: () -> Unit
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MangaColors.Surface
+    com.exapps.mangaworld.presentation.components.GlassBottomSheet(
+        onDismissRequest = onDismiss
     ) {
         Column(
             modifier = Modifier

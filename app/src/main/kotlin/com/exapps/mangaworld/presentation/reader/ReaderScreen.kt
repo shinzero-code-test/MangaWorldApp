@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.pager.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -349,7 +351,7 @@ fun ReaderScreen(
         }
 
         if (annotationsSheetOpen) {
-            ModalBottomSheet(onDismissRequest = { annotationsSheetOpen = false }) {
+            GlassBottomSheet(onDismissRequest = { annotationsSheetOpen = false }) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Text(stringResource(R.string.bookmarks_and_notes), style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(12.dp))
@@ -386,7 +388,7 @@ fun ReaderScreen(
         }
 
         if (communityEnabled && commentsSheetOpen) {
-            ModalBottomSheet(onDismissRequest = { commentsSheetOpen = false }) {
+            GlassBottomSheet(onDismissRequest = { commentsSheetOpen = false }) {
                 ReaderCommentsSheet(
                     comments = state.chapterComments,
                     collapseSpoilersByDefault = state.spoilerCollapseDefault,
@@ -411,7 +413,7 @@ fun ReaderScreen(
         }
 
         if (settingsSheetOpen) {
-            ModalBottomSheet(onDismissRequest = { settingsSheetOpen = false }) {
+            GlassBottomSheet(onDismissRequest = { settingsSheetOpen = false }) {
                 ReaderSettingsSheet(
                     state = state,
                     onModeChange = viewModel::setReaderMode,
@@ -911,27 +913,38 @@ private fun ReaderSettingsSheet(
         }
 
         // Reading Mode Section
+        // v8 (#2): SegmentedButtons crushed Arabic labels into vertical
+        // one-character-per-line boxes. Scrollable glass chips keep every
+        // label on one line and match the design system.
         SectionHeader(stringResource(R.string.reading_mode), "mode", expandedSection, { expandedSection = it }) {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                ReaderMode.entries.forEachIndexed { index, mode ->
-                    SegmentedButton(
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ReaderMode.entries.forEach { mode ->
+                    FilterChip(
                         selected = state.readerMode == mode,
                         onClick = { onModeChange(mode) },
-                        shape = SegmentedButtonDefaults.itemShape(index, ReaderMode.entries.size)
-                    ) { Text(mode.label) }
+                        label = { Text(mode.label, maxLines = 1) },
+                        shape = RoundedCornerShape(100.dp)
+                    )
                 }
             }
         }
 
         // Image Filter Section
         SectionHeader(stringResource(R.string.str_343), "filter", expandedSection, { expandedSection = it }) {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                ReaderImageFilter.entries.forEachIndexed { index, filter ->
-                    SegmentedButton(
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ReaderImageFilter.entries.forEach { filter ->
+                    FilterChip(
                         selected = state.imageFilter == filter,
                         onClick = { onFilterChange(filter) },
-                        shape = SegmentedButtonDefaults.itemShape(index, ReaderImageFilter.entries.size)
-                    ) { Text(filter.label) }
+                        label = { Text(filter.label, maxLines = 1) },
+                        shape = RoundedCornerShape(100.dp)
+                    )
                 }
             }
         }

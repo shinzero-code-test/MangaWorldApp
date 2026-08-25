@@ -283,10 +283,8 @@ private fun FilterBottomSheet(
     var selectedStatus by remember { mutableStateOf(currentStatus) }
     var selectedType by remember { mutableStateOf(currentType) }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MangaColors.SurfaceContainer,
-        dragHandle = { BottomSheetDefaults.DragHandle(color = MangaColors.OutlineVariant) }
+    com.exapps.mangaworld.presentation.components.GlassBottomSheet(
+        onDismissRequest = onDismiss
     ) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
             Text(stringResource(R.string.filter_results), style = MaterialTheme.typography.titleMedium,

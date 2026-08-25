@@ -490,12 +490,15 @@ private fun LatestChapterGridCard(
 
 @Composable
 private fun TrendingRow(items: List<MangaItem>, onMangaClick: (MangaItem) -> Unit) {
+    // Defensive id-dedupe: duplicate keys inside a LazyRow crash at measure
+    // time, so the list is sanitized at the last point before rendering.
+    val uniqueItems = remember(items) { items.distinctBy { it.id } }
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.padding(bottom = 8.dp)
     ) {
-        items(items, key = { "trending_${it.id}" }) { manga ->
+        items(uniqueItems, key = { "trending_${it.id}" }) { manga ->
             MangaCard(
                 manga = manga,
                 onClick = { onMangaClick(manga) },

@@ -277,9 +277,8 @@ fun SourceBrowseScreen(
 
     // Sort bottom sheet
     if (showSortSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showSortSheet = false },
-            containerColor = MangaColors.Surface
+        com.exapps.mangaworld.presentation.components.GlassBottomSheet(
+            onDismissRequest = { showSortSheet = false }
         ) {
             Column(Modifier.padding(16.dp)) {
                 Text(stringResource(R.string.browse_sort), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)

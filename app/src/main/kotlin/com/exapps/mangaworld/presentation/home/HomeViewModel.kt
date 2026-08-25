@@ -129,7 +129,12 @@ class HomeViewModel @Inject constructor(
                     val filteredFeatured = data.featured.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.id }
                     val filteredLatest = data.latestChapters.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.chapterUrl }
                     val filteredTrending = data.trending.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.id }
-                    val suggested = repo.getSuggestedManga(filteredFeatured + filteredTrending)
+                    // Candidates must be id-distinct BEFORE scoring: a manga that
+                    // appears in both featured and trending otherwise comes back
+                    // twice and crashes the LazyRow with duplicate keys.
+                    val suggested = repo.getSuggestedManga(
+                        (filteredFeatured + filteredTrending).distinctBy { it.id }
+                    ).distinctBy { it.id }
                     _state.update {
                         it.copy(
                             isLoading = false,

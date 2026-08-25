@@ -35,9 +35,8 @@ fun SourceSettingsSheet(
     val context = LocalContext.current
     var showClearConfirm by remember { mutableStateOf(false) }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MangaColors.Surface
+    com.exapps.mangaworld.presentation.components.GlassBottomSheet(
+        onDismissRequest = onDismiss
     ) {
         Column(
             modifier = Modifier

@@ -1,43 +1,92 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- v8: mirrors DailyRecommendationsWidget — title row + suggestion rows with badges. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_preview_generic"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="14dp">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="اقتراحات اليوم"
-        android:textColor="#FFFFFF"
-        android:textStyle="bold"
-        android:textSize="16sp" />
-
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:background="#3D3445"
-        android:padding="12dp"
-        android:text="موصى بها: Omniscient Reader"
-        android:textColor="#FFFFFF" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-    <TextView
+        <View
+            android:layout_width="4dp"
+            android:layout_height="16dp"
+            android:background="#FFD700" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="@string/widget_recommendations_title"
+            android:textColor="#E4E1ED"
+            android:textStyle="bold"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/widget_preview_row"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="11dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/widget_preview_rec_title"
+            android:textColor="#E4E1ED"
+            android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_preview_badge"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="2dp"
+            android:text="@string/widget_preview_rec_badge"
+            android:textColor="#CDBDFF"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:background="#3D3445"
-        android:padding="12dp"
-        android:text="الأكثر رواجاً: Eleceed"
-        android:textColor="#FFFFFF" />
+        android:background="@drawable/widget_preview_row"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="11dp">
 
-    <TextView
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/widget_preview_latest_title"
+            android:textColor="#E4E1ED"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:background="#3D3445"
-        android:padding="12dp"
-        android:text="تحديث جديد: الفصل 92"
-        android:textColor="#FFFFFF" />
+        android:background="@drawable/widget_preview_row"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="11dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/widget_preview_library_row3_title"
+            android:textColor="#E4E1ED"
+            android:textSize="13sp" />
+    </LinearLayout>
 </LinearLayout>
