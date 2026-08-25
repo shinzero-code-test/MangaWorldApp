@@ -109,11 +109,26 @@ class SuggestionNotificationWorker @AssistedInject constructor(
             if (cachedMangas.isEmpty()) return@withContext Result.success()
 
             // Get existing suggestions to avoid duplicate notifications
-            val existingIds = suggestionsManager.getSuggestions(200).map { it.mangaId }.toSet()
+            val existingIds = suggestionsManager.getSuggestions(60).map { it.mangaId }.toSet()
 
-            // Generate recommendations
-            val recommendations = recommendationEngine.getSmartRecommendations(cachedMangas, limit = 10)
-            val newSuggestions = recommendations.filter { it.id !in existingIds }
+            // v8 (#5 fix): score ONLY titles the user has not been shown yet.
+            // Previously the engine scored every cached manga and THEN dropped
+            // the ones already suggested — the deterministic top-scores were
+            // always filtered out, so after the first cycle no notification
+            // could ever fire again.
+            var recommendations = recommendationEngine.getSmartRecommendations(
+                cachedMangas.filterNot { it.id in existingIds },
+                limit = 10
+            )
+            if (recommendations.isEmpty()) {
+                // Every cached title has been suggested once — rotate by
+                // forgetting the history so the cycle can restart.
+                recommendations = run {
+                    suggestionsManager.clear()
+                    recommendationEngine.getSmartRecommendations(cachedMangas, limit = 10)
+                }
+            }
+            val newSuggestions = recommendations
 
             if (newSuggestions.isEmpty()) return@withContext Result.success()
 

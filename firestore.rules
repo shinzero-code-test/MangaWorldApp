@@ -299,7 +299,9 @@ service cloud.firestore {
         // v8 (#5): authors may PERMANENTLY remove their own content when no
         // replies reference it; anchored (replyCount > 0) docs stay soft-only.
         allow delete: if canWriteCommunity(resource.data.authorUid)
-          && resource.data.replyCount == 0;
+          // get(..., 0): legacy docs predate the replyCount field — absent must
+          // count as "unreferenced", otherwise their delete is PERMISSION_DENIED.
+          && resource.data.get('replyCount', 0) == 0;
 
         match /votes/{voterUid} {
           allow read, write: if false;
@@ -313,7 +315,9 @@ service cloud.firestore {
         // v8 (#5): permanent delete for unreferenced reviews — also frees the
         // one-review-per-user document slot.
         allow delete: if canWriteCommunity(resource.data.authorUid)
-          && resource.data.replyCount == 0;
+          // get(..., 0): legacy docs predate the replyCount field — absent must
+          // count as "unreferenced", otherwise their delete is PERMISSION_DENIED.
+          && resource.data.get('replyCount', 0) == 0;
 
         match /votes/{voterUid} {
           allow read, write: if false;
@@ -328,7 +332,9 @@ service cloud.firestore {
         allow update: if authorOnlyCommentEdit();
         // v8 (#5): same permanent-delete rule as manga comments.
         allow delete: if canWriteCommunity(resource.data.authorUid)
-          && resource.data.replyCount == 0;
+          // get(..., 0): legacy docs predate the replyCount field — absent must
+          // count as "unreferenced", otherwise their delete is PERMISSION_DENIED.
+          && resource.data.get('replyCount', 0) == 0;
 
         match /votes/{voterUid} {
           allow read, write: if false;

@@ -23,6 +23,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
+import com.exapps.mangaworld.presentation.components.glassSurface
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
 @Composable
@@ -153,12 +154,12 @@ private fun FavoritesContent(
 @Composable
 private fun FavoriteCard(fav: FavoriteManga, onClick: () -> Unit, onRemove: () -> Unit) {
     var showMenu by remember { mutableStateOf(false) }
-    Card(
-        onClick = onClick,
+    // v8 glass card.
+    com.exapps.mangaworld.presentation.components.GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MangaColors.CardBg),
-        elevation = CardDefaults.cardElevation(2.dp)
+        cornerRadius = 12.dp,
+        glowColors = MangaColors.GradientPurpleCyan,
+        onClick = onClick
     ) {
         Box {
             MangaCover(
@@ -238,9 +239,17 @@ private fun HistoryContent(
 @Composable
 private fun HistoryItem(item: ReadingHistoryItem, onClick: () -> Unit, onRemove: () -> Unit) {
     var showMenu by remember { mutableStateOf(false) }
+    // v8 glass row.
     Row(
         modifier = Modifier.fillMaxWidth()
-            .background(MangaColors.CardBg, RoundedCornerShape(12.dp))
+            .glassSurface(
+                cornerRadius = 12.dp,
+                shape = RoundedCornerShape(12.dp),
+                glowColors = listOf(MangaColors.PrimaryLight, MangaColors.PrimaryLight),
+                baseAlpha = 0.6f,
+                glowIntensity = 0.5f
+            )
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -461,9 +461,27 @@ class FirebaseCommunityRepository @Inject constructor(
             ).await()
         } else {
             // v8 (#5): unreferenced content is removed PERMANENTLY instead of
-            // leaving a "[deleted]" husk behind.
-            docRef.delete().await()
+            // leaving a "[deleted]" husk behind. If the server still considers
+            // it referenced (fresh replies landed since this snapshot), rules
+            // deny the delete — degrade to the soft anchor so the user's
+            // intent always succeeds visibly.
+            try {
+                docRef.delete().await()
+            } catch (_: Exception) {
+                softDeleteComment(docRef)
+            }
         }
+    }
+
+    private suspend fun softDeleteComment(docRef: com.google.firebase.firestore.DocumentReference) {
+        docRef.update(
+            mapOf(
+                "text" to "",
+                "mentions" to emptyList<String>(),
+                "isDeleted" to true,
+                "editedAt" to System.currentTimeMillis()
+            )
+        ).await()
     }
 
     override suspend fun deleteReview(review: MangaReview) {
@@ -483,8 +501,21 @@ class FirebaseCommunityRepository @Inject constructor(
             ).await()
         } else {
             // v8 (#5): permanent removal when nothing references it. Also frees
-            // the one-review-per-user slot for a fresh write (v8 #8).
-            reviewRef.delete().await()
+            // the one-review-per-user slot for a fresh write (v8 #8). Same
+            // PERMISSION_DENIED fallback as comments: a reply may have landed
+            // after this snapshot was taken.
+            try {
+                reviewRef.delete().await()
+            } catch (_: Exception) {
+                reviewRef.update(
+                    mapOf(
+                        "title" to "",
+                        "body" to "",
+                        "isDeleted" to true,
+                        "updatedAt" to System.currentTimeMillis()
+                    )
+                ).await()
+            }
         }
     }
 

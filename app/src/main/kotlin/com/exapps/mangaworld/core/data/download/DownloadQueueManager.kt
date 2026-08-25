@@ -562,20 +562,27 @@ class DownloadQueueManager @Inject constructor(
     }
 
     private suspend fun resolvePagesForRetry(task: DownloadTaskEntity, ignoreCache: Boolean = false): List<ChapterPage> {
-        // v8 (#10): manual retries pass ignoreCache=true so expired/rotated page
-        // URLs are re-resolved from the source instead of failing identically.
-        if (!ignoreCache) {
-            val cachedPages = runCatching {
-                val array = JSONArray(task.pagesJson)
-                (0 until array.length()).map { index -> ChapterPage(index, array.getString(index)) }
-            }.getOrDefault(emptyList())
-            if (cachedPages.isNotEmpty()) return cachedPages
+        val cachedPages = runCatching {
+            val array = JSONArray(task.pagesJson)
+            (0 until array.length()).map { index -> ChapterPage(index, array.getString(index)) }
+        }.getOrDefault(emptyList())
+
+        // v8 (#10, round 2): manual retries prefer FRESH resolution so expired or
+        // rotated page URLs are not re-downloaded forever — but if the source is
+        // unreachable (Cloudflare challenge, network blip, source layout change),
+        // falling back to the cached list still beats an instant identical fail.
+        suspend fun fetchFresh(): List<ChapterPage> {
+            val source = MangaSource.fromIdOrNull(task.sourceId.ifBlank { task.mangaId.substringBefore('_') })
+                ?: return emptyList()
+            val slug = task.mangaSlug.ifBlank { task.mangaId.substringAfter("${source.id}_") }
+            return mangaRepository.getChapterPages(slug, task.chapterUrl, source).getOrDefault(emptyList())
         }
 
-        val source = MangaSource.fromIdOrNull(task.sourceId.ifBlank { task.mangaId.substringBefore('_') })
-            ?: return emptyList()
-        val slug = task.mangaSlug.ifBlank { task.mangaId.substringAfter("${source.id}_") }
-        return mangaRepository.getChapterPages(slug, task.chapterUrl, source).getOrDefault(emptyList())
+        return if (ignoreCache) {
+            fetchFresh().ifEmpty { cachedPages }
+        } else {
+            cachedPages.ifEmpty { fetchFresh() }
+        }
     }
 
     suspend fun clearCompleted() = downloadTaskDao.clearCompleted()

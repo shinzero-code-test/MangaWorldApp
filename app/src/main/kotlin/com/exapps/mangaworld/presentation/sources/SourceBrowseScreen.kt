@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import com.exapps.mangaworld.presentation.components.glassSurface
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.LazyRow
@@ -321,35 +322,41 @@ private fun StatusFilterChip(selected: Boolean, onClick: () -> Unit, text: Strin
 
 @Composable
 private fun SourceMangaCard(manga: MangaItem, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().aspectRatio(0.65f).clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(Modifier.fillMaxSize()) {
-            AsyncImage(
-                model = manga.coverUrl.ifBlank { null },
-                contentDescription = manga.title,
-                modifier = Modifier.fillMaxWidth().weight(1f)
-                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
-                contentScale = ContentScale.Crop
+    // v8 glass — consistent with MangaCard on home/browse.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(0.65f)
+            .glassSurface(
+                cornerRadius = 12.dp,
+                shape = RoundedCornerShape(12.dp),
+                glowColors = MangaColors.GradientPurpleCyan
             )
-            Column(Modifier.padding(6.dp)) {
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClickLabel = manga.title, onClick = onClick)
+    ) {
+        AsyncImage(
+            model = manga.coverUrl.ifBlank { null },
+            contentDescription = manga.title,
+            modifier = Modifier.fillMaxWidth().weight(1f)
+                .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
+            contentScale = ContentScale.Crop
+        )
+        Column(Modifier.padding(6.dp)) {
+            Text(
+                manga.title,
+                style = MaterialTheme.typography.labelSmall,
+                color = MangaColors.OnSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (manga.status != MangaStatus.UNKNOWN) {
                 Text(
-                    manga.title,
+                    manga.status.label,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MangaColors.OnSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    color = MangaColors.Muted,
+                    maxLines = 1
                 )
-                if (manga.status != MangaStatus.UNKNOWN) {
-                    Text(
-                        manga.status.label,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MangaColors.Muted,
-                        maxLines = 1
-                    )
-                }
             }
         }
     }

@@ -4,9 +4,11 @@ import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -217,11 +219,14 @@ private fun LocalMangaCard(
     onDelete: () -> Unit
 ) {
     val ctx = LocalContext.current
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MangaColors.CardBg),
-        elevation = CardDefaults.cardElevation(3.dp)
+    // v8 (#3) redesigned: glass surface, scrollable tag row (no overflow),
+    // quiet overflow-menu delete instead of a permanent red button.
+    var showActions by remember { mutableStateOf(false) }
+    com.exapps.mangaworld.presentation.components.GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 14.dp,
+        glowColors = MangaColors.GradientPurpleCyan,
+        onClick = onClick
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -240,24 +245,14 @@ private fun LocalMangaCard(
                     fontWeight = FontWeight.Bold, color = MangaColors.OnSurface,
                     maxLines = 2, overflow = TextOverflow.Ellipsis)
 
-                Box(Modifier.background(MangaColors.SurfaceContainer, RoundedCornerShape(6.dp))
-                    .padding(horizontal = 8.dp, vertical = 3.dp)) {
-                    Text(MangaSource.fromId(manga.sourceId).displayName,
-                        style = MaterialTheme.typography.labelSmall, color = MangaColors.Cyan)
-                }
-
-                if (autoTags.isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        autoTags.forEach { tag ->
-                            Box(
-                                Modifier
-                                    .background(MangaColors.SurfaceContainer, RoundedCornerShape(100.dp))
-                                    .padding(horizontal = 8.dp, vertical = 3.dp)
-                            ) {
-                                Text(tag, style = MaterialTheme.typography.labelSmall, color = MangaColors.OnSurfaceVariant)
-                            }
-                        }
-                    }
+                // Scrollable tag row — long genre lists previously pushed the
+                // layout wide and crushed the rest of the column.
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    TagChip(MangaSource.fromId(manga.sourceId).displayName, highlighted = true)
+                    autoTags.forEach { tag -> TagChip(tag) }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically,
@@ -282,13 +277,43 @@ private fun LocalMangaCard(
                 }
             }
 
-            IconButton(onClick = onDelete,
-                modifier = Modifier.size(36.dp)
-                    .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
-            ) {
-                Icon(Icons.Filled.Delete, stringResource(R.string.delete), modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.error)
+            Box {
+                IconButton(
+                    onClick = { showActions = true },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(Icons.Filled.MoreVert, stringResource(R.string.options), modifier = Modifier.size(18.dp),
+                        tint = MangaColors.MutedLight)
+                }
+                DropdownMenu(expanded = showActions, onDismissRequest = { showActions = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = {
+                            Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                        },
+                        onClick = { showActions = false; onDelete() }
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun TagChip(label: String, highlighted: Boolean = false) {
+    Box(
+        Modifier
+            .background(
+                if (highlighted) MangaColors.Cyan.copy(alpha = 0.14f) else MangaColors.SurfaceContainer,
+                RoundedCornerShape(100.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (highlighted) MangaColors.Cyan else MangaColors.OnSurfaceVariant,
+            maxLines = 1
+        )
     }
 }

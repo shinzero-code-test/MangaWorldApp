@@ -216,12 +216,12 @@ fun SuggestionsScreen(
 
 @Composable
 private fun SuggestionCard(manga: MangaItem, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MangaColors.Surface)
+    // v8 glass with a warm suggestion glow.
+    com.exapps.mangaworld.presentation.components.GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 16.dp,
+        glowColors = listOf(MangaColors.Yellow, MangaColors.Primary),
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier.padding(12.dp),

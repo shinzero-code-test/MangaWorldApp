@@ -238,12 +238,13 @@ fun LatestUpdatesScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 items(state.items, key = { "${it.source.id}_${it.chapterUrl}" }) { item ->
-                    Card(
+                    // v8 glass row.
+                    com.exapps.mangaworld.presentation.components.GlassCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onOpenChapter(item.source.id, item.mangaId, item.chapterUrl) },
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = MangaColors.CardBg)
+                        cornerRadius = 14.dp,
+                        glowColors = listOf(MangaColors.Cyan, MangaColors.Primary)
                     ) {
                         Row(
                             modifier = Modifier.padding(10.dp),

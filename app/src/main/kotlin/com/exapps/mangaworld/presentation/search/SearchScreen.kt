@@ -197,9 +197,14 @@ private fun SearchHints(onSuggestionClick: (String) -> Unit) {
 private fun SuggestionChip(label: String, onClick: () -> Unit) {
     Box(
         Modifier
+            .glassSurface(
+                cornerRadius = 100.dp,
+                shape = RoundedCornerShape(100.dp),
+                glowColors = listOf(MangaColors.OutlineVariant, MangaColors.OutlineVariant),
+                baseAlpha = 0.55f,
+                glowIntensity = 0.35f
+            )
             .clickable(onClick = onClick)
-            .background(MangaColors.SurfaceContainer, RoundedCornerShape(100.dp))
-            .border(1.dp, MangaColors.OutlineVariant, RoundedCornerShape(100.dp))
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         Text(label, style = MaterialTheme.typography.bodySmall, color = MangaColors.MutedLight)
@@ -273,9 +278,17 @@ private fun SearchResultItem(
     source: com.exapps.mangaworld.domain.model.MangaSource,
     onClick: () -> Unit
 ) {
+    // v8 glass result row.
     Row(
         Modifier.fillMaxWidth()
-            .background(MangaColors.CardBg, RoundedCornerShape(12.dp))
+            .glassSurface(
+                cornerRadius = 12.dp,
+                shape = RoundedCornerShape(12.dp),
+                glowColors = MangaColors.GradientPurpleCyan,
+                baseAlpha = 0.6f,
+                glowIntensity = 0.5f
+            )
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
