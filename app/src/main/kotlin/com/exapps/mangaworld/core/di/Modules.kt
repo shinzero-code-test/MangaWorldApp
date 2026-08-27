@@ -242,3 +242,18 @@ object SchedulerModule {
         @ApplicationContext context: Context
     ): ChapterUpdateCheckerScheduler = ChapterUpdateCheckerScheduler(workManager, settingsRepository, context)
 }
+
+@Module
+@InstallIn(SingletonComponent::class)
+object WorkManagerModule {
+
+    /**
+     * WorkManager uses on-demand initialization via MangaWorldApp's
+     * Configuration.Provider (HiltWorkerFactory-backed), so getInstance()
+     * here is safe at any point after Application construction.
+     */
+    @Provides
+    @Singleton
+    fun provideWorkManager(@ApplicationContext context: Context): WorkManager =
+        WorkManager.getInstance(context)
+}
