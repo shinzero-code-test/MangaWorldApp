@@ -14,7 +14,9 @@ import androidx.work.NetworkType
 import androidx.work.BackoffPolicy
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.TimeUnit
 import com.exapps.mangaworld.R
+import com.exapps.mangaworld.MangaWorldApp
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
@@ -30,6 +32,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.util.concurrent.TimeUnit
 
 /**
  * Local chapter update detector — checks sources for new chapters
@@ -269,13 +272,19 @@ class ChapterUpdateCheckerScheduler @Inject constructor(
 
     suspend fun schedule() = withContext(kotlinx.coroutines.Dispatchers.IO) {
         val settings = settingsRepository.getAppSettings().first()
-        if (!settings.enableNotifications) return unschedule()
+        if (!settings.enableNotifications) {
+            unschedule()
+            return
+        }
 
         // Respect delivery mode - only schedule if INSTANT mode
-        if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) return unschedule()
+        if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) {
+            unschedule()
+            return
+        }
 
         // Check if already scheduled
-        if (isScheduled()) return@withContext
+        if (isScheduled()) return
 
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(if (settings.downloadOnWifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)

@@ -20,8 +20,7 @@ class FavoriteDigestWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
         return try {
-            chapterUpdateChecker.checkForUpdates(forceCheck = true)
-            Result.success()
+            chapterUpdateChecker.doWork()
         } catch (_: Exception) {
             Result.retry()
         }

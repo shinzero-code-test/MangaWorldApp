@@ -28,6 +28,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import android.content.SharedPreferences
 import com.exapps.mangaworld.domain.model.CommunityNotification
 import com.exapps.mangaworld.domain.model.CommunityNotificationType
 import com.exapps.mangaworld.domain.repository.CommunityRepository
@@ -113,7 +114,7 @@ class NotificationCenterViewModel @Inject constructor(
         }
 
         // Register listener for future changes
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { prefs: SharedPreferences, key: String ->
             if (key == "notifications") {
                 try {
                     val json = prefs.getString("notifications", "[]") ?: "[]"
