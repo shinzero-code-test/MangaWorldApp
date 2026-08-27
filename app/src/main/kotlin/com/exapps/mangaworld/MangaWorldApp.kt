@@ -1,6 +1,6 @@
 package com.exapps.mangaworld
-import com.exapps.mangaworld.R
 
+import com.exapps.mangaworld.R
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -11,6 +11,8 @@ import androidx.work.Configuration
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.BackoffPolicy
+import androidx.work.NetworkType
 import coil.disk.DiskCache
 import coil.ImageLoader
 import coil.ImageLoaderFactory

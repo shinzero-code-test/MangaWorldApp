@@ -43,14 +43,14 @@ import javax.inject.Singleton
  * Scheduling follows the Kotatsu pattern: periodic work with proper constraints,
  * UPDATE policy, and settings-driven scheduling.
  */
-@Singleton
 class ChapterUpdateChecker @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val params: WorkerParameters,
     private val favoriteDao: FavoriteDao,
     private val historyDao: ReadingHistoryDao,
     private val mangaRepository: MangaRepository,
     private val settingsRepository: SettingsRepository
-) : CoroutineWorker(context, WorkerParameters.DEFAULT_INPUT_DATA) {
+) : CoroutineWorker(context, params) {
 
     private val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -247,14 +247,6 @@ class ChapterUpdateChecker @Inject constructor(
         }
     }
 
-    private val prefs by lazy {
-        context.getSharedPreferences("chapter_update_prefs", Context.MODE_PRIVATE)
-    }
-
-    private val prefsEdit by lazy {
-        context.getSharedPreferences("chapter_update_prefs", Context.MODE_PRIVATE).edit()
-    }
-
     companion object {
         private const val NOTIFICATION_ID_NEW_CHAPTERS = 7000
         private const val GROUP_KEY_CHAPTER_UPDATES = "chapter_updates"
@@ -275,7 +267,7 @@ class ChapterUpdateCheckerScheduler @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
-    suspend fun schedule() = withContext(Dispatchers.IO) {
+    suspend fun schedule() = withContext(kotlinx.coroutines.Dispatchers.IO) {
         val settings = settingsRepository.getAppSettings().first()
         if (!settings.enableNotifications) return unschedule()
 
@@ -301,13 +293,13 @@ class ChapterUpdateCheckerScheduler @Inject constructor(
             .await()
     }
 
-    suspend fun unschedule() = withContext(Dispatchers.IO) {
+    suspend fun unschedule() = withContext(kotlinx.coroutines.Dispatchers.IO) {
         WorkManager.getInstance(context)
             .cancelUniqueWork(TAG)
             .await()
     }
 
-    suspend fun isScheduled(): Boolean = withContext(Dispatchers.IO) {
+    suspend fun isScheduled(): Boolean = withContext(kotlinx.coroutines.Dispatchers.IO) {
         WorkManager.getInstance(context)
             .awaitUniqueWorkInfoByName(TAG)
             .any { !it.state.isFinished }
