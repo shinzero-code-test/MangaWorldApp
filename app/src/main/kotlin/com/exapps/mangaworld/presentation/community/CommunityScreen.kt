@@ -212,12 +212,18 @@ class CommunityViewModel @Inject constructor(
             now - echo.updatedAt < ECHO_TTL_MS &&
                 data.reviews.none { it.authorUid == echo.authorUid && it.title == echo.title && !it.isDeleted }
         }
+        // Deduplicate reviews by ID: editedReviews (server + pending edits) takes priority
+        // over echoedReviews (optimistic new reviews). This prevents duplicate keys when
+        // a review is edited and the optimistic echo still exists locally.
+        val allReviews = (editedReviews + echoedReviews)
+            .filter { it.authorUid !in mutedUserIds }
+            .distinctBy { it.id }
         CommunityUiState(
             title = if (chapterUrl == null) context.getString(R.string.fmt_068, bits.title) else context.getString(R.string.community_discussion),
             // The main screen intentionally contains roots only. Replies belong to their own stack screen.
             comments = (filterMutedComments(liveComments, mutedUserIds) + echoedComments)
                 .filter { it.parentId == null && it.reviewId == null },
-            reviews = (editedReviews.filter { it.authorUid !in mutedUserIds } + echoedReviews),
+            reviews = allReviews,
             profile = data.profile,
             appSettings = data.settings,
             tab = bits.tab,

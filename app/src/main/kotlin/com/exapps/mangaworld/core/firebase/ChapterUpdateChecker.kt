@@ -1,20 +1,27 @@
 package com.exapps.mangaworld.core.firebase
 
 import android.app.NotificationManager
-import android.util.Log
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.work.CoroutineWorker
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.BackoffPolicy
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
 import com.exapps.mangaworld.R
-import com.exapps.mangaworld.MangaWorldApp
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.model.NotificationDeliveryMode
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
-import com.exapps.mangaworld.domain.model.NotificationDeliveryMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -32,6 +39,9 @@ import javax.inject.Singleton
  * `latestChapters` list and find the HIGHEST chapter number for that manga.
  * We compare it against the previously stored max chapter number. If the
  * current max is higher, a new chapter was published.
+ *
+ * Scheduling follows the Kotatsu pattern: periodic work with proper constraints,
+ * UPDATE policy, and settings-driven scheduling.
  */
 @Singleton
 class ChapterUpdateChecker @Inject constructor(
@@ -40,7 +50,8 @@ class ChapterUpdateChecker @Inject constructor(
     private val historyDao: ReadingHistoryDao,
     private val mangaRepository: MangaRepository,
     private val settingsRepository: SettingsRepository
-) {
+) : CoroutineWorker(context, WorkerParameters.DEFAULT_INPUT_DATA) {
+
     private val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -59,81 +70,92 @@ class ChapterUpdateChecker @Inject constructor(
         val coverUrl: String
     )
 
-    suspend fun checkForUpdates(forceCheck: Boolean = false) = withContext(Dispatchers.IO) {
+    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         checkMutex.withLock {
             val settings = settingsRepository.getAppSettings().first()
-            if (!settings.enableNotifications) return@withContext
-            // Respect delivery mode — only INSTANT notifications fire immediately
-            if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) return@withContext
 
-        // Throttle: check at most once per 2 hours (bypassed by WorkManager via forceCheck)
-        val lastCheck = prefs.getLong("last_update_check", 0L)
-        val now = System.currentTimeMillis()
-        if (!forceCheck && now - lastCheck < 2 * 60 * 60 * 1000L) return@withContext
+            // Respect user settings - only run if notifications are enabled
+            if (!settings.enableNotifications) return@withContext Result.success()
 
-        val favorites = favoriteDao.getFavoritesList()
-        if (favorites.isEmpty()) return@withContext
+            // Respect delivery mode - only INSTANT notifications fire immediately
+            if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) return@withContext Result.success()
 
-        val favoritesBySource = favorites.groupBy { it.sourceId }
-        val newChapters = mutableListOf<NewChapterInfo>()
+            // Throttle: check at most once per 2 hours
+            val lastCheck = prefs.getLong("last_update_check", 0L)
+            val now = System.currentTimeMillis()
+            if (now - lastCheck < 2 * 60 * 60 * 1000L) return@withContext Result.success()
 
-        for ((sourceId, sourceFavorites) in favoritesBySource) {
-            if (sourceId !in settings.enabledSources) continue
+            val favorites = favoriteDao.getFavoritesList()
+            if (favorites.isEmpty()) return@withContext Result.success()
 
-            try {
-                val source = MangaSource.fromId(sourceId)
-                val homeData = mangaRepository.getHomeData(source).getOrDefault(
-                    com.exapps.mangaworld.domain.model.HomeData()
-                )
+            val favoritesBySource = favorites.groupBy { it.sourceId }
+            val newChapters = mutableListOf<NewChapterInfo>()
 
-                for (favorite in sourceFavorites) {
-                    val mangaChapters = homeData.latestChapters.filter {
-                        it.mangaId == favorite.mangaId || it.mangaSlug == favorite.slug
-                    }
-                    if (mangaChapters.isEmpty()) continue
+            for ((sourceId, sourceFavorites) in favoritesBySource) {
+                if (sourceId !in settings.enabledSources) continue
 
-                    val currentMaxChapter = mangaChapters.maxOf { it.chapterNumber.toDouble() }
-                    val lastKnownMax = prefs.getFloat("max_chapter_${favorite.mangaId}", -1f).toDouble()
+                try {
+                    val source = MangaSource.fromId(sourceId)
+                    val homeData = mangaRepository.getHomeData(source).getOrDefault(
+                        com.exapps.mangaworld.domain.model.HomeData()
+                    )
 
-                    if (lastKnownMax < 0.0) {
-                        prefs.edit().putFloat("max_chapter_${favorite.mangaId}", currentMaxChapter.toFloat()).apply()
-                    } else if (currentMaxChapter > lastKnownMax) {
-                        val diff = mangaChapters.count { it.chapterNumber.toDouble() > lastKnownMax }
-                            .coerceAtLeast(1)
-                        newChapters.add(
-                            NewChapterInfo(
-                                title = favorite.title,
-                                info = context.getString(
-                                    if (diff > 1) R.string.notif_new_chapter_info_plural
-                                    else R.string.notif_new_chapter_info_single,
-                                    diff
-                                ),
-                                mangaId = favorite.mangaId,
-                                sourceId = favorite.sourceId,
-                                slug = favorite.slug,
-                                coverUrl = favorite.coverUrl
+                    for (favorite in sourceFavorites) {
+                        val mangaChapters = homeData.latestChapters.filter {
+                            it.mangaId == favorite.mangaId || it.mangaSlug == favorite.slug
+                        }
+                        if (mangaChapters.isEmpty()) continue
+
+                        val currentMaxChapter = mangaChapters.maxOf { it.chapterNumber.toDouble() }
+                        val lastKnownMax = prefs.getFloat("max_chapter_${favorite.mangaId}", -1f).toDouble()
+
+                        if (lastKnownMax < 0.0) {
+                            prefs.edit().putFloat("max_chapter_${favorite.mangaId}", currentMaxChapter.toFloat()).apply()
+                        } else if (currentMaxChapter > lastKnownMax) {
+                            val diff = mangaChapters.count { it.chapterNumber.toDouble() > lastKnownMax }
+                                .coerceAtLeast(1)
+                            newChapters.add(
+                                NewChapterInfo(
+                                    title = favorite.title,
+                                    info = context.getString(
+                                        if (diff > 1) R.string.notif_new_chapter_info_plural
+                                        else R.string.notif_new_chapter_info_single,
+                                        diff
+                                    ),
+                                    mangaId = favorite.mangaId,
+                                    sourceId = favorite.sourceId,
+                                    slug = favorite.slug,
+                                    coverUrl = favorite.coverUrl
+                                )
                             )
-                        )
-                        prefs.edit().putFloat("max_chapter_${favorite.mangaId}", currentMaxChapter.toFloat()).apply()
+                            prefs.edit().putFloat("max_chapter_${favorite.mangaId}", currentMaxChapter.toFloat()).apply()
+                        }
                     }
+                } catch (e: Exception) {
+                    Log.w("ChapterUpdateChecker", "Failed to check updates for source $sourceId: ${e.message}")
                 }
-            } catch (e: Exception) {
-                Log.w("ChapterUpdateChecker", "Failed to check updates for source $sourceId: ${e.message}")
             }
-        }
 
-        if (newChapters.isNotEmpty()) {
-            showNewChaptersNotification(newChapters)
-        }
+            if (newChapters.isNotEmpty()) {
+                showNewChaptersNotification(newChapters)
+            }
 
-        // Throttle timestamp is written only after a completed sweep — a mid-loop
-        // failure must not consume the 2h window (L-review).
-        prefs.edit().putLong("last_update_check", System.currentTimeMillis()).commit()
+            // Throttle timestamp is written only after a completed sweep — a mid-loop
+            // failure must not consume the 2h window (L-review).
+            prefs.edit().putLong("last_update_check", System.currentTimeMillis()).commit()
         } // end checkMutex.withLock
+
+        Result.success()
     }
 
-    // snapshotCurrentCounts() deleted (L-review): zero callers, mutated
-    // max_chapter_* prefs outside the check mutex.
+    private data class NewChapterInfo(
+        val title: String,
+        val info: String,
+        val mangaId: String,
+        val sourceId: String,
+        val slug: String,
+        val coverUrl: String
+    )
 
     private suspend fun showNewChaptersNotification(chapters: List<NewChapterInfo>) {
         // Content intent — open latest updates
@@ -225,8 +247,74 @@ class ChapterUpdateChecker @Inject constructor(
         }
     }
 
+    private val prefs by lazy {
+        context.getSharedPreferences("chapter_update_prefs", Context.MODE_PRIVATE)
+    }
+
+    private val prefsEdit by lazy {
+        context.getSharedPreferences("chapter_update_prefs", Context.MODE_PRIVATE).edit()
+    }
+
     companion object {
         private const val NOTIFICATION_ID_NEW_CHAPTERS = 7000
         private const val GROUP_KEY_CHAPTER_UPDATES = "chapter_updates"
+        const val TAG = "chapter_update_checker"
+    }
+}
+
+/**
+ * Scheduler for ChapterUpdateChecker — follows the Kotatsu pattern:
+ * - Uses ExistingPeriodicWorkPolicy.UPDATE
+ * - Checks isScheduled() before scheduling
+ * - Respects user settings (enabled/disabled, wifi only)
+ * - Proper constraints (battery not low, network type)
+ */
+@Reusable
+class ChapterUpdateCheckerScheduler @Inject constructor(
+    private val workManager: WorkManager,
+    private val settingsRepository: SettingsRepository,
+    @ApplicationContext private val context: Context
+) {
+
+    suspend fun schedule() = withContext(Dispatchers.IO) {
+        val settings = settingsRepository.getAppSettings().first()
+        if (!settings.enableNotifications) return unschedule()
+
+        // Respect delivery mode - only schedule if INSTANT mode
+        if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) return unschedule()
+
+        // Check if already scheduled
+        if (isScheduled()) return@withContext
+
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(if (settings.downloadOnWifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+            .setRequiresBatteryNotLow(true)
+            .build()
+
+        val request = PeriodicWorkRequestBuilder<ChapterUpdateChecker>(12, TimeUnit.HOURS)
+            .setConstraints(constraints)
+            .addTag(TAG)
+            .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.MINUTES)
+            .build()
+
+        WorkManager.getInstance(context)
+            .enqueueUniquePeriodicWork(TAG, ExistingPeriodicWorkPolicy.UPDATE, request)
+            .await()
+    }
+
+    suspend fun unschedule() = withContext(Dispatchers.IO) {
+        WorkManager.getInstance(context)
+            .cancelUniqueWork(TAG)
+            .await()
+    }
+
+    suspend fun isScheduled(): Boolean = withContext(Dispatchers.IO) {
+        WorkManager.getInstance(context)
+            .awaitUniqueWorkInfoByName(TAG)
+            .any { !it.state.isFinished }
+    }
+
+    companion object {
+        const val TAG = "chapter_update_checker"
     }
 }

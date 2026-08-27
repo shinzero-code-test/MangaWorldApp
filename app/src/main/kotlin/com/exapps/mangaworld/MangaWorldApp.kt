@@ -20,6 +20,7 @@ import com.exapps.mangaworld.core.firebase.FirebaseStartupCoordinator
 import com.exapps.mangaworld.core.firebase.FirebaseSyncWorker
 import com.exapps.mangaworld.core.firebase.FavoriteDigestWorker
 import com.exapps.mangaworld.core.firebase.SuggestionNotificationWorker
+import com.exapps.mangaworld.core.firebase.ChapterUpdateCheckerScheduler
 import com.exapps.mangaworld.core.firebase.installAppCheckProvider
 import com.exapps.mangaworld.core.widget.AppShortcutManager
 import com.exapps.mangaworld.core.widget.WidgetRefreshScheduler
@@ -43,6 +44,7 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     @Inject lateinit var firebaseStartupCoordinator: FirebaseStartupCoordinator
     @Inject lateinit var downloadQueueManager: com.exapps.mangaworld.core.data.download.DownloadQueueManager
     @Inject lateinit var readingStatsStore: com.exapps.mangaworld.core.data.ReadingStatsStore
+    @Inject lateinit var chapterUpdateCheckerScheduler: ChapterUpdateCheckerScheduler
 
     internal val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -104,34 +106,43 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
 
     private fun scheduleFirebaseSync() {
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiresBatteryNotLow(true)
             .build()
+
+        // Use UPDATE policy so existing work gets updated with new constraints/backoff
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "firebase_sync_periodic",
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             PeriodicWorkRequestBuilder<FirebaseSyncWorker>(12, TimeUnit.HOURS)
                 .setConstraints(constraints)
-                .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.MINUTES)
+                .addTag("firebase_sync")
                 .build()
         )
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "favorite_digest_periodic",
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             PeriodicWorkRequestBuilder<FavoriteDigestWorker>(6, TimeUnit.HOURS)
                 .setConstraints(constraints)
-                .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.MINUTES)
+                .addTag("favorite_digest")
                 .build()
         )
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "suggestion_notification_periodic",
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             PeriodicWorkRequestBuilder<SuggestionNotificationWorker>(12, TimeUnit.HOURS)
                 .setConstraints(constraints)
-                .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.MINUTES)
+                .addTag("suggestion_notification")
                 .build()
         )
+
+        // Chapter update checker — scheduled via its own Scheduler (respects settings, constraints, UPDATE policy)
+        applicationScope.launch { chapterUpdateCheckerScheduler.schedule() }
     }
 
     private fun scheduleAutoDownload() {

@@ -87,31 +87,59 @@ class NotificationCenterViewModel @Inject constructor(
             }
         }
 
-    private val _refreshTrigger = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** Local notifications from SharedPreferences — auto-refreshes via OnSharedPreferenceChangeListener */
+    private val localNotifications = kotlinx.coroutines.flow.callbackFlow {
+        val prefs = context.getSharedPreferences("local_notifications", android.content.Context.MODE_PRIVATE)
 
-    /** Local notifications from SharedPreferences (chapter updates, suggestions, reminders) */
-    private val localNotifications = _refreshTrigger.flatMapLatest {
-        kotlinx.coroutines.flow.flow {
-            val prefs = context.getSharedPreferences("local_notifications", android.content.Context.MODE_PRIVATE)
+        // Emit initial value
+        try {
             val json = prefs.getString("notifications", "[]") ?: "[]"
-            val items = try {
-                val arr = org.json.JSONArray(json)
-                (0 until arr.length()).mapNotNull { i ->
-                    val obj = arr.optJSONObject(i) ?: return@mapNotNull null
-                    UnifiedNotification(
-                        id = obj.optString("id", ""),
-                        title = obj.optString("title", ""),
-                        body = obj.optString("body", ""),
-                        type = obj.optString("type", "system"),
-                        mangaId = obj.optString("mangaId", null),
-                        read = obj.optBoolean("read", false),
-                        timestamp = obj.optLong("timestamp", 0L)
-                    )
-                }
-            } catch (_: Exception) { emptyList() }
-            emit(items)
+            val arr = org.json.JSONArray(json)
+            val items = (0 until arr.length()).mapNotNull { i ->
+                val obj = arr.optJSONObject(i) ?: return@mapNotNull null
+                UnifiedNotification(
+                    id = obj.optString("id", ""),
+                    title = obj.optString("title", ""),
+                    body = obj.optString("body", ""),
+                    type = obj.optString("type", "system"),
+                    mangaId = obj.optString("mangaId", null),
+                    read = obj.optBoolean("read", false),
+                    timestamp = obj.optLong("timestamp", 0L)
+                )
+            }
+            trySend(items)
+        } catch (_: Exception) {
+            trySend(emptyList())
         }
-    }
+
+        // Register listener for future changes
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+            if (key == "notifications") {
+                try {
+                    val json = prefs.getString("notifications", "[]") ?: "[]"
+                    val arr = org.json.JSONArray(json)
+                    val items = (0 until arr.length()).mapNotNull { i ->
+                        val obj = arr.optJSONObject(i) ?: return@mapNotNull null
+                        UnifiedNotification(
+                            id = obj.optString("id", ""),
+                            title = obj.optString("title", ""),
+                            body = obj.optString("body", ""),
+                            type = obj.optString("type", "system"),
+                            mangaId = obj.optString("mangaId", null),
+                            read = obj.optBoolean("read", false),
+                            timestamp = obj.optLong("timestamp", 0L)
+                        )
+                    }
+                    trySend(items)
+                } catch (_: Exception) {
+                    trySend(emptyList())
+                }
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+
+        awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val notifications = combine(communityNotifications, localNotifications, _unreadOnly) { community, local, unread ->
         val all = (community + local).sortedByDescending { it.timestamp }
@@ -139,7 +167,7 @@ class NotificationCenterViewModel @Inject constructor(
                 }
                 changed
             }
-            if (changed) _refreshTrigger.tryEmit(Unit)
+            // No _refreshTrigger needed — callbackFlow auto-refreshes on SharedPreferences change
         }
     }
 
@@ -162,8 +190,7 @@ class NotificationCenterViewModel @Inject constructor(
                     }
                 }
             }
-            // Single refresh at the end.
-            _refreshTrigger.tryEmit(Unit)
+            // No _refreshTrigger needed — callbackFlow auto-refreshes on SharedPreferences change
         }
     }
 }
