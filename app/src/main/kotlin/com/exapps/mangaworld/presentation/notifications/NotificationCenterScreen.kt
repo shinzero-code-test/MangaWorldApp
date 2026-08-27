@@ -34,7 +34,7 @@ import com.exapps.mangaworld.domain.model.CommunityNotificationType
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.awaitClose
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
