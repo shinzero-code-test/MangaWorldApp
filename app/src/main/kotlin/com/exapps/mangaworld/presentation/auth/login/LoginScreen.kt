@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.presentation.theme.IbmPlexArabicFontFamily
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
 @Composable
@@ -297,7 +298,12 @@ fun MangaTextField(
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = true,
-                textStyle = TextStyle(color = MangaColors.OnSurface, fontSize = 15.sp, textAlign = TextAlign.Start),
+                textStyle = TextStyle(
+                    color = MangaColors.OnSurface,
+                    fontFamily = IbmPlexArabicFontFamily,
+                    fontSize = 15.sp,
+                    textAlign = TextAlign.Start
+                ),
                 visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
                 keyboardActions = keyboardActions,

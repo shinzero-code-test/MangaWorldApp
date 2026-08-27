@@ -10,6 +10,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.exapps.mangaworld.R
 
 // ─── Brand Colors (hardcoded accents — never change with theme) ──────────────
 
@@ -197,22 +198,43 @@ private val LightColorScheme = lightColorScheme(
 
 // ─── Typography ───────────────────────────────────────────────────────────────
 
+/**
+ * App type system (v8.1): Cairo for titles/headlines, IBM Plex Sans Arabic for
+ * everything else. Both are bundled static instances downloaded from the
+ * official Google Fonts repo — bundled (not GMS Downloadable Fonts) because the
+ * app supports devices without Play Services.
+ *
+ * Cairo Bold was instanced from the variable font (slnt=0, wght=700).
+ */
+val CairoFontFamily = FontFamily(
+    Font(R.font.cairo_bold, FontWeight.Bold)
+)
+
+val IbmPlexArabicFontFamily = FontFamily(
+    Font(R.font.ibm_plex_arabic_regular, FontWeight.Normal),
+    Font(R.font.ibm_plex_arabic_medium, FontWeight.Medium),
+    Font(R.font.ibm_plex_arabic_semi_bold, FontWeight.SemiBold),
+    Font(R.font.ibm_plex_arabic_bold, FontWeight.Bold)
+)
+
 val MangaTypography = Typography(
-    displayLarge  = TextStyle(fontSize = 48.sp, fontWeight = FontWeight.Bold, lineHeight = 56.sp, letterSpacing = (-0.02).sp),
-    displayMedium = TextStyle(fontSize = 36.sp, fontWeight = FontWeight.Bold, lineHeight = 44.sp, letterSpacing = 0.sp),
-    displaySmall  = TextStyle(fontSize = 30.sp, fontWeight = FontWeight.Bold, lineHeight = 38.sp, letterSpacing = 0.sp),
-    headlineLarge = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold, lineHeight = 40.sp),
-    headlineMedium= TextStyle(fontSize = 24.sp, fontWeight = FontWeight.SemiBold, lineHeight = 32.sp),
-    headlineSmall = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, lineHeight = 28.sp),
-    titleLarge    = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, lineHeight = 28.sp),
-    titleMedium   = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, lineHeight = 24.sp),
-    titleSmall    = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 20.sp),
-    bodyLarge     = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Normal, lineHeight = 24.sp),
-    bodyMedium    = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, lineHeight = 20.sp),
-    bodySmall     = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Normal, lineHeight = 16.sp),
-    labelLarge    = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, lineHeight = 16.sp, letterSpacing = 0.5.sp),
-    labelMedium   = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, lineHeight = 16.sp, letterSpacing = 0.5.sp),
-    labelSmall    = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium, lineHeight = 14.sp, letterSpacing = 0.5.sp),
+    // Cairo — titles, headlines, display
+    displayLarge  = TextStyle(fontFamily = CairoFontFamily, fontSize = 48.sp, fontWeight = FontWeight.Bold, lineHeight = 56.sp, letterSpacing = 0.sp),
+    displayMedium = TextStyle(fontFamily = CairoFontFamily, fontSize = 36.sp, fontWeight = FontWeight.Bold, lineHeight = 44.sp, letterSpacing = 0.sp),
+    displaySmall  = TextStyle(fontFamily = CairoFontFamily, fontSize = 30.sp, fontWeight = FontWeight.Bold, lineHeight = 38.sp, letterSpacing = 0.sp),
+    headlineLarge = TextStyle(fontFamily = CairoFontFamily, fontSize = 32.sp, fontWeight = FontWeight.Bold, lineHeight = 40.sp),
+    headlineMedium= TextStyle(fontFamily = CairoFontFamily, fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 32.sp),
+    headlineSmall = TextStyle(fontFamily = CairoFontFamily, fontSize = 20.sp, fontWeight = FontWeight.Bold, lineHeight = 28.sp),
+    titleLarge    = TextStyle(fontFamily = CairoFontFamily, fontSize = 20.sp, fontWeight = FontWeight.Bold, lineHeight = 28.sp),
+    titleMedium   = TextStyle(fontFamily = CairoFontFamily, fontSize = 16.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp),
+    titleSmall    = TextStyle(fontFamily = CairoFontFamily, fontSize = 14.sp, fontWeight = FontWeight.Bold, lineHeight = 20.sp),
+    // IBM Plex Sans Arabic — body, labels, buttons, inputs
+    bodyLarge     = TextStyle(fontFamily = IbmPlexArabicFontFamily, fontSize = 16.sp, fontWeight = FontWeight.Normal, lineHeight = 24.sp),
+    bodyMedium    = TextStyle(fontFamily = IbmPlexArabicFontFamily, fontSize = 14.sp, fontWeight = FontWeight.Normal, lineHeight = 20.sp),
+    bodySmall     = TextStyle(fontFamily = IbmPlexArabicFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Normal, lineHeight = 16.sp),
+    labelLarge    = TextStyle(fontFamily = IbmPlexArabicFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Medium, lineHeight = 16.sp, letterSpacing = 0.5.sp),
+    labelMedium   = TextStyle(fontFamily = IbmPlexArabicFontFamily, fontSize = 11.sp, fontWeight = FontWeight.Medium, lineHeight = 16.sp, letterSpacing = 0.5.sp),
+    labelSmall    = TextStyle(fontFamily = IbmPlexArabicFontFamily, fontSize = 10.sp, fontWeight = FontWeight.Medium, lineHeight = 14.sp, letterSpacing = 0.5.sp),
 )
 
 // ─── Shapes ───────────────────────────────────────────────────────────────────
@@ -313,7 +335,14 @@ fun MangaWorldTheme(
         else -> LightThemeColors
     }
 
-    CompositionLocalProvider(LocalThemeColors provides themeColors) {
+    CompositionLocalProvider(
+        // Default font for every Text that does not set one explicitly: Text()
+        // merges its style into LocalTextStyle, so ad-hoc TextStyle(fontSize=…)
+        // usages inherit IBM Plex instead of the platform default. Typography
+        // styles carry their own families (Cairo/IBM Plex) and win on merge.
+        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = IbmPlexArabicFontFamily),
+        LocalThemeColors provides themeColors
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography  = MangaTypography,
