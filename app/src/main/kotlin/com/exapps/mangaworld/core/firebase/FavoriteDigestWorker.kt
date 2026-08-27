@@ -9,18 +9,18 @@ import dagger.assisted.AssistedInject
 
 /**
  * Periodic worker that checks for new chapters on favorited manga.
- * Uses [ChapterUpdateChecker] for the actual detection logic.
+ * Delegates to [ChapterUpdateCheckerCore] for the actual detection logic.
  * Runs every 6 hours to catch updates even when app is in background.
  */
 @HiltWorker
 class FavoriteDigestWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
-    private val chapterUpdateChecker: ChapterUpdateChecker
+    private val chapterUpdateCheckerCore: ChapterUpdateCheckerCore
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
         return try {
-            chapterUpdateChecker.doWork()
+            chapterUpdateCheckerCore.checkForNewChapters()
         } catch (_: Exception) {
             Result.retry()
         }

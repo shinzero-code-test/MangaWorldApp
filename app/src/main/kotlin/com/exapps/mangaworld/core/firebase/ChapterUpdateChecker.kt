@@ -6,7 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.ListenableWorker
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.Constraints
@@ -24,6 +26,8 @@ import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.NotificationDeliveryMode
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -35,25 +39,50 @@ import javax.inject.Singleton
 import java.util.concurrent.TimeUnit
 
 /**
- * Local chapter update detector — checks sources for new chapters
- * on favorited manga and shows notifications without FCM.
+ * Local chapter update detector — periodic WorkManager job that checks sources
+ * for new chapters on favorited manga and shows notifications without FCM.
+ *
+ * All detection logic lives in [ChapterUpdateCheckerCore]; this worker (and
+ * [FavoriteDigestWorker]) are thin shells around it, following the same
+ * @HiltWorker/@AssistedInject pattern as every other worker in the app.
+ *
+ * Scheduling follows the Kotatsu pattern: periodic work with proper constraints,
+ * UPDATE policy, and settings-driven scheduling.
+ */
+@HiltWorker
+class ChapterUpdateChecker @AssistedInject constructor(
+    @Assisted appContext: Context,
+    @Assisted params: WorkerParameters,
+    private val core: ChapterUpdateCheckerCore
+) : CoroutineWorker(appContext, params) {
+
+    override suspend fun doWork(): Result = core.checkForNewChapters()
+
+    companion object {
+        const val TAG = "chapter_update_checker"
+    }
+}
+
+/**
+ * Injectable core of the local chapter update detector.
+ *
+ * Both [ChapterUpdateChecker] (12h periodic) and [FavoriteDigestWorker] (6h
+ * digest) delegate here, so the detection strategy and its 2h throttle live in
+ * exactly one place and can never race each other (single [checkMutex]).
  *
  * Detection strategy: For each favorited manga, we look at the home page's
  * `latestChapters` list and find the HIGHEST chapter number for that manga.
  * We compare it against the previously stored max chapter number. If the
  * current max is higher, a new chapter was published.
- *
- * Scheduling follows the Kotatsu pattern: periodic work with proper constraints,
- * UPDATE policy, and settings-driven scheduling.
  */
-class ChapterUpdateChecker @Inject constructor(
+@Singleton
+class ChapterUpdateCheckerCore @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val params: WorkerParameters,
     private val favoriteDao: FavoriteDao,
     private val historyDao: ReadingHistoryDao,
     private val mangaRepository: MangaRepository,
     private val settingsRepository: SettingsRepository
-) : CoroutineWorker(context, params) {
+) {
 
     private val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -73,23 +102,23 @@ class ChapterUpdateChecker @Inject constructor(
         val coverUrl: String
     )
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+    suspend fun checkForNewChapters(): ListenableWorker.Result = withContext(Dispatchers.IO) {
         checkMutex.withLock {
             val settings = settingsRepository.getAppSettings().first()
 
             // Respect user settings - only run if notifications are enabled
-            if (!settings.enableNotifications) return@withContext Result.success()
+            if (!settings.enableNotifications) return@withContext ListenableWorker.Result.success()
 
             // Respect delivery mode - only INSTANT notifications fire immediately
-            if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) return@withContext Result.success()
+            if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) return@withContext ListenableWorker.Result.success()
 
             // Throttle: check at most once per 2 hours
             val lastCheck = prefs.getLong("last_update_check", 0L)
             val now = System.currentTimeMillis()
-            if (now - lastCheck < 2 * 60 * 60 * 1000L) return@withContext Result.success()
+            if (now - lastCheck < 2 * 60 * 60 * 1000L) return@withContext ListenableWorker.Result.success()
 
             val favorites = favoriteDao.getFavoritesList()
-            if (favorites.isEmpty()) return@withContext Result.success()
+            if (favorites.isEmpty()) return@withContext ListenableWorker.Result.success()
 
             val favoritesBySource = favorites.groupBy { it.sourceId }
             val newChapters = mutableListOf<NewChapterInfo>()
@@ -148,7 +177,7 @@ class ChapterUpdateChecker @Inject constructor(
             prefs.edit().putLong("last_update_check", System.currentTimeMillis()).commit()
         } // end checkMutex.withLock
 
-        Result.success()
+        ListenableWorker.Result.success()
     }
 
     private suspend fun showNewChaptersNotification(chapters: List<NewChapterInfo>) {
@@ -244,7 +273,6 @@ class ChapterUpdateChecker @Inject constructor(
     companion object {
         private const val NOTIFICATION_ID_NEW_CHAPTERS = 7000
         private const val GROUP_KEY_CHAPTER_UPDATES = "chapter_updates"
-        const val TAG = "chapter_update_checker"
     }
 }
 
