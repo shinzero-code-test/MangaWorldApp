@@ -14,7 +14,7 @@ import androidx.work.NetworkType
 import androidx.work.BackoffPolicy
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.TimeUnit
+import androidx.work.await
 import com.exapps.mangaworld.R
 import com.exapps.mangaworld.MangaWorldApp
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
@@ -270,21 +270,21 @@ class ChapterUpdateCheckerScheduler @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
-    suspend fun schedule() = withContext(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun schedule(): Unit = withContext(kotlinx.coroutines.Dispatchers.IO) {
         val settings = settingsRepository.getAppSettings().first()
         if (!settings.enableNotifications) {
             unschedule()
-            return
+            return@withContext
         }
 
         // Respect delivery mode - only schedule if INSTANT mode
         if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) {
             unschedule()
-            return
+            return@withContext
         }
 
         // Check if already scheduled
-        if (isScheduled()) return
+        if (isScheduled()) return@withContext
 
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(if (settings.downloadOnWifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
@@ -302,16 +302,25 @@ class ChapterUpdateCheckerScheduler @Inject constructor(
             .await()
     }
 
-    suspend fun unschedule() = withContext(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun unschedule(): Unit = withContext(kotlinx.coroutines.Dispatchers.IO) {
         WorkManager.getInstance(context)
             .cancelUniqueWork(TAG)
             .await()
     }
 
     suspend fun isScheduled(): Boolean = withContext(kotlinx.coroutines.Dispatchers.IO) {
-        WorkManager.getInstance(context)
-            .awaitUniqueWorkInfoByName(TAG)
-            .any { !it.state.isFinished }
+        // getWorkInfosForUniqueWork returns a ListenableFuture and work-runtime-ktx
+        // (2.10.0) provides no suspend extension for it, so block briefly on the IO
+        // dispatcher. Fail-open to "not scheduled": schedule() then re-enqueues with
+        // ExistingPeriodicWorkPolicy.UPDATE, which is idempotent.
+        try {
+            WorkManager.getInstance(context)
+                .getWorkInfosForUniqueWork(TAG)
+                .get()
+                .any { !it.state.isFinished }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     companion object {

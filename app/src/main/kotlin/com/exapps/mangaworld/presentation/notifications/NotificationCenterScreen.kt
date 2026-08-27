@@ -34,6 +34,7 @@ import com.exapps.mangaworld.domain.model.CommunityNotificationType
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.awaitClose
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -114,10 +115,13 @@ class NotificationCenterViewModel @Inject constructor(
         }
 
         // Register listener for future changes
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { prefs: SharedPreferences, key: String ->
+        // NOTE: no explicit parameter types — the Java SAM's params are platform types
+        // (SharedPreferences!, String?), and declaring `key: String` (non-null) breaks
+        // SAM conversion under the K2 compiler.
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedPrefs, key ->
             if (key == "notifications") {
                 try {
-                    val json = prefs.getString("notifications", "[]") ?: "[]"
+                    val json = changedPrefs.getString("notifications", "[]") ?: "[]"
                     val arr = org.json.JSONArray(json)
                     val items = (0 until arr.length()).mapNotNull { i ->
                         val obj = arr.optJSONObject(i) ?: return@mapNotNull null
