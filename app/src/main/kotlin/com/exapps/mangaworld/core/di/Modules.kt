@@ -8,6 +8,7 @@ import com.exapps.mangaworld.core.data.local.MangaDatabase
 import com.exapps.mangaworld.core.data.local.dao.*
 import com.exapps.mangaworld.core.data.remote.scraper.*
 import com.exapps.mangaworld.core.firebase.FirebaseCommunityRepository
+import com.exapps.mangaworld.core.firebase.ChapterUpdateCheckerScheduler
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.domain.repository.*
@@ -20,6 +21,7 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoMap
 import dagger.multibindings.StringKey
 import com.exapps.mangaworld.core.firebase.FirebaseNetworkInterceptor
+import androidx.work.WorkManager
 import coil.ImageLoader
 import coil.disk.DiskCache
 import okhttp3.Cache
@@ -226,4 +228,17 @@ abstract class RepositoryModule {
 
     @Binds @Singleton
     abstract fun bindCommunityRepository(impl: FirebaseCommunityRepository): CommunityRepository
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+object SchedulerModule {
+
+    @Provides
+    @Singleton
+    fun provideChapterUpdateCheckerScheduler(
+        workManager: WorkManager,
+        settingsRepository: SettingsRepository,
+        @ApplicationContext context: Context
+    ): ChapterUpdateCheckerScheduler = ChapterUpdateCheckerScheduler(workManager, settingsRepository, context)
 }

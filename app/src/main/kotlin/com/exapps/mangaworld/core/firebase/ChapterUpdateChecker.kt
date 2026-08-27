@@ -269,7 +269,6 @@ class ChapterUpdateChecker @Inject constructor(
  * - Respects user settings (enabled/disabled, wifi only)
  * - Proper constraints (battery not low, network type)
  */
-@Reusable
 class ChapterUpdateCheckerScheduler @Inject constructor(
     private val workManager: WorkManager,
     private val settingsRepository: SettingsRepository,
