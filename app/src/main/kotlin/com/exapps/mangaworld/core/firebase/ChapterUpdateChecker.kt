@@ -151,15 +151,6 @@ class ChapterUpdateChecker @Inject constructor(
         Result.success()
     }
 
-    private data class NewChapterInfo(
-        val title: String,
-        val info: String,
-        val mangaId: String,
-        val sourceId: String,
-        val slug: String,
-        val coverUrl: String
-    )
-
     private suspend fun showNewChaptersNotification(chapters: List<NewChapterInfo>) {
         // Content intent — open latest updates
         val contentIntent = AppLaunchIntents.latestUpdates(context)
