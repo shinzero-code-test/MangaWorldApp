@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Simple thread-safe in-memory cookie store used by the Coil image-loading
  * OkHttpClient interceptor. Cookies are populated whenever the user solves
  * a Cloudflare challenge, so that image requests to CF-protected domains
- * (e.g. starz.manga-starz.net) automatically include the cf_clearance token.
+ * automatically include the cf_clearance token.
  */
 object CookieCache {
 
@@ -21,7 +21,7 @@ object CookieCache {
         // Exact match first
         store[lower]?.let { return it }
         // Then walk up subdomain levels:
-        //   "starz.manga-starz.net" → "manga-starz.net"
+        //   "cdn.example.com" → "example.com"
         var idx = lower.indexOf('.')
         while (idx >= 0 && idx < lower.length - 1) {
             val parent = lower.substring(idx + 1)

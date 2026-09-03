@@ -34,6 +34,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.exapps.mangaworld.domain.model.MangaItem
 import com.exapps.mangaworld.domain.model.MangaStatus
+import com.exapps.mangaworld.domain.model.effectiveBaseUrl
+import com.exapps.mangaworld.domain.model.effectiveHost
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import com.exapps.mangaworld.presentation.webview.WebViewSolverActivity
 
@@ -72,8 +74,8 @@ fun SourceBrowseScreen(
     LaunchedEffect(uiState.needsCloudflare, uiState.cfAutoTriggerDisabled) {
         if (uiState.needsCloudflare && !uiState.cfAutoTriggerDisabled) {
             val intent = Intent(context, WebViewSolverActivity::class.java).apply {
-                putExtra(WebViewSolverActivity.EXTRA_URL, uiState.source.baseUrl)
-                putExtra(WebViewSolverActivity.EXTRA_DOMAIN, java.net.URI(uiState.source.baseUrl).host)
+                putExtra(WebViewSolverActivity.EXTRA_URL, uiState.source.effectiveBaseUrl())
+                putExtra(WebViewSolverActivity.EXTRA_DOMAIN, uiState.source.effectiveHost())
             }
             cfLauncher.launch(intent)
         }
@@ -186,8 +188,8 @@ fun SourceBrowseScreen(
                     Row(
                         Modifier.padding(12.dp).clickable {
                             val intent = Intent(context, WebViewSolverActivity::class.java).apply {
-                                putExtra(WebViewSolverActivity.EXTRA_URL, uiState.source.baseUrl)
-                                putExtra(WebViewSolverActivity.EXTRA_DOMAIN, java.net.URI(uiState.source.baseUrl).host)
+                                putExtra(WebViewSolverActivity.EXTRA_URL, uiState.source.effectiveBaseUrl())
+                                putExtra(WebViewSolverActivity.EXTRA_DOMAIN, uiState.source.effectiveHost())
                             }
                             cfLauncher.launch(intent)
                         },

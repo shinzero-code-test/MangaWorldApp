@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.model.effectiveBaseUrl
+import com.exapps.mangaworld.domain.model.effectiveHost
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -189,9 +191,9 @@ private fun SourceGridCard(
                 modifier = Modifier.weight(1f).padding(vertical = 4.dp)
             )
 
-            // Domain hint
+            // Domain hint (effective — follows Remote Config overrides)
             Text(
-                text = source.baseUrl.removePrefix("https://").removePrefix("http://").take(18),
+                text = source.effectiveHost().take(18),
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
                 color = MangaColors.Muted,
                 textAlign = TextAlign.Center,

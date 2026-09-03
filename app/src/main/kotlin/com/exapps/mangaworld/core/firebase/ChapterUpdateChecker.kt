@@ -186,55 +186,42 @@ class ChapterUpdateCheckerCore @Inject constructor(
         ListenableWorker.Result.success()
     }
 
+    /**
+     * Kotatsu-style tracker notifications: one notification PER MANGA (stable
+     * id derived from the manga id, common group tag) plus a group summary
+     * when several manga updated. Previously a single notification id was
+     * reused for everything, so a second manga's update silently replaced the
+     * first and tapping could never deep-link to the right title.
+     */
     private suspend fun showNewChaptersNotification(chapters: List<NewChapterInfo>) {
-        // Content intent — open latest updates
-        val contentIntent = AppLaunchIntents.latestUpdates(context)
+        if (chapters.size == 1) {
+            showSingleMangaNotification(chapters[0])
+        } else {
+            chapters.forEach { showSingleMangaNotification(it, withFavAction = false) }
+            showChapterGroupSummary(chapters)
+        }
+
+        // Persist to notification center
+        saveToNotificationCenter(chapters)
+    }
+
+    /** Stable per-manga id band [70000, 90000) — disjoint from every channel. */
+    private fun mangaNotificationId(mangaId: String): Int =
+        70000 + ((mangaId.hashCode() and 0x7fffffff) % 20000)
+
+    private suspend fun showSingleMangaNotification(ch: NewChapterInfo, withFavAction: Boolean = true) {
+        // Content intent — deep-link straight to the manga detail.
+        val contentIntent = AppLaunchIntents.detail(context, ch.sourceId, ch.slug)
+        val notifId = mangaNotificationId(ch.mangaId)
         val pendingContentIntent = PendingIntent.getActivity(
             context,
-            NOTIFICATION_ID_NEW_CHAPTERS,
+            notifId,
             contentIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val title = if (chapters.size == 1) {
-            context.getString(R.string.notif_new_chapter_title_single, chapters[0].title)
-        } else {
-            context.getString(R.string.notif_new_chapters_title_multi, chapters.size)
-        }
-
-        val body = chapters.take(5).joinToString("\n") { "• ${it.title} — ${it.info}" }
-
-        // "Read Now" action
-        val readAction = NotificationCompat.Action(
-            android.R.drawable.stat_notify_chat,
-            context.getString(R.string.notif_action_read_now),
-            pendingContentIntent
-        )
-
-        // "Add to Favourite" action — only for single-manga notifications
-        val favAction = if (chapters.size == 1) {
-            val ch = chapters[0]
-            val favIntent = Intent(context, NotificationActionReceiver::class.java).apply {
-                action = NotificationActionReceiver.ACTION_ADD_FAVORITE
-                putExtra(NotificationActionReceiver.EXTRA_MANGA_ID, ch.mangaId)
-                putExtra(NotificationActionReceiver.EXTRA_TITLE, ch.title)
-                putExtra(NotificationActionReceiver.EXTRA_SOURCE_ID, ch.sourceId)
-                putExtra(NotificationActionReceiver.EXTRA_SLUG, ch.slug)
-                putExtra(NotificationActionReceiver.EXTRA_COVER_URL, ch.coverUrl)
-                putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, NOTIFICATION_ID_NEW_CHAPTERS)
-            }
-            val favPendingIntent = PendingIntent.getBroadcast(
-                context,
-                NOTIFICATION_ID_NEW_CHAPTERS + 1,
-                favIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            NotificationCompat.Action(
-                android.R.drawable.btn_star,
-                context.getString(R.string.notif_action_add_favorite),
-                favPendingIntent
-            )
-        } else null
+        val title = context.getString(R.string.notif_new_chapter_title_single, ch.title)
+        val body = "• ${ch.title} — ${ch.info}"
 
         val builder = NotificationCompat.Builder(context, MangaWorldApp.CLOUD_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
@@ -245,15 +232,67 @@ class ChapterUpdateCheckerCore @Inject constructor(
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setGroup(GROUP_KEY_CHAPTER_UPDATES)
-            .setGroupSummary(false)
-            .addAction(readAction)
 
-        favAction?.let { builder.addAction(it) }
+        // "Read Now" action
+        builder.addAction(
+            NotificationCompat.Action(
+                android.R.drawable.stat_notify_chat,
+                context.getString(R.string.notif_action_read_now),
+                pendingContentIntent
+            )
+        )
 
-        notificationManager.notify(NOTIFICATION_ID_NEW_CHAPTERS, builder.build())
+        if (withFavAction) {
+            val favIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+                action = NotificationActionReceiver.ACTION_ADD_FAVORITE
+                putExtra(NotificationActionReceiver.EXTRA_MANGA_ID, ch.mangaId)
+                putExtra(NotificationActionReceiver.EXTRA_TITLE, ch.title)
+                putExtra(NotificationActionReceiver.EXTRA_SOURCE_ID, ch.sourceId)
+                putExtra(NotificationActionReceiver.EXTRA_SLUG, ch.slug)
+                putExtra(NotificationActionReceiver.EXTRA_COVER_URL, ch.coverUrl)
+                putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notifId)
+            }
+            val favPendingIntent = PendingIntent.getBroadcast(
+                context,
+                notifId + 1,
+                favIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(
+                NotificationCompat.Action(
+                    android.R.drawable.btn_star,
+                    context.getString(R.string.notif_action_add_favorite),
+                    favPendingIntent
+                )
+            )
+        }
 
-        // Persist to notification center
-        saveToNotificationCenter(chapters)
+        notificationManager.notify(GROUP_KEY_CHAPTER_UPDATES, notifId, builder.build())
+    }
+
+    /** Group summary shown only when several manga updated at once. */
+    private suspend fun showChapterGroupSummary(chapters: List<NewChapterInfo>) {
+        val contentIntent = AppLaunchIntents.latestUpdates(context)
+        val pendingContentIntent = PendingIntent.getActivity(
+            context,
+            NOTIFICATION_ID_NEW_CHAPTERS,
+            contentIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val title = context.getString(R.string.notif_new_chapters_title_multi, chapters.size)
+        val body = chapters.take(5).joinToString("\n") { "• ${it.title} — ${it.info}" }
+        val summary = NotificationCompat.Builder(context, MangaWorldApp.CLOUD_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(pendingContentIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setGroup(GROUP_KEY_CHAPTER_UPDATES)
+            .setGroupSummary(true)
+            .build()
+        notificationManager.notify(GROUP_KEY_CHAPTER_UPDATES, NOTIFICATION_ID_NEW_CHAPTERS, summary)
     }
 
     private suspend fun saveToNotificationCenter(chapters: List<NewChapterInfo>) {

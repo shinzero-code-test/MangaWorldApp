@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.model.effectiveBaseUrl
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,7 +65,7 @@ fun SourceSettingsSheet(
                         color = MangaColors.OnSurface
                     )
                     Text(
-                        text = source.baseUrl.removePrefix("https://"),
+                        text = source.effectiveBaseUrl().removePrefix("https://"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MangaColors.Muted
                     )
@@ -97,10 +98,10 @@ fun SourceSettingsSheet(
             SourceSettingAction(
                 icon = Icons.Filled.Language,
                 label = LocalContext.current.getString(R.string.open_in_browser),
-                subtitle = source.baseUrl,
+                subtitle = source.effectiveBaseUrl(),
                 onClick = {
                     onDismiss()
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(source.baseUrl))
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(source.effectiveBaseUrl()))
                     context.startActivity(intent)
                 }
             )

@@ -184,7 +184,7 @@ class AzoraScraper @Inject constructor(
                 .url(url)
                 .header("User-Agent", USER_AGENT)
                 .header("Accept", "application/json")
-                .header("Referer", "${source.baseUrl}/")
+                .header("Referer", "${resolvedBaseUrl}/")
                 .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
                 .build()
             val body = client.newCall(req).execute().use { resp ->
@@ -198,7 +198,7 @@ class AzoraScraper @Inject constructor(
     // ─── Home ─────────────────────────────────────────────────────────────────
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
-        val rawHtml = fetchRawHtml(source.baseUrl)
+        val rawHtml = fetchRawHtml(resolvedBaseUrl)
 
         // ── 1. Latest chapters ← ChapterUpdatesSectionIsland.items ────────────
         //    item keys: chapterId, chapterSlug, chapterNumber, chapterTitle,
@@ -229,7 +229,7 @@ class AzoraScraper @Inject constructor(
                         coverUrl     = decodeStr(obj["seriesImage"]),
                         chapterNumber= chapterNum,
                         chapterTitle = decodeStr(obj["chapterTitle"]).ifBlank { null },
-                        chapterUrl   = "${source.baseUrl}/series/$seriesSlug/$chapterSlug",
+                        chapterUrl   = "${resolvedBaseUrl}/series/$seriesSlug/$chapterSlug",
                         timeAgo      = createdAt.take(10),
                         publishedAt  = dateLong,
                         source       = source,
@@ -277,7 +277,7 @@ class AzoraScraper @Inject constructor(
     // ─── Manga Detail ─────────────────────────────────────────────────────────
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
-        val url     = "${source.baseUrl}/series/$slug"
+        val url     = "${resolvedBaseUrl}/series/$slug"
         val rawHtml = fetchRawHtml(url)
 
         // ── SeriesChaptersPanelIsland ──────────────────────────────────────────
@@ -334,7 +334,7 @@ class AzoraScraper @Inject constructor(
             val obj  = c as? Map<*, *> ?: return@mapNotNull null
             val num  = decodeFloat(obj["number"]).takeIf { it > 0 } ?: return@mapNotNull null
             val cslug= decodeStr(obj["slug"]).ifBlank { "chapter-${num.toInt()}" }
-            val chUrl= "${source.baseUrl}/series/$slug/$cslug"
+            val chUrl= "${resolvedBaseUrl}/series/$slug/$cslug"
             val chapterCover = (decodeWire(obj["mangaPost"]) as? Map<*, *>)?.let { mp ->
                 decodeStr(mp["featuredImage"]).ifBlank { null }
             }.orEmpty()
@@ -373,7 +373,7 @@ class AzoraScraper @Inject constructor(
                     genres = decodeList(obj["genres"]).mapNotNull { g -> (g as? Map<*, *>)?.let { gm -> decodeStr(gm["name"]).cleanText().ifBlank { null } } },
                     status = MangaStatus.from(decodeStr(obj["seriesStatus"])),
                     type = MangaType.from(decodeStr(obj["seriesType"])),
-                    url = "${source.baseUrl}/series/$rslug"
+                    url = "${resolvedBaseUrl}/series/$rslug"
                 )
             }.distinctBy { it.id }
         }
@@ -457,7 +457,7 @@ class AzoraScraper @Inject constructor(
                     status   = MangaStatus.from(post.optString("seriesStatus")),
                     type     = MangaType.from(post.optString("seriesType")),
                     rating   = post.optDouble("averageRating").takeIf { it > 0 }?.toFloat(),
-                    url      = "${source.baseUrl}/series/$slug"
+                    url      = "${resolvedBaseUrl}/series/$slug"
                 )
             )
         }
@@ -477,7 +477,7 @@ class AzoraScraper @Inject constructor(
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
         val enc = java.net.URLEncoder.encode(genre, "UTF-8")
-        parseMangaListPage(fetchDocument("${source.baseUrl}/series?genres=%2B$enc&page=$page"))
+        parseMangaListPage(fetchDocument("${resolvedBaseUrl}/series?genres=%2B$enc&page=$page"))
     }
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
@@ -500,13 +500,13 @@ class AzoraScraper @Inject constructor(
                         rating   = post.optDouble("averageRating").takeIf { it > 0 }?.toFloat(),
                         status   = MangaStatus.from(post.optString("seriesStatus", "")),
                         type     = MangaType.from(post.optString("seriesType", "")),
-                        url      = "${source.baseUrl}/series/$slug"
+                        url      = "${resolvedBaseUrl}/series/$slug"
                     )
                 )
             }
             result
         } else {
-            parseMangaListPage(fetchDocument("${source.baseUrl}/series"))
+            parseMangaListPage(fetchDocument("${resolvedBaseUrl}/series"))
         }
     }
 
@@ -518,7 +518,7 @@ class AzoraScraper @Inject constructor(
         sortBy: SortBy
     ): Result<List<MangaItem>> = runCatching {
         val baseUrl = buildString {
-            append("${source.baseUrl}/series?page=$page")
+            append("${resolvedBaseUrl}/series?page=$page")
             genre?.takeIf { it.isNotBlank() }?.let {
                 append("&genres=%2B")
                 append(java.net.URLEncoder.encode(it, "UTF-8"))
@@ -539,7 +539,7 @@ class AzoraScraper @Inject constructor(
 
     override suspend fun getGenres(): Result<List<String>> = runCatching {
         // Genres are rendered as filter links on the series page
-        val doc = fetchDocument("${source.baseUrl}/series")
+        val doc = fetchDocument("${resolvedBaseUrl}/series")
         doc.select("a[href*='/series?genres='], a[href*='genres=']")
             .map { it.text().cleanText() }
             .filter { it.isNotBlank() }
@@ -570,7 +570,7 @@ class AzoraScraper @Inject constructor(
             type     = MangaType.from(decodeStr(obj["seriesType"])),
             rating   = decodeFloat(obj["averageRating"]).takeIf { it > 0f },
             genres   = genres,
-            url      = "${source.baseUrl}/series/$slug"
+            url      = "${resolvedBaseUrl}/series/$slug"
         )
     }
 
@@ -616,7 +616,7 @@ class AzoraScraper @Inject constructor(
                     source   = source,
                     type     = MangaType.from(typeSpan?.text()),
                     status   = MangaStatus.from(statusTxt),
-                    url      = "${source.baseUrl}/series/$slug"
+                    url      = "${resolvedBaseUrl}/series/$slug"
                 )
             )
         }

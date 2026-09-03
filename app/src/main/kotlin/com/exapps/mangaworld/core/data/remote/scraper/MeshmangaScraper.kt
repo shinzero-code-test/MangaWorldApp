@@ -59,7 +59,7 @@ class MeshmangaScraper @Inject constructor(
             views = series.opt("views_count")?.toString(),
             lastUpdated = series.optString("updated_at_humanized").ifBlank { null },
             chapters = chapters,
-            url = "${source.baseUrl}/series/$seriesId"
+            url = "${resolvedBaseUrl}/series/$seriesId"
         )
     }
 
@@ -78,7 +78,7 @@ class MeshmangaScraper @Inject constructor(
                 ChapterPage(
                     index = image.optInt("order").takeIf { it > 0 }?.minus(1) ?: index,
                     url = src,
-                    headers = buildImageHeaders(src, source.baseUrl + "/")
+                    headers = buildImageHeaders(src, resolvedBaseUrl + "/")
                 )
             }
             .sortedBy { it.index }
@@ -183,7 +183,7 @@ class MeshmangaScraper @Inject constructor(
             type = MangaType.from(obj.optJSONObject("type")?.optString("name")),
             rating = obj.optString("rating").toFloatOrNull(),
             totalChapters = obj.optInt("chapters_count").takeIf { it > 0 },
-            url = "${source.baseUrl}/series/$seriesId"
+            url = "${resolvedBaseUrl}/series/$seriesId"
         )
     }
 
@@ -237,7 +237,7 @@ class MeshmangaScraper @Inject constructor(
         } else {
             chapterNumber.toString()
         }
-        return "${source.baseUrl}/read/$seriesId/cid-$chapterId/chapter-$displayNumber"
+        return "${resolvedBaseUrl}/read/$seriesId/cid-$chapterId/chapter-$displayNumber"
     }
 
     private fun parseChapterNumber(text: String): Float? =
@@ -262,7 +262,7 @@ class MeshmangaScraper @Inject constructor(
                 .url(url)
                 .header("User-Agent", USER_AGENT)
                 .header("Accept", "application/json")
-                .header("Referer", source.baseUrl + "/")
+                .header("Referer", resolvedBaseUrl + "/")
                 .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
                 .build()
             val response = client.newCall(request).execute()
@@ -278,7 +278,7 @@ class MeshmangaScraper @Inject constructor(
                 .url(url)
                 .header("User-Agent", USER_AGENT)
                 .header("Accept", "application/json")
-                .header("Referer", source.baseUrl + "/")
+                .header("Referer", resolvedBaseUrl + "/")
                 .apply { if (!cookies.isNullOrBlank()) header("Cookie", cookies) }
                 .build()
             val response = client.newCall(request).execute()

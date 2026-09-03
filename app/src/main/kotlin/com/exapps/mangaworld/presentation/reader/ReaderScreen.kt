@@ -91,10 +91,10 @@ fun ReaderScreen(
     val haptics = LocalHapticFeedback.current
     val activity = ctx as? Activity
 
-    // Announce page changes to TalkBack users
-    LaunchedEffect(state.currentPage) {
-        if (state.currentPage >= 0 && state.totalPages > 0) {
-            ctx.announceForAccessibility(ctx.getString(R.string.reader_page_counter, "${state.currentPage + 1}", "${state.totalPages}"))
+    // Announce page changes to TalkBack users (per-chapter position).
+    LaunchedEffect(state.pageInChapter, state.chapterPageCount, state.chapterUrl) {
+        if (state.pageInChapter >= 0 && state.chapterPageCount > 0) {
+            ctx.announceForAccessibility(ctx.getString(R.string.reader_page_counter, "${state.pageInChapter + 1}", "${state.chapterPageCount}"))
         }
     }
     var noteDialog by rememberSaveable { mutableStateOf(false) }
@@ -216,6 +216,7 @@ fun ReaderScreen(
                 else -> ReaderContent(
                     state = state,
                     onPageChanged = viewModel::onPageChanged,
+                    onVisibleRangeChanged = viewModel::onVisibleRangeChanged,
                     onTap = { x, y ->
                         viewModel.onReaderTap(x, y)
                         if (state.hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -265,8 +266,15 @@ fun ReaderScreen(
             modifier = Modifier.align(Alignment.TopCenter)
         ) {
             ReaderTopBar(
-                currentPage = state.currentPage + 1,
-                totalPages = state.totalPages,
+                // Per-chapter counter (Kotatsu): never a combined total across
+                // chained chapters.
+                currentPage = state.pageInChapter + 1,
+                totalPages = maxOf(1, state.chapterPageCount),
+                chapterLabel = state.chapterNumber?.let { num ->
+                    val n = if (num == num.toInt().toFloat()) num.toInt().toString() else num.toString()
+                    if (state.chapterTitle.isNullOrBlank()) ctx.getString(R.string.fmt_059, n)
+                    else ctx.getString(R.string.fmt_055, n, state.chapterTitle!!)
+                },
                 onBack = onBack,
                 onRetryDownload = viewModel::retryCurrentChapterDownload,
                 // Typed failure signal — display strings must never drive behavior.
@@ -288,10 +296,11 @@ fun ReaderScreen(
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             ReaderBottomBar(
-                currentPage = state.currentPage,
-                totalPages = state.totalPages,
+                // Per-chapter slider seeks inside the current chapter only.
+                currentPage = state.pageInChapter,
+                totalPages = maxOf(1, state.chapterPageCount),
                 showPageNumber = state.showPageNumber,
-                onPageSelected = viewModel::onPageChanged
+                onPageSelected = viewModel::seekToPageInChapter
             )
         }
 
@@ -351,7 +360,7 @@ fun ReaderScreen(
         if (noteDialog) {
             AlertDialog(
                 onDismissRequest = { noteDialog = false },
-                title = { Text(stringResource(R.string.fmt_079, state.currentPage + 1)) },
+                title = { Text(stringResource(R.string.fmt_079, state.pageInChapter + 1)) },
                 text = {
                     OutlinedTextField(
                         value = noteText,
@@ -380,7 +389,7 @@ fun ReaderScreen(
             AlertDialog(
                 onDismissRequest = { showSavePageDialog = false },
                 title = { Text(stringResource(R.string.reader_save_page)) },
-                text = { Text(stringResource(R.string.fmt_080, state.currentPage + 1)) },
+                text = { Text(stringResource(R.string.fmt_080, state.pageInChapter + 1)) },
                 confirmButton = {
                     TextButton(onClick = {
                         viewModel.saveCurrentPage()
@@ -398,13 +407,19 @@ fun ReaderScreen(
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Text(stringResource(R.string.bookmarks_and_notes), style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(12.dp))
-                    val annotatedPages = state.pages.filter { page ->
-                        page.index in state.bookmarkedPages || !state.pageNotes[page.index].isNullOrBlank()
+                    // Annotations are stored per chapter — only list pages of the
+                    // CURRENT chapter, with per-chapter display numbers.
+                    val currentRange = state.chapterRanges.firstOrNull { it.chapterUrl == state.chapterUrl }
+                    val annotatedPages = state.pages.mapNotNull { page ->
+                        val range = currentRange ?: return@mapNotNull null
+                        if (page.index !in range.startIndex until range.endIndexExclusive) return@mapNotNull null
+                        val inChapter = page.index - range.startIndex
+                        if (inChapter in state.bookmarkedPages || !state.pageNotes[inChapter].isNullOrBlank()) inChapter else null
                     }
                     if (annotatedPages.isEmpty()) {
                         Text(stringResource(R.string.str_358), color = MangaColors.Muted)
                     } else {
-                        annotatedPages.forEach { page ->
+                        annotatedPages.forEach { inChapter ->
                             Card(
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                                 colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)
@@ -412,13 +427,13 @@ fun ReaderScreen(
                                 Column(Modifier.fillMaxWidth().padding(14.dp)) {
                                     Text(
                                         // Own formatted resource instead of concatenating a literal suffix.
-                                        text = if (page.index in state.bookmarkedPages)
-                                            stringResource(R.string.reader_page_bookmarked, page.index + 1)
-                                        else stringResource(R.string.fmt_052, page.index + 1),
+                                        text = if (inChapter in state.bookmarkedPages)
+                                            stringResource(R.string.reader_page_bookmarked, inChapter + 1)
+                                        else stringResource(R.string.fmt_052, inChapter + 1),
                                         color = MangaColors.OnSurface,
                                         fontWeight = FontWeight.SemiBold
                                     )
-                                    state.pageNotes[page.index]?.takeIf { it.isNotBlank() }?.let { note ->
+                                    state.pageNotes[inChapter]?.takeIf { it.isNotBlank() }?.let { note ->
                                         Spacer(Modifier.height(4.dp))
                                         Text(note, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                                     }
@@ -479,7 +494,7 @@ fun ReaderScreen(
                     onCancelDownload = { viewModel.cancelDownload() },
                     onToggleBookmark = { viewModel.toggleBookmarkCurrentPage() },
                     onEditNote = {
-                        noteText = state.pageNotes[state.currentPage].orEmpty()
+                        noteText = state.pageNotes[state.pageInChapter].orEmpty()
                         settingsSheetOpen = false
                         noteDialog = true
                     },
@@ -491,8 +506,8 @@ fun ReaderScreen(
         }
     }
 
-    LaunchedEffect(state.currentPage, state.totalPages, state.hapticsEnabled) {
-        if (state.hapticsEnabled && state.totalPages > 0 && state.currentPage == state.totalPages - 1) {
+    LaunchedEffect(state.pageInChapter, state.chapterPageCount, state.hapticsEnabled, state.chapterUrl) {
+        if (state.hapticsEnabled && state.chapterPageCount > 0 && state.pageInChapter == state.chapterPageCount - 1) {
             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         }
     }
@@ -505,6 +520,7 @@ fun ReaderScreen(
 private fun ReaderContent(
     state: ReaderUiState,
     onPageChanged: (Int) -> Unit,
+    onVisibleRangeChanged: (Int, Int) -> Unit,
     onTap: (Float, Float) -> Unit,
     onLongPress: () -> Unit = {},
     onModeChange: (ReaderMode) -> Unit
@@ -521,6 +537,7 @@ private fun ReaderContent(
                     onTap = onTap,
                     onLongPress = onLongPress,
                     onPageChanged = onPageChanged,
+                    onVisibleRangeChanged = onVisibleRangeChanged,
                     pageSpacing = state.pageSpacing,
                     currentPage = state.currentPage,
                     chapterRanges = state.chapterRanges,
@@ -538,12 +555,14 @@ private fun ReaderContent(
                     onTap = onTap,
                     onLongPress = onLongPress,
                     pageSpacing = state.pageSpacing,
+                    chapterRanges = state.chapterRanges,
                     doubleTapZoomEnabled = state.doubleTapZoom
                 )
             } else {
                 HorizontalReader(pages = state.pages, rtl = true,
                     initialPage = state.currentPage, currentPage = state.currentPage,
                     imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress,
+                    chapterRanges = state.chapterRanges,
                     doubleTapZoomEnabled = state.doubleTapZoom)
             }
         ReaderMode.HORIZONTAL_LTR ->
@@ -558,12 +577,14 @@ private fun ReaderContent(
                     onTap = onTap,
                     onLongPress = onLongPress,
                     pageSpacing = state.pageSpacing,
+                    chapterRanges = state.chapterRanges,
                     doubleTapZoomEnabled = state.doubleTapZoom
                 )
             } else {
                 HorizontalReader(pages = state.pages, rtl = false,
                     initialPage = state.currentPage, currentPage = state.currentPage,
                     imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress,
+                    chapterRanges = state.chapterRanges,
                     doubleTapZoomEnabled = state.doubleTapZoom)
             }
     }
@@ -582,7 +603,8 @@ private fun ZoomableMangaPage(
     doubleTapZoomEnabled: Boolean,
     onTap: (Float, Float) -> Unit,
     onLongPress: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    displayNumber: Int = page.index + 1
 ) {
     var scale by remember(page.url) { mutableFloatStateOf(1f) }
     var offset by remember(page.url) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
@@ -630,6 +652,7 @@ private fun ZoomableMangaPage(
         MangaPageImage(
             page = page,
             imageFilter = imageFilter,
+            displayNumber = displayNumber,
             modifier = Modifier
                 .fillMaxWidth()
                 .graphicsLayer(
@@ -653,6 +676,7 @@ private fun WebtoonReader(
     onTap: (Float, Float) -> Unit,
     onLongPress: () -> Unit = {},
     onPageChanged: (Int) -> Unit,
+    onVisibleRangeChanged: (Int, Int) -> Unit = { first, _ -> onPageChanged(first) },
     pageSpacing: Int = 0,
     currentPage: Int = 0,
     chapterRanges: List<ReaderChapterRange> = emptyList(),
@@ -662,11 +686,11 @@ private fun WebtoonReader(
         initialFirstVisibleItemIndex = initialPage.coerceIn(0, maxOf(0, pages.size - 1))
     )
 
-    // Track the effective visible page. firstVisibleItemIndex alone never
-    // reaches a short last page (it stays on the previous item while the last
-    // page is fully visible below). Promote to the last visible index when the
-    // combined list end is on screen so progress + continuous append fire.
-    LaunchedEffect(listState) {
+    // Kotatsu-style center tracking: the middle of the visible range owns the
+    // reading position (firstVisible alone never reaches a short last page).
+    // pages.size is an effect key — without it the closure goes stale after
+    // chapters are appended and the counter gets stuck (the reported bug).
+    LaunchedEffect(listState, pages.size) {
         snapshotFlow {
             val info = listState.layoutInfo
             val first = listState.firstVisibleItemIndex
@@ -674,11 +698,13 @@ private fun WebtoonReader(
             Triple(first, last, listState.isScrollInProgress)
         }
             .filter { (_, _, scrolling) -> !scrolling }
-            .map { (first, last, _) ->
-                if (pages.isNotEmpty() && last >= pages.size - 1) pages.size - 1 else first
-            }
             .distinctUntilChanged()
-            .collect { page -> if (page in pages.indices) onPageChanged(page) }
+            .collect { (first, last, _) ->
+                if (pages.isNotEmpty()) onVisibleRangeChanged(
+                    first.coerceIn(0, pages.size - 1),
+                    last.coerceIn(0, pages.size - 1)
+                )
+            }
     }
 
     // Allow slider / volume / tap-zone code to scroll to a specific page.
@@ -716,12 +742,14 @@ private fun WebtoonReader(
                         chapterTitle = range.chapterTitle
                     )
                 }
+                val range = chapterRanges.firstOrNull { page.index in it.startIndex until it.endIndexExclusive }
                 ZoomableMangaPage(
                     page = page,
                     imageFilter = imageFilter,
                     doubleTapZoomEnabled = doubleTapZoomEnabled,
                     onTap = onTap,
                     onLongPress = onLongPress,
+                    displayNumber = if (range != null) page.index - range.startIndex + 1 else page.index + 1,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -764,6 +792,7 @@ private fun DualPageReader(
     onTap: (Float, Float) -> Unit,
     onLongPress: () -> Unit = {},
     pageSpacing: Int = 0,
+    chapterRanges: List<ReaderChapterRange> = emptyList(),
     doubleTapZoomEnabled: Boolean = true
 ) {
     val orderedPages = if (rtl) pages.reversed() else pages
@@ -806,12 +835,14 @@ private fun DualPageReader(
     ) { spreadIndex ->
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap)) {
             spreadPages.getOrNull(spreadIndex)?.forEach { page ->
+                val range = chapterRanges.firstOrNull { page.index in it.startIndex until it.endIndexExclusive }
                 ZoomableMangaPage(
                     page = page,
                     imageFilter = imageFilter,
                     doubleTapZoomEnabled = doubleTapZoomEnabled,
                     onTap = onTap,
                     onLongPress = onLongPress,
+                    displayNumber = if (range != null) page.index - range.startIndex + 1 else page.index + 1,
                     modifier = Modifier.weight(1f).fillMaxHeight()
                 )
             }
@@ -835,6 +866,7 @@ private fun HorizontalReader(
     onPageChanged: (Int) -> Unit,
     onTap: (Float, Float) -> Unit,
     onLongPress: () -> Unit = {},
+    chapterRanges: List<ReaderChapterRange> = emptyList(),
     doubleTapZoomEnabled: Boolean = true
 ) {
     val orderedPages = if (rtl) pages.reversed() else pages
@@ -868,12 +900,15 @@ private fun HorizontalReader(
         state = pagerState,
         modifier = Modifier.fillMaxSize()
     ) { pageIndex ->
+        val page = orderedPages[pageIndex]
+        val range = chapterRanges.firstOrNull { page.index in it.startIndex until it.endIndexExclusive }
         ZoomableMangaPage(
-            page = orderedPages[pageIndex],
+            page = page,
             imageFilter = imageFilter,
             doubleTapZoomEnabled = doubleTapZoomEnabled,
             onTap = onTap,
             onLongPress = onLongPress,
+            displayNumber = if (range != null) page.index - range.startIndex + 1 else page.index + 1,
             modifier = Modifier.fillMaxSize()
         )
     }
@@ -882,7 +917,12 @@ private fun HorizontalReader(
 // ─── Single Page Image ────────────────────────────────────────────────────────
 
 @Composable
-private fun MangaPageImage(page: ChapterPage, imageFilter: ReaderImageFilter, modifier: Modifier = Modifier) {
+private fun MangaPageImage(
+    page: ChapterPage,
+    imageFilter: ReaderImageFilter,
+    modifier: Modifier = Modifier,
+    displayNumber: Int = page.index + 1
+) {
     val ctx = LocalContext.current
     var isLoading by remember { mutableStateOf(true) }
     var isError by remember { mutableStateOf(false) }
@@ -902,7 +942,7 @@ private fun MangaPageImage(page: ChapterPage, imageFilter: ReaderImageFilter, mo
                 .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
                 .build(),
             imageLoader = ctx.imageLoader,
-            contentDescription = stringResource(R.string.accessibility_page, page.index + 1),
+            contentDescription = stringResource(R.string.accessibility_page, displayNumber),
             contentScale = ContentScale.FillWidth,
             modifier = Modifier.fillMaxWidth(),
             colorFilter = imageFilter.toColorFilter(),
@@ -925,7 +965,7 @@ private fun MangaPageImage(page: ChapterPage, imageFilter: ReaderImageFilter, mo
             ) {
                 Icon(Icons.Filled.BrokenImage, null, tint = MangaColors.Muted, modifier = Modifier.size(40.dp))
                 Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.fmt_076, page.index + 1),
+                Text(stringResource(R.string.fmt_076, displayNumber),
                     style = MaterialTheme.typography.bodySmall, color = MangaColors.Muted)
             }
         }
@@ -938,6 +978,7 @@ private fun MangaPageImage(page: ChapterPage, imageFilter: ReaderImageFilter, mo
 private fun ReaderTopBar(
     currentPage: Int,
     totalPages: Int,
+    chapterLabel: String? = null,
     onBack: () -> Unit,
     onRetryDownload: () -> Unit,
     canRetry: Boolean,
@@ -967,6 +1008,9 @@ private fun ReaderTopBar(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(stringResource(R.string.reader_page_counter, "$currentPage", "$totalPages"),
                         style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                    chapterLabel?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f), maxLines = 1)
+                    }
                     Text(stringResource(R.string.reader_live_count, liveReaders), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f))
                 }
             }
@@ -1036,7 +1080,7 @@ private fun ReaderSettingsSheet(
             ) {
                 ActionButton(
                     modifier = Modifier.weight(1f),
-                    icon = if (state.currentPage in state.bookmarkedPages) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                    icon = if (state.pageInChapter in state.bookmarkedPages) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                     label = stringResource(R.string.bookmark),
                     onClick = onToggleBookmark
                 )

@@ -31,7 +31,7 @@ class AreaScansScraper @Inject constructor(
 ) : BaseScraperImpl(client, MangaSource.AREASCANS, settingsRepo) {
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
-        val doc = fetchDocument("${source.baseUrl}/browse/")
+        val doc = fetchDocument("${resolvedBaseUrl}/browse/")
         val mangaCards = parseMangaCards(doc)
 
         HomeData(
@@ -45,7 +45,7 @@ class AreaScansScraper @Inject constructor(
     }
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
-        val url = "${source.baseUrl}/manga/$slug/"
+        val url = "${resolvedBaseUrl}/manga/$slug/"
         val doc = fetchDocument(url)
 
         val coverUrl = doc.selectFirst(".manga-poster img, .hero-backdrop, .header-bg img")
@@ -123,7 +123,7 @@ class AreaScansScraper @Inject constructor(
     }
 
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
-        val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to source.baseUrl + "/"))
+        val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to resolvedBaseUrl + "/"))
 
         // Strategy 1: Try AJAX endpoint (get_secure_chapter_images) - most reliable
         val chapterId = doc.select("script").mapNotNull { script ->
@@ -142,7 +142,7 @@ class AreaScansScraper @Inject constructor(
                 .add("chapter_id", chapterId)
                 .build()
             val request = Request.Builder()
-                .url("${source.baseUrl}/wp-admin/admin-ajax.php")
+                .url("${resolvedBaseUrl}/wp-admin/admin-ajax.php")
                 .header("User-Agent", USER_AGENT)
                 .header("Accept", "application/json")
                 .header("Referer", chapterUrl.encodeForHeader())
@@ -155,7 +155,7 @@ class AreaScansScraper @Inject constructor(
             if (json.optBoolean("success", false)) {
                 val html = json.optJSONObject("data")?.optString("content", "") ?: ""
                 if (html.isNotBlank()) {
-                    val imgDoc = Jsoup.parse(html, source.baseUrl)
+                    val imgDoc = Jsoup.parse(html, resolvedBaseUrl)
                     val ajaxImages = imgDoc.select("img[src]").mapNotNull { img ->
                         val src = img.attr("src")
                         if (src.isNotBlank() && !src.startsWith("data:")) src else null
@@ -221,7 +221,7 @@ class AreaScansScraper @Inject constructor(
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
 
         // Standard WP search page is more reliable than AJAX for this site
-        val url = if (page <= 1) "${source.baseUrl}/?s=$encoded" else "${source.baseUrl}/page/$page/?s=$encoded"
+        val url = if (page <= 1) "${resolvedBaseUrl}/?s=$encoded" else "${resolvedBaseUrl}/page/$page/?s=$encoded"
         val doc = fetchDocument(url)
         val results = parseMangaCards(doc)
 
@@ -229,7 +229,7 @@ class AreaScansScraper @Inject constructor(
 
         // Fallback: try AJAX search (GET with query params — POST body is ignored)
         try {
-            val searchUrl = "${source.baseUrl}/wp-admin/admin-ajax.php?action=ts_ac_do_search&ts_ac_query=$encoded"
+            val searchUrl = "${resolvedBaseUrl}/wp-admin/admin-ajax.php?action=ts_ac_do_search&ts_ac_query=$encoded"
             // Capture the withContext result — `return@withContext` alone discarded
             // the AJAX hits and search always fell through to HTML results (M-review).
             val ajaxItems: List<MangaItem>? = withContext(Dispatchers.IO) {
@@ -237,7 +237,7 @@ class AreaScansScraper @Inject constructor(
                     .url(searchUrl)
                     .header("User-Agent", USER_AGENT)
                     .header("Accept", "application/json")
-                    .header("Referer", source.baseUrl)
+                    .header("Referer", resolvedBaseUrl)
                     .build()
                 val response = client.newCall(request).execute()
                 response.use { resp ->
@@ -256,13 +256,13 @@ class AreaScansScraper @Inject constructor(
     }
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
-        val url = "${source.baseUrl}/browse/?genre[]=${java.net.URLEncoder.encode(genre, "UTF-8")}&page=$page"
+        val url = "${resolvedBaseUrl}/browse/?genre[]=${java.net.URLEncoder.encode(genre, "UTF-8")}&page=$page"
         val doc = fetchDocument(url)
         parseMangaCards(doc)
     }
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
-        val doc = fetchDocument("${source.baseUrl}/browse/?m_orderby=views")
+        val doc = fetchDocument("${resolvedBaseUrl}/browse/?m_orderby=views")
         parseMangaCards(doc)
     }
 
@@ -277,12 +277,12 @@ class AreaScansScraper @Inject constructor(
         }
         val params = mutableListOf("m_orderby=$order", "page=$page")
         genre?.takeIf { it.isNotBlank() }?.let { params += "genre[]=${java.net.URLEncoder.encode(it, "UTF-8")}" }
-        val doc = fetchDocument("${source.baseUrl}/browse/?${params.joinToString("&")}")
+        val doc = fetchDocument("${resolvedBaseUrl}/browse/?${params.joinToString("&")}")
         parseMangaCards(doc)
     }
 
     override suspend fun getGenres(): Result<List<String>> = runCatching {
-        val doc = fetchDocument("${source.baseUrl}/browse/")
+        val doc = fetchDocument("${resolvedBaseUrl}/browse/")
         doc.select(".genre-tag, .quickfilter .genre-item label")
             .map { it.text().cleanText() }
             .filter { it.length in 2..20 }

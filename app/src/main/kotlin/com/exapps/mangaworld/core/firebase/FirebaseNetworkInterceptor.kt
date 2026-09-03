@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.core.firebase
 
 import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.model.effectiveHost
 import com.google.firebase.perf.FirebasePerformance
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -29,12 +30,16 @@ class FirebaseNetworkInterceptor @Inject constructor(
         val request = chain.request()
         val host = request.url.host.lowercase(Locale.US)
         val sourceId = MangaSource.entries.firstOrNull { source ->
-            val sourceHost = source.baseUrl
+            // Effective host first (Remote Config override), then the enum
+            // default so traffic is still attributed right after a domain move.
+            val resolved = source.effectiveHost()
+            val bundled = source.baseUrl
                 .removePrefix("https://")
                 .removePrefix("http://")
                 .substringBefore('/')
                 .lowercase(Locale.US)
-            host == sourceHost || host.endsWith(".$sourceHost")
+            host == resolved || host.endsWith(".$resolved") ||
+                host == bundled || host.endsWith(".$bundled")
         }?.id
 
         val tunedChain = chain

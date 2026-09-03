@@ -54,7 +54,7 @@ class OlympusScraper @Inject constructor(
     // ─── Home ─────────────────────────────────────────────────────────────────
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
-        val doc = fetchDocument(source.baseUrl)
+        val doc = fetchDocument(resolvedBaseUrl)
 
         // Latest updates: skip empty hero slots and '#' placeholders.
         val latestBoxSelector = remoteSelector("home_latest_boxes", ".box:has(.imgu a[href*='/series/']):has(.info h3)")
@@ -134,7 +134,7 @@ class OlympusScraper @Inject constructor(
     // ─── Manga Detail ─────────────────────────────────────────────────────────
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
-        val url = "${source.baseUrl}/series/$slug"
+        val url = "${resolvedBaseUrl}/series/$slug"
         val doc = fetchDocument(url)
 
         fun lazySrc(element: org.jsoup.nodes.Element?): String? {
@@ -274,7 +274,7 @@ class OlympusScraper @Inject constructor(
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
         val doc = fetchDocument(
             chapterUrl,
-            extraHeaders = mapOf("Referer" to source.baseUrl + "/")
+            extraHeaders = mapOf("Referer" to resolvedBaseUrl + "/")
         )
 
         // Pages: .reading-content .page-break img.manga-chapter-img
@@ -306,13 +306,13 @@ class OlympusScraper @Inject constructor(
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query.trim(), "UTF-8")
         // Correct URL format per Kotatsu reference: /?search=<query>&page=<n>
-        val doc = fetchDocument("${source.baseUrl}/?search=$encoded&page=$page")
+        val doc = fetchDocument("${resolvedBaseUrl}/?search=$encoded&page=$page")
         parseMangaGrid(doc)
     }
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encodedGenre = java.net.URLEncoder.encode(genre, "UTF-8")
-        val url = "${source.baseUrl}/series?genre=$encodedGenre&page=$page"
+        val url = "${resolvedBaseUrl}/series?genre=$encodedGenre&page=$page"
         val doc = fetchDocument(url)
         parseMangaGrid(doc)
     }
@@ -336,14 +336,14 @@ class OlympusScraper @Inject constructor(
             }
             if (raw.isNotBlank()) params += "state=${java.net.URLEncoder.encode(raw, "UTF-8")}"
         }
-        val doc = fetchDocument("${source.baseUrl}/series?${params.joinToString("&")}")
+        val doc = fetchDocument("${resolvedBaseUrl}/series?${params.joinToString("&")}")
         parseMangaGrid(doc)
             .filter { type == null || it.type == type || it.type == MangaType.UNKNOWN }
             .let { applyBrowseSort(it, sortBy) }
     }
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
-        val doc = fetchDocument(source.baseUrl)
+        val doc = fetchDocument(resolvedBaseUrl)
         doc.select(".popular-manga .entry-box, .entry-box.entry-box-1").mapNotNull { box ->
             val img = box.selectFirst("img.best-img") ?: return@mapNotNull null
             val titleEl = box.selectFirst(".entry-title a, h3 a") ?: return@mapNotNull null
@@ -359,7 +359,7 @@ class OlympusScraper @Inject constructor(
     }
 
     override suspend fun getGenres(): Result<List<String>> = runCatching {
-        val doc = fetchDocument("${source.baseUrl}/series")
+        val doc = fetchDocument("${resolvedBaseUrl}/series")
         doc.select("a.subtitle[href*=\"genre\"]")
             .map { it.text().cleanText() }
             .filter { it.isNotEmpty() }

@@ -17,7 +17,7 @@ class MangaSidScraper @Inject constructor(
 ) : BaseScraperImpl(client, MangaSource.MANGASID, settingsRepo) {
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
-        val doc = fetchDocument("${source.baseUrl}/manga-list")
+        val doc = fetchDocument("${resolvedBaseUrl}/manga-list")
         val cards = parseCards(doc)
         HomeData(
             featured = cards.map { it.first }.take(8),
@@ -27,7 +27,7 @@ class MangaSidScraper @Inject constructor(
     }
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
-        val url = "${source.baseUrl}/manga/$slug"
+        val url = "${resolvedBaseUrl}/manga/$slug"
         // Single fetch: island props live in <script> tags, which outerHtml
         // preserves — the second network request for raw HTML was redundant.
         val doc = fetchDocument(url)
@@ -106,7 +106,7 @@ class MangaSidScraper @Inject constructor(
                     title = decodeStr(chapterMap["title"]).cleanText().takeIf {
                         it.isNotBlank() && !it.equals("Chapter $chapterPath", ignoreCase = true)
                     },
-                    url = "${source.baseUrl}/reader/$slug/$chapterPath",
+                    url = "${resolvedBaseUrl}/reader/$slug/$chapterPath",
                     date = dateLong,
                     dateText = createdAt.substringBefore('T').takeIf { it.isNotBlank() },
                     isPaid = decodeLong(chapterMap["price"])?.let { it > 0 } == true
@@ -130,7 +130,7 @@ class MangaSidScraper @Inject constructor(
                 source = source,
                 genres = emptyList(),
                 status = MangaStatus.from(decodeStr(map["status"])),
-                url = "${source.baseUrl}/manga/$relatedSlug"
+                url = "${resolvedBaseUrl}/manga/$relatedSlug"
             )
         }.distinctBy { it.id }
 
@@ -160,7 +160,7 @@ class MangaSidScraper @Inject constructor(
         val doc = fetchDocument(
             chapterUrl,
             extraHeaders = mapOf(
-                "Referer" to source.baseUrl + "/",
+                "Referer" to resolvedBaseUrl + "/",
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                 "Sec-Fetch-Dest" to "document",
                 "Sec-Fetch-Mode" to "navigate",
@@ -193,18 +193,18 @@ class MangaSidScraper @Inject constructor(
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query.trim(), "UTF-8")
-        val doc = fetchDocument("${source.baseUrl}/manga-list?search=$encoded&page=$page")
+        val doc = fetchDocument("${resolvedBaseUrl}/manga-list?search=$encoded&page=$page")
         parseCards(doc).map { it.first }
     }
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(genre.trim(), "UTF-8")
-        val doc = fetchDocument("${source.baseUrl}/manga-list?genres=$encoded&page=$page")
+        val doc = fetchDocument("${resolvedBaseUrl}/manga-list?genres=$encoded&page=$page")
         parseCards(doc).map { it.first }
     }
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
-        val doc = fetchDocument("${source.baseUrl}/manga-list")
+        val doc = fetchDocument("${resolvedBaseUrl}/manga-list")
         parseCards(doc).map { it.first }
     }
 
@@ -225,13 +225,13 @@ class MangaSidScraper @Inject constructor(
         }
         val params = mutableListOf("page=$page", "sort=$sort")
         genre?.takeIf { it.isNotBlank() }?.let { params += "genres=${java.net.URLEncoder.encode(it, "UTF-8")}" }
-        val items = parseCards(fetchDocument("${source.baseUrl}/manga-list?${params.joinToString("&")}")).map { it.first }
+        val items = parseCards(fetchDocument("${resolvedBaseUrl}/manga-list?${params.joinToString("&")}")).map { it.first }
         items.filter { status == null || it.status == status || it.status == MangaStatus.UNKNOWN }
             .filter { type == null || it.type == type || it.type == MangaType.UNKNOWN }
     }
 
     override suspend fun getGenres(): Result<List<String>> = runCatching {
-        fetchDocument("${source.baseUrl}/genres")
+        fetchDocument("${resolvedBaseUrl}/genres")
             .select("a[href*='genres=']")
             .map { it.text().cleanText().removeSuffix(" مانجا تصفح") }
             .filter { it.isNotBlank() }

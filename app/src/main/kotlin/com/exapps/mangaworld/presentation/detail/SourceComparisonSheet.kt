@@ -24,6 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.exapps.mangaworld.domain.model.MangaItem
 import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.model.effectiveBaseUrl
+import com.exapps.mangaworld.domain.model.effectiveHost
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
 data class SourceComparison(
@@ -150,7 +152,7 @@ private fun SourceCard(
                     }
                 }
                 Text(
-                    source.baseUrl.removePrefix("https://").removePrefix("http://"),
+                    source.effectiveHost(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.OnSurfaceVariant
                 )

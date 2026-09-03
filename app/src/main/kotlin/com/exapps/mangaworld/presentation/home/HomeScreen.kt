@@ -39,6 +39,8 @@ fun HomeScreen(
     onMangaClick: (sourceId: String, slug: String) -> Unit,
     onSeeAllLatest: () -> Unit,
     onReadChapter: (sourceId: String, mangaId: String, chapterUrl: String) -> Unit = { _, _, _ -> },
+    onOpenProfile: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -51,6 +53,30 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
+                // Top bar: physical left = notifications, physical right =
+                // profile avatar — in BOTH layouts. The Row is pinned to LTR so
+                // RTL mirroring cannot swap the two sides.
+                item {
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            HomeNotificationButton(
+                                unreadCount = state.unreadNotifications,
+                                onClick = onOpenNotifications
+                            )
+                            Spacer(Modifier.weight(1f))
+                            HomeAvatarButton(
+                                avatarUrl = state.avatarUrl,
+                                initial = state.avatarInitial,
+                                onClick = onOpenProfile
+                            )
+                        }
+                    }
+                }
                 if (state.remoteAlertMessage.isNotBlank()) {
                     item {
                         Card(
@@ -183,6 +209,67 @@ fun HomeScreen(
                     }
                 }
             ) { Text(err) }
+        }
+    }
+}
+
+// ─── Home Top Bar ─────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeNotificationButton(unreadCount: Int, onClick: () -> Unit) {
+    BadgedBox(
+        badge = {
+            if (unreadCount > 0) {
+                Badge(containerColor = MangaColors.Error) {
+                    Text(if (unreadCount > 99) "99+" else "$unreadCount")
+                }
+            }
+        }
+    ) {
+        IconButton(onClick = onClick) {
+            Icon(
+                Icons.Filled.Notifications,
+                contentDescription = stringResource(R.string.notification_center),
+                tint = MangaColors.OnSurface
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeAvatarButton(avatarUrl: String?, initial: String, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(MangaColors.SurfaceContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            if (!avatarUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current).data(avatarUrl).crossfade(true).build(),
+                    imageLoader = LocalContext.current.imageLoader,
+                    contentDescription = stringResource(R.string.profile_title),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape)
+                )
+            } else if (initial.isNotBlank()) {
+                Text(
+                    text = initial,
+                    color = MangaColors.PrimaryLight,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            } else {
+                Icon(
+                    Icons.Filled.Person,
+                    contentDescription = stringResource(R.string.profile_title),
+                    tint = MangaColors.Muted,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

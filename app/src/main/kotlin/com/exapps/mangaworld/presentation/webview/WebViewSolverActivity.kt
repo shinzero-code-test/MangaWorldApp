@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.exapps.mangaworld.core.data.remote.scraper.BaseScraperImpl
 import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.model.SourceDomainOverrides
+import com.exapps.mangaworld.domain.model.effectiveHost
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import com.exapps.mangaworld.presentation.theme.MangaWorldTheme
 
@@ -35,9 +37,21 @@ class WebViewSolverActivity : ComponentActivity() {
         const val EXTRA_DOMAIN = "extra_domain"
         const val RESULT_COOKIES = "result_cookies"
 
-        private val ALLOWED_DOMAINS = MangaSource.entries.map {
-            java.net.URI(it.baseUrl).host
-        }.toSet()
+        /**
+         * Computed per call (not a static val): Remote Config domain overrides
+         * load after process start, so a snapshot taken at class-load time
+         * would permanently miss them.
+         */
+        private fun isAllowedDomain(domain: String): Boolean {
+            val lower = domain.lowercase()
+            if (MangaSource.entries.any { it.effectiveHost() == lower }) return true
+            // Previous default hosts stay solvable after a domain move (cookies
+            // saved under the old host must remain clearable/solvable).
+            if (MangaSource.entries.any { it.baseUrl.removePrefix("https://").removePrefix("http://").substringBefore('/').lowercase() == lower }) return true
+            return SourceDomainOverrides.snapshot().values.any {
+                it.removePrefix("https://").removePrefix("http://").substringBefore('/').lowercase() == lower
+            }
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -46,7 +60,7 @@ class WebViewSolverActivity : ComponentActivity() {
         val url    = intent.getStringExtra(EXTRA_URL) ?: run { finish(); return }
         val domain = intent.getStringExtra(EXTRA_DOMAIN) ?: run { finish(); return }
 
-        if (domain !in ALLOWED_DOMAINS || !url.startsWith("https://")) {
+        if (!isAllowedDomain(domain) || !url.startsWith("https://")) {
             finish()
             return
         }

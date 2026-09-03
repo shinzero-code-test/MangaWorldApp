@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.*
 import androidx.navigation.compose.*
 import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.model.effectiveBaseUrl
 import com.exapps.mangaworld.presentation.browse.BrowseScreen
 import com.exapps.mangaworld.presentation.cloud.CloudSyncScreen
 import com.exapps.mangaworld.presentation.community.CommunityChatScreen
@@ -161,7 +162,9 @@ fun MangaNavGraph(
                 onSeeAllLatest = { navController.navigate(Screen.LatestUpdates.route) },
                 onReadChapter = { src, mangaId, chapterUrl ->
                     navController.navigate(Screen.Reader.createRoute(src, mangaId, chapterUrl))
-                }
+                },
+                onOpenProfile = { navController.navigate(Screen.Profile.route) },
+                onOpenNotifications = { navController.navigate(Screen.Notifications.route) }
             )
         }
         composable(Screen.Browse.route) {
@@ -393,7 +396,10 @@ fun MangaNavGraph(
                 onImportComplete = { navController.popBackStack() }
             )
         }
-        composable(Screen.Suggestions.route) {
+        composable(
+            route = Screen.Suggestions.route,
+            deepLinks = listOf(navDeepLink { uriPattern = "mangaworld://screen/suggestions" })
+        ) {
             SuggestionsScreen(
                 onBack = { navController.popBackStack() },
                 onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src.id, slug)) }
@@ -559,7 +565,7 @@ fun MangaNavGraph(
             // make the app fetch arbitrary hosts through the scraper pipeline.
             // Imported chapters are local dir names (never absolute URLs) — skip
             // the host check for them.
-            if (!isImported && !isTrustedChapterHost(chapterUrl, source.baseUrl)) {
+            if (!isImported && !isTrustedChapterHost(chapterUrl, source.effectiveBaseUrl())) {
                 navController.navigate(Screen.Detail.createRoute(sourceId, slug)) {
                     popUpTo(Screen.Home.route)
                 }
@@ -713,7 +719,7 @@ private fun launchFacebookLogin(context: android.content.Context) {
  */
 private fun isTrustedChapterHost(chapterUrl: String, baseUrl: String): Boolean {
     val linkHost = chapterUrl.toHttpUrlOrNull()?.host
-        ?: return true // not an absolute http(s) URL — resolved against source.baseUrl by the reader
+        ?: return true // not an absolute http(s) URL — resolved against the effective source base URL by the reader
     val expectedHost = baseUrl.toHttpUrlOrNull()?.host
         ?: return false
     return linkHost.equals(expectedHost, ignoreCase = true)

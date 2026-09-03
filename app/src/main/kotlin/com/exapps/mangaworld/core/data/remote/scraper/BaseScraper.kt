@@ -51,6 +51,16 @@ abstract class BaseScraperImpl(
     protected val settingsRepo: SettingsRepository
 ) : MangaScraper {
 
+    /**
+     * Effective origin for this source: Remote Config override
+     * (`source_<id>_base_url`) wins, enum default otherwise. Domains move
+     * (starz: manga-starz.net → starzmanga.com) — always build entry-point
+     * URLs, Referers and Jsoup base URIs from this, never the raw enum
+     * `source.baseUrl` (which cannot follow domain moves).
+     */
+    protected val resolvedBaseUrl: String
+        get() = source.effectiveBaseUrl()
+
     protected suspend fun fetchDocument(url: String, extraHeaders: Map<String, String> = emptyMap()): Document =
         withContext(Dispatchers.IO) {
             // Strict URI parsing throws on non-ASCII/space characters that are
@@ -58,7 +68,7 @@ abstract class BaseScraperImpl(
             // become hard failures (M-review; root amplifier of genre bugs).
             val domain = runCatching { java.net.URI(url).host }
                 .getOrNull()
-                ?: source.baseUrl.removePrefix("https://").removePrefix("http://")
+                ?: resolvedBaseUrl.removePrefix("https://").removePrefix("http://")
             val cookies = resolveCookieForUrl(settingsRepo, url)
 
             val requestBuilder = Request.Builder()
@@ -66,7 +76,7 @@ abstract class BaseScraperImpl(
                 .header("User-Agent", USER_AGENT)
                 .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
                 .header("Accept-Language", "ar,en;q=0.9")
-                .header("Referer", source.baseUrl + "/")
+                .header("Referer", resolvedBaseUrl + "/")
                 .apply { extraHeaders.forEach { (k, v) -> header(k, v) } }
 
             if (!cookies.isNullOrBlank()) {
@@ -91,7 +101,7 @@ abstract class BaseScraperImpl(
                 title.contains("attention required") ||
                 body.contains("cf-chl", ignoreCase = true)
             if (isCf) {
-                throw CloudflareChallengeException(source.baseUrl.removePrefix("https://").removePrefix("http://"), url)
+                throw CloudflareChallengeException(resolvedBaseUrl.removePrefix("https://").removePrefix("http://"), url)
             }
             // Server error bodies used to be parsed as content → silent empty results.
             // Fail loudly so repositories can fall back to cache instead.
@@ -101,7 +111,7 @@ abstract class BaseScraperImpl(
             doc
         }
 
-    protected fun String.absoluteUrl(base: String = source.baseUrl): String {
+    protected fun String.absoluteUrl(base: String = resolvedBaseUrl): String {
         return when {
             startsWith("http") -> this
             startsWith("//") -> "https:$this"

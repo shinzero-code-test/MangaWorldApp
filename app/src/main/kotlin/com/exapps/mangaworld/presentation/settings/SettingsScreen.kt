@@ -265,7 +265,7 @@ fun SettingsScreen(
                 SwitchItem(
                     icon = Icons.Filled.Language,
                     title = source.displayName,
-                    subtitle = source.baseUrl,
+                    subtitle = source.effectiveBaseUrl(),
                     checked = enabled,
                     onCheckedChange = { viewModel.toggleSource(source.id, it) }
                 )
@@ -284,8 +284,8 @@ fun SettingsScreen(
                             Intent(
                                 context,
                                 WebViewSolverActivity::class.java
-                            ).putExtra(WebViewSolverActivity.EXTRA_URL, "https://olympustaff.com")
-                                .putExtra(WebViewSolverActivity.EXTRA_DOMAIN, "olympustaff.com")
+                            ).putExtra(WebViewSolverActivity.EXTRA_URL, MangaSource.OLYMPUS.effectiveBaseUrl())
+                                .putExtra(WebViewSolverActivity.EXTRA_DOMAIN, MangaSource.OLYMPUS.effectiveHost())
                         )
                     }) { Text("Olympus") }
                     OutlinedButton(onClick = {
@@ -293,8 +293,8 @@ fun SettingsScreen(
                             Intent(
                                 context,
                                 WebViewSolverActivity::class.java
-                            ).putExtra(WebViewSolverActivity.EXTRA_URL, "https://manga-starz.net")
-                                .putExtra(WebViewSolverActivity.EXTRA_DOMAIN, "manga-starz.net")
+                            ).putExtra(WebViewSolverActivity.EXTRA_URL, MangaSource.STARZ.effectiveBaseUrl())
+                                .putExtra(WebViewSolverActivity.EXTRA_DOMAIN, MangaSource.STARZ.effectiveHost())
                         )
                     }) { Text("Starz") }
                 }

@@ -10,6 +10,8 @@ object AppLaunchIntents {
 
     fun home(context: Context): Intent = intent(context, "$Scheme://screen/home")
 
+    fun suggestions(context: Context): Intent = intent(context, "$Scheme://screen/suggestions")
+
     fun latestUpdates(context: Context): Intent = intent(context, "$Scheme://screen/latest_updates")
 
     fun search(context: Context): Intent = intent(context, "$Scheme://screen/search")

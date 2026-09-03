@@ -34,7 +34,7 @@ open class MangaReaderBaseScraper(
     // ─── Home ─────────────────────────────────────────────────────────────────
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
-        val doc = fetchDocument(source.baseUrl)
+        val doc = fetchDocument(resolvedBaseUrl)
         val latestChapters = parseLatestChapters(doc)
         val popular = parsePopularManga(doc)
 
@@ -60,7 +60,7 @@ open class MangaReaderBaseScraper(
         var resolvedDoc: org.jsoup.nodes.Document? = null
 
         for (path in pathsToTry) {
-            val tryUrl = "${source.baseUrl}$path$slug/"
+            val tryUrl = "${resolvedBaseUrl}$path$slug/"
             val tryDoc = runCatching { fetchDocument(tryUrl) }.getOrNull()
             if (tryDoc != null && isMangaDetailPage(tryDoc)) {
                 resolvedUrl = tryUrl
@@ -70,7 +70,7 @@ open class MangaReaderBaseScraper(
         }
         // Final fallback: try the original path
         if (resolvedDoc == null) {
-            resolvedUrl = "${source.baseUrl}/manga/$slug/"
+            resolvedUrl = "${resolvedBaseUrl}/manga/$slug/"
             resolvedDoc = fetchDocument(resolvedUrl)
         }
         val doc = resolvedDoc ?: error("Could not load manga detail for $slug")
@@ -180,7 +180,7 @@ open class MangaReaderBaseScraper(
     // ─── Chapter Pages ────────────────────────────────────────────────────────
 
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
-        val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to source.baseUrl + "/"))
+        val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to resolvedBaseUrl + "/"))
 
         // MangaReader/MangaStream themes:
         // - Standard: div#readerarea img, div#content .ts-main-image
@@ -242,7 +242,7 @@ open class MangaReaderBaseScraper(
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-        val url = if (page <= 1) "${source.baseUrl}/?s=$encoded" else "${source.baseUrl}/page/$page/?s=$encoded"
+        val url = if (page <= 1) "${resolvedBaseUrl}/?s=$encoded" else "${resolvedBaseUrl}/page/$page/?s=$encoded"
         val doc = fetchDocument(url)
         parseMangaCards(doc)
     }
@@ -250,13 +250,13 @@ open class MangaReaderBaseScraper(
     // ─── Browse ───────────────────────────────────────────────────────────────
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
-        val url = "${source.baseUrl}${listPath}?genre[]=${java.net.URLEncoder.encode(genre, "UTF-8")}&page=$page"
+        val url = "${resolvedBaseUrl}${listPath}?genre[]=${java.net.URLEncoder.encode(genre, "UTF-8")}&page=$page"
         val doc = fetchDocument(url)
         parseMangaCards(doc)
     }
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
-        val url = "${source.baseUrl}${listPath}?order=popular"
+        val url = "${resolvedBaseUrl}${listPath}?order=popular"
         val doc = fetchDocument(url)
         parseMangaCards(doc)
     }
@@ -276,12 +276,12 @@ open class MangaReaderBaseScraper(
         }
         val params = mutableListOf("order=$order", "page=$page")
         genre?.takeIf { it.isNotBlank() }?.let { params += "genre[]=${java.net.URLEncoder.encode(it, "UTF-8")}" }
-        val doc = fetchDocument("${source.baseUrl}${listPath}?${params.joinToString("&")}")
+        val doc = fetchDocument("${resolvedBaseUrl}${listPath}?${params.joinToString("&")}")
         parseMangaCards(doc)
     }
 
     override suspend fun getGenres(): Result<List<String>> = runCatching {
-        val doc = fetchDocument("${source.baseUrl}${listPath}")
+        val doc = fetchDocument("${resolvedBaseUrl}${listPath}")
         doc.select(".quickfilter .genrez label, .advanced-search .genres label, ul.genrez li label")
             .map { it.text().cleanText() }
             .filter { it.isNotEmpty() }

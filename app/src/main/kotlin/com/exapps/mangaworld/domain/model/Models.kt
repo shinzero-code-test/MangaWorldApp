@@ -15,7 +15,7 @@ enum class MangaSource(
     // ─── Original Sources ─────────────────────────────────────────────────────
     OLYMPUS("olympus", "تيم اكس", "https://olympustaff.com", true, ThemeType.OTHER, R.drawable.olympustaff_com_logo),
     AZORA("azora", "ازورا مانجا", "https://azorafly.com", false, ThemeType.ASTRO, R.drawable.azoramoon_com_logo),
-    STARZ("starz", "مانجا ستارز", "https://manga-starz.net", true, ThemeType.MADARA, R.drawable.manga_starz_net_logo),
+    STARZ("starz", "مانجا ستارز", "https://starzmanga.com", true, ThemeType.MADARA, R.drawable.manga_starz_net_logo),
     MANGASID("mangasid", "مانجا سيد", "https://mangasid.com", false, ThemeType.ASTRO, R.drawable.mangasid_com_logo),
     MESHMANGA("meshmanga", "مانجا سوات", "https://meshmanga.com", false, ThemeType.API, R.drawable.meshmanga_com_logo),
 

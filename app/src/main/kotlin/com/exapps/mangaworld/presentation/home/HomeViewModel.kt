@@ -32,6 +32,11 @@ data class HomeUiState(
     val favoriteIds: Set<String> = emptySet(),
     val remoteAlertMessage: String = "",
     val homeLayoutVariant: String = "default",
+    /** Header: Firebase photo URL preferred, community avatar wins when set. */
+    val avatarUrl: String? = null,
+    val avatarInitial: String = "",
+    /** Header: unread community notifications badge. */
+    val unreadNotifications: Int = 0,
     val error: String? = null
 )
 
@@ -43,7 +48,9 @@ class HomeViewModel @Inject constructor(
     private val libraryRepo: com.exapps.mangaworld.domain.repository.LibraryRepository,
     private val remoteConfigManager: FirebaseRemoteConfigManager,
     private val analyticsManager: FirebaseAnalyticsManager,
-    private val firebaseTelemetry: FirebaseTelemetry
+    private val firebaseTelemetry: FirebaseTelemetry,
+    private val sessionManager: com.exapps.mangaworld.core.firebase.FirebaseSessionManager,
+    private val communityRepo: com.exapps.mangaworld.domain.repository.CommunityRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -93,6 +100,47 @@ class HomeViewModel @Inject constructor(
                 _state.update { it.copy(favoriteIds = favorites.mapTo(mutableSetOf()) { f -> f.mangaId }) }
             }
         }
+        // Header identity: Firebase photo, upgraded to the community avatar
+        // when the user set one. Guests fall back to an initial letter.
+        viewModelScope.launch {
+            sessionManager.authState.collectLatest { user ->
+                val fallbackUrl = user?.photoUrl?.toString()
+                val fallbackInitial = initialOf(
+                    user?.displayName?.takeIf { it.isNotBlank() }
+                        ?: user?.email?.substringBefore('@')?.takeIf { it.isNotBlank() }
+                )
+                _state.update { it.copy(avatarUrl = fallbackUrl, avatarInitial = fallbackInitial) }
+                val uid = user?.uid
+                if (uid != null) {
+                    runCatching {
+                        communityRepo.observePublicProfile(uid).collect { profile ->
+                            val avt = profile?.avatarUrl?.takeIf { it.isNotBlank() } ?: fallbackUrl
+                            _state.update {
+                                it.copy(
+                                    avatarUrl = avt,
+                                    avatarInitial = initialOf(
+                                        profile?.displayName?.takeIf { it.isNotBlank() }
+                                            ?: profile?.username?.takeIf { it.isNotBlank() }
+                                    ).ifBlank { fallbackInitial }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Header badge: unread community notifications.
+        viewModelScope.launch {
+            communityRepo.observeNotifications(50)
+                .map { list -> list.count { !it.read } }
+                .catch { emit(0) }
+                .collect { _state.update { it.copy(unreadNotifications = it) } }
+        }
+    }
+
+    private fun initialOf(name: String?): String {
+        val first = name?.trim()?.firstOrNull()?.toString()?.uppercase().orEmpty()
+        return first.ifBlank { context.getString(R.string.guest).trim().take(1).ifBlank { "?" } }
     }
 
     /**

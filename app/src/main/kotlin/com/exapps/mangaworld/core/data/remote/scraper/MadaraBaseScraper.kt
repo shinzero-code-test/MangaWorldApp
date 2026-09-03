@@ -36,7 +36,7 @@ open class MadaraBaseScraper(
     // ─── Home ─────────────────────────────────────────────────────────────────
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
-        val doc = fetchDocument(source.baseUrl)
+        val doc = fetchDocument(resolvedBaseUrl)
         val latestChapters = parseMadaraLatestChapters(doc)
         val popular = parseMadaraPopularManga(doc)
 
@@ -66,7 +66,7 @@ open class MadaraBaseScraper(
         var doc: org.jsoup.nodes.Document? = null
 
         for (path in pathsToTry) {
-            val tryUrl = "${source.baseUrl}$path$slug/"
+            val tryUrl = "${resolvedBaseUrl}$path$slug/"
             val tryDoc = runCatching { fetchDocument(tryUrl) }.getOrNull()
             if (tryDoc != null) {
                 val isExplicit404 = tryDoc.selectFirst("body.error-404, body.page-not-found, .page-404, .error-page") != null
@@ -79,7 +79,7 @@ open class MadaraBaseScraper(
         }
         // Last resort: try the slug directly on the base URL (for hijala-like sites)
         if (doc == null) {
-            val bareUrl = "${source.baseUrl}/$slug/"
+            val bareUrl = "${resolvedBaseUrl}/$slug/"
             val bareDoc = runCatching { fetchDocument(bareUrl) }.getOrNull()
             if (bareDoc != null && isMangaDetailPage(bareDoc)) {
                 url = bareUrl
@@ -174,7 +174,7 @@ open class MadaraBaseScraper(
     // ─── Chapter Pages ────────────────────────────────────────────────────────
 
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
-        val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to source.baseUrl + "/"))
+        val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to resolvedBaseUrl + "/"))
 
         // Madara theme: .reading-content .page-break img
         doc.select(".reading-content .page-break img, .reading-content img, .page-break img, img.wp-manga-chapter-img")
@@ -209,7 +209,7 @@ open class MadaraBaseScraper(
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
         // Try standard GET search first
-        val url = "${source.baseUrl}/?s=$encoded&post_type=wp-manga&paged=$page"
+        val url = "${resolvedBaseUrl}/?s=$encoded&post_type=wp-manga&paged=$page"
         val doc = fetchDocument(url)
         val results = parseMangaGrid(doc)
         if (results.isNotEmpty()) return@runCatching results
@@ -217,9 +217,9 @@ open class MadaraBaseScraper(
         // Fallback: try /{listPath}/ path search — WP archives paginate via
         // /page/N/, not ?page= (which repeats page-1 results) (L-review).
         val url2 = if (page <= 1) {
-            "${source.baseUrl}${listPath}?s=$encoded"
+            "${resolvedBaseUrl}${listPath}?s=$encoded"
         } else {
-            "${source.baseUrl}${listPath}page/$page/?s=$encoded"
+            "${resolvedBaseUrl}${listPath}page/$page/?s=$encoded"
         }
         val doc2 = runCatching { fetchDocument(url2) }.getOrNull()
         if (doc2 != null) {
@@ -232,13 +232,13 @@ open class MadaraBaseScraper(
     // ─── Browse ───────────────────────────────────────────────────────────────
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
-        val url = "${source.baseUrl}${listPath}?genre=${java.net.URLEncoder.encode(genre, "UTF-8")}&page=$page"
+        val url = "${resolvedBaseUrl}${listPath}?genre=${java.net.URLEncoder.encode(genre, "UTF-8")}&page=$page"
         val doc = fetchDocument(url)
         parseMangaGrid(doc)
     }
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
-        val url = "${source.baseUrl}${listPath}?m_orderby=views"
+        val url = "${resolvedBaseUrl}${listPath}?m_orderby=views"
         val doc = fetchDocument(url)
         parseMangaGrid(doc)
     }
@@ -256,7 +256,7 @@ open class MadaraBaseScraper(
             SortBy.OLDEST -> "alphabet"
             SortBy.LATEST -> "latest"
         }
-        val pagePart = if (page <= 1) "${source.baseUrl}${listPath}" else "${source.baseUrl}${listPath}page/$page/"
+        val pagePart = if (page <= 1) "${resolvedBaseUrl}${listPath}" else "${resolvedBaseUrl}${listPath}page/$page/"
         val params = mutableListOf("m_orderby=$order")
         genre?.takeIf { it.isNotBlank() }?.let { params += "genre=${java.net.URLEncoder.encode(it, "UTF-8")}" }
         val doc = fetchDocument(pagePart + "?" + params.joinToString("&"))
@@ -264,7 +264,7 @@ open class MadaraBaseScraper(
     }
 
     override suspend fun getGenres(): Result<List<String>> = runCatching {
-        val doc = fetchDocument("${source.baseUrl}${listPath}")
+        val doc = fetchDocument("${resolvedBaseUrl}${listPath}")
         doc.select("ul.genre-scroll-list li a, .genres-content a, .madara-dropdown .genre-item a")
             .map { it.text().cleanText() }
             .filter { it.isNotEmpty() }
@@ -414,7 +414,7 @@ open class MadaraBaseScraper(
             }
 
             if (body.isNotBlank() && body.contains("wp-manga-chapter")) {
-                val chapDoc = Jsoup.parse(body, source.baseUrl)
+                val chapDoc = Jsoup.parse(body, resolvedBaseUrl)
                 val ajaxChapters = chapDoc.select("li.wp-manga-chapter, li")
                     .mapNotNull { li -> parseChapterLi(li, slug) }
                 if (ajaxChapters.isNotEmpty()) {
@@ -442,7 +442,7 @@ open class MadaraBaseScraper(
                             .add("manga", postId)
                             .build()
                         val ajaxRequest = Request.Builder()
-                            .url("${source.baseUrl}/wp-admin/admin-ajax.php")
+                            .url("${resolvedBaseUrl}/wp-admin/admin-ajax.php")
                             .header("User-Agent", USER_AGENT)
                             .header("Accept", "*/*")
                             .header("Referer", pageUrl.encodeForHeader())
@@ -456,7 +456,7 @@ open class MadaraBaseScraper(
                         }
                         if (json.optBoolean("success", false)) {
                             val html = json.optString("data", "")
-                            val chapDoc = Jsoup.parse(html, source.baseUrl)
+                            val chapDoc = Jsoup.parse(html, resolvedBaseUrl)
                             val ajaxChapters = chapDoc.select("li").mapNotNull { li -> parseChapterLi(li, slug) }
                             if (ajaxChapters.isNotEmpty()) {
                                 allChapters.addAll(ajaxChapters)

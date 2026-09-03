@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.model.effectiveBaseUrl
+import com.exapps.mangaworld.domain.model.effectiveHost
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -69,11 +71,12 @@ class SourcesViewModel @Inject constructor(
     }
 
     fun clearCookies(source: MangaSource) {
-        val domain = runCatching { java.net.URI(source.baseUrl).host }.getOrNull()
-            ?: source.baseUrl.removePrefix("https://")
-        CookieCache.clearDomain(domain)
+        // Clear both the effective host and the enum-default host so stale
+        // cookies never survive a domain move.
+        val hosts = setOf(source.effectiveHost(), source.baseUrl.removePrefix("https://").removePrefix("http://").substringBefore('/').lowercase())
+        hosts.forEach { CookieCache.clearDomain(it) }
         viewModelScope.launch {
-            settingsRepository.clearCookies(domain)
+            hosts.forEach { settingsRepository.clearCookies(it) }
         }
     }
 }

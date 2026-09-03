@@ -33,10 +33,15 @@ export async function POST(request: NextRequest) {
       ? decoded.role as DashboardRole
       : "viewer";
 
-    // Block viewers from accessing the dashboard
+    // Block viewers from accessing the dashboard. The signed-in email is
+    // echoed back so an admin who used the wrong Google account can tell
+    // immediately (previously a bare "no permission" looked like broken auth).
     if (role === "viewer") {
       return NextResponse.json(
-        { error: "ليس لديك صلاحية الوصول إلى لوحة التحكم. هذه اللوحة مخصصة للمشرفين والمديرين فقط." },
+        {
+          error: "ليس لديك صلاحية الوصول إلى لوحة التحكم. هذه اللوحة مخصصة للمشرفين والمديرين فقط.",
+          email: decoded.email ?? null,
+        },
         { status: 403 }
       );
     }

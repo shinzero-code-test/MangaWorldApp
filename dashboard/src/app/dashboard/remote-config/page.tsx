@@ -7,7 +7,31 @@ interface RCParam {
   key: string; defaultValue: string; valueType: string; description: string;
 }
 
-// Heuristic group assignment by key prefix / keyword
+// Canonical source origins — keep in sync with the MangaSource enum and the
+// FirebaseRemoteConfigManager `source_<id>_base_url` defaults. Lets admins
+// follow domain moves (e.g. starz → starzmanga.com) without an app update.
+const SOURCE_DOMAINS: { id: string; label: string; def: string }[] = [
+  { id: "olympus",       label: "تيم اكس",            def: "https://olympustaff.com" },
+  { id: "azora",         label: "ازورا مانجا",        def: "https://azorafly.com" },
+  { id: "starz",         label: "مانجا ستارز",        def: "https://starzmanga.com" },
+  { id: "mangasid",      label: "مانجا سيد",          def: "https://mangasid.com" },
+  { id: "meshmanga",     label: "مانجا سوات",         def: "https://meshmanga.com" },
+  { id: "asq3",          label: "مانجا العاشق",       def: "https://3asq.online" },
+  { id: "lekmanga",      label: "مانجا ليك",          def: "https://mangalik.net" },
+  { id: "lekmangaonline",label: "مانجا ليك اونلاين",  def: "https://lekmanga.online" },
+  { id: "likemanga",     label: "مانجا لايك",         def: "https://like-manga.net" },
+  { id: "linkmanga",     label: "مانجا لينك",         def: "https://link-manga.net" },
+  { id: "mangaleko",     label: "مانجا ليكو",         def: "https://manga-leko.site" },
+  { id: "mangalionz",    label: "مانجا ليونز",        def: "https://manga-lionz.org" },
+  { id: "areascans",     label: "آريا مانجا",         def: "https://ar.kenmanga.com" },
+  { id: "hijala",        label: "حجالة مانجا",        def: "https://hijala.com" },
+  { id: "lavascans",     label: "لاڤا سكانز",         def: "https://lavascans.com" },
+  { id: "stellarsaber",  label: "StellarSaber",       def: "https://stellarsaber.pro" },
+  { id: "procomic",      label: "ProChan",            def: "https://procomic.pro" },
+  { id: "rockmanga",     label: "روكس مانجا",         def: "https://rocksmanga.com" },
+];
+
+const DOMAIN_DESC = "النطاق الأساسي للمصدر — يُستخدم عند انتقال الدومين. اترك القيمة الافتراضية ما لم يتوقف المصدر عن العمل.";
 function assignGroup(key: string): string {
   const k = key.toLowerCase();
   if (k.includes("source") || k.includes("scraper") || k.includes("manga")) return "sources";
@@ -59,6 +83,16 @@ export default function RemoteConfigPage() {
           valueType:    p.valueType    ?? "STRING",
           description:  p.description  ?? "",
         }));
+        // Source domains are editable even before they exist server-side: show
+        // every known `source_<id>_base_url` key (template value or default).
+        // Publishing writes them into the live template via the generic PUT.
+        const have = new Set(list.map(p => p.key));
+        for (const s of SOURCE_DOMAINS) {
+          const key = `source_${s.id}_base_url`;
+          if (!have.has(key)) {
+            list.push({ key, defaultValue: s.def, valueType: "STRING", description: `${DOMAIN_DESC} (${s.label})` });
+          }
+        }
         setParams(list);
         // Init editable values
         const init: Record<string,any> = {};

@@ -28,13 +28,33 @@ function googleSignInErrorMessage(error: unknown): string {
     "auth/operation-not-allowed": "تسجيل الدخول بـ Google غير مفعّل في Firebase Console.",
     "auth/operation-not-supported-in-this-environment": "المتصفح لا يدعم النوافذ المنبثقة — جارٍ التحويل لتسجيل الدخول عبر التحويل",
     "auth/network-request-failed": "تعذر الاتصال بـ Google. تحقق من الإنترنت وحاول مجدداً.",
+    "auth/account-exists-with-different-credential": "هذا البريد مسجّل بطريقة أخرى — سجّل الدخول بالبريد وكلمة المرور أولاً.",
+    "auth/user-disabled": "تم تعطيل هذا الحساب. تواصل مع مدير النظام.",
   };
   return (code && messages[code]) || "تعذر بدء تسجيل الدخول بـ Google. حاول مرة أخرى.";
 }
 
+function googleSignInDetails(error: unknown): string {
+  // Raw diagnostic line (never translated): lets the admin report the exact
+  // Firebase code/message instead of "it doesn't work".
+  if (typeof error !== "object" || error === null) return "";
+  const code = "code" in error && typeof error.code === "string" ? error.code : "";
+  const message = "message" in error && typeof error.message === "string" ? error.message : "";
+  return [code, message].filter(Boolean).join(" — ");
+}
+
 function isRedirectFallbackError(error: unknown): boolean {
   const code = authErrorCode(error);
-  return code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment" || code === "auth/popup-closed-by-user";
+  // Anything popup-specific (blocked/unsupported/failed/cancelled-request)
+  // is worth one redirect attempt — redirect survives blocked popups and
+  // third-party-cookie walls where popups hang or die. Explicit user-close
+  // and console misconfiguration (domain/provider) are terminal: redirect
+  // would fail identically, so surface the message instead.
+  return code === "auth/popup-blocked"
+    || code === "auth/operation-not-supported-in-this-environment"
+    || code === "auth/cancelled-popup-request"
+    || code === "auth/network-request-failed"
+    || code === "auth/internal-error";
 }
 
 function emailSignInErrorMessage(error: unknown): string {
@@ -53,6 +73,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+  const [googleDetails, setGoogleDetails] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const router = useRouter();
@@ -68,7 +89,10 @@ export default function LoginPage() {
       body: JSON.stringify({ idToken }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "خطأ في تسجيل الدخول");
+    if (!res.ok) {
+      const suffix = typeof data?.email === "string" && data.email ? ` (${data.email})` : "";
+      throw new Error((data.error || "خطأ في تسجيل الدخول") + suffix);
+    }
     if (data.refreshRequired) {
       if (attempt >= MAX_REFRESH_ATTEMPTS) {
         throw new Error("تعذر تحديث صلاحيات الحساب. حاول تسجيل الدخول مرة أخرى.");
@@ -83,6 +107,7 @@ export default function LoginPage() {
   const handleGoogle = async () => {
     setGoogleLoading(true);
     setError("");
+    setGoogleDetails("");
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
@@ -91,7 +116,7 @@ export default function LoginPage() {
     } catch (error: unknown) {
       // Popup blocked / unsupported environment → fall back to full-page redirect.
       // getRedirectResult below completes the flow after returning from Google.
-      if (isRedirectFallbackError(error) && authErrorCode(error) !== "auth/popup-closed-by-user") {
+      if (isRedirectFallbackError(error)) {
         try {
           const provider = new GoogleAuthProvider();
           provider.setCustomParameters({ prompt: "select_account" });
@@ -99,9 +124,13 @@ export default function LoginPage() {
           return;
         } catch (redirectError: unknown) {
           setError(googleSignInErrorMessage(redirectError));
+          setGoogleDetails(googleSignInDetails(redirectError));
+          console.error("[login] google redirect failed:", redirectError);
         }
       } else {
         setError(googleSignInErrorMessage(error));
+        setGoogleDetails(googleSignInDetails(error));
+        console.error("[login] google popup failed:", error);
       }
     } finally {
       setGoogleLoading(false);
@@ -118,7 +147,11 @@ export default function LoginPage() {
         setGoogleLoading(true);
         await handleSession(await result.user.getIdToken(), () => result.user.getIdToken(true));
       } catch (error: unknown) {
-        if (!cancelled) setError(googleSignInErrorMessage(error));
+        if (!cancelled) {
+          setError(googleSignInErrorMessage(error));
+          setGoogleDetails(googleSignInDetails(error));
+          console.error("[login] google redirect result failed:", error);
+        }
       } finally {
         if (!cancelled) setGoogleLoading(false);
       }
@@ -131,6 +164,7 @@ export default function LoginPage() {
     ev.preventDefault();
     setLoading(true);
     setError("");
+    setGoogleDetails("");
     try {
       const result = await signInWithEmailAndPassword(clientAuth, email, password);
       await handleSession(await result.user.getIdToken(), () => result.user.getIdToken(true));
@@ -362,6 +396,11 @@ export default function LoginPage() {
                 <AlertCircle size={16} className="shrink-0" />
                 <span>{error}</span>
               </div>
+            )}
+            {googleDetails && (
+              <p className="text-[11px] font-mono break-all" dir="ltr" style={{ color: "var(--muted-foreground)" }}>
+                {googleDetails}
+              </p>
             )}
 
             <button

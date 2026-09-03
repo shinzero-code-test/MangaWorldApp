@@ -68,6 +68,7 @@ import com.exapps.mangaworld.core.data.WidgetSnapshotStore
 import com.exapps.mangaworld.core.data.remote.scraper.MangaScraper
 import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.model.effectiveHost
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import com.exapps.mangaworld.presentation.utils.formatDiagnosticBytes
@@ -136,7 +137,7 @@ class DiagnosticsViewModel @Inject constructor(
                                 source = source,
                                 homeOk = home.isSuccess,
                                 searchResults = search.getOrDefault(emptyList()).size,
-                                hasCookie = settingsRepository.getCookies(source.baseUrl.removePrefix("https://").removePrefix("http://")).first()?.isNotBlank() == true,
+                                hasCookie = settingsRepository.getCookies(source.effectiveHost()).first()?.isNotBlank() == true,
                                 error = home.exceptionOrNull()?.message ?: search.exceptionOrNull()?.message
                             )
                         }

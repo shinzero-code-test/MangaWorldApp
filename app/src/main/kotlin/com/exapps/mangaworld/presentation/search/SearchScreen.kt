@@ -32,6 +32,8 @@ import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.model.effectiveBaseUrl
+import com.exapps.mangaworld.domain.model.effectiveHost
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import com.exapps.mangaworld.presentation.webview.WebViewSolverActivity
@@ -153,10 +155,10 @@ fun SearchScreen(
                     TextButton(onClick = {
                         cfLauncher.launch(
                             Intent(context, WebViewSolverActivity::class.java)
-                                .putExtra(WebViewSolverActivity.EXTRA_URL, selectedSource.baseUrl)
+                                .putExtra(WebViewSolverActivity.EXTRA_URL, selectedSource.effectiveBaseUrl())
                                 .putExtra(
                                     WebViewSolverActivity.EXTRA_DOMAIN,
-                                    selectedSource.baseUrl.removePrefix("https://").removePrefix("http://")
+                                    selectedSource.effectiveHost()
                                 )
                         )
                     }) {

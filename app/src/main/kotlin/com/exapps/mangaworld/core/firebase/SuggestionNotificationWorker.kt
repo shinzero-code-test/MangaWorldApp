@@ -152,6 +152,20 @@ class SuggestionNotificationWorker @AssistedInject constructor(
                 pendingIntent
             )
 
+            // "More" action — opens the in-app suggestions screen (Kotatsu parity).
+            val moreIntent = AppLaunchIntents.suggestions(ctx)
+            val morePendingIntent = PendingIntent.getActivity(
+                ctx,
+                SUGGESTION_NOTIFICATION_ID + 2,
+                moreIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val moreAction = NotificationCompat.Action(
+                android.R.drawable.ic_menu_more,
+                ctx.getString(com.exapps.mangaworld.R.string.more_title),
+                morePendingIntent
+            )
+
             // "Add to Favourite" action — adds the top suggestion
             val topSuggestion = newSuggestions.first()
             val favIntent = Intent(ctx, NotificationActionReceiver::class.java).apply {
@@ -182,7 +196,9 @@ class SuggestionNotificationWorker @AssistedInject constructor(
                 .setStyle(NotificationCompat.BigTextStyle().bigText("$body$extraText"))
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
+                .setGroup("mw_suggestions")
                 .addAction(readAction)
+                .addAction(moreAction)
                 .addAction(favAction)
                 .build()
 

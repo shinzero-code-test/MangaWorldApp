@@ -21,7 +21,7 @@ class RockMangaScraper @Inject constructor(
 ) : BaseScraperImpl(client, MangaSource.ROCKMANGA, settingsRepo) {
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
-        val doc = fetchDocument(source.baseUrl)
+        val doc = fetchDocument(resolvedBaseUrl)
         val mangaCards = parseMangaCards(doc)
 
         HomeData(
@@ -35,7 +35,7 @@ class RockMangaScraper @Inject constructor(
     }
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
-        val url = "${source.baseUrl}/manga/$slug/"
+        val url = "${resolvedBaseUrl}/manga/$slug/"
         val doc = fetchDocument(url)
 
         val coverUrl = doc.selectFirst("aside.content div.poster img, #manga-page img")
@@ -105,7 +105,7 @@ class RockMangaScraper @Inject constructor(
     }
 
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
-        val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to source.baseUrl + "/"))
+        val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to resolvedBaseUrl + "/"))
 
         doc.select("div#ch-images div.page img.preload-image, div#ch-images img")
             .mapNotNull { img ->
@@ -121,19 +121,19 @@ class RockMangaScraper @Inject constructor(
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-        val doc = fetchDocument("${source.baseUrl}/?post_type=wp-manga&s=$encoded&page=$page")
+        val doc = fetchDocument("${resolvedBaseUrl}/?post_type=wp-manga&s=$encoded&page=$page")
         parseMangaCards(doc)
     }
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
         // Path position: encode with %20 (URLEncoder's "+" is wrong inside paths).
         val enc = java.net.URLEncoder.encode(genre, "UTF-8").replace("+", "%20")
-        val doc = fetchDocument("${source.baseUrl}/manga-genre/$enc/page/$page/")
+        val doc = fetchDocument("${resolvedBaseUrl}/manga-genre/$enc/page/$page/")
         parseMangaCards(doc)
     }
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
-        val doc = fetchDocument("${source.baseUrl}/manga/?sort=most_viewed")
+        val doc = fetchDocument("${resolvedBaseUrl}/manga/?sort=most_viewed")
         parseMangaCards(doc)
     }
 
@@ -148,12 +148,12 @@ class RockMangaScraper @Inject constructor(
         }
         val params = mutableListOf("sort=$sort", "page=$page")
         genre?.takeIf { it.isNotBlank() }?.let { params += "genre=${java.net.URLEncoder.encode(it, "UTF-8")}" }
-        val doc = fetchDocument("${source.baseUrl}/manga/?${params.joinToString("&")}")
+        val doc = fetchDocument("${resolvedBaseUrl}/manga/?${params.joinToString("&")}")
         parseMangaCards(doc)
     }
 
     override suspend fun getGenres(): Result<List<String>> = runCatching {
-        val doc = fetchDocument("${source.baseUrl}/manga/")
+        val doc = fetchDocument("${resolvedBaseUrl}/manga/")
         doc.select("a[href*='/manga-genre/']")
             .map { it.text().cleanText() }
             .filter { it.length in 2..20 }

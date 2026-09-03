@@ -47,6 +47,15 @@ class FirebaseRemoteConfigManager @Inject constructor() {
     private val _scraperRuntimeConfig = MutableStateFlow(ScraperRuntimeConfig())
     val scraperRuntimeConfig: StateFlow<ScraperRuntimeConfig> = _scraperRuntimeConfig.asStateFlow()
 
+    /**
+     * Effective source base URLs (`source_<id>` → origin). The dashboard edits
+     * these via Remote Config keys `source_<id>_base_url`; blank/invalid
+     * values fall back to the enum defaults. Lets admins follow domain moves
+     * (starz: manga-starz.net → starzmanga.com) without an app update.
+     */
+    private val _sourceBaseUrls = MutableStateFlow<Map<String, String>>(emptyMap())
+    val sourceBaseUrls: StateFlow<Map<String, String>> = _sourceBaseUrls.asStateFlow()
+
     // Engagement tier thresholds (configurable via Remote Config)
     private val _engagementWarmingMs = MutableStateFlow(900_000L)
     val engagementWarmingMs: StateFlow<Long> = _engagementWarmingMs.asStateFlow()
@@ -83,6 +92,24 @@ class FirebaseRemoteConfigManager @Inject constructor() {
                     "source_stellarsaber_enabled" to true,
                     "source_procomic_enabled" to true,
                     "source_rockmanga_enabled" to true,
+                    "source_olympus_base_url" to "https://olympustaff.com",
+                    "source_azora_base_url" to "https://azorafly.com",
+                    "source_starz_base_url" to "https://starzmanga.com",
+                    "source_mangasid_base_url" to "https://mangasid.com",
+                    "source_meshmanga_base_url" to "https://meshmanga.com",
+                    "source_asq3_base_url" to "https://3asq.online",
+                    "source_lekmanga_base_url" to "https://mangalik.net",
+                    "source_lekmangaonline_base_url" to "https://lekmanga.online",
+                    "source_likemanga_base_url" to "https://like-manga.net",
+                    "source_linkmanga_base_url" to "https://link-manga.net",
+                    "source_mangaleko_base_url" to "https://manga-leko.site",
+                    "source_mangalionz_base_url" to "https://manga-lionz.org",
+                    "source_areascans_base_url" to "https://ar.kenmanga.com",
+                    "source_hijala_base_url" to "https://hijala.com",
+                    "source_lavascans_base_url" to "https://lavascans.com",
+                    "source_stellarsaber_base_url" to "https://stellarsaber.pro",
+                    "source_procomic_base_url" to "https://procomic.pro",
+                    "source_rockmanga_base_url" to "https://rocksmanga.com",
                     "scraper_selector_overrides" to "{}",
                     "scraper_connect_timeout_seconds" to 30,
                     "scraper_read_timeout_seconds" to 30,
@@ -133,6 +160,23 @@ class FirebaseRemoteConfigManager @Inject constructor() {
             if (!remoteConfig.getBoolean("source_rockmanga_enabled")) add("rockmanga")
         }
         _disabledSourceIds.value = disabled
+
+        // Per-source domains. Only non-blank, valid origins are kept — anything
+        // else falls back to the enum default inside SourceDomainOverrides.
+        val domainOverrides = buildMap {
+            for (source in com.exapps.mangaworld.domain.model.MangaSource.entries) {
+                val raw = remoteConfig.getString("source_${source.id}_base_url")
+                com.exapps.mangaworld.domain.model.SourceDomainOverrides.normalizeBaseUrl(raw)?.let {
+                    put(source.id, it)
+                }
+            }
+        }
+        _sourceBaseUrls.value = buildMap {
+            for (source in com.exapps.mangaworld.domain.model.MangaSource.entries) {
+                put(source.id, domainOverrides[source.id] ?: source.baseUrl)
+            }
+        }
+        com.exapps.mangaworld.domain.model.SourceDomainOverrides.replaceAll(domainOverrides)
 
         val overridesJson = remoteConfig.getString("scraper_selector_overrides")
         _selectorOverridesJson.value = overridesJson
