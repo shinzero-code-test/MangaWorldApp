@@ -14,7 +14,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 8.2.0 (versionCode 193)
+- **Current version**: 8.2.1 (versionCode 194)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 35 · **Compile SDK**: 35
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.

@@ -57,6 +57,10 @@ function isRedirectFallbackError(error: unknown): boolean {
     || code === "auth/internal-error";
 }
 
+// sessionStorage marker so the return leg knows a Google redirect was
+// initiated by us (vs. a plain visit to /login).
+const REDIRECT_MARKER = "mw_google_redirect";
+
 function emailSignInErrorMessage(error: unknown): string {
   const messages: Record<string, string> = {
     "auth/user-not-found": "البريد الإلكتروني غير مسجل",
@@ -120,6 +124,7 @@ export default function LoginPage() {
         try {
           const provider = new GoogleAuthProvider();
           provider.setCustomParameters({ prompt: "select_account" });
+          if (typeof sessionStorage !== "undefined") sessionStorage.setItem(REDIRECT_MARKER, "1");
           await signInWithRedirect(clientAuth, provider);
           return;
         } catch (redirectError: unknown) {
@@ -138,19 +143,54 @@ export default function LoginPage() {
   };
 
   // Completes the redirect flow when handleGoogle fell back to signInWithRedirect.
+  // The marker distinguishes a genuine redirect return from a plain page load.
+  // On auth/internal-error the result is retried once: the handler sometimes
+  // needs a beat to settle its stored state after navigation.
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      let result = null;
       try {
-        const result = await getRedirectResult(clientAuth);
+        result = await getRedirectResult(clientAuth);
+      } catch (error: unknown) {
+        const returning = typeof sessionStorage !== "undefined"
+          && sessionStorage.getItem(REDIRECT_MARKER) === "1";
+        if (!cancelled && returning && authErrorCode(error) === "auth/internal-error") {
+          await new Promise((r) => setTimeout(r, 600));
+          if (cancelled) return;
+          try {
+            result = await getRedirectResult(clientAuth);
+          } catch (retryError: unknown) {
+            if (!cancelled) {
+              setError(googleSignInErrorMessage(retryError));
+              setGoogleDetails(googleSignInDetails(retryError));
+              console.error("[login] google redirect result failed (retry):", retryError);
+            }
+            if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(REDIRECT_MARKER);
+            if (!cancelled) setGoogleLoading(false);
+            return;
+          }
+        } else {
+          if (!cancelled && returning) {
+            setError(googleSignInErrorMessage(error));
+            setGoogleDetails(googleSignInDetails(error));
+            console.error("[login] google redirect result failed:", error);
+          }
+          if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(REDIRECT_MARKER);
+          if (!cancelled) setGoogleLoading(false);
+          return;
+        }
+      }
+      try {
         if (!result || cancelled) return;
+        if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(REDIRECT_MARKER);
         setGoogleLoading(true);
         await handleSession(await result.user.getIdToken(), () => result.user.getIdToken(true));
       } catch (error: unknown) {
         if (!cancelled) {
-          setError(googleSignInErrorMessage(error));
-          setGoogleDetails(googleSignInDetails(error));
-          console.error("[login] google redirect result failed:", error);
+          setError(error instanceof Error ? error.message : googleSignInErrorMessage(error));
+          if (!(error instanceof Error)) setGoogleDetails(googleSignInDetails(error));
+          console.error("[login] google redirect session failed:", error);
         }
       } finally {
         if (!cancelled) setGoogleLoading(false);

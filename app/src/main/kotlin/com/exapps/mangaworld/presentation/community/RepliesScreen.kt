@@ -95,10 +95,15 @@ data class RepliesUiState(
 @Immutable
 data class PendingReplyEdit(val text: String, val spoiler: Boolean, val at: Long)
 
+/** Optimistic overlay for an edited root REVIEW (same bug class as comments). */
+@Immutable
+data class PendingRootReviewEdit(val title: String, val body: String, val rating: Int, val at: Long)
+
 @Immutable
 private data class ReplyPending(
     val echoes: List<CommunityComment> = emptyList(),
-    val edits: Map<String, PendingReplyEdit> = emptyMap()
+    val edits: Map<String, PendingReplyEdit> = emptyMap(),
+    val reviewEdits: Map<String, PendingRootReviewEdit> = emptyMap()
 )
 
 @HiltViewModel
@@ -137,7 +142,15 @@ class RepliesViewModel @Inject constructor(
         val root = if (reviewId == null) {
             data.comments.firstOrNull { it.id == rootId }?.let { CommunityTarget.Comment(it) }
         } else {
-            data.reviews.firstOrNull { it.id == reviewId }?.let { CommunityTarget.Review(it) }
+            data.reviews.firstOrNull { it.id == reviewId }?.let { review ->
+                // Pending edit overlay: edited content renders immediately
+                // instead of waiting for the snapshot round-trip.
+                val edited = bits.pending.reviewEdits[review.id]
+                    ?.takeIf { review.updatedAt < it.at - EDIT_LANDED_TOLERANCE_MS }
+                    ?.let { review.copy(title = it.title, body = it.body, rating = it.rating) }
+                    ?: review
+                CommunityTarget.Review(edited)
+            }
         }
         val now = System.currentTimeMillis()
         // Optimistic overlays (v8 #6): apply pending edits, then append echoes that
@@ -242,10 +255,28 @@ class RepliesViewModel @Inject constructor(
 
     fun deleteReview(review: MangaReview) = launchAction(R.string.community_error_generic_action) {
         communityRepository.deleteReview(review)
+        pending.update { s -> s.copy(reviewEdits = s.reviewEdits - review.id) }
     }
 
     fun upsertReview(rating: Int, title: String, body: String) = launchAction(R.string.str_338) {
-        communityRepository.upsertReview(mangaId, slug, sourceId, rating, title, body)
+        // Editing the root review overlays immediately; creates rely on the
+        // snapshot (one review per user per manga — doc id = uid server-side).
+        if (reviewId != null) {
+            val at = System.currentTimeMillis()
+            pending.update {
+                it.copy(
+                    reviewEdits = it.reviewEdits + (reviewId to PendingRootReviewEdit(title.trim(), body.trim(), rating.coerceIn(1, 5), at))
+                )
+            }
+        }
+        try {
+            communityRepository.upsertReview(mangaId, slug, sourceId, rating, title, body)
+        } catch (t: Throwable) {
+            if (reviewId != null) {
+                pending.update { s -> s.copy(reviewEdits = s.reviewEdits - reviewId) }
+            }
+            throw t
+        }
     }
 
     fun dismissError() {

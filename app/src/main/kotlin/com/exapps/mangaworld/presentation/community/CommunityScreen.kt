@@ -280,32 +280,50 @@ class CommunityViewModel @Inject constructor(
 
     fun upsertReview(rating: Int, title: String, body: String) {
         val profile = state.value.profile
-        val existing = state.value.reviews.firstOrNull { it.authorUid == profile?.uid }
+        // One review per user per manga: an existing (non-deleted) review is
+        // EDITED in place (same doc id = uid), never duplicated.
+        val existing = state.value.reviews.firstOrNull { it.authorUid == profile?.uid && !it.isDeleted }
         var reviewEcho: MangaReview? = null
         launchCommunityAction(R.string.str_338) {
             if (profile != null) {
-                reviewEcho = MangaReview(
-                    id = existing?.takeIf { !it.isDeleted }?.id ?: "pending_review_${java.util.UUID.randomUUID()}",
-                    mangaId = mangaId,
-                    authorUid = profile.uid,
-                    authorName = profile.displayName.ifBlank { profile.username },
-                    authorUsername = profile.username,
-                    authorAvatarUrl = profile.avatarUrl,
-                    rating = rating.coerceIn(1, 5),
-                    title = title.trim(),
-                    body = body.trim(),
-                    updatedAt = System.currentTimeMillis(),
-                    isDeleted = false
-                )
-                pending.update {
-                    it.copy(
-                        reviewEchoes = it.reviewEchoes.filterNot { e -> e.authorUid == profile.uid } + reviewEcho!!
+                val at = System.currentTimeMillis()
+                if (existing != null) {
+                    // Edit path: overlay via reviewEdits so the new content
+                    // renders IMMEDIATELY. (Echoes are shadowed by distinctBy
+                    // and only appear after the snapshot lands — the reported
+                    // "edit invisible until tab switch" bug.)
+                    pending.update {
+                        it.copy(
+                            reviewEdits = it.reviewEdits + (existing.id to PendingReviewEdit(title.trim(), body.trim(), rating.coerceIn(1, 5), at))
+                        )
+                    }
+                } else {
+                    reviewEcho = MangaReview(
+                        id = "pending_review_${java.util.UUID.randomUUID()}",
+                        mangaId = mangaId,
+                        authorUid = profile.uid,
+                        authorName = profile.displayName.ifBlank { profile.username },
+                        authorUsername = profile.username,
+                        authorAvatarUrl = profile.avatarUrl,
+                        rating = rating.coerceIn(1, 5),
+                        title = title.trim(),
+                        body = body.trim(),
+                        updatedAt = at,
+                        isDeleted = false
                     )
+                    pending.update {
+                        it.copy(
+                            reviewEchoes = it.reviewEchoes.filterNot { e -> e.authorUid == profile.uid } + reviewEcho!!
+                        )
+                    }
                 }
             }
             try {
                 communityRepository.upsertReview(mangaId, slug, sourceId, rating, title, body)
             } catch (t: Throwable) {
+                if (existing != null) {
+                    pending.update { s -> s.copy(reviewEdits = s.reviewEdits - existing.id) }
+                }
                 reviewEcho?.let { e -> pending.update { s -> s.copy(reviewEchoes = s.reviewEchoes - e) } }
                 throw t
             }

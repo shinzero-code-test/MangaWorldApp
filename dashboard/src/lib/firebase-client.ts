@@ -10,14 +10,13 @@ if (!projectId) {
 }
 
 // The dashboard is hosted on Vercel, which does not serve Firebase's
-// /__/auth/handler route. Popup/redirect sign-in must therefore use a
-// Firebase-hosted handler. Prefer an explicitly configured auth domain when
-// present (it may be a verified custom domain), otherwise derive the default
-// Firebase-hosted handler for this project — never the dashboard origin.
-const configuredAuthDomain = (process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "").trim();
-const authDomain = configuredAuthDomain.length > 0
-  ? configuredAuthDomain
-  : `${projectId}.firebaseapp.com`;
+// /__/auth/handler route. Use the configured Firebase-hosted auth domain
+// verbatim: v7.0.0 replaced this with a derived `${projectId}.firebaseapp.com`
+// and that broke Google sign-in (auth/internal-error on redirect return).
+// Only fall back to the derived handler when the variable is unset.
+const authDomain =
+  (process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "").trim() ||
+  `${projectId}.firebaseapp.com`;
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_CLIENT_API_KEY,
