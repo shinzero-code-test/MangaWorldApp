@@ -31,7 +31,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.ui.input.key.*
