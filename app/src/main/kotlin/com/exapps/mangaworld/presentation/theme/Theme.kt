@@ -340,7 +340,14 @@ fun MangaWorldTheme(
         // merges its style into LocalTextStyle, so ad-hoc TextStyle(fontSize=…)
         // usages inherit IBM Plex instead of the platform default. Typography
         // styles carry their own families (Cairo/IBM Plex) and win on merge.
-        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = IbmPlexArabicFontFamily),
+        // textDirection = Content fixes glyph order for mixed Arabic/Latin.
+        // Alignment is handled per-string via LocalizedText/contentTextAlign:
+        // TextAlign.Start follows the app layout (RTL) and would right-align
+        // English titles, so dynamic content uses absolute Left/Right instead.
+        LocalTextStyle provides LocalTextStyle.current.copy(
+            fontFamily = IbmPlexArabicFontFamily,
+            textDirection = androidx.compose.ui.text.style.TextDirection.Content
+        ),
         LocalThemeColors provides themeColors
     ) {
         MaterialTheme(

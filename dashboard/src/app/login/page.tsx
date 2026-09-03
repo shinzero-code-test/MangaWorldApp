@@ -5,10 +5,13 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, Eye, EyeOff, Loader2 } from "lucide-react";
 import {
   GoogleAuthProvider,
+  getRedirectResult,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
 } from "firebase/auth";
 import { clientAuth } from "@/lib/firebase-client";
+import { useEffect } from "react";
 
 function authErrorCode(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
@@ -16,9 +19,22 @@ function authErrorCode(error: unknown): string | undefined {
 }
 
 function googleSignInErrorMessage(error: unknown): string {
-  return authErrorCode(error) === "auth/popup-closed-by-user"
-    ? "تم إغلاق نافذة تسجيل الدخول"
-    : "تعذر بدء تسجيل الدخول بـ Google. حاول مرة أخرى.";
+  const code = authErrorCode(error);
+  const messages: Record<string, string> = {
+    "auth/popup-closed-by-user": "تم إغلاق نافذة تسجيل الدخول",
+    "auth/cancelled-popup-request": "تم إلغاء طلب تسجيل الدخول",
+    "auth/popup-blocked": "تم حظر النافذة المنبثقة — جارٍ التحويل لتسجيل الدخول عبر التحويل",
+    "auth/unauthorized-domain": "نطاق لوحة التحكم غير مصرّح به في Firebase (Authorized domains). أضف نطاق Vercel في Firebase Console ← Authentication ← Settings.",
+    "auth/operation-not-allowed": "تسجيل الدخول بـ Google غير مفعّل في Firebase Console.",
+    "auth/operation-not-supported-in-this-environment": "المتصفح لا يدعم النوافذ المنبثقة — جارٍ التحويل لتسجيل الدخول عبر التحويل",
+    "auth/network-request-failed": "تعذر الاتصال بـ Google. تحقق من الإنترنت وحاول مجدداً.",
+  };
+  return (code && messages[code]) || "تعذر بدء تسجيل الدخول بـ Google. حاول مرة أخرى.";
+}
+
+function isRedirectFallbackError(error: unknown): boolean {
+  const code = authErrorCode(error);
+  return code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment" || code === "auth/popup-closed-by-user";
 }
 
 function emailSignInErrorMessage(error: unknown): string {
@@ -73,11 +89,43 @@ export default function LoginPage() {
       const result = await signInWithPopup(clientAuth, provider);
       await handleSession(await result.user.getIdToken(), () => result.user.getIdToken(true));
     } catch (error: unknown) {
-      setError(googleSignInErrorMessage(error));
+      // Popup blocked / unsupported environment → fall back to full-page redirect.
+      // getRedirectResult below completes the flow after returning from Google.
+      if (isRedirectFallbackError(error) && authErrorCode(error) !== "auth/popup-closed-by-user") {
+        try {
+          const provider = new GoogleAuthProvider();
+          provider.setCustomParameters({ prompt: "select_account" });
+          await signInWithRedirect(clientAuth, provider);
+          return;
+        } catch (redirectError: unknown) {
+          setError(googleSignInErrorMessage(redirectError));
+        }
+      } else {
+        setError(googleSignInErrorMessage(error));
+      }
     } finally {
       setGoogleLoading(false);
     }
   };
+
+  // Completes the redirect flow when handleGoogle fell back to signInWithRedirect.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await getRedirectResult(clientAuth);
+        if (!result || cancelled) return;
+        setGoogleLoading(true);
+        await handleSession(await result.user.getIdToken(), () => result.user.getIdToken(true));
+      } catch (error: unknown) {
+        if (!cancelled) setError(googleSignInErrorMessage(error));
+      } finally {
+        if (!cancelled) setGoogleLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleEmail = async (ev: React.FormEvent) => {
     ev.preventDefault();

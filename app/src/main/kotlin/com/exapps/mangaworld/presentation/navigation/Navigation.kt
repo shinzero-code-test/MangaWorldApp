@@ -211,11 +211,24 @@ fun MangaNavGraph(
             NotificationCenterScreen(
                 onBack = { navController.popBackStack() },
                 onNotificationClick = { item ->
-                    if (item.mangaId != null) {
-                        navController.navigate(Screen.Detail.createRoute(
-                            item.mangaId.substringBefore("_", "azora"),
-                            item.mangaId.substringAfter("_", item.mangaId)
-                        ))
+                    val mangaId = item.mangaId ?: return@NotificationCenterScreen
+                    // Imported/local entries store the full mangaId (imported_xxx) —
+                    // routing them through substring parsing would strip the prefix
+                    // and land on a blank detail screen.
+                    if (mangaId.startsWith("imported_")) {
+                        navController.navigate(Screen.Detail.createRoute("local", mangaId))
+                    } else {
+                        val prefix = mangaId.substringBefore("_")
+                        if (MangaSource.isLocalSource(prefix)) {
+                            navController.navigate(Screen.Detail.createRoute("local", mangaId))
+                        } else {
+                            navController.navigate(
+                                Screen.Detail.createRoute(
+                                    prefix.ifBlank { "azora" },
+                                    mangaId.substringAfter("_", mangaId)
+                                )
+                            )
+                        }
                     }
                 }
             )
@@ -463,11 +476,14 @@ fun MangaNavGraph(
         ) { back ->
             val sourceId = back.arguments?.getString("sourceId") ?: return@composable
             val slug     = back.arguments?.getString("slug") ?: return@composable
-            // Unknown source ids must not silently render Azora content (L-review).
-            val source = MangaSource.fromIdOrNull(sourceId) ?: return@composable
+            // Local/imported manga has no online source entry — use a placeholder
+            // source for the `source` param but keep rawSourceId so the ViewModel
+            // loads from disk. Unknown online ids still blank (never Azora fallback).
+            val isLocalDetail = MangaSource.isLocalSource(sourceId) || slug.startsWith("imported_")
+            val source = if (isLocalDetail) MangaSource.AZORA else MangaSource.fromIdOrNull(sourceId) ?: return@composable
             MangaDetailScreen(
                 source = source, slug = slug,
-                rawSourceId = sourceId,
+                rawSourceId = if (isLocalDetail) "local" else sourceId,
                 onChapterClick = { chapterUrl, mangaId ->
                     navController.navigate(Screen.Reader.createRoute(sourceId, mangaId, chapterUrl))
                 },
@@ -496,9 +512,9 @@ fun MangaNavGraph(
             val chapterUrl = java.net.URLDecoder.decode(
                 back.arguments?.getString("chapterUrl") ?: "", "UTF-8"
             )
-            val source = MangaSource.fromIdOrNull(sourceId) ?: return@composable
             val isImported = mangaId.startsWith("imported_") || MangaSource.isLocalSource(sourceId)
-            val slug = mangaId.substringAfter("${sourceId}_").ifBlank { mangaId }
+            val source = if (isImported) MangaSource.AZORA else MangaSource.fromIdOrNull(sourceId) ?: return@composable
+            val slug = if (isImported) mangaId else mangaId.substringAfter("${sourceId}_").ifBlank { mangaId }
             ReaderScreen(
                 source = source, mangaId = mangaId,
                 chapterUrl = chapterUrl,
@@ -535,13 +551,15 @@ fun MangaNavGraph(
             val chapterUrl = java.net.URLDecoder.decode(
                 back.arguments?.getString("chapterUrl") ?: "", "UTF-8"
             )
-            val source = MangaSource.fromIdOrNull(sourceId) ?: return@composable
             val isImported = mangaId.startsWith("imported_") || MangaSource.isLocalSource(sourceId)
-            val slug = mangaId.substringAfter("${sourceId}_").ifBlank { mangaId }
+            val source = if (isImported) MangaSource.AZORA else MangaSource.fromIdOrNull(sourceId) ?: return@composable
+            val slug = if (isImported) mangaId else mangaId.substringAfter("${sourceId}_").ifBlank { mangaId }
 
             // Deep links are exported — an attacker-supplied chapterUrl must not
             // make the app fetch arbitrary hosts through the scraper pipeline.
-            if (!isTrustedChapterHost(chapterUrl, source.baseUrl)) {
+            // Imported chapters are local dir names (never absolute URLs) — skip
+            // the host check for them.
+            if (!isImported && !isTrustedChapterHost(chapterUrl, source.baseUrl)) {
                 navController.navigate(Screen.Detail.createRoute(sourceId, slug)) {
                     popUpTo(Screen.Home.route)
                 }

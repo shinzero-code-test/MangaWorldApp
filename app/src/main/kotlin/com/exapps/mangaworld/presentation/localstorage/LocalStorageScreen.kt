@@ -50,7 +50,8 @@ import javax.inject.Inject
 class LocalStorageViewModel @Inject constructor(
     private val manager: DownloadQueueManager,
     private val remoteConfigManager: FirebaseRemoteConfigManager,
-    private val analyticsManager: FirebaseAnalyticsManager
+    private val analyticsManager: FirebaseAnalyticsManager,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
 
     val downloadedMangas = manager.observeDownloadedMangas()
@@ -72,8 +73,14 @@ class LocalStorageViewModel @Inject constructor(
                 // Compute auto-tags from manga metadata (source + genres + status)
                 val tags = mangas.associate { manga ->
                     val tagsList = mutableListOf<String>()
-                    // Source tag
-                    val sourceName = MangaSource.fromId(manga.sourceId).displayName
+                    // Source tag — local/imported must show the imported label,
+                    // never fall back to AZORA via fromId().
+                    val sourceName = if (MangaSource.isLocalSource(manga.sourceId)) {
+                        context.getString(com.exapps.mangaworld.R.string.source_imported)
+                    } else {
+                        MangaSource.displayNameOrNull(manga.sourceId)
+                            ?: context.getString(com.exapps.mangaworld.R.string.unknown)
+                    }
                     if (sourceName.isNotBlank()) tagsList.add(sourceName)
                     // Genre tags
                     try {
@@ -241,9 +248,13 @@ private fun LocalMangaCard(
                     .background(MangaColors.SurfaceContainer)
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(manga.title, style = MaterialTheme.typography.titleSmall,
+                // Imported titles have no online source and are often English —
+                // align by content so Latin stays left in the RTL layout.
+                com.exapps.mangaworld.presentation.theme.LocalizedText(
+                    manga.title, style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold, color = MangaColors.OnSurface,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    maxLines = 2, overflow = TextOverflow.Ellipsis
+                )
 
                 // Scrollable tag row — long genre lists previously pushed the
                 // layout wide and crushed the rest of the column.
@@ -251,7 +262,13 @@ private fun LocalMangaCard(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    TagChip(MangaSource.fromId(manga.sourceId).displayName, highlighted = true)
+                    val sourceLabel = if (MangaSource.isLocalSource(manga.sourceId)) {
+                        stringResource(R.string.source_imported)
+                    } else {
+                        MangaSource.displayNameOrNull(manga.sourceId)
+                            ?: stringResource(R.string.unknown)
+                    }
+                    TagChip(sourceLabel, highlighted = true)
                     autoTags.forEach { tag -> TagChip(tag) }
                 }
 

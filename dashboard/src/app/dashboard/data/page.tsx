@@ -44,7 +44,7 @@ function JsonViewer({ data }: { data: unknown }) {
 }
 
 export default function DataBrowserPage() {
-  const [selected,       setSelected]       = useState<string>("users");
+  const [selected,       setSelected]       = useState<string>("publicProfiles");
   const [docs,           setDocs]           = useState<DocRow[]>([]);
   const [loading,        setLoading]        = useState(false);
   const [viewDoc,        setViewDoc]        = useState<DocRow | null>(null);
@@ -109,7 +109,7 @@ export default function DataBrowserPage() {
     finally  { setCreateLoading(false); }
   };
 
-  const colCfg = COLLECTIONS.find((c) => c.id === selected)!;
+  const colCfg = COLLECTIONS.find((c) => c.id === selected) ?? COLLECTIONS[0];
   const previewFields = (fields: Record<string, any>) =>
     Object.entries(fields).slice(0, 2).map(([k, v]) => (
       <span
@@ -155,7 +155,7 @@ export default function DataBrowserPage() {
           <div className="p-2 space-y-0.5">
             {COLLECTIONS.map((col) => {
               const active = selected === col.id;
-              const Icon   = col.icon;
+              const Icon   = col.icon ?? Database;
               return (
                 <button
                   key={col.id}

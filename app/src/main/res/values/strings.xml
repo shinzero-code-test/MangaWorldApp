@@ -675,6 +675,8 @@
     <string name="manga">مانجا</string>
     <string name="manga_you_may_like">مانجا قد تعجبك</string>
     <string name="local_manga">مانجا محلية</string>
+    <string name="source_imported">مستورد</string>
+    <string name="source_local">محلي</string>
     <string name="read_manga">مانجا مقروءة</string>
     <string name="manhwa">مانهوا</string>
     <string name="manhwa_action">مانهوا أكشن</string>

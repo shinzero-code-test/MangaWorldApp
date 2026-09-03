@@ -35,11 +35,25 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @Immutable
+data class ReaderChapterRange(
+    val chapterUrl: String = "",
+    val chapterNumber: Float? = null,
+    val chapterTitle: String? = null,
+    val startIndex: Int = 0,
+    val endIndexExclusive: Int = 0
+)
+
+@Immutable
 data class ReaderUiState(
     val isLoading: Boolean = true,
     val pages: List<ChapterPage> = emptyList(),
     val currentPage: Int = 0,
     val totalPages: Int = 0,
+    // Continuous scroll: pages of auto-loaded next chapters are appended to
+    // [pages] so scrolling never breaks. Ranges map global indices back to
+    // their owning chapter for progress / read-marking.
+    val chapterRanges: List<ReaderChapterRange> = emptyList(),
+    val isAppendingNextChapter: Boolean = false,
     val showControls: Boolean = true,
     val readerMode: ReaderMode = ReaderMode.VERTICAL_SCROLL,
     val brightness: Float = 1.0f,
@@ -117,6 +131,7 @@ class ReaderViewModel @Inject constructor(
     private var reactionsJob: Job? = null
     private var commentsJob: Job? = null
     private var downloadTaskJob: Job? = null
+    private var appendJob: Job? = null
     private var prefetchedNextChapterUrl: String? = null
     private var lastReadAnalyticsKey: String? = null
     private var periodicSaveJob: kotlinx.coroutines.Job? = null
@@ -167,12 +182,18 @@ class ReaderViewModel @Inject constructor(
         }
         currentSource = source
         prefetchedNextChapterUrl = null
+        appendJob?.cancel()
         _state.update {
             it.copy(
                 isLoading = true,
                 error = null,
                 chapterUrl = chapterUrl,
-                mangaId = mangaId
+                mangaId = mangaId,
+                pages = emptyList(),
+                totalPages = 0,
+                currentPage = 0,
+                chapterRanges = emptyList(),
+                isAppendingNextChapter = false
             )
         }
 
@@ -184,16 +205,27 @@ class ReaderViewModel @Inject constructor(
                     downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
                 }
                 if (localPages.isNotEmpty()) {
+                    val indexed = localPages.mapIndexed { i, p -> p.copy(index = i) }
                     _state.update {
                         it.copy(
                             isLoading = false,
-                            pages = localPages,
-                            totalPages = localPages.size,
+                            pages = indexed,
+                            totalPages = indexed.size,
                             currentPage = 0,
                             chapterNumber = parseFallbackChapterNumber(chapterUrl),
+                            chapterRanges = listOf(
+                                ReaderChapterRange(
+                                    chapterUrl = chapterUrl,
+                                    chapterNumber = parseFallbackChapterNumber(chapterUrl),
+                                    chapterTitle = null,
+                                    startIndex = 0,
+                                    endIndexExclusive = indexed.size
+                                )
+                            ),
                             downloadMessage = context.getString(R.string.read_offline)
                         )
                     }
+                    computeAdjacentLocalChapters(mangaId)
                     beginSession(mangaId, chapterUrl)
                 } else {
                     _state.update { it.copy(isLoading = false, error = context.getString(R.string.no_pages_loaded)) }
@@ -213,14 +245,24 @@ class ReaderViewModel @Inject constructor(
             }
             if (localPages.isNotEmpty()) {
                 val currentChapterNumber = chapterMeta?.number ?: parseFallbackChapterNumber(chapterUrl)
+                val indexed = localPages.mapIndexed { i, p -> p.copy(index = i) }
                 _state.update {
                     it.copy(
                         isLoading = false,
-                        pages = localPages,
-                        totalPages = localPages.size,
+                        pages = indexed,
+                        totalPages = indexed.size,
                         currentPage = 0,
                         chapterNumber = currentChapterNumber,
                         chapterTitle = chapterMeta?.title,
+                        chapterRanges = listOf(
+                            ReaderChapterRange(
+                                chapterUrl = chapterUrl,
+                                chapterNumber = currentChapterNumber,
+                                chapterTitle = chapterMeta?.title,
+                                startIndex = 0,
+                                endIndexExclusive = indexed.size
+                            )
+                        ),
                         downloadMessage = context.getString(R.string.read_offline)
                     )
                 }
@@ -235,14 +277,24 @@ class ReaderViewModel @Inject constructor(
                     // Restore saved progress
                     val chNum = chapterMeta?.number ?: parseFallbackChapterNumber(chapterUrl)
                     val (savedPage, _) = libraryRepo.getReadingProgress(mangaId, chNum)
+                    val indexed = pages.mapIndexed { i, p -> p.copy(index = i) }
                     _state.update {
                         it.copy(
                             isLoading = false,
-                            pages = pages,
-                            totalPages = pages.size,
-                            currentPage = savedPage.coerceIn(0, maxOf(0, pages.size - 1)),
+                            pages = indexed,
+                            totalPages = indexed.size,
+                            currentPage = savedPage.coerceIn(0, maxOf(0, indexed.size - 1)),
                             chapterNumber = chNum,
-                            chapterTitle = chapterMeta?.title
+                            chapterTitle = chapterMeta?.title,
+                            chapterRanges = listOf(
+                                ReaderChapterRange(
+                                    chapterUrl = chapterUrl,
+                                    chapterNumber = chNum,
+                                    chapterTitle = chapterMeta?.title,
+                                    startIndex = 0,
+                                    endIndexExclusive = indexed.size
+                                )
+                            )
                         )
                     }
                     // Update reading history so Library shows last-visited manga
@@ -290,53 +342,197 @@ class ReaderViewModel @Inject constructor(
 
     fun onPageChanged(page: Int) {
         val st = _state.value
-        _state.update { it.copy(currentPage = page) }
+        if (page == st.currentPage && st.chapterRanges.isNotEmpty()) {
+            // Still trigger continuous prefetch when settling on same index
+            // (e.g. small last page that never reaches top).
+            if (st.autoOpenNextChapter) ensureContinuousNextChapter(page, st) else if (st.smartPrefetchEnabled && st.totalPages > 0 && page >= (st.totalPages / 2)) {
+                viewModelScope.launch { prefetchNextChapterIfNeeded(st) }
+            }
+            return
+        }
+        // Resolve the owning chapter for this global index (continuous mode).
+        val activeRange = st.chapterRanges.firstOrNull { page in it.startIndex until it.endIndexExclusive }
+        val activeChapterUrl = activeRange?.chapterUrl ?: st.chapterUrl
+        val activeChapterNumber = activeRange?.chapterNumber ?: st.chapterNumber
+        val activeChapterTitle = activeRange?.chapterTitle ?: st.chapterTitle
+        val pageInChapter = if (activeRange != null) page - activeRange.startIndex else page
+        val chapterTotal = if (activeRange != null) activeRange.endIndexExclusive - activeRange.startIndex else st.totalPages
+        val chapterChanged = activeChapterUrl != st.chapterUrl
+        _state.update {
+            it.copy(
+                currentPage = page,
+                chapterUrl = activeChapterUrl,
+                chapterNumber = activeChapterNumber,
+                chapterTitle = activeChapterTitle
+            )
+        }
         // Save progress & mark read at last page
         viewModelScope.launch {
             // Resolve once, then cache in state so fast page-flips never re-hit
             // the network for chapter metadata.
-            val cachedNumber = st.chapterNumber
+            val cachedNumber = activeChapterNumber
             val chNum = cachedNumber
-                ?: (resolveChapterMeta(st.mangaId, st.chapterUrl, currentSource)?.number
-                    ?: parseFallbackChapterNumber(st.chapterUrl))
+                ?: (resolveChapterMeta(st.mangaId, activeChapterUrl, currentSource)?.number
+                    ?: parseFallbackChapterNumber(activeChapterUrl))
                 .also { resolved -> if (cachedNumber == null) _state.update { it.copy(chapterNumber = resolved) } }
             trackReadingTime()
             if (!st.incognitoMode) {
-                libraryRepo.saveReadingProgress(st.mangaId, chNum, page, st.totalPages)
+                libraryRepo.saveReadingProgress(st.mangaId, chNum, pageInChapter, chapterTotal)
                 // Sync position to cloud every 5 pages
                 if (page % 5 == 0) {
                     runCatching { positionSyncManager.pushLocalPositions() }
                 }
             }
-            observeReactions(st.mangaId, st.chapterUrl, page)
-            if (st.smartPrefetchEnabled && st.totalPages > 0 && page >= (st.totalPages / 2)) {
-                prefetchNextChapterIfNeeded(st)
+            observeReactions(st.mangaId, activeChapterUrl, pageInChapter)
+            if (chapterChanged) {
+                // Switched into an appended chapter — move annotations/presence
+                // so bookmarks, comments and live-readers follow the visible chapter.
+                observeAnnotations(st.mangaId, activeChapterUrl)
+                observeCommunity(st.mangaId, activeChapterUrl)
             }
-            if (page >= st.totalPages - 1) {
+            if (st.smartPrefetchEnabled && st.totalPages > 0 && page >= (st.totalPages / 2)) {
+                prefetchNextChapterIfNeeded(_state.value)
+            }
+            // Continuous mode: append next chapter when near the end instead of
+            // waiting for the last page top to be visible (small pages never
+            // reach it). Works for short and tall pages alike.
+            if (st.autoOpenNextChapter) {
+                ensureContinuousNextChapter(page, _state.value)
+            }
+            val isLastGlobalPage = page >= _state.value.totalPages - 1
+            val isEndOfItsChapter = activeRange != null && page >= activeRange.endIndexExclusive - 1
+            if (isEndOfItsChapter || (activeRange == null && isLastGlobalPage)) {
                 if (!st.incognitoMode) {
                     libraryRepo.markChapterRead(st.mangaId, chNum)
                     achievementManager.recordChapterRead()
                     readingStatsStore.incrementMangaRead()
-                    scheduleAutoCleanupIfNeeded(st.mangaId, st.chapterUrl)
+                    scheduleAutoCleanupIfNeeded(st.mangaId, activeChapterUrl)
                     runCatching { firebaseSyncManager.pushLocalSnapshot() }
-                    val analyticsKey = "${st.mangaId}|${st.chapterUrl}|$chNum"
+                    val analyticsKey = "${st.mangaId}|$activeChapterUrl|$chNum"
                     if (lastReadAnalyticsKey != analyticsKey) {
                         lastReadAnalyticsKey = analyticsKey
                         analyticsManager.logChapterRead(
                             mangaId = st.mangaId,
                             sourceId = currentSource.id,
                             chapterNumber = chNum,
-                            totalPages = st.totalPages,
+                            totalPages = chapterTotal,
                             readerMode = st.readerMode.name
                         )
                     }
                 }
-                if (st.autoOpenNextChapter) {
-                    st.nextChapterUrl?.let { next -> loadChapter(next, st.mangaId, currentSource) }
+                // Legacy fallback: if continuous is off but auto-next is on,
+                // jump discretely (previous behaviour).
+                if (st.autoOpenNextChapter && _state.value.chapterRanges.size <= 1) {
+                    _state.value.nextChapterUrl?.let { next -> loadChapter(next, st.mangaId, currentSource) }
                 }
                 widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
             }
         }
+    }
+
+    /**
+     * Append the next chapter's pages to the current list when the user scrolls
+     * within [PREFETCH_THRESHOLD] pages of the end. The next chapter then
+     * appears as a continuation — no tap needed, no blank jump.
+     */
+    private fun ensureContinuousNextChapter(globalPage: Int, st: ReaderUiState) {
+        if (!st.autoOpenNextChapter) return
+        if (st.isAppendingNextChapter) return
+        if (st.totalPages <= 0) return
+        if (globalPage < st.totalPages - PREFETCH_THRESHOLD) return
+        val nextUrl = st.nextChapterUrl ?: return
+        // Already appended this chapter (ranges contain it).
+        if (st.chapterRanges.any { it.chapterUrl == nextUrl }) return
+        if (appendJob?.isActive == true) return
+        appendJob = viewModelScope.launch {
+            _state.update { it.copy(isAppendingNextChapter = true) }
+            try {
+                val mangaId = st.mangaId
+                val isLocalManga = mangaId.startsWith("imported_")
+                val fetched: List<ChapterPage> = if (isLocalManga) {
+                    withContext(Dispatchers.IO) {
+                        downloadQueueManager.getLocalChapterPages(mangaId, nextUrl)
+                    }
+                } else {
+                    val local = withContext(Dispatchers.IO) {
+                        downloadQueueManager.getLocalChapterPages(mangaId, nextUrl)
+                    }
+                    if (local.isNotEmpty()) local
+                    else mangaRepo.getChapterPages("", nextUrl, currentSource).getOrNull().orEmpty()
+                }
+                if (fetched.isEmpty()) {
+                    _state.update { it.copy(isAppendingNextChapter = false) }
+                    return@launch
+                }
+                val meta = resolveChapterMeta(mangaId, nextUrl, currentSource)
+                val chNum = meta?.number ?: parseFallbackChapterNumber(nextUrl)
+                val base = _state.value.pages.size
+                val indexed = fetched.mapIndexed { i, p -> p.copy(index = base + i) }
+                val newRange = ReaderChapterRange(
+                    chapterUrl = nextUrl,
+                    chapterNumber = chNum,
+                    chapterTitle = meta?.title,
+                    startIndex = base,
+                    endIndexExclusive = base + indexed.size
+                )
+                _state.update { cur ->
+                    val combined = cur.pages + indexed
+                    cur.copy(
+                        pages = combined,
+                        totalPages = combined.size,
+                        chapterRanges = cur.chapterRanges + newRange,
+                        isAppendingNextChapter = false
+                    )
+                }
+                // Advance the next/prev pointers so a second append chains to the
+                // chapter after the one just appended.
+                if (isLocalManga) {
+                    computeAdjacentLocalChaptersFor(mangaId, nextUrl)
+                } else {
+                    computeAdjacentChapters(mangaId, nextUrl, currentSource)
+                }
+                if (!st.incognitoMode) {
+                    imagePrefetcher.prefetchPages(indexed.take(6))
+                }
+            } catch (_: Exception) {
+                _state.update { it.copy(isAppendingNextChapter = false) }
+            }
+        }
+    }
+
+    /** Local/imported manga: chapters are on-disk dirs — resolve prev/next from metadata. */
+    private suspend fun computeAdjacentLocalChapters(mangaId: String) {
+        computeAdjacentLocalChaptersFor(mangaId, _state.value.chapterUrl)
+        val st = _state.value
+        // Imported local chapters also support continuous scroll.
+        if (st.autoOpenNextChapter) ensureContinuousNextChapter(st.currentPage, st)
+    }
+
+    private suspend fun computeAdjacentLocalChaptersFor(mangaId: String, currentUrl: String) {
+        try {
+            // Reuse disk scan order from detail (metadata + .completed dirs).
+            val mangaDirPath = withContext(Dispatchers.IO) {
+                downloadQueueManager.getMangaDirPath(mangaId)
+            }
+            val mangaDir = java.io.File(mangaDirPath)
+            val ordered = mangaDir.listFiles()
+                ?.filter { it.isDirectory && java.io.File(it, ".completed").exists() }
+                ?.sortedBy { it.name.replace("[^0-9.]".toRegex(), "").toFloatOrNull() ?: 0f }
+                ?.map { it.name }
+                .orEmpty()
+            val idx = ordered.indexOf(currentUrl)
+            _state.update {
+                it.copy(
+                    nextChapterUrl = if (idx >= 0) ordered.getOrNull(idx + 1) else null,
+                    prevChapterUrl = if (idx > 0) ordered.getOrNull(idx - 1) else null
+                )
+            }
+        } catch (_: Exception) { }
+    }
+
+    companion object {
+        /** Start appending when within this many pages of the combined end. */
+        private const val PREFETCH_THRESHOLD = 3
     }
 
     fun toggleControls() = _state.update { it.copy(showControls = !it.showControls) }
@@ -347,6 +543,8 @@ class ReaderViewModel @Inject constructor(
 
     fun downloadCurrentChapter() {
         val st = _state.value
+        // Imported chapters are already local files — nothing to download.
+        if (st.mangaId.startsWith("imported_")) return
         if (st.pages.isEmpty() || st.downloadInProgress) return
         val taskId = "${st.mangaId}_${st.chapterUrl.hashCode()}"
         viewModelScope.launch {

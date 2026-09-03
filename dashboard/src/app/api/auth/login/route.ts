@@ -77,9 +77,10 @@ export async function POST(request: NextRequest) {
     const sessionCookie = await getAdminAuth().createSessionCookie(idToken, { expiresIn });
 
     const response = NextResponse.json({ success: true });
+    const isProd = process.env.NODE_ENV === "production";
     response.cookies.set("session", sessionCookie, {
       httpOnly: true,
-      secure: true,
+      secure: isProd,
       sameSite: "lax",
       maxAge: expiresIn / 1000,
       path: "/",
@@ -98,7 +99,8 @@ export async function DELETE() {
   // replayed for the remainder of its TTL after logout.
   await deleteCurrentMfaGrant();
   const response = NextResponse.json({ success: true });
-  response.cookies.set("session", "", { httpOnly: true, secure: true, maxAge: 0, path: "/" });
+  const isProd = process.env.NODE_ENV === "production";
+  response.cookies.set("session", "", { httpOnly: true, secure: isProd, sameSite: "lax", maxAge: 0, path: "/" });
   clearMfaGrantCookie(response);
   return response;
 }

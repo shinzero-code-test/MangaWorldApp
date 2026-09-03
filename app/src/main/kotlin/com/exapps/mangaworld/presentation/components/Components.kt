@@ -121,7 +121,7 @@ fun MangaCard(
         }
         // Title & info
         Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
-            Text(
+            com.exapps.mangaworld.presentation.theme.LocalizedText(
                 manga.title,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,

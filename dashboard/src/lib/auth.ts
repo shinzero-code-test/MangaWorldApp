@@ -86,9 +86,10 @@ export async function deleteCurrentMfaGrant(): Promise<void> {
 export function setMfaGrantCookie(response: Response, grantId: string) {
   // NextResponse extends Response and exposes the cookie API at runtime.
   const nextResponse = response as Response & { cookies: { set: (name: string, value: string, options: object) => void } };
+  const isProd = process.env.NODE_ENV === "production";
   nextResponse.cookies.set(MFA_GRANT_COOKIE, grantId, {
     httpOnly: true,
-    secure: true,
+    secure: isProd,
     sameSite: "lax",
     maxAge: MFA_GRANT_TTL_SECONDS,
     path: "/",
@@ -97,7 +98,8 @@ export function setMfaGrantCookie(response: Response, grantId: string) {
 
 export function clearMfaGrantCookie(response: Response) {
   const nextResponse = response as Response & { cookies: { set: (name: string, value: string, options: object) => void } };
-  nextResponse.cookies.set(MFA_GRANT_COOKIE, "", { httpOnly: true, secure: true, maxAge: 0, path: "/" });
+  const isProd = process.env.NODE_ENV === "production";
+  nextResponse.cookies.set(MFA_GRANT_COOKIE, "", { httpOnly: true, secure: isProd, maxAge: 0, path: "/" });
 }
 
 async function sessionContext(): Promise<{ session: string; uid: string; email: string; role: DashboardRole; authTime?: number }> {

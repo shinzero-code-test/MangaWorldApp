@@ -58,6 +58,13 @@ enum class MangaSource(
         /** Check if the sourceId represents a local/imported manga (not an online source) */
         fun isLocalSource(id: String): Boolean = id == "imported" || id == "local"
 
+        /**
+         * Safe display name for any stored sourceId without falling back to AZORA.
+         * Returns null for local/imported/unknown ids so callers can show the
+         * dedicated imported label (R.string.source_imported) instead.
+         */
+        fun displayNameOrNull(id: String): String? = entries.find { it.id == id }?.displayName
+
         /** All sources added in v4.0.0 — these appear on the Sources screen grid */
         val NEW_SOURCES = setOf(
             ASQ3, LEKMANGA, LEKMANGAONLINE, LIKEMANGA, LINKMANGA,

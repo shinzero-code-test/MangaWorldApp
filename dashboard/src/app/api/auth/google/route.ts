@@ -62,9 +62,13 @@ export async function POST(request: NextRequest) {
       success: true,
       role,
     });
+    // `secure` must follow the environment: hardcoded `true` prevents the
+    // cookie from being set over http://localhost during local development,
+    // which surfaces as "Google Auth is not working".
+    const isProd = process.env.NODE_ENV === "production";
     response.cookies.set("session", sessionCookie, {
       httpOnly: true,
-      secure: true,
+      secure: isProd,
       sameSite: "lax",
       maxAge: expiresIn / 1000,
       path: "/",

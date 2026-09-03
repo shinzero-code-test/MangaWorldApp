@@ -124,15 +124,21 @@ class ChapterUpdateCheckerCore @Inject constructor(
             val newChapters = mutableListOf<NewChapterInfo>()
 
             for ((sourceId, sourceFavorites) in favoritesBySource) {
+                // Imported has no online source; downloaded (local) keeps its real
+                // sourceId so it IS checked. Skip imported by sourceId AND by
+                // mangaId prefix (imported favorites may carry a placeholder source).
+                if (MangaSource.isLocalSource(sourceId)) continue
+                val onlineFavorites = sourceFavorites.filterNot { it.mangaId.startsWith("imported_") }
+                if (onlineFavorites.isEmpty()) continue
                 if (sourceId !in settings.enabledSources) continue
 
                 try {
-                    val source = MangaSource.fromId(sourceId)
+                    val source = MangaSource.fromIdOrNull(sourceId) ?: continue
                     val homeData = mangaRepository.getHomeData(source).getOrDefault(
                         com.exapps.mangaworld.domain.model.HomeData()
                     )
 
-                    for (favorite in sourceFavorites) {
+                    for (favorite in onlineFavorites) {
                         val mangaChapters = homeData.latestChapters.filter {
                             it.mangaId == favorite.mangaId || it.mangaSlug == favorite.slug
                         }

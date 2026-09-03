@@ -109,12 +109,15 @@ fun MangaDetailScreen(
                 chapterSearchQuery = state.chapterSearchQuery,
                 downloadingChapters = state.downloadingChapters,
                 showCommunity = communityEnabled,
+                isLocalManga = communityEnabled.not(),
                 onToggleFav = viewModel::toggleFavorite,
                 onSetReadingStatus = viewModel::setReadingStatus,
                 onToggleOrder = viewModel::toggleChaptersOrder,
                 onDownloadChapter = viewModel::downloadChapter,
                 onShowDownloadDialog = viewModel::showDownloadDialog,
-                onOpenCommunity = { onOpenCommunity("${source.id}_$slug") },
+                // Local mangaId IS the slug (imported_xxx) — prefixing with the
+                // placeholder AZORA id would corrupt it (azora_imported_xxx).
+                onOpenCommunity = { onOpenCommunity(if (communityEnabled.not()) slug else "${source.id}_$slug") },
                 onOpenChapterCommunity = onOpenChapterCommunity,
                 onOpenOtherSource = onOpenOtherSource,
                 onShowAddToList = viewModel::showAddToListDialog,
@@ -280,6 +283,7 @@ private fun DetailContent(
     chapterSearchQuery: String,
     downloadingChapters: Set<Float>,
     showCommunity: Boolean,
+    isLocalManga: Boolean = false,
     onToggleFav: () -> Unit,
     onSetReadingStatus: (String?) -> Unit,
     onToggleOrder: () -> Unit,
@@ -355,7 +359,7 @@ private fun DetailContent(
                             )
                         }
                         Column(Modifier.weight(1f).padding(bottom = 2.dp)) {
-                            Text(
+                            com.exapps.mangaworld.presentation.theme.LocalizedText(
                                 manga.title,
                                 style = MaterialTheme.typography.titleLarge,
                                 color = Color.White,
@@ -369,7 +373,11 @@ private fun DetailContent(
                                 StatusBadge(manga.status)
                             }
                             Spacer(Modifier.height(8.dp))
-                            SourceBadge(manga.source)
+                            if (isLocalManga) {
+                                ImportedSourceBadge()
+                            } else {
+                                SourceBadge(manga.source)
+                            }
                             Spacer(Modifier.height(10.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                                 StatItem(Icons.Filled.MenuBook, "${manga.totalChapters}", stringResource(R.string.chapter))
@@ -450,7 +458,7 @@ private fun DetailContent(
                         color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(6.dp))
-                    Text(
+                    com.exapps.mangaworld.presentation.theme.LocalizedText(
                         manga.description,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MangaColors.OnSurfaceVariant,
@@ -500,7 +508,14 @@ private fun DetailContent(
                         Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
                             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(item.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
+                                    com.exapps.mangaworld.presentation.theme.LocalizedText(
+                                        item.title,
+                                        color = MangaColors.OnSurface,
+                                        fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                     Text(item.source.displayName, color = MangaColors.OnSurfaceVariant)
                                 }
                                 OutlinedButton(onClick = { onOpenOtherSource(item.source.id, item.slug) }) {
@@ -695,7 +710,7 @@ private fun ChapterItem(
                         fontWeight = FontWeight.Medium
                     )
                     if (!chapter.title.isNullOrEmpty()) {
-                        Text(
+                        com.exapps.mangaworld.presentation.theme.LocalizedText(
                             chapter.title, style = MaterialTheme.typography.bodySmall,
                             color = MangaColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
@@ -862,7 +877,31 @@ private fun InfoRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
         Text(label, color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.width(12.dp))
-        Text(value, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+        com.exapps.mangaworld.presentation.theme.LocalizedText(
+            value,
+            color = MangaColors.OnSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun ImportedSourceBadge() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .background(MangaColors.Cyan.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Icon(Icons.Filled.FolderOpen, null, tint = MangaColors.Cyan, modifier = Modifier.size(14.dp))
+        Text(
+            stringResource(R.string.source_imported),
+            style = MaterialTheme.typography.labelSmall,
+            color = MangaColors.Cyan,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 

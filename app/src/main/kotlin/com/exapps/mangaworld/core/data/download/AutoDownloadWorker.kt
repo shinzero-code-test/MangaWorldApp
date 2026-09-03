@@ -36,8 +36,10 @@ class AutoDownloadWorker @AssistedInject constructor(
         val favorites = favoriteDao.getFavoritesList()
 
         for (favorite in favorites) {
+            // Imported/local entries live on disk — no scraper to query.
+            if (MangaSource.isLocalSource(favorite.sourceId) || favorite.mangaId.startsWith("imported_")) continue
             try {
-                val source = MangaSource.fromId(favorite.sourceId)
+                val source = MangaSource.fromIdOrNull(favorite.sourceId) ?: continue
                 val detail = mangaRepository.getMangaDetail(favorite.slug, source).getOrNull() ?: continue
                 val readChapters = readChapterDao.getReadChapters(favorite.mangaId).first().toSet()
 

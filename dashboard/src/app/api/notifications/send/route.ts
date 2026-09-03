@@ -28,12 +28,47 @@ export async function POST(request: NextRequest) {
       }
       tokens = raw.tokens as string[];
     }
+    const topic = boundedString(raw.topic, 120) ?? "general";
+
+    // Data-only payload: `notification`-only messages are rendered by the
+    // system tray when the app is backgrounded and never reach
+    // onMessageReceived, so they were never logged to the app's Notification
+    // Centre. Data messages always hit the service, which builds the system
+    // notification itself AND persists to NotificationCenterStore.
+    // FCM data values must be strings.
+    const dataPayload: Record<string, string> = {
+      title,
+      body: msgBody,
+      type: "push",
+      topic,
+    };
+
+    async function persistHistory(sent: number, failed: number) {
+      try {
+        await getAdminDb().collection("notification_history").add({
+          title,
+          body: msgBody,
+          topic,
+          targetUids: null,
+          sentAt: Date.now(),
+          sentBy: "admin",
+          status: failed > 0 && sent === 0 ? "failed" : "sent",
+          sent,
+          failed,
+        });
+      } catch {
+        /* history write must never fail the push */
+      }
+    }
 
     // If tokens are explicitly provided (e.g. testing or specific users)
     if (tokens && tokens.length > 0) {
       const response = await getAdminMessaging().sendEachForMulticast({
-        tokens, notification: { title, body: msgBody },
+        tokens,
+        data: dataPayload,
+        android: { priority: "high" },
       });
+      await persistHistory(response.successCount, response.failureCount);
       return NextResponse.json({ success: true, sent: response.successCount, failed: response.failureCount });
     }
 
@@ -42,6 +77,7 @@ export async function POST(request: NextRequest) {
     const allTokens = Array.from(new Set(devicesSnap.docs.map(d => d.data().token).filter(Boolean)));
     
     if (allTokens.length === 0) {
+      await persistHistory(0, 0);
       return NextResponse.json({ success: true, sent: 0, failed: 0, message: "No devices found" });
     }
 
@@ -53,12 +89,14 @@ export async function POST(request: NextRequest) {
       const chunk = allTokens.slice(i, i + 500);
       const res = await getAdminMessaging().sendEachForMulticast({
         tokens: chunk,
-        notification: { title, body: msgBody },
+        data: dataPayload,
+        android: { priority: "high" },
       });
       successCount += res.successCount;
       failureCount += res.failureCount;
     }
 
+    await persistHistory(successCount, failureCount);
     return NextResponse.json({ success: true, sent: successCount, failed: failureCount });
   } catch (error: unknown) {
     const { body, status } = genericErrorResponse(error);

@@ -29,6 +29,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusable
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
@@ -113,20 +118,25 @@ fun ReaderScreen(
         }
     }
 
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+
     Box(
         Modifier.fillMaxSize().background(Color.Black)
             .systemBarsPadding()
+            .focusRequester(focusRequester)
+            .focusable()
             .onPreviewKeyEvent { event ->
                 if (state.volumeButtonPageTurn && event.type == KeyEventType.KeyDown) {
                     when (event.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_VOLUME_UP -> {
-                            val prev = state.currentPage - 1
-                            if (prev >= 0) viewModel.onPageChanged(prev)
+                            val prev = (state.currentPage - 1).coerceAtLeast(0)
+                            if (prev != state.currentPage) viewModel.onPageChanged(prev)
+                            // Consume so the system volume UI doesn't appear while paging.
                             true
                         }
                         KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                            val next = state.currentPage + 1
-                            if (next < state.totalPages) viewModel.onPageChanged(next)
+                            val next = (state.currentPage + 1).coerceAtMost(maxOf(0, state.totalPages - 1))
+                            if (next != state.currentPage) viewModel.onPageChanged(next)
                             true
                         }
                         else -> false
@@ -134,6 +144,8 @@ fun ReaderScreen(
                 } else false
             }
     ) {
+        // Volume keys only reach onPreviewKeyEvent when something is focused.
+        LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
         DisposableEffect(state.secureReaderEnabled, activity) {
             val window = activity?.window
             if (state.secureReaderEnabled) {
@@ -207,7 +219,38 @@ fun ReaderScreen(
                     onTap = { x, y ->
                         viewModel.onReaderTap(x, y)
                         if (state.hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        viewModel.toggleControls()
+                        // Horizontal modes: side taps turn pages (respect RTL),
+                        // centre toggles UI. Vertical/webtoon: tap toggles UI so
+                        // scrolling never triggers accidental page jumps.
+                        when (state.readerMode) {
+                            ReaderMode.HORIZONTAL_RTL -> {
+                                when {
+                                    x < 0.33f -> {
+                                        val next = (state.currentPage + 1).coerceAtMost(maxOf(0, state.totalPages - 1))
+                                        if (next != state.currentPage) viewModel.onPageChanged(next) else viewModel.toggleControls()
+                                    }
+                                    x > 0.67f -> {
+                                        val prev = (state.currentPage - 1).coerceAtLeast(0)
+                                        if (prev != state.currentPage) viewModel.onPageChanged(prev) else viewModel.toggleControls()
+                                    }
+                                    else -> viewModel.toggleControls()
+                                }
+                            }
+                            ReaderMode.HORIZONTAL_LTR -> {
+                                when {
+                                    x < 0.33f -> {
+                                        val prev = (state.currentPage - 1).coerceAtLeast(0)
+                                        if (prev != state.currentPage) viewModel.onPageChanged(prev) else viewModel.toggleControls()
+                                    }
+                                    x > 0.67f -> {
+                                        val next = (state.currentPage + 1).coerceAtMost(maxOf(0, state.totalPages - 1))
+                                        if (next != state.currentPage) viewModel.onPageChanged(next) else viewModel.toggleControls()
+                                    }
+                                    else -> viewModel.toggleControls()
+                                }
+                            }
+                            else -> viewModel.toggleControls()
+                        }
                     },
                     onLongPress = { showSavePageDialog = true },
                     onModeChange = viewModel::setReaderMode
@@ -479,7 +522,9 @@ private fun ReaderContent(
                     onLongPress = onLongPress,
                     onPageChanged = onPageChanged,
                     pageSpacing = state.pageSpacing,
-                    currentPage = state.currentPage
+                    currentPage = state.currentPage,
+                    chapterRanges = state.chapterRanges,
+                    doubleTapZoomEnabled = state.doubleTapZoom
                 )
         ReaderMode.HORIZONTAL_RTL ->
             if (state.dualPageLandscape && isLandscape) {
@@ -487,14 +532,18 @@ private fun ReaderContent(
                     pages = state.pages,
                     rtl = true,
                     initialPage = state.currentPage,
+                    currentPage = state.currentPage,
                     imageFilter = state.imageFilter,
                     onPageChanged = onPageChanged,
                     onTap = onTap,
-                    onLongPress = onLongPress
+                    onLongPress = onLongPress,
+                    pageSpacing = state.pageSpacing,
+                    doubleTapZoomEnabled = state.doubleTapZoom
                 )
             } else {
                 HorizontalReader(pages = state.pages, rtl = true,
-                    initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress,
+                    initialPage = state.currentPage, currentPage = state.currentPage,
+                    imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress,
                     doubleTapZoomEnabled = state.doubleTapZoom)
             }
         ReaderMode.HORIZONTAL_LTR ->
@@ -503,16 +552,93 @@ private fun ReaderContent(
                     pages = state.pages,
                     rtl = false,
                     initialPage = state.currentPage,
+                    currentPage = state.currentPage,
                     imageFilter = state.imageFilter,
                     onPageChanged = onPageChanged,
                     onTap = onTap,
-                    onLongPress = onLongPress
+                    onLongPress = onLongPress,
+                    pageSpacing = state.pageSpacing,
+                    doubleTapZoomEnabled = state.doubleTapZoom
                 )
             } else {
                 HorizontalReader(pages = state.pages, rtl = false,
-                    initialPage = state.currentPage, imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress,
+                    initialPage = state.currentPage, currentPage = state.currentPage,
+                    imageFilter = state.imageFilter, onPageChanged = onPageChanged, onTap = onTap, onLongPress = onLongPress,
                     doubleTapZoomEnabled = state.doubleTapZoom)
             }
+    }
+}
+
+// ─── Shared zoomable page (all modes) ─────────────────────────────────────────
+// Single source of truth for double-tap + pinch. Uses `transformable` with
+// canPan gated on zoom so un-zoomed drags bubble to the parent pager/list
+// (horizontal swipe was previously swallowed by an always-on
+// detectTransformGestures, breaking page turns).
+
+@Composable
+private fun ZoomableMangaPage(
+    page: ChapterPage,
+    imageFilter: ReaderImageFilter,
+    doubleTapZoomEnabled: Boolean,
+    onTap: (Float, Float) -> Unit,
+    onLongPress: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var scale by remember(page.url) { mutableFloatStateOf(1f) }
+    var offset by remember(page.url) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val transformState = androidx.compose.foundation.gestures.rememberTransformableState { zoomChange, panChange, _ ->
+        val newScale = (scale * zoomChange).coerceIn(1f, 5f)
+        offset = if (newScale > 1f) {
+            val maxX = 1200f * (newScale - 1f)
+            val maxY = 2000f * (newScale - 1f)
+            androidx.compose.ui.geometry.Offset(
+                (offset.x + panChange.x).coerceIn(-maxX, maxX),
+                (offset.y + panChange.y).coerceIn(-maxY, maxY)
+            )
+        } else androidx.compose.ui.geometry.Offset.Zero
+        scale = newScale
+    }
+    Box(
+        modifier = modifier
+            .transformable(
+                state = transformState,
+                canPan = { scale > 1f },
+                lockRotationOnZoomPan = true
+            )
+            .pointerInput(doubleTapZoomEnabled) {
+                detectTapGestures(
+                    onLongPress = { _ -> onLongPress() },
+                    onTap = { tapOffset ->
+                        val nx = if (size.width == 0) 0.5f else tapOffset.x / size.width.toFloat()
+                        val ny = if (size.height == 0) 0.5f else tapOffset.y / size.height.toFloat()
+                        onTap(nx, ny)
+                    },
+                    onDoubleTap = {
+                        if (doubleTapZoomEnabled) {
+                            if (scale > 1f) {
+                                scale = 1f
+                                offset = androidx.compose.ui.geometry.Offset.Zero
+                            } else {
+                                scale = 2f
+                            }
+                        }
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        MangaPageImage(
+            page = page,
+            imageFilter = imageFilter,
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer(
+                    scaleX = scale,
+                    scaleY = scale,
+                    translationX = offset.x,
+                    translationY = offset.y
+                )
+        )
     }
 }
 
@@ -528,54 +654,101 @@ private fun WebtoonReader(
     onLongPress: () -> Unit = {},
     onPageChanged: (Int) -> Unit,
     pageSpacing: Int = 0,
-    currentPage: Int = 0
+    currentPage: Int = 0,
+    chapterRanges: List<ReaderChapterRange> = emptyList(),
+    doubleTapZoomEnabled: Boolean = true
 ) {
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = initialPage.coerceIn(0, maxOf(0, pages.size - 1))
     )
 
-    // Track actual visible page (forward and backward). Emissions are gated on
-    // scroll settle so programmatic animateScrollToItem passes don't fire
-    // intermediate onPageChanged calls (progress writes, reaction re-observes)
-    // and can't feed the slider feedback loop.
+    // Track the effective visible page. firstVisibleItemIndex alone never
+    // reaches a short last page (it stays on the previous item while the last
+    // page is fully visible below). Promote to the last visible index when the
+    // combined list end is on screen so progress + continuous append fire.
     LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.isScrollInProgress }
-            .filter { (_, scrolling) -> !scrolling }
-            .map { (index, _) -> index }
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val first = listState.firstVisibleItemIndex
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: first
+            Triple(first, last, listState.isScrollInProgress)
+        }
+            .filter { (_, _, scrolling) -> !scrolling }
+            .map { (first, last, _) ->
+                if (pages.isNotEmpty() && last >= pages.size - 1) pages.size - 1 else first
+            }
             .distinctUntilChanged()
-            .collect { page -> onPageChanged(page) }
+            .collect { page -> if (page in pages.indices) onPageChanged(page) }
     }
 
-    // Allow slider / external code to scroll to a specific page
-    LaunchedEffect(currentPage) {
-        if (currentPage in pages.indices && listState.firstVisibleItemIndex != currentPage) {
-            listState.animateScrollToItem(currentPage)
+    // Allow slider / volume / tap-zone code to scroll to a specific page.
+    // Guard against feedback: only animate when the target differs from BOTH
+    // first and last visible (continuous lists show 2+ items at once).
+    LaunchedEffect(currentPage, pages.size) {
+        if (currentPage in pages.indices) {
+            val first = listState.firstVisibleItemIndex
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: first
+            if (currentPage != first && currentPage != last) {
+                listState.animateScrollToItem(currentPage)
+            }
         }
     }
 
-    val spacing = when {
-        autoStitch -> 0.dp
-        pageSpacing > 0 -> pageSpacing.dp
-        else -> 6.dp
+    // 0dp must mean 0 — the old `else -> 6.dp` re-introduced a gap even when
+    // the user explicitly set spacing to zero.
+    val spacing = if (autoStitch) 0.dp else pageSpacing.coerceAtLeast(0).dp
+
+    // ChapterId → header index for continuous ranges after the first.
+    val headerForIndex: Map<Int, ReaderChapterRange> = remember(chapterRanges) {
+        chapterRanges.drop(1).associateBy { it.startIndex }
     }
 
     LazyColumn(
         state = listState,
         verticalArrangement = Arrangement.spacedBy(spacing),
-        modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-            detectTapGestures(
-                onLongPress = { _ -> onLongPress() },
-                onTap = { offset ->
-                    val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
-                    val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
-                    onTap(nx, ny)
-                }
-            )
-        }
+        modifier = Modifier.fillMaxSize()
     ) {
         items(pages, key = { it.index }) { page ->
-            MangaPageImage(page = page, imageFilter = imageFilter, modifier = Modifier.fillMaxWidth())
+            Column(Modifier.fillMaxWidth()) {
+                headerForIndex[page.index]?.let { range ->
+                    NextChapterDivider(
+                        chapterNumber = range.chapterNumber,
+                        chapterTitle = range.chapterTitle
+                    )
+                }
+                ZoomableMangaPage(
+                    page = page,
+                    imageFilter = imageFilter,
+                    doubleTapZoomEnabled = doubleTapZoomEnabled,
+                    onTap = onTap,
+                    onLongPress = onLongPress,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun NextChapterDivider(chapterNumber: Float?, chapterTitle: String?) {
+    val num = chapterNumber?.let {
+        if (it == it.toInt().toFloat()) it.toInt().toString() else it.toString()
+    }
+    val cleanTitle = chapterTitle?.takeIf { it.isNotBlank() }
+    val label = when {
+        num != null && cleanTitle != null -> stringResource(R.string.fmt_055, num, cleanTitle)
+        num != null -> stringResource(R.string.fmt_059, num)
+        cleanTitle != null -> cleanTitle
+        else -> stringResource(R.string.reader_next)
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        HorizontalDivider(Modifier.weight(1f), color = MangaColors.Primary.copy(alpha = 0.4f))
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold)
+        HorizontalDivider(Modifier.weight(1f), color = MangaColors.Primary.copy(alpha = 0.4f))
     }
 }
 
@@ -585,40 +758,64 @@ private fun DualPageReader(
     pages: List<ChapterPage>,
     rtl: Boolean,
     initialPage: Int,
+    currentPage: Int,
     imageFilter: ReaderImageFilter,
     onPageChanged: (Int) -> Unit,
     onTap: (Float, Float) -> Unit,
-    onLongPress: () -> Unit = {}
+    onLongPress: () -> Unit = {},
+    pageSpacing: Int = 0,
+    doubleTapZoomEnabled: Boolean = true
 ) {
     val orderedPages = if (rtl) pages.reversed() else pages
     val spreadPages = orderedPages.chunked(2)
-    val initialSpread = (initialPage / 2).coerceIn(0, maxOf(0, spreadPages.size - 1))
+    // Spread index that contains the ViewModel's global currentPage.
+    fun spreadForGlobal(global: Int): Int {
+        val orderedIndex = if (rtl) orderedPages.size - 1 - global else global
+        return (orderedIndex / 2).coerceIn(0, maxOf(0, spreadPages.size - 1))
+    }
+    val initialSpread = spreadForGlobal(initialPage)
     val pagerState = rememberPagerState(initialPage = initialSpread) { spreadPages.size }
 
-    LaunchedEffect(pagerState.currentPage) {
-        val logicalIndex = pagerState.currentPage * 2
-        val realIndex = if (rtl) orderedPages.size - 1 - logicalIndex else logicalIndex
-        onPageChanged(realIndex.coerceIn(0, maxOf(0, pages.size - 1)))
+    LaunchedEffect(pagerState.currentPage, pages.size) {
+        if (spreadPages.isEmpty()) return@LaunchedEffect
+        val spread = spreadPages.getOrNull(pagerState.currentPage) ?: return@LaunchedEffect
+        // Report the first page of the spread as the logical position.
+        val orderedIndex = orderedPages.indexOfFirst { it.index == spread.firstOrNull()?.index }
+        if (orderedIndex != -1) {
+            val realIndex = if (rtl) orderedPages.size - 1 - orderedIndex else orderedIndex
+            onPageChanged(realIndex.coerceIn(0, maxOf(0, pages.size - 1)))
+        }
     }
+
+    // Volume / tap-zone / slider changes update currentPage without swiping —
+    // animate the pager so the visible spread follows the ViewModel.
+    LaunchedEffect(currentPage, pages.size) {
+        if (spreadPages.isEmpty()) return@LaunchedEffect
+        val target = spreadForGlobal(currentPage.coerceIn(0, maxOf(0, pages.size - 1)))
+        if (target != pagerState.currentPage) {
+            runCatching { pagerState.animateScrollToPage(target) }
+        }
+    }
+
+    // 0dp must mean 0 — no hardcoded 2.dp gap.
+    val gap = pageSpacing.coerceAtLeast(0).dp
 
     HorizontalPager(
         state = pagerState,
-        modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-            detectTapGestures(
-                onLongPress = { _ -> onLongPress() },
-                onTap = { offset ->
-                    val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
-                    val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
-                    onTap(nx, ny)
-                }
-            )
-        }
+        modifier = Modifier.fillMaxSize()
     ) { spreadIndex ->
-        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            spreadPages[spreadIndex].forEach { page ->
-                MangaPageImage(page = page, imageFilter = imageFilter, modifier = Modifier.weight(1f).fillMaxHeight())
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            spreadPages.getOrNull(spreadIndex)?.forEach { page ->
+                ZoomableMangaPage(
+                    page = page,
+                    imageFilter = imageFilter,
+                    doubleTapZoomEnabled = doubleTapZoomEnabled,
+                    onTap = onTap,
+                    onLongPress = onLongPress,
+                    modifier = Modifier.weight(1f).fillMaxHeight()
+                )
             }
-            if (spreadPages[spreadIndex].size == 1) {
+            if ((spreadPages.getOrNull(spreadIndex)?.size ?: 0) == 1) {
                 Box(Modifier.weight(1f).fillMaxHeight())
             }
         }
@@ -633,6 +830,7 @@ private fun HorizontalReader(
     pages: List<ChapterPage>,
     rtl: Boolean,
     initialPage: Int,
+    currentPage: Int = initialPage,
     imageFilter: ReaderImageFilter,
     onPageChanged: (Int) -> Unit,
     onTap: (Float, Float) -> Unit,
@@ -640,70 +838,44 @@ private fun HorizontalReader(
     doubleTapZoomEnabled: Boolean = true
 ) {
     val orderedPages = if (rtl) pages.reversed() else pages
-    val adjustedInitial = if (rtl && orderedPages.isNotEmpty()) {
-        (orderedPages.size - 1 - initialPage).coerceIn(0, maxOf(0, orderedPages.size - 1))
-    } else {
-        initialPage.coerceIn(0, maxOf(0, orderedPages.size - 1))
-    }
+    fun pagerIndexForGlobal(global: Int): Int =
+        if (rtl && orderedPages.isNotEmpty()) {
+            (orderedPages.size - 1 - global).coerceIn(0, maxOf(0, orderedPages.size - 1))
+        } else {
+            global.coerceIn(0, maxOf(0, orderedPages.size - 1))
+        }
+    val adjustedInitial = pagerIndexForGlobal(initialPage)
     val pagerState = rememberPagerState(initialPage = adjustedInitial) { orderedPages.size }
 
-    LaunchedEffect(pagerState.currentPage) {
+    LaunchedEffect(pagerState.currentPage, pages.size) {
+        if (orderedPages.isEmpty()) return@LaunchedEffect
         val realIndex = if (rtl) orderedPages.size - 1 - pagerState.currentPage else pagerState.currentPage
-        onPageChanged(realIndex)
+        onPageChanged(realIndex.coerceIn(0, maxOf(0, pages.size - 1)))
+    }
+
+    // External page changes (volume keys, side taps, bottom slider) must move
+    // the pager — previously onPageChanged only updated state, leaving the
+    // visible page behind so volume appeared broken.
+    LaunchedEffect(currentPage, pages.size) {
+        if (orderedPages.isEmpty()) return@LaunchedEffect
+        val target = pagerIndexForGlobal(currentPage.coerceIn(0, maxOf(0, pages.size - 1)))
+        if (target != pagerState.currentPage) {
+            runCatching { pagerState.animateScrollToPage(target) }
+        }
     }
 
     HorizontalPager(
         state = pagerState,
         modifier = Modifier.fillMaxSize()
     ) { pageIndex ->
-        // Pinch-to-zoom + tap wrapper for each page
-        var pageScale by remember { mutableFloatStateOf(1f) }
-        var pageOffsetX by remember { mutableFloatStateOf(0f) }
-        var pageOffsetY by remember { mutableFloatStateOf(0f) }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onLongPress = { _ -> onLongPress() },
-                        onTap = { offset ->
-                            val nx = if (size.width == 0) 0.5f else offset.x / size.width.toFloat()
-                            val ny = if (size.height == 0) 0.5f else offset.y / size.height.toFloat()
-                            onTap(nx, ny)
-                        },
-                        onDoubleTap = {
-                            // Honor the user's double-tap-zoom setting (was always-on).
-                            if (doubleTapZoomEnabled) {
-                                pageScale = if (pageScale > 1f) 1f else 2f
-                                if (pageScale == 1f) { pageOffsetX = 0f; pageOffsetY = 0f }
-                            }
-                        }
-                    )
-                }
-                .pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        val newScale = (pageScale * zoom).coerceIn(1f, 5f)
-                        pageOffsetX = if (newScale > 1f) (pageOffsetX + pan.x).coerceIn(-size.width * (newScale - 1f), size.width * (newScale - 1f)) else 0f
-                        pageOffsetY = if (newScale > 1f) (pageOffsetY + pan.y).coerceIn(-size.height * (newScale - 1f), size.height * (newScale - 1f)) else 0f
-                        pageScale = newScale
-                    }
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            MangaPageImage(
-                page = orderedPages[pageIndex],
-                imageFilter = imageFilter,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer(
-                        scaleX = pageScale,
-                        scaleY = pageScale,
-                        translationX = pageOffsetX,
-                        translationY = pageOffsetY
-                    )
-            )
-        }
+        ZoomableMangaPage(
+            page = orderedPages[pageIndex],
+            imageFilter = imageFilter,
+            doubleTapZoomEnabled = doubleTapZoomEnabled,
+            onTap = onTap,
+            onLongPress = onLongPress,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
@@ -793,7 +965,7 @@ private fun ReaderTopBar(
             }
             androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("$currentPage / $totalPages",
+                    Text(stringResource(R.string.reader_page_counter, "$currentPage", "$totalPages"),
                         style = MaterialTheme.typography.bodyMedium, color = Color.White)
                     Text(stringResource(R.string.reader_live_count, liveReaders), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f))
                 }

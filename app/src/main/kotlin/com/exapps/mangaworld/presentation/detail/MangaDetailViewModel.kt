@@ -556,6 +556,9 @@ class MangaDetailViewModel @Inject constructor(
 
     /** Enqueue a single chapter for download. */
     fun downloadChapter(chapter: Chapter) {
+        // Imported has no online source and already lives on disk — downloading
+        // would query the AZORA placeholder scraper with a local dir name.
+        if (MangaSource.isLocalSource(currentRawSourceId) || currentMangaId.startsWith("imported_")) return
         if (_state.value.downloadingChapters.contains(chapter.number)) return
         _state.update { it.copy(downloadingChapters = it.downloadingChapters + chapter.number) }
 
@@ -610,6 +613,8 @@ class MangaDetailViewModel @Inject constructor(
      * rather than silently dropping chapters or flooding WorkManager with individual requests.
      */
     fun downloadChapters(chapters: List<Chapter>) {
+        // Imported already lives on disk — no online pages to resolve.
+        if (MangaSource.isLocalSource(currentRawSourceId) || currentMangaId.startsWith("imported_")) return
         if (batchPreparationJob?.isActive == true) return
         val manga = _state.value.manga ?: return
         val mangaId = currentMangaId

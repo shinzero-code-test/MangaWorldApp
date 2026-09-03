@@ -2,7 +2,7 @@
 
 ## System Instructions
 
-- Don't use head or tail commands — always read the full output/log.
+- every push & version bump, create a release tag.
 - For every fix do a patch; for every new feature, do a minor; for important high-impact features, do a major version update.
 - Always use string resources. No hardcoded strings.
 - Never build the app locally. Always use CI/CD.
@@ -14,7 +14,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 8.1.0 (versionCode 183)
+- **Current version**: 8.1.9 (versionCode 192)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 35 · **Compile SDK**: 35
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
