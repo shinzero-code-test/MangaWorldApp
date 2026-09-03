@@ -2,6 +2,8 @@ package com.exapps.mangaworld.core.firebase
 
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
+import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.model.SourceDomainOverrides
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -163,20 +165,18 @@ class FirebaseRemoteConfigManager @Inject constructor() {
 
         // Per-source domains. Only non-blank, valid origins are kept — anything
         // else falls back to the enum default inside SourceDomainOverrides.
-        val domainOverrides = buildMap {
-            for (source in com.exapps.mangaworld.domain.model.MangaSource.entries) {
+        val domainOverrides: Map<String, String> = buildMap<String, String> {
+            for (source in MangaSource.entries) {
                 val raw = remoteConfig.getString("source_${source.id}_base_url")
-                com.exapps.mangaworld.domain.model.SourceDomainOverrides.normalizeBaseUrl(raw)?.let {
-                    put(source.id, it)
-                }
+                SourceDomainOverrides.normalizeBaseUrl(raw)?.let { put(source.id, it) }
             }
         }
-        _sourceBaseUrls.value = buildMap {
-            for (source in com.exapps.mangaworld.domain.model.MangaSource.entries) {
+        _sourceBaseUrls.value = buildMap<String, String> {
+            for (source in MangaSource.entries) {
                 put(source.id, domainOverrides[source.id] ?: source.baseUrl)
             }
         }
-        com.exapps.mangaworld.domain.model.SourceDomainOverrides.replaceAll(domainOverrides)
+        SourceDomainOverrides.replaceAll(domainOverrides)
 
         val overridesJson = remoteConfig.getString("scraper_selector_overrides")
         _selectorOverridesJson.value = overridesJson

@@ -34,17 +34,15 @@ object SourceDomainOverrides {
 
     fun snapshot(): Map<String, String> = overrides.toMap()
 
-    companion object {
-        /**
-         * Returns a canonical base URL or null when the remote value is not a
-         * plain https? origin (path/query/whitespace → rejected).
-         */
-        fun normalizeBaseUrl(raw: String?): String? {
-            val trimmed = raw?.trim()?.trimEnd('/')?.trim() ?: return null
-            if (trimmed.isEmpty()) return null
-            val match = Regex("^https?://[A-Za-z0-9.-]+(?::\\d+)?$").matchEntire(trimmed) ?: return null
-            return match.value.lowercase()
-        }
+    /**
+     * Returns a canonical base URL or null when the remote value is not a
+     * plain https? origin (path/query/whitespace → rejected).
+     */
+    fun normalizeBaseUrl(raw: String?): String? {
+        val trimmed = raw?.trim()?.trimEnd('/')?.trim() ?: return null
+        if (trimmed.isEmpty()) return null
+        val match = Regex("^https?://[A-Za-z0-9.-]+(?::\\d+)?$").matchEntire(trimmed) ?: return null
+        return match.value.lowercase()
     }
 }
 

@@ -134,7 +134,7 @@ class HomeViewModel @Inject constructor(
             communityRepo.observeNotifications(50)
                 .map { list -> list.count { !it.read } }
                 .catch { emit(0) }
-                .collect { _state.update { it.copy(unreadNotifications = it) } }
+                .collect { count -> _state.update { s -> s.copy(unreadNotifications = count) } }
         }
     }
 
