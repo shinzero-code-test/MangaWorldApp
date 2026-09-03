@@ -2,8 +2,10 @@ package com.exapps.mangaworld.viewmodel
 
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
+import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.domain.model.*
+import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.LibraryRepository
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -30,6 +32,8 @@ class HomeViewModelTest {
     private val remoteConfigManager = mockk<FirebaseRemoteConfigManager>(relaxed = true)
     private val analyticsManager = mockk<FirebaseAnalyticsManager>(relaxed = true)
     private val firebaseTelemetry = mockk<FirebaseTelemetry>(relaxed = true)
+    private val sessionManager = mockk<FirebaseSessionManager>(relaxed = true)
+    private val communityRepo = mockk<CommunityRepository>(relaxed = true)
 
     @Before
     fun setup() {
@@ -37,6 +41,8 @@ class HomeViewModelTest {
         val defaultSettings = AppSettings(enabledSources = setOf("azora", "olympus"))
         every { settingsRepo.getAppSettings() } returns flowOf(defaultSettings)
         every { libraryRepo.getFavorites() } returns flowOf(emptyList())
+        every { sessionManager.authState } returns flowOf(null)
+        every { communityRepo.observeNotifications(any()) } returns flowOf(emptyList())
         every { remoteConfigManager.remoteAlertMessage } returns MutableStateFlow("")
         every { remoteConfigManager.homeLayoutVariant } returns MutableStateFlow("default")
         coEvery { mangaRepo.getHomeData(any()) } returns Result.success(
@@ -61,7 +67,9 @@ class HomeViewModelTest {
         libraryRepo = libraryRepo,
         remoteConfigManager = remoteConfigManager,
         analyticsManager = analyticsManager,
-        firebaseTelemetry = firebaseTelemetry
+        firebaseTelemetry = firebaseTelemetry,
+        sessionManager = sessionManager,
+        communityRepo = communityRepo
     )
 
     @Test
