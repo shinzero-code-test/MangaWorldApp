@@ -594,9 +594,15 @@ class DownloadQueueManager @Inject constructor(
     }
 
     private suspend fun resolvePagesForRetry(task: DownloadTaskEntity, ignoreCache: Boolean = false): List<ChapterPage> {
+        // Tolerant parse (mirrors ChapterDownloadWorker.toPageUrls): a stale or
+        // partially-written pagesJson must degrade to "skip bad entries", never
+        // to an empty list that fails the retry instantly while old files sit
+        // on disk looking like a phantom failure.
         val cachedPages = runCatching {
             val array = JSONArray(task.pagesJson)
-            (0 until array.length()).map { index -> ChapterPage(index, array.getString(index)) }
+            (0 until array.length()).mapNotNull { index ->
+                array.optString(index).takeIf { it.isNotBlank() }?.let { ChapterPage(index, it) }
+            }
         }.getOrDefault(emptyList())
 
         // v8 (#10, round 2): manual retries prefer FRESH resolution so expired or

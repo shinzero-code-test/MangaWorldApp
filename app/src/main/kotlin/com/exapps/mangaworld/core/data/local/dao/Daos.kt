@@ -254,6 +254,29 @@ interface DownloadTaskDao {
         updatedAt: Long
     ): Int
 
+    /**
+     * Single-owner claim for a download worker: only a `queued` task can be
+     * claimed. A stale duplicate worker (leftover batch-chain entry racing a
+     * manual retry chain for the same task) sees `running`/`completed` and
+     * exits quietly instead of re-downloading into the same directory and
+     * clobbering the winner's completion marker.
+     */
+    @Query("""
+        UPDATE download_tasks
+        SET status = 'running',
+            progress = 0,
+            downloadedPages = 0,
+            totalPages = :totalPages,
+            updatedAt = :updatedAt,
+            errorMessage = NULL
+        WHERE id = :id AND status = 'queued'
+    """)
+    suspend fun claimRunningIfQueued(
+        id: String,
+        totalPages: Int,
+        updatedAt: Long
+    ): Int
+
     @Query("UPDATE download_tasks SET failureNotified = 1, updatedAt = :updatedAt WHERE id = :id AND failureNotified = 0")
     suspend fun markFailureNotified(id: String, updatedAt: Long = System.currentTimeMillis()): Int
 

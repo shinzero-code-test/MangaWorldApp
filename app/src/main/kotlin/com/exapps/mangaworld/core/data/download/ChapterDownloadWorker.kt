@@ -84,15 +84,14 @@ class ChapterDownloadWorker @AssistedInject constructor(
 
         val chapterKey = DownloadStorage.chapterKey(chapterUrl)
         val displayTitle = chapterTitle ?: appContext.getString(R.string.fmt_059, chapterKey)
+        // Single-owner claim: a duplicate worker for the same task (batch chain
+        // racing a manual retry chain) must exit quietly instead of downloading
+        // into the same directory and deleting the winner's marker below.
         if (
-            downloadTaskDao.updateStateIfActive(
+            downloadTaskDao.claimRunningIfQueued(
                 taskId,
-                "running",
-                0f,
-                0,
                 pages.size,
-                System.currentTimeMillis(),
-                null
+                System.currentTimeMillis()
             ) == 0
         ) return@withContext Result.success()
         runCatching { setForeground(buildForegroundInfo(displayTitle, 0, pages.size, mangaId, chapterUrl)) }
@@ -127,12 +126,30 @@ class ChapterDownloadWorker @AssistedInject constructor(
             // A single dead page (durable 404/expired URL) must still trigger the
             // existing retry path — but only after all other pages had their chance,
             // instead of aborting mid-chunk with good siblings unattempted.
-            check(done >= pages.size) { "incomplete download: $done/${pages.size}" }
+            // Disk-truthful recount: the increment counter drifts whenever files
+            // pre-exist (resumed attempts, concurrent winner) while their
+            // downloads report "skipped". What matters is what is on disk now.
+            val onDisk = existingPageCount(targetDir)
+            done = onDisk
+            updateProgress(taskId, displayTitle, done, pages.size, mangaId, chapterUrl)
+            check(onDisk >= pages.size) { "incomplete download: $onDisk/${pages.size}" }
 
             val pendingMarker = File(targetDir, ".completed.part")
             val completionMarker = File(targetDir, ".completed")
-            pendingMarker.writeText("ok")
-            check(pendingMarker.renameTo(completionMarker)) { "completion marker rename failed" }
+            // Idempotent marker: a previous attempt (or a concurrent winner) may
+            // have already completed. renameTo fails when the destination exists —
+            // that is success, not failure. The copyTo fallback covers
+            // filesystems where renameTo is flaky.
+            if (!completionMarker.exists()) {
+                pendingMarker.writeText("ok")
+                if (!pendingMarker.renameTo(completionMarker) && !completionMarker.exists()) {
+                    runCatching {
+                        pendingMarker.copyTo(completionMarker, overwrite = true)
+                        pendingMarker.delete()
+                    }
+                    check(completionMarker.exists()) { appContext.getString(R.string.download_error) }
+                }
+            }
             if (
                 downloadTaskDao.updateStateIfActive(
                     taskId,
@@ -144,7 +161,13 @@ class ChapterDownloadWorker @AssistedInject constructor(
                     null
                 ) == 0
             ) {
-                completionMarker.delete()
+                // Never delete a winner's marker: if the task already reads
+                // `completed` (a concurrent worker won the race), the marker on
+                // disk belongs to that success. Only clean up when the task did
+                // NOT complete (cancelled/paused/failed meanwhile).
+                if (downloadTaskDao.getById(taskId)?.status != "completed") {
+                    completionMarker.delete()
+                }
                 return@withContext Result.success()
             }
             analyticsManager.logDownloadStatus(

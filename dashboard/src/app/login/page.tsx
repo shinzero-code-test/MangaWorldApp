@@ -30,17 +30,19 @@ function googleSignInErrorMessage(error: unknown): string {
     "auth/network-request-failed": "تعذر الاتصال بـ Google. تحقق من الإنترنت وحاول مجدداً.",
     "auth/account-exists-with-different-credential": "هذا البريد مسجّل بطريقة أخرى — سجّل الدخول بالبريد وكلمة المرور أولاً.",
     "auth/user-disabled": "تم تعطيل هذا الحساب. تواصل مع مدير النظام.",
+    "auth/web-storage-unsupported": "المتصفح يمنع التخزين المحلي (ملفات تعريف الارتباط/التخزين) — فعّله أو جرّب متصفحاً آخر.",
   };
   return (code && messages[code]) || "تعذر بدء تسجيل الدخول بـ Google. حاول مرة أخرى.";
 }
 
-function googleSignInDetails(error: unknown): string {
-  // Raw diagnostic line (never translated): lets the admin report the exact
-  // Firebase code/message instead of "it doesn't work".
-  if (typeof error !== "object" || error === null) return "";
+function googleSignInDetails(stage: string, error: unknown): string {
+  // Raw diagnostic line (never translated): stage-tagged so a report names the
+  // exact failing leg — popup, redirect-start, redirect-return, or session —
+  // instead of "it doesn't work".
+  if (typeof error !== "object" || error === null) return `[${stage}]`;
   const code = "code" in error && typeof error.code === "string" ? error.code : "";
   const message = "message" in error && typeof error.message === "string" ? error.message : "";
-  return [code, message].filter(Boolean).join(" — ");
+  return [`[${stage}]`, code, message].filter(Boolean).join(" — ");
 }
 
 function isRedirectFallbackError(error: unknown): boolean {
@@ -129,12 +131,12 @@ export default function LoginPage() {
           return;
         } catch (redirectError: unknown) {
           setError(googleSignInErrorMessage(redirectError));
-          setGoogleDetails(googleSignInDetails(redirectError));
+          setGoogleDetails(googleSignInDetails("redirect-start", redirectError));
           console.error("[login] google redirect failed:", redirectError);
         }
       } else {
         setError(googleSignInErrorMessage(error));
-        setGoogleDetails(googleSignInDetails(error));
+        setGoogleDetails(googleSignInDetails("popup", error));
         console.error("[login] google popup failed:", error);
       }
     } finally {
@@ -163,7 +165,7 @@ export default function LoginPage() {
           } catch (retryError: unknown) {
             if (!cancelled) {
               setError(googleSignInErrorMessage(retryError));
-              setGoogleDetails(googleSignInDetails(retryError));
+              setGoogleDetails(googleSignInDetails("redirect-return", retryError));
               console.error("[login] google redirect result failed (retry):", retryError);
             }
             if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(REDIRECT_MARKER);
@@ -173,7 +175,7 @@ export default function LoginPage() {
         } else {
           if (!cancelled && returning) {
             setError(googleSignInErrorMessage(error));
-            setGoogleDetails(googleSignInDetails(error));
+            setGoogleDetails(googleSignInDetails("redirect-return", error));
             console.error("[login] google redirect result failed:", error);
           }
           if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(REDIRECT_MARKER);
@@ -189,7 +191,8 @@ export default function LoginPage() {
       } catch (error: unknown) {
         if (!cancelled) {
           setError(error instanceof Error ? error.message : googleSignInErrorMessage(error));
-          if (!(error instanceof Error)) setGoogleDetails(googleSignInDetails(error));
+          if (!(error instanceof Error)) setGoogleDetails(googleSignInDetails("redirect-return", error));
+          else setGoogleDetails(`[session] ${error.message}`.slice(0, 300));
           console.error("[login] google redirect session failed:", error);
         }
       } finally {
