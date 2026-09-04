@@ -281,12 +281,12 @@ class DownloadQueueManager @Inject constructor(
     }
 
     /** Adds a fully prepared manga batch as one ordered WorkManager continuation. */
-    private fun enqueueBatchWorkers(tasks: List<DownloadTaskEntity>) {
+    private fun enqueueBatchWorkers(tasks: List<DownloadTaskEntity>, queueName: String? = null) {
         val requests = tasks.map(::buildWorkerRequest)
         if (requests.isEmpty()) return
 
         var continuation = WorkManager.getInstance(app).beginUniqueWork(
-            mangaQueueName(tasks.first().mangaId),
+            queueName ?: mangaQueueName(tasks.first().mangaId),
             ExistingWorkPolicy.APPEND_OR_REPLACE,
             requests.first()
         )
@@ -295,6 +295,23 @@ class DownloadQueueManager @Inject constructor(
         }
         continuation.enqueue()
     }
+
+    /**
+     * Manual single-chapter retries bypass the per-manga batch chain entirely.
+     * The batch chain (up to 75 chapters under manga_download_queue_<id>) stays
+     * pending while the user taps retry — APPEND_OR_REPLACE would sequence the
+     * retry BEHIND chapters 26–75, reading as "retry does nothing" for the whole
+     * batch duration. A per-task unique name runs immediately, in parallel.
+     */
+    private fun enqueueSingleRetry(task: DownloadTaskEntity) {
+        WorkManager.getInstance(app).enqueueUniqueWork(
+            retryQueueName(task.id),
+            ExistingWorkPolicy.REPLACE,
+            buildWorkerRequest(task)
+        )
+    }
+
+    private fun retryQueueName(taskId: String): String = "manga_download_retry_$taskId"
 
     private fun buildWorkerRequest(task: DownloadTaskEntity): OneTimeWorkRequest {
         val constraints = Constraints.Builder()
@@ -393,6 +410,7 @@ class DownloadQueueManager @Inject constructor(
                 if (updatedTask != queuedTask) downloadTaskDao.upsert(updatedTask)
             }
             cancelMangaQueue(task.mangaId)
+            cancelRetryQueue(taskId)
             enqueueQueuedTasks(task.mangaId)
         } else {
             downloadTaskDao.upsert(
@@ -426,7 +444,7 @@ class DownloadQueueManager @Inject constructor(
     suspend fun resumeTask(taskId: String) = queueMutex.withLock {
         val task = downloadTaskDao.getById(taskId) ?: return@withLock
         if (task.status != "paused") return@withLock
-        resubmitTasks(listOf(task))
+        resubmitTasks(listOf(task), isManualSingleRetry = true)
     }
 
     suspend fun pauseAll() = queueMutex.withLock {
@@ -466,7 +484,7 @@ class DownloadQueueManager @Inject constructor(
         // v8 (#10): a MANUAL retry must not keep re-downloading the same stale
         // cached page list — that is exactly the loop where failed chapters
         // failed forever. Force fresh resolution from the source.
-        resubmitTasks(listOf(task), forceFreshPages = true)
+        resubmitTasks(listOf(task), forceFreshPages = true, isManualSingleRetry = true)
     }
 
     private suspend fun pauseMangaTasks(mangaId: String, pausedTaskIds: Set<String>) {
@@ -480,6 +498,9 @@ class DownloadQueueManager @Inject constructor(
             if (updatedTask != task) downloadTaskDao.upsert(updatedTask)
         }
         cancelMangaQueue(mangaId)
+        // A retry chain runs outside the batch queue — pause must stop it too,
+        // otherwise the "paused" chapter keeps downloading in the background.
+        pausedTaskIds.forEach { cancelRetryQueue(it) }
         enqueueQueuedTasks(mangaId)
     }
 
@@ -498,6 +519,7 @@ class DownloadQueueManager @Inject constructor(
             )
         }
         cancelMangaQueue(mangaId)
+        tasks.forEach { cancelRetryQueue(it.id) }
         withContext(Dispatchers.IO) {
             tasks.forEach { task ->
                 deleteChapterDirectory(task.mangaId, task.chapterUrl, task.mangaTitle)
@@ -510,7 +532,8 @@ class DownloadQueueManager @Inject constructor(
 
     private suspend fun resubmitTasks(
         tasks: List<DownloadTaskEntity>,
-        forceFreshPages: Boolean = false
+        forceFreshPages: Boolean = false,
+        isManualSingleRetry: Boolean = false
     ) {
         val queuedTasks = mutableListOf<DownloadTaskEntity>()
         val failedBatchIds = mutableSetOf<String>()
@@ -550,11 +573,20 @@ class DownloadQueueManager @Inject constructor(
             }
         }
         failedBatchIds.forEach { reconcileBatchCompletion(it) }
-        enqueueBatchWorkers(queuedTasks)
+        if (isManualSingleRetry && queuedTasks.size == 1) {
+            enqueueSingleRetry(queuedTasks.first())
+        } else {
+            enqueueBatchWorkers(queuedTasks)
+        }
     }
 
     private suspend fun cancelMangaQueue(mangaId: String) {
         WorkManager.getInstance(app).cancelUniqueWork(mangaQueueName(mangaId)).await()
+    }
+
+    /** Cancels a per-task retry chain started by [enqueueSingleRetry], if any. */
+    private suspend fun cancelRetryQueue(taskId: String) {
+        WorkManager.getInstance(app).cancelUniqueWork(retryQueueName(taskId)).await()
     }
 
     private suspend fun enqueueQueuedTasks(mangaId: String) {
@@ -624,8 +656,10 @@ class DownloadQueueManager @Inject constructor(
      * and the downloaded_manga metadata row.
      */
     suspend fun deleteDownloadedManga(mangaId: String) = queueMutex.withLock {
-        // Cancel any active work
+        // Cancel any active work — batch chain plus any per-task retry chains,
+        // which live under their own unique names outside the batch queue.
         WorkManager.getInstance(app).cancelUniqueWork(mangaQueueName(mangaId)).await()
+        WorkManager.getInstance(app).cancelAllWorkByTag("manga_$mangaId").await()
         // Delete files
         deleteMangaDirectory(canonicalMangaDir(mangaId))
         downloadedMangaDao.get(mangaId)?.title?.let { title ->

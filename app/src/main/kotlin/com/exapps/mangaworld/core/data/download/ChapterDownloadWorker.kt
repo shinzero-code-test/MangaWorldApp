@@ -104,10 +104,19 @@ class ChapterDownloadWorker @AssistedInject constructor(
             val targets = pages.mapIndexed { index, pageUrl -> pageUrl to File(targetDir, "${index + 1}.jpg") }
             targets.chunked(PARALLEL_DOWNLOADS).forEach { chunk ->
                 coroutineScope {
+                    // One bad page must not cancel its 3 siblings via structured
+                    // concurrency and discard a whole chunk every attempt.
+                    // Isolate per-page failures; completeness is checked below.
                     chunk.map { (pageUrl, outFile) ->
                         async {
                             ensureActive()
-                            downloadPage(pageUrl, referer, outFile)
+                            try {
+                                downloadPage(pageUrl, referer, outFile)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Exception) {
+                                false
+                            }
                         }
                     }.awaitAll().forEach { downloaded ->
                         if (downloaded) done += 1
@@ -115,6 +124,10 @@ class ChapterDownloadWorker @AssistedInject constructor(
                 }
                 updateProgress(taskId, displayTitle, done, pages.size, mangaId, chapterUrl)
             }
+            // A single dead page (durable 404/expired URL) must still trigger the
+            // existing retry path — but only after all other pages had their chance,
+            // instead of aborting mid-chunk with good siblings unattempted.
+            check(done >= pages.size) { "incomplete download: $done/${pages.size}" }
 
             val pendingMarker = File(targetDir, ".completed.part")
             val completionMarker = File(targetDir, ".completed")

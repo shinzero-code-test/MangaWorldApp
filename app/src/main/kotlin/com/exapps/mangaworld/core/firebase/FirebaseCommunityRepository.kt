@@ -28,6 +28,8 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -234,7 +236,8 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String?, bannerUrl: String?, displayName: String) {
-        val uid = sessionManager.ensureFirebaseSession() ?: return
+        withContext(NonCancellable) {
+        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
         val normalized = username.trim().lowercase()
         require(normalized.isNotBlank()) { context.getString(R.string.auth_error_username_required) }
         require(normalized.length in 3..20) { context.getString(R.string.auth_error_username_invalid) }
@@ -283,10 +286,12 @@ class FirebaseCommunityRepository @Inject constructor(
         } catch (_: Exception) {
             // The profile itself is already saved. A later profile update can retry this best-effort sync.
         }
+        }
     }
 
     override suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean, showLibraryPublic: Boolean) {
-        val uid = sessionManager.ensureFirebaseSession() ?: return
+        withContext(NonCancellable) {
+        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
         firestore.collection("publicProfiles").document(uid).set(
             mapOf(
                 "showListsPublic" to showListsPublic,
@@ -296,9 +301,11 @@ class FirebaseCommunityRepository @Inject constructor(
             ),
             SetOptions.merge()
         ).await()
+        }
     }
 
     override suspend fun createOrUpdateList(listId: String?, name: String, description: String, coverUrl: String, rating: Float, genres: List<String>, isPublic: Boolean): String {
+        return withContext(NonCancellable) {
         val uid = sessionManager.ensureFirebaseSession() ?: error(context.getString(R.string.community_error_sign_in))
         val id = listId ?: UUID.randomUUID().toString()
         val doc = firestore.collection("users").document(uid).collection("lists").document(id)
@@ -318,11 +325,13 @@ class FirebaseCommunityRepository @Inject constructor(
             updatedAt = System.currentTimeMillis()
         )
         doc.set(payload.toMap()).await()
-        return id
+        id
+        }
     }
 
     override suspend fun deleteList(listId: String) {
-        val uid = sessionManager.ensureFirebaseSession() ?: return
+        withContext(NonCancellable) {
+        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
         val doc = firestore.collection("users").document(uid).collection("lists").document(listId)
         val items = doc.collection("items").get().await().documents
         // Firestore batches cap at 500 operations — chunk so large lists can
@@ -332,10 +341,12 @@ class FirebaseCommunityRepository @Inject constructor(
                 chunk.forEach(batch::delete)
             }.await()
         }
+        }
     }
 
     override suspend fun addMangaToList(listId: String, item: CustomUserListItem) {
-        val uid = sessionManager.ensureFirebaseSession() ?: return
+        withContext(NonCancellable) {
+        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
         val listDoc = firestore.collection("users").document(uid).collection("lists").document(listId)
         val itemDoc = listDoc.collection("items").document(item.mangaId)
         val existed = itemDoc.get().await().exists()
@@ -346,16 +357,18 @@ class FirebaseCommunityRepository @Inject constructor(
                 "updatedAt" to System.currentTimeMillis()
             )
         ).await()
+        }
     }
 
     override suspend fun removeMangaFromList(listId: String, mangaId: String) {
-        val uid = sessionManager.ensureFirebaseSession() ?: return
+        withContext(NonCancellable) {
+        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
         val listDoc = firestore.collection("users").document(uid).collection("lists").document(listId)
         val itemDoc = listDoc.collection("items").document(mangaId)
         // Mirror addMangaToList: only decrement when the item actually existed,
         // otherwise repeated removes drive itemCount negative (L-review).
         val existed = itemDoc.get().await().exists()
-        if (!existed) return
+        if (!existed) return@withContext
         itemDoc.delete().await()
         listDoc.update(
             mapOf(
@@ -363,6 +376,7 @@ class FirebaseCommunityRepository @Inject constructor(
                 "updatedAt" to System.currentTimeMillis()
             )
         ).await()
+        }
     }
 
     override suspend fun postMangaComment(mangaId: String, slug: String, sourceId: String, text: String, spoiler: Boolean, replyTarget: com.exapps.mangaworld.domain.model.CommunityReplyTarget?) {
@@ -374,6 +388,11 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun upsertReview(mangaId: String, slug: String, sourceId: String, rating: Int, title: String, body: String) {
+        // Review edits must survive navigation: the ViewModel's viewModelScope is
+        // cancelled the moment the screen is left, which previously aborted the
+        // read-then-write below mid-flight while the UI already showed success.
+        // NonCancellable lets this block finish even after the parent scope dies.
+        withContext(NonCancellable) {
         val profile = currentProfileOrThrow()
         val trimmedTitle = title.trim()
         val trimmedBody = body.trim()
@@ -424,9 +443,11 @@ class FirebaseCommunityRepository @Inject constructor(
             )
             reviewRef.set(review.toMap()).await()
         }
+        }
     }
 
     override suspend fun updateComment(comment: CommunityComment, text: String, spoiler: Boolean) {
+        withContext(NonCancellable) {
         val profile = currentProfileOrThrow()
         require(profile.uid == comment.authorUid) { context.getString(R.string.community_error_author_edit) }
         val trimmed = text.trim()
@@ -442,9 +463,11 @@ class FirebaseCommunityRepository @Inject constructor(
                 )
             )
             .await()
+        }
     }
 
     override suspend fun deleteComment(comment: CommunityComment) {
+        withContext(NonCancellable) {
         val profile = currentProfileOrThrow()
         require(profile.uid == comment.authorUid) { context.getString(R.string.community_error_author_delete) }
         val docRef = commentsCollection(comment.mangaId, comment.chapterUrl).document(comment.id)
@@ -471,6 +494,7 @@ class FirebaseCommunityRepository @Inject constructor(
                 softDeleteComment(docRef)
             }
         }
+        }
     }
 
     private suspend fun softDeleteComment(docRef: com.google.firebase.firestore.DocumentReference) {
@@ -485,6 +509,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun deleteReview(review: MangaReview) {
+        withContext(NonCancellable) {
         val profile = currentProfileOrThrow()
         require(profile.uid == review.authorUid) { context.getString(R.string.community_error_author_delete) }
         val reviewRef = firestore.collection("community_manga").document(review.mangaId)
@@ -517,9 +542,11 @@ class FirebaseCommunityRepository @Inject constructor(
                 ).await()
             }
         }
+        }
     }
 
     override suspend fun sendPageReaction(mangaId: String, chapterUrl: String, pageIndex: Int, emoji: String, normalizedX: Float, normalizedY: Float) {
+        withContext(NonCancellable) {
         val profile = currentProfileOrThrow()
         val reaction = ReaderReaction(
             id = UUID.randomUUID().toString(),
@@ -536,9 +563,11 @@ class FirebaseCommunityRepository @Inject constructor(
             .collection("reactions").document(reaction.id)
             .set(reaction.toMap())
             .await()
+        }
     }
 
     override suspend fun sendChatMessage(roomId: String, text: String) {
+        withContext(NonCancellable) {
         // Chat is named-users-only. Checking BEFORE currentProfileOrThrow() matters:
         // that helper silently provisions an anonymous session, which the RTDB rules
         // now reject — guests must get a sign-in error, not a provisioned identity.
@@ -562,6 +591,7 @@ class FirebaseCommunityRepository @Inject constructor(
             createdAt = System.currentTimeMillis()
         )
         ref.setValue(message.toMap()).await()
+        }
     }
 
     override suspend fun reportComment(comment: CommunityComment, reason: String) {
@@ -603,6 +633,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean) {
+        withContext(NonCancellable) {
         val profile = currentProfileOrThrow()
         val memberDoc = firestore.collection("community_presence").document(threadId(mangaId, chapterUrl))
             .collection("members").document(profile.uid)
@@ -617,18 +648,22 @@ class FirebaseCommunityRepository @Inject constructor(
         } else {
             memberDoc.delete().await()
         }
+        }
     }
 
     override suspend fun markNotificationRead(notificationId: String) {
-        val uid = sessionManager.currentUserId() ?: return
+        withContext(NonCancellable) {
+        val uid = sessionManager.currentUserId() ?: return@withContext
         firestore.collection("users").document(uid)
             .collection("notifications").document(notificationId)
             .update("read", true)
             .await()
+        }
     }
 
     override suspend fun markNotificationsRead(ids: List<String>) {
-        val uid = sessionManager.currentUserId() ?: return
+        withContext(NonCancellable) {
+        val uid = sessionManager.currentUserId() ?: return@withContext
         // WriteBatch chunks — one round-trip per 400 instead of one per item.
         ids.chunked(400).forEach { chunk ->
             val batch = firestore.batch()
@@ -640,6 +675,7 @@ class FirebaseCommunityRepository @Inject constructor(
                 )
             }
             batch.commit().await()
+        }
         }
     }
 
@@ -661,6 +697,7 @@ class FirebaseCommunityRepository @Inject constructor(
         spoiler: Boolean,
         replyTarget: com.exapps.mangaworld.domain.model.CommunityReplyTarget?
     ) {
+        withContext(NonCancellable) {
         val profile = currentProfileOrThrow()
         val trimmed = text.trim()
         require(trimmed.isNotBlank()) { context.getString(R.string.community_error_empty_content) }
@@ -690,6 +727,7 @@ class FirebaseCommunityRepository @Inject constructor(
         collection.document(comment.id).set(comment.toMap()).await()
         if (replyTarget != null || comment.mentions.isNotEmpty()) {
             sendPushNotification(mangaId, chapterUrl, comment.id)
+        }
         }
     }
 
@@ -725,6 +763,8 @@ class FirebaseCommunityRepository @Inject constructor(
 
     private suspend fun voteOnContent(targetType: String, mangaId: String?, targetId: String, vote: Int) {
         require(targetId.isNotBlank()) { context.getString(R.string.community_error_invalid_content) }
+        // Votes must survive navigation like every other community write.
+        withContext(NonCancellable) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val token = sessionManager.currentIdToken() ?: error(context.getString(R.string.community_error_sign_in))
             val body = org.json.JSONObject().apply {
@@ -747,6 +787,7 @@ class FirebaseCommunityRepository @Inject constructor(
                 conn.disconnect()
             }
         }
+        }
     }
 
     private suspend fun reportContent(
@@ -757,6 +798,7 @@ class FirebaseCommunityRepository @Inject constructor(
         reportedUid: String,
         reason: String
     ) {
+        withContext(NonCancellable) {
         val reporter = currentProfileOrThrow()
         val trimmedReason = reason.trim()
         require(trimmedReason.isNotBlank()) { context.getString(R.string.community_error_report_reason_required) }
@@ -779,6 +821,7 @@ class FirebaseCommunityRepository @Inject constructor(
                 )
             )
             .await()
+        }
     }
 
     private suspend fun currentProfileOrThrow(): CommunityProfile {
