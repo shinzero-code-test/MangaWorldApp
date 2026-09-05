@@ -7,7 +7,6 @@ import {
   GoogleAuthProvider,
   getRedirectResult,
   signInWithEmailAndPassword,
-  signInWithPopup,
   signInWithRedirect,
 } from "firebase/auth";
 import { clientAuth } from "@/lib/firebase-client";
@@ -46,27 +45,16 @@ function googleSignInDetails(stage: string, error: unknown): string {
   return [`[${stage}]`, code, message].filter(Boolean).join(" — ");
 }
 
-function isRedirectFallbackError(error: unknown): boolean {
-  const code = authErrorCode(error);
-  // Anything popup-specific (blocked/unsupported/failed/cancelled-request)
-  // is worth one redirect attempt — redirect survives blocked popups and
-  // third-party-cookie walls where popups hang or die. Explicit user-close
-  // and console misconfiguration (domain/provider) are terminal: redirect
-  // would fail identically, so surface the message instead.
-  return code === "auth/popup-blocked"
-    || code === "auth/operation-not-supported-in-this-environment"
-    || code === "auth/cancelled-popup-request"
-    || code === "auth/network-request-failed"
-    || code === "auth/popup-timeout"
-    || code === "auth/internal-error";
-}
+// sessionStorage marker so the return leg knows a Google redirect was
+// initiated by us (vs. a plain visit to /login). Per-tab by design: a second
+// tab never mistakes itself for the returning one.
+const REDIRECT_MARKER = "mw_google_redirect";
 
-// Popup blockers and third-party-storage walls can leave signInWithPopup
-// hanging forever (never resolves, never rejects): the account chooser
-// completes and the popup closes, but the auth event never reaches the
-// opener, so no session POST is ever sent. This is the ceiling for that hang.
-const POPUP_TIMEOUT_MS = 45_000;
-
+// Redirect is the ONLY Google flow (no popup): popups hang forever in
+// storage-walled browsers — chooser completes, popup closes, but the auth
+// event never reaches the opener, so no session POST is ever sent and the
+// user lands back with no error. Redirect delivers the result via URL params
+// plus first-party storage and every failure mode is visible.
 async function startGoogleRedirect(): Promise<never> {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
@@ -75,10 +63,6 @@ async function startGoogleRedirect(): Promise<never> {
   // signInWithRedirect navigates away; if it ever returns, treat as failure.
   throw { code: "auth/internal-error", message: "redirect did not navigate" };
 }
-
-// sessionStorage marker so the return leg knows a Google redirect was
-// initiated by us (vs. a plain visit to /login).
-const REDIRECT_MARKER = "mw_google_redirect";
 
 function emailSignInErrorMessage(error: unknown): string {
   const messages: Record<string, string> = {
@@ -131,46 +115,23 @@ export default function LoginPage() {
     setGoogleLoading(true);
     setError("");
     setGoogleDetails("");
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: "select_account" });
-    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const popup = signInWithPopup(clientAuth, provider);
-      const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject({ code: "auth/popup-timeout" }), POPUP_TIMEOUT_MS);
-      });
-      // If the popup wins, the timer is cleared and never rejects (no
-      // unhandled rejection). If the timer wins, navigation below unloads the
-      // page and the still-pending popup promise is discarded with it.
-      const result = await Promise.race([popup, timeout]);
-      if (timer) clearTimeout(timer);
-      await handleSession(await result.user.getIdToken(), () => result.user.getIdToken(true));
+      // Redirect-first: navigates to Google and back. Every failure mode here
+      // is visible (unlike a hung popup, which resolves nothing and rejects
+      // nothing). The mount effect below completes the flow on return.
+      await startGoogleRedirect();
+      return;
     } catch (error: unknown) {
-      if (timer) clearTimeout(timer);
-      // Popup blocked / hung / unsupported environment → fall back to
-      // full-page redirect. getRedirectResult below completes the flow after
-      // returning from Google; redirect delivers the result via URL params
-      // and first-party storage, so it survives the walls that kill popups.
-      if (isRedirectFallbackError(error)) {
-        try {
-          await startGoogleRedirect();
-          return;
-        } catch (redirectError: unknown) {
-          setError(googleSignInErrorMessage(redirectError));
-          setGoogleDetails(googleSignInDetails("redirect-start", redirectError));
-          console.error("[login] google redirect failed:", redirectError);
-        }
-      } else {
-        setError(googleSignInErrorMessage(error));
-        setGoogleDetails(googleSignInDetails("popup", error));
-        console.error("[login] google popup failed:", error);
-      }
+      if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(REDIRECT_MARKER);
+      setError(googleSignInErrorMessage(error));
+      setGoogleDetails(googleSignInDetails("redirect-start", error));
+      console.error("[login] google redirect failed:", error);
     } finally {
       setGoogleLoading(false);
     }
   };
 
-  // Completes the redirect flow when handleGoogle fell back to signInWithRedirect.
+  // Completes the redirect flow started by handleGoogle (redirect-first).
   // The marker distinguishes a genuine redirect return from a plain page load.
   // On auth/internal-error the result is retried once: the handler sometimes
   // needs a beat to settle its stored state after navigation.
@@ -210,7 +171,22 @@ export default function LoginPage() {
         }
       }
       try {
-        if (!result || cancelled) return;
+        if (!result || cancelled) {
+          // A returning redirect with NO result is the previously-silent
+          // dead end (no error, no session POST, user just lands on /login).
+          // Name it loudly: storage cleared mid-flight, handoff started in
+          // another tab, or the browser dropped the redirect state.
+          const returning = typeof sessionStorage !== "undefined"
+            && sessionStorage.getItem(REDIRECT_MARKER) === "1";
+          if (!cancelled && returning && !result) {
+            setError("اكتمل التحويل من Google لكن لم يتم العثور على نتيجة تسجيل الدخول. حاول مرة أخرى، أو جرّب متصفحاً آخر.");
+            setGoogleDetails("[redirect-return] auth/no-pending-result");
+            console.error("[login] google redirect returned no result (marker present)");
+          }
+          if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(REDIRECT_MARKER);
+          if (!cancelled) setGoogleLoading(false);
+          return;
+        }
         if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(REDIRECT_MARKER);
         setGoogleLoading(true);
         await handleSession(await result.user.getIdToken(), () => result.user.getIdToken(true));
