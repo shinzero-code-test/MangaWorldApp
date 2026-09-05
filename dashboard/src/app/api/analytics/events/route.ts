@@ -18,6 +18,7 @@ export async function GET() {
         events: [],
         topEvents: [],
         totalEvents: 0,
+        ga4: { configured: false, accessible: false },
         note: "GA4_PROPERTY_ID not configured",
       });
     }
@@ -26,6 +27,7 @@ export async function GET() {
 
     // Fetch recent events from GA4 Data API
     let events: any[] = [];
+    let ga4Error: string | null = null;
     try {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -57,9 +59,13 @@ export async function GET() {
           timestamp: Date.now(),
           count: Number(row.metricValues?.[0]?.value) || 0,
         }));
+      } else if (response.status === 403) {
+        ga4Error = "permission-denied";
+      } else {
+        ga4Error = `ga4-error-${response.status}`;
       }
     } catch {
-      // GA4 API may not be available
+      ga4Error = "ga4-unreachable";
     }
 
     const topEvents = events.map((e) => ({ name: e.name, count: e.count })).slice(0, 20);
@@ -69,6 +75,7 @@ export async function GET() {
       events: events.slice(0, 100),
       topEvents,
       totalEvents,
+      ga4: { configured: true, accessible: ga4Error === null, error: ga4Error },
     });
   } catch (error: unknown) {
     const { body, status } = genericErrorResponse(error);

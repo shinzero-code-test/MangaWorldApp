@@ -5,9 +5,12 @@ import { PageHeader, StatusBadge, EmptyState } from "@/components/ui";
 import { formatRelative } from "@/lib/utils";
 
 const TOPICS = [
-  { id:"general",     label:"عام",              desc:"إشعار لجميع المستخدمين",    icon:Megaphone,  color:"var(--primary)"  },
-  { id:"updates",     label:"تحديثات المانجا",   desc:"للمشتركين في التحديثات",    icon:BookOpen,   color:"#10b981"         },
-  { id:"maintenance", label:"صيانة / تحديث",    desc:"إشعارات تقنية",             icon:RefreshCcw, color:"#f59e0b"         },
+  { id:"general",     label:"عام",              desc:"إشعار لجميع المستخدمين",    icon:Megaphone,  color:"var(--primary)",
+    presetTitle:"إشعار من مانجا وورلد", presetBody:"تحديث جديد في التطبيق — افتح مانجا وورلد لاكتشاف المزيد." },
+  { id:"updates",     label:"تحديثات المانجا",   desc:"للمشتركين في التحديثات",    icon:BookOpen,   color:"#10b981",
+    presetTitle:"فصل جديد متاح الآن", presetBody:"تمت إضافة فصول جديدة — تابع القراءة من حيث توقفت." },
+  { id:"maintenance", label:"صيانة / تحديث",    desc:"إشعارات تقنية",             icon:RefreshCcw, color:"#f59e0b",
+    presetTitle:"صيانة مجدولة", presetBody:"سيخضع التطبيق لصيانة قصيرة. شكراً لتفهمكم." },
 ];
 
 interface HistoryItem {
@@ -19,6 +22,12 @@ export default function NotificationsPage() {
   const [topic,        setTopic]        = useState("general");
   const [title,        setTitle]        = useState("");
   const [body,         setBody]         = useState("");
+  const [imageUrl,     setImageUrl]     = useState("");
+  const [linkType,     setLinkType]     = useState<"none"|"manga"|"chapter">("none");
+  const [linkMangaId,  setLinkMangaId]  = useState("");
+  const [linkSlug,     setLinkSlug]     = useState("");
+  const [linkSourceId, setLinkSourceId] = useState("");
+  const [linkChapter,  setLinkChapter]  = useState("");
   const [deviceCount,  setDeviceCount]  = useState<number|null>(null);
   const [sending,      setSending]      = useState(false);
   const [sent,         setSent]         = useState(false);
@@ -49,19 +58,38 @@ export default function NotificationsPage() {
     if (!title.trim() || !body.trim()) return;
     setSending(true); setError("");
     try {
+      const payload: Record<string, string> = { title, body, topic };
+      if (imageUrl.trim()) payload.imageUrl = imageUrl.trim();
+      if (linkType !== "none") {
+        if (linkMangaId.trim()) payload.mangaId = linkMangaId.trim();
+        if (linkSlug.trim()) payload.slug = linkSlug.trim();
+        if (linkSourceId.trim()) payload.sourceId = linkSourceId.trim();
+        if (linkType === "chapter" && linkChapter.trim()) payload.chapterUrl = linkChapter.trim();
+      }
       const res = await fetch("/api/notifications/send", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ title, body: body, topic }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null) as { error?: string } | null;
         throw new Error(data?.error || "خطأ في الإرسال");
       }
       setSent(true); setTimeout(() => setSent(false), 3000);
-      setTitle(""); setBody("");
+      setTitle(""); setBody(""); setImageUrl("");
+      setLinkType("none"); setLinkMangaId(""); setLinkSlug(""); setLinkSourceId(""); setLinkChapter("");
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "خطأ في الإرسال"); }
     finally { setSending(false); }
+  };
+
+  const applyTopicPreset = (id: string) => {
+    setTopic(id);
+    const preset = TOPICS.find((t) => t.id === id);
+    // Fill only empty fields so custom copy is never clobbered.
+    if (preset) {
+      if (!title.trim()) setTitle(preset.presetTitle);
+      if (!body.trim()) setBody(preset.presetBody);
+    }
   };
 
   const topicLabel = (id?:string) => TOPICS.find(t => t.id===id)?.label ?? (id || "—");
@@ -102,7 +130,7 @@ export default function NotificationsPage() {
                   const Icon   = t.icon;
                   const active = topic === t.id;
                   return (
-                    <button key={t.id} type="button" onClick={() => setTopic(t.id)}
+                    <button key={t.id} type="button" onClick={() => applyTopicPreset(t.id)}
                       className="p-4 rounded-[var(--radius-lg)] border text-start transition-all"
                       style={{ background:active?`${t.color}10`:"var(--card)", borderColor:active?t.color:"var(--border)", borderWidth:active?2:1 }}>
                       <div className="flex items-start justify-between mb-2">
@@ -138,6 +166,43 @@ export default function NotificationsPage() {
                 className="w-full resize-none" required />
             </div>
 
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">صورة الغلاف (اختياري)</label>
+              <input type="url" dir="ltr" value={imageUrl} onChange={e => setImageUrl(e.target.value.slice(0,2048))}
+                placeholder="https://… (تظهر كصورة كبيرة في الإشعار)" className="w-full text-xs font-mono" />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">الوجهة عند النقر (اختياري)</label>
+              <div className="flex gap-2">
+                {[
+                  { id:"none", label:"التطبيق" },
+                  { id:"manga", label:"صفحة مانجا" },
+                  { id:"chapter", label:"فصل" },
+                ].map((o) => (
+                  <button key={o.id} type="button" onClick={() => setLinkType(o.id as typeof linkType)}
+                    className="px-3 py-1.5 rounded-lg border text-sm transition-all"
+                    style={{
+                      background: linkType === o.id ? "color-mix(in srgb, var(--primary) 10%, transparent)" : "var(--card)",
+                      borderColor: linkType === o.id ? "var(--primary)" : "var(--border)",
+                      color: linkType === o.id ? "var(--primary)" : "var(--muted-foreground)",
+                    }}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+              {linkType !== "none" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input value={linkMangaId} onChange={e => setLinkMangaId(e.target.value)} placeholder="mangaId" dir="ltr" className="w-full text-xs font-mono" />
+                  <input value={linkSourceId} onChange={e => setLinkSourceId(e.target.value)} placeholder="sourceId" dir="ltr" className="w-full text-xs font-mono" />
+                  <input value={linkSlug} onChange={e => setLinkSlug(e.target.value)} placeholder="slug" dir="ltr" className="w-full text-xs font-mono" />
+                  {linkType === "chapter" && (
+                    <input value={linkChapter} onChange={e => setLinkChapter(e.target.value)} placeholder="chapterUrl" dir="ltr" className="w-full text-xs font-mono" />
+                  )}
+                </div>
+              )}
+            </div>
+
             {error && <p className="text-sm" style={{ color:"var(--destructive)" }}>{error}</p>}
 
             <button type="submit" disabled={sending||!title.trim()||!body.trim()}
@@ -167,6 +232,14 @@ export default function NotificationsPage() {
                     <p className="text-xs mt-0.5 line-clamp-2" style={{ color:"var(--muted-foreground)" }}>
                       {body || "نص الإشعار الذي سيراه المستخدمون..."}
                     </p>
+                    {imageUrl.trim() && (
+                      <p className="text-xs mt-1" style={{ color:"var(--primary)" }}>+ صورة مرفقة</p>
+                    )}
+                    {linkType !== "none" && (
+                      <p className="text-xs mt-0.5" style={{ color:"var(--muted-foreground)" }}>
+                        الوجهة: {linkType === "manga" ? "صفحة مانجا" : "فصل"}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

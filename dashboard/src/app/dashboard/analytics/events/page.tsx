@@ -20,6 +20,7 @@ interface EventsData {
   topEvents: TopEvent[];
   totalEvents: number;
   note?: string;
+  ga4?: { configured: boolean; accessible: boolean; error?: string | null };
 }
 
 export default function EventsPage() {
@@ -38,6 +39,7 @@ export default function EventsPage() {
           topEvents: Array.isArray(d?.topEvents) ? d.topEvents : [],
           totalEvents: typeof d?.totalEvents === "number" ? d.totalEvents : 0,
           note: typeof d?.note === "string" ? d.note : undefined,
+          ga4: d?.ga4 && typeof d.ga4 === "object" ? d.ga4 : undefined,
         });
         if (typeof d?.error === "string" && !Array.isArray(d?.events)) {
           setFetchError(d.error);
@@ -58,6 +60,15 @@ export default function EventsPage() {
   return (
     <div className="space-y-6">
       <h3 className="text-lg font-semibold">سجل الأحداث</h3>
+
+      {data?.ga4 && (!data.ga4.configured || !data.ga4.accessible) && (
+        <div className="p-4 rounded-xl border text-sm leading-relaxed"
+          style={{ background: "rgba(245,158,11,0.08)", borderColor: "rgba(245,158,11,0.3)", color: "var(--warning)" }}>
+          {!data.ga4.configured
+            ? "لم يتم إعداد GA4_PROPERTY_ID — صفحة الأحداث تعرض بيانات Google Analytics."
+            : "لا تملك الخدمة صلاحية الوصول إلى خاصية GA4 (permission-denied). امنح حساب الخدمة دور Viewer على الخاصية في Google Analytics ← الإدارة ← إدارة الوصول."}
+        </div>
+      )}
 
       {(data?.topEvents?.length ?? 0) > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

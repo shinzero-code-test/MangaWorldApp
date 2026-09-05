@@ -10,15 +10,13 @@ const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY || "";
 const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET || "";
 
 interface CloudinaryUsage {
-  created_bytes: number;
-  count: number;
+  resources?: { created_bytes?: number; count?: number };
+  storage?: { usage?: number; limit?: number };
+  objects?: { usage?: number };
+  bandwidth?: { usage?: number; limit?: number };
 }
 
-interface CloudinaryUsageResponse {
-  storage: { used: number; limit: number };
-  bandwidth: { used: number; limit: number };
-  resources: CloudinaryUsage;
-}
+interface CloudinaryUsageResponse extends CloudinaryUsage {}
 
 async function fetchCloudinaryUsage(): Promise<CloudinaryUsageResponse> {
   const timestamp = Math.floor(Date.now() / 1000);
@@ -44,15 +42,18 @@ export async function GET() {
 
     const usage = await fetchCloudinaryUsage();
 
-    // Cloudinary doesn't provide file-level breakdown in the usage API
-    // Return total storage from usage data
-    const totalBytes = usage.resources?.created_bytes ?? 0;
+    // Shape-tolerant: the usage endpoint has returned different envelopes
+    // across API versions ({resources:{created_bytes}} vs {storage:{usage}}).
+    const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+    const totalBytes = num(usage.resources?.created_bytes)
+      || num(usage.storage?.usage)
+      || num(usage.objects?.usage);
 
     return NextResponse.json({
       totalBytes,
       bucketName: CLOUDINARY_CLOUD_NAME,
       breakdown: [
-        { id: "images", label: "الصور", bytes: totalBytes, fileCount: usage.resources?.count ?? 0 },
+        { id: "images", label: "الصور", bytes: totalBytes, fileCount: num(usage.resources?.count) },
       ],
     });
   } catch (error: unknown) {

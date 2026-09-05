@@ -26,11 +26,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const profile = profileDoc.data() || {};
 
     // Get user data counts
-    const [favSnap, histSnap, annotSnap, deviceSnap] = await Promise.all([
+    const [favSnap, histSnap, annotSnap, deviceSnap, commentsSnap, reviewsSnap] = await Promise.all([
       getAdminDb().collection("users").doc(uid).collection("favorites").count().get(),
       getAdminDb().collection("users").doc(uid).collection("readingHistory").count().get(),
       getAdminDb().collection("users").doc(uid).collection("readerAnnotations").count().get(),
       getAdminDb().collection("users").doc(uid).collection("devices").count().get(),
+      getAdminDb().collectionGroup("comments").where("authorUid", "==", uid).count().get(),
+      getAdminDb().collectionGroup("reviews").where("authorUid", "==", uid).count().get(),
     ]);
 
     // Get recent activity
@@ -48,6 +50,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       // Auth info
       uid,
       email: authUser?.email || null,
+      displayName: authUser?.displayName || null,
       emailVerified: authUser?.emailVerified || false,
       disabled: authUser?.disabled || false,
       lastSignIn: authUser?.metadata?.lastSignInTime || null,
@@ -72,6 +75,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       historyCount: histSnap.data().count,
       annotationCount: annotSnap.data().count,
       deviceCount: deviceSnap.data().count,
+      commentsCount: commentsSnap.data().count,
+      reviewsCount: reviewsSnap.data().count,
 
       // Activity
       recentHistory: history,

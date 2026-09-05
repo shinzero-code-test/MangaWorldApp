@@ -21,12 +21,12 @@ export default function ReleasesPage() {
   const [loading,  setLoading]  = useState(true);
 
   useEffect(() => {
-    // Releases typically come from a Firestore collection
-    fetch("/api/firestore/releases")
+    // Real releases from the GitHub release pipeline (APKs/AABs per tag).
+    fetch("/api/releases")
       .then((r) => r.json())
       .then((d) => {
-        const docs = d.documents ?? d.docs ?? [];
-        setReleases(docs.map((doc: any) => ({ id: doc.id, ...doc.fields })));
+        const list = Array.isArray(d.releases) ? d.releases : [];
+        setReleases(list);
         setLoading(false);
       })
       .catch(() => setLoading(false));

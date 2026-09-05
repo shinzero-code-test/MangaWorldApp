@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     let enriched = allAuthUsers.map(authUser => ({
       id: authUser.uid,
       email: authUser.email || null,
+      displayName: authUser.displayName || null,
       username: authUser.displayName || authUser.email?.split('@')[0] || "مستخدم",
       role: authUser.customClaims?.role || "viewer",
       emailVerified: authUser.emailVerified,

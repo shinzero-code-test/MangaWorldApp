@@ -1,62 +1,91 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
-import { getAccessToken } from "@/lib/firebase-admin";
 import { genericErrorResponse } from "@/lib/security";
+import { bigQueryProjectId, listDatasetTables, runQuery } from "@/lib/bigquery";
 
 export const dynamic = "force-dynamic";
 
-const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? "";
+const DATASET = "firebase_performance";
+
+function pickTable(tables: string[]): string | null {
+  const usable = tables.filter((t) => !t.toUpperCase().startsWith("INFORMATION_SCHEMA"));
+  if (usable.length === 0) return null;
+  const android = usable.filter((t) => t.toLowerCase().includes("android"));
+  return android.length > 0 ? [...android].sort()[0] : [...usable].sort()[0];
+}
 
 export async function GET() {
   try {
     await requireRole("super-admin");
 
-    const token = await getAccessToken();
-    const baseUrl = `https://firebaseperformance.googleapis.com/v1beta1/projects/${PROJECT_ID}`;
-
-    // Fetch performance traces from Performance Monitoring API
-    let traces: any[] = [];
-    try {
-      // List traces (custom traces from the app)
-      const response = await fetch(
-        `${baseUrl}/traces?pageSize=100&orderBy=startTime%20desc`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        traces = (data.traces || []).map((trace: any) => ({
-          name: trace.name || "unknown",
-          duration: trace.durations
-            ? Object.values(trace.durations).reduce((a: number, b: any) => a + (Number(b) || 0), 0)
-            : 0,
-          networkType: trace.attributes?.network_type || "unknown",
-          metrics: trace.metrics || {},
-          startedAt: trace.startTime ? new Date(trace.startTime).getTime() : 0,
-        }));
-      }
-    } catch {
-      // Performance API may not be available
+    const { tables, error: listError } = await listDatasetTables(DATASET);
+    const table = pickTable(tables);
+    if (!table) {
+      return NextResponse.json({
+        summary: { avgStartup: 0, avgNetwork: 0, avgRender: 0, totalTraces: 0 },
+        traces: [],
+        screenMetrics: [],
+        bigquery: {
+          available: false,
+          reason: listError === "permission-denied"
+            ? "permission-denied"
+            : "no-exported-data",
+          hint: listError === "permission-denied"
+            ? "Service account needs BigQuery Data Viewer + Job User."
+            : "BigQuery export is linked but no tables exist yet — data appears after the first daily export with performance events.",
+        },
+      });
     }
 
-    const totalTraces = traces.length;
-    const startupTraces = traces.filter((t) => t.name?.includes("startup") || t.name?.includes("app_start"));
-    const networkTraces = traces.filter((t) => t.name?.includes("network") || t.name?.includes("http"));
-    const renderTraces = traces.filter((t) => t.name?.includes("render") || t.name?.includes("draw"));
+    const project = bigQueryProjectId();
+    const result = await runQuery(
+      `SELECT event_type, event_name, COUNT(*) AS n,
+        AVG(trace_info.duration_us) / 1000 AS avg_ms,
+        APPROX_QUANTILES(trace_info.duration_us, 100)[OFFSET(50)] / 1000 AS p50_ms
+      FROM \`${project}.${DATASET}.${table}\`
+      WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
+      GROUP BY event_type, event_name
+      ORDER BY n DESC
+      LIMIT 100`
+    );
+    if (!result.ok) {
+      return NextResponse.json({
+        summary: { avgStartup: 0, avgNetwork: 0, avgRender: 0, totalTraces: 0 },
+        traces: [],
+        screenMetrics: [],
+        bigquery: { available: false, reason: result.error ?? "bq-query-error" },
+      });
+    }
 
-    const avgStartup = startupTraces.length > 0
-      ? Math.round(startupTraces.reduce((sum, t) => sum + (t.duration || 0), 0) / startupTraces.length)
-      : 0;
-    const avgNetwork = networkTraces.length > 0
-      ? Math.round(networkTraces.reduce((sum, t) => sum + (t.duration || 0), 0) / networkTraces.length)
-      : 0;
-    const avgRender = renderTraces.length > 0
-      ? Math.round(renderTraces.reduce((sum, t) => sum + (t.duration || 0), 0) / renderTraces.length)
-      : 0;
+    const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+    const traces = result.rows.map((r) => ({
+      name: String(r.event_name ?? "unknown"),
+      eventType: String(r.event_type ?? ""),
+      count: num(r.n),
+      avgMs: Math.round(num(r.avg_ms)),
+      p50Ms: Math.round(num(r.p50_ms)),
+    }));
+
+    const avgFor = (match: (name: string, type: string) => boolean): number => {
+      const hit = traces.filter((t) => match(t.name, t.eventType));
+      const total = hit.reduce((s, t) => s + t.count, 0);
+      if (total === 0) return 0;
+      return Math.round(hit.reduce((s, t) => s + t.avgMs * t.count, 0) / total);
+    };
+    const avgStartup = avgFor((n, t) => t === "DURATION_TRACE" && /app_start|startup|foreground/i.test(n));
+    const avgNetwork = avgFor((_, t) => t === "NETWORK_REQUEST");
+    const avgRender = avgFor((_, t) => t === "SCREEN_TRACE");
 
     return NextResponse.json({
-      summary: { avgStartup, avgNetwork, avgRender, totalTraces },
+      summary: {
+        avgStartup,
+        avgNetwork,
+        avgRender,
+        totalTraces: traces.reduce((s, t) => s + t.count, 0),
+      },
       traces: traces.slice(0, 20),
       screenMetrics: [],
+      bigquery: { available: true, table },
     });
   } catch (error: unknown) {
     const { body, status } = genericErrorResponse(error);

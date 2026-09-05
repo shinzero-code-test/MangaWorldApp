@@ -12,13 +12,21 @@ interface CrashIssue {
 }
 
 interface Stats {
-  crashFreeRate:number; crashFreeRateDelta?:number;
+  crashFreeRate:number|null; crashFreeRateDelta?:number;
   totalIssues:number; openIssues:number; totalCrashes:number; affectedUsers:number;
+}
+
+interface BigQueryState {
+  available: boolean;
+  table?: string;
+  reason?: string;
+  hint?: string;
 }
 
 export default function CrashlyticsPage() {
   const [issues,  setIssues]  = useState<CrashIssue[]>([]);
   const [stats,   setStats]   = useState<Stats|null>(null);
+  const [bq,      setBq]      = useState<BigQueryState|null>(null);
   const [loading, setLoading] = useState(true);
   const [filter,  setFilter]  = useState<"all"|"open"|"resolved">("all");
   const [expanded,setExpanded]= useState<Set<string>>(new Set());
@@ -29,6 +37,7 @@ export default function CrashlyticsPage() {
       .then(d => {
         setIssues(d.issues ?? []);
         setStats(d.stats ?? null);
+        setBq(d.bigquery ?? null);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -38,8 +47,8 @@ export default function CrashlyticsPage() {
     setExpanded(p => { const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n; });
 
   const filtered = issues.filter(i => filter==="all" ? true : i.state===filter);
-  const cfr      = stats?.crashFreeRate ?? 0;
-  const cfrColor = cfr>=99?"var(--success)":cfr>=95?"var(--warning)":"var(--destructive)";
+  const cfr      = stats?.crashFreeRate ?? null;
+  const cfrColor = cfr===null?"var(--muted-foreground)":cfr>=99?"var(--success)":cfr>=95?"var(--warning)":"var(--destructive)";
 
   const STAT_CARDS = [
     { label:"معدل خالٍ من الأعطال", custom: "gauge" },
@@ -52,6 +61,15 @@ export default function CrashlyticsPage() {
     <div className="space-y-6">
       <PageHeader title="الأعطال" subtitle="Crashlytics — تتبع أعطال التطبيق" icon={Bug} />
 
+      {bq && !bq.available && (
+        <div className="p-4 rounded-xl border text-sm leading-relaxed"
+          style={{ background: "rgba(245,158,11,0.08)", borderColor: "rgba(245,158,11,0.3)", color: "var(--warning)" }}>
+          {bq.reason === "permission-denied"
+            ? "لا تملك الخدمة صلاحية BigQuery — امنح حساب الخدمة دوري Job User و Data Viewer."
+            : "لا توجد بيانات مصدّرة في BigQuery بعد — تظهر المشاكل تلقائياً بعد أول تصدير يومي يحتوي أحداث أعطال."}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {loading ? Array.from({length:4}).map((_,i) => <SkeletonCard key={i} />) : (
           <>
@@ -60,12 +78,12 @@ export default function CrashlyticsPage() {
               style={{ background:"var(--card)", borderColor:"var(--border)" }}>
               <div className="relative w-24 h-24">
                 <ResponsiveContainer width="100%" height="100%">
-                  <RadialBarChart innerRadius="65%" outerRadius="85%" data={[{value:cfr}]} startAngle={90} endAngle={-270}>
+                  <RadialBarChart innerRadius="65%" outerRadius="85%" data={[{value:cfr ?? 0}]} startAngle={90} endAngle={-270}>
                     <RadialBar dataKey="value" fill={cfrColor} cornerRadius={4} background={{ fill:"var(--muted)" } as any} />
                   </RadialBarChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-sm font-bold" style={{ color:cfrColor }}>{cfr.toFixed(1)}%</span>
+                  <span className="text-sm font-bold" style={{ color:cfrColor }}>{cfr === null ? "—" : `${cfr.toFixed(1)}%`}</span>
                 </div>
               </div>
               <p className="text-xs text-center" style={{ color:"var(--muted-foreground)" }}>خالٍ من الأعطال</p>

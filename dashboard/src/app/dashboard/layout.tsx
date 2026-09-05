@@ -151,7 +151,7 @@ export default function DashboardLayout({
         {/* Sidebar */}
         <div
           className={`fixed end-0 top-0 z-50 h-screen lg:sticky transition-transform duration-300 ${
-            sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
+            sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
           }`}
         >
           <Sidebar

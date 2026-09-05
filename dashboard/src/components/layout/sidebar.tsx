@@ -101,7 +101,7 @@ export function Sidebar({ userRole, userEmail, collapsed=false, onToggleCollapse
               <img src="/logo.png" alt="Logo" className="w-4 h-4 object-contain" />
             </div>
             <div>
-              <p className="text-sm font-bold text-white leading-none">MangaWorld</p>
+              <p className="text-sm font-bold leading-none" style={{ color:"var(--sidebar-text)" }}>MangaWorld</p>
               <p className="text-[10px] mt-0.5" style={{ color:"var(--sidebar-text)" }}>لوحة التحكم</p>
             </div>
           </div>
@@ -188,13 +188,13 @@ export function Sidebar({ userRole, userEmail, collapsed=false, onToggleCollapse
 
         {!collapsed && (
           <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg"
-            style={{ background:"rgba(255,255,255,0.03)" }}>
+            style={{ background:"color-mix(in srgb, var(--sidebar-active) 8%, transparent)" }}>
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 text-white"
               style={{ background:"var(--sidebar-active)" }}>
               {userEmail?.[0]?.toUpperCase() ?? "A"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-white truncate">{userEmail || "admin"}</p>
+              <p className="text-xs font-medium truncate" style={{ color:"var(--sidebar-text)" }}>{userEmail || "admin"}</p>
               <p className="text-[10px]" style={{ color:"var(--sidebar-text)", opacity:0.7 }}>
                 {userRole==="super-admin"?"مدير عام":userRole==="moderator"?"مشرف":"مشاهد"}
               </p>

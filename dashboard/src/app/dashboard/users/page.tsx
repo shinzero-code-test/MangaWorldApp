@@ -6,7 +6,7 @@ import { StatusBadge, SkeletonTable, EmptyState, PageHeader } from "@/components
 import { formatAr, formatRelative, formatDate, avatarColor, getInitials } from "@/lib/utils";
 
 interface User {
-  id: string; email: string; username?: string; role: string;
+  id: string; email: string; username?: string; displayName?: string | null; role: string;
   disabled: boolean; lastSignIn?: string; createdAt?: string;
   providers?: string[];
 }
@@ -126,6 +126,7 @@ export default function UsersPage() {
             <thead>
               <tr>
                 <th scope="col">المستخدم</th>
+                <th scope="col">المعرف</th>
                 <th scope="col">الدور</th>
                 <th scope="col">الحالة</th>
                 <th scope="col">المزود</th>
@@ -135,14 +136,18 @@ export default function UsersPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="p-0"><SkeletonTable rows={PAGE_SIZE} cols={5} /></td></tr>
+                <tr><td colSpan={7} className="p-0"><SkeletonTable rows={PAGE_SIZE} cols={5} /></td></tr>
               ) : users.length === 0 ? (
-                <tr><td colSpan={6}><EmptyState icon={Users} title="لا يوجد مستخدمون" description="جرّب تغيير فلاتر البحث" /></td></tr>
+                <tr><td colSpan={7}><EmptyState icon={Users} title="لا يوجد مستخدمون" description="جرّب تغيير فلاتر البحث" /></td></tr>
               ) : (
                 users.map(user => {
                   const initials = getInitials(user.username, user.email);
                   const bgColor  = avatarColor(user.id);
-                  const provider = user.providers?.[0] ?? "password";
+                  const providerIds = user.providers ?? [];
+                  const providerLabel = providerIds.includes("google.com") ? "Google"
+                    : providerIds.includes("password") ? "Email"
+                    : providerIds.includes("anonymous") || providerIds.length === 0 ? "زائر"
+                    : providerIds[0];
                   return (
                     <tr key={user.id} className="cursor-pointer">
                       <td>
@@ -150,17 +155,22 @@ export default function UsersPage() {
                           <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
                             style={{ background:bgColor }}>{initials}</div>
                           <div className="min-w-0">
-                            <p className="font-medium text-sm truncate">{user.username || "—"}</p>
+                            <p className="font-medium text-sm truncate">{user.displayName || user.username || "—"}</p>
                             <p className="text-xs font-mono truncate" style={{ color:"var(--muted-foreground)" }} dir="ltr">{user.email}</p>
                           </div>
                         </div>
+                      </td>
+                      <td>
+                        <span className="text-xs font-mono" style={{ color:"var(--muted-foreground)" }} dir="ltr" title={user.id}>
+                          {user.id.slice(0, 8)}…
+                        </span>
                       </td>
                       <td><StatusBadge status={user.role} /></td>
                       <td><StatusBadge status={user.disabled ? "banned" : "active"} /></td>
                       <td>
                         <span className="text-xs font-mono px-2 py-0.5 rounded"
                           style={{ background:"var(--muted)", color:"var(--muted-foreground)" }} dir="ltr">
-                          {provider === "google.com" ? "Google" : "Email"}
+                          {providerLabel}
                         </span>
                       </td>
                       <td>

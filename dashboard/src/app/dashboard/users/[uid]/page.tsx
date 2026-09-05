@@ -1,16 +1,17 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { User, ChevronRight, ShieldOff, Shield, Save, Loader2, Mail, Calendar, Key, Globe, BookOpen, Heart, FileText } from "lucide-react";
+import { User, ChevronRight, ShieldOff, Shield, Save, Loader2, Mail, Calendar, Key, Globe, BookOpen, Heart, MessageSquare, PenLine, Star } from "lucide-react";
 import { StatusBadge, ConfirmDialog, Skeleton } from "@/components/ui";
 import { formatDate, formatRelative, avatarColor, getInitials } from "@/lib/utils";
 
 interface UserDetail {
-  id: string; email: string | null; username?: string; role: string;
+  id: string; email: string | null; username?: string; displayName?: string | null; role: string;
   disabled: boolean; lastSignIn?: string; createdAt?: string;
   emailVerified?: boolean; providers?: { providerId: string; email?: string }[];
   bio?: string; avatarUrl?: string;
   favoriteCount?: number; historyCount?: number; annotationCount?: number; deviceCount?: number;
+  commentsCount?: number; reviewsCount?: number;
   customClaims?: Record<string, any>;
 }
 
@@ -90,8 +91,10 @@ export default function UserDetailPage() {
   const stats = [
     { label:"المفضلة", val: user.favoriteCount ?? 0, icon: Heart },
     { label:"سجل القراءة", val: user.historyCount ?? 0, icon: BookOpen },
+    { label:"التعليقات", val: user.commentsCount ?? 0, icon: MessageSquare },
+    { label:"المراجعات", val: user.reviewsCount ?? 0, icon: Star },
     { label:"الأجهزة", val: user.deviceCount ?? 0, icon: Globe },
-    { label:"التعليقات", val: user.annotationCount ?? 0, icon: FileText },
+    { label:"تعليقات توضيحية", val: user.annotationCount ?? 0, icon: PenLine },
   ];
 
   return (
@@ -116,7 +119,7 @@ export default function UserDetailPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-xl font-bold">{user.username || "بدون اسم"}</h2>
+                  <h2 className="text-xl font-bold">{user.displayName || user.username || "بدون اسم"}</h2>
                   <StatusBadge status={user.role} />
                   <StatusBadge status={user.disabled ? "banned" : "active"} />
                 </div>

@@ -144,6 +144,9 @@ export default function SettingsPage() {
   return (
     <div className="space-y-5 pb-24">
       <PageHeader title="إعدادات التطبيق" subtitle="ضبط إعدادات تطبيق مانجا وورلد" icon={Smartphone} />
+      <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+        تُنشر التغييرات على Remote Config فور الحفظ، ويلتقطها التطبيق خلال ساعة كحد أقصى (عند التشغيل) — أعد تشغيل التطبيق لرؤية الأثر فوراً.
+      </p>
 
       {SECTIONS.map(section => {
         const Icon = section.icon;

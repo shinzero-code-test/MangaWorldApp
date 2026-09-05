@@ -6,18 +6,14 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts";
 import { PageHeader, SkeletonCard, Skeleton } from "@/components/ui";
-import { formatDuration, formatAr, formatRelative } from "@/lib/utils";
+import { formatDuration, formatAr } from "@/lib/utils";
 
 interface TraceItem {
   name:      string;
+  eventType: string;
+  count:     number;
   avgMs:     number;
-  p50:       number;
-  p95:       number;
-  p99:       number;
-  status:    "good" | "warning" | "critical";
-  device?:   string;
-  os?:       string;
-  timestamp: string | number;
+  p50Ms:     number;
 }
 
 interface PerformanceData {
@@ -29,6 +25,7 @@ interface PerformanceData {
     avgRender:  number;
     totalTraces:number;
   };
+  bigquery?: { available: boolean; table?: string; reason?: string; hint?: string };
 }
 
 const durationColor = (ms: number) =>
@@ -48,6 +45,7 @@ export default function PerformancePage() {
   const traces       = data?.traces ?? [];
   const screenMetrics= data?.screenMetrics ?? [];
   const summary      = data?.summary ?? { avgStartup: 0, avgNetwork: 0, avgRender: 0, totalTraces: 0 };
+  const bq           = data?.bigquery;
 
   return (
     <div className="space-y-6">
@@ -56,6 +54,15 @@ export default function PerformancePage() {
         subtitle="Firebase Performance Monitoring"
         icon={Zap}
       />
+
+      {bq && !bq.available && (
+        <div className="p-4 rounded-xl border text-sm leading-relaxed"
+          style={{ background: "rgba(245,158,11,0.08)", borderColor: "rgba(245,158,11,0.3)", color: "var(--warning)" }}>
+          {bq.reason === "permission-denied"
+            ? "لا تملك الخدمة صلاحية BigQuery — امنح حساب الخدمة دوري Job User و Data Viewer."
+            : "لا توجد بيانات مصدّرة في BigQuery بعد — تظهر التتبعات تلقائياً بعد أول تصدير يومي يحتوي أحداث أداء."}
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -121,33 +128,35 @@ export default function PerformancePage() {
                 <thead>
                   <tr>
                     <th scope="col">الاسم</th>
+                    <th scope="col">النوع</th>
+                    <th scope="col">العدد</th>
                     <th scope="col">متوسط</th>
-                    <th scope="col">p95</th>
-                    <th scope="col">الوقت</th>
+                    <th scope="col">p50</th>
                   </tr>
                 </thead>
                 <tbody>
                   {traces.map((t, i) => (
-                    <tr key={i}>
+                    <tr key={`${t.eventType}-${t.name}-${i}`}>
                       <td>
                         <span className="text-xs font-mono" dir="ltr">{t.name}</span>
                       </td>
                       <td>
+                        <span className="text-xs font-mono" style={{ color: "var(--muted-foreground)" }} dir="ltr">{t.eventType}</span>
+                      </td>
+                      <td>
+                        <span className="text-sm font-mono">{formatAr(t.count ?? 0)}</span>
+                      </td>
+                      <td>
                         <span
                           className="text-sm font-mono font-semibold"
-                          style={{ color: durationColor(t.avgMs) }}
+                          style={{ color: durationColor(t.avgMs ?? 0) }}
                         >
-                          {formatDuration(t.avgMs)}
+                          {formatDuration(t.avgMs ?? 0)}
                         </span>
                       </td>
                       <td>
-                        <span className="text-sm font-mono" style={{ color: durationColor(t.p95) }}>
-                          {formatDuration(t.p95)}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-                          {formatRelative(t.timestamp)}
+                        <span className="text-sm font-mono" style={{ color: durationColor(t.p50Ms ?? 0) }}>
+                          {formatDuration(t.p50Ms ?? 0)}
                         </span>
                       </td>
                     </tr>

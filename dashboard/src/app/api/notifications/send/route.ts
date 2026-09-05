@@ -37,6 +37,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "topic must be one of: general, updates, maintenance" }, { status: 400 });
     }
 
+    // Rich content (all optional, all consumed by the app's
+    // MangaWorldFirebaseMessagingService): cover image + deep link. The app
+    // renders imageUrl as BigPicture and routes mangaId/slug/sourceId (+
+    // chapterUrl) to the detail/reader screens.
+    const imageUrl = typeof raw.imageUrl === "string" && raw.imageUrl.trim() !== "" ? raw.imageUrl.trim() : null;
+    if (imageUrl !== null && (imageUrl.length > 2048 || !/^https:\/\/[^/]+\..+/.test(imageUrl))) {
+      return NextResponse.json({ error: "invalid imageUrl (https URL, max 2048 chars)" }, { status: 400 });
+    }
+    const link: Record<string, string> = {};
+    for (const key of ["mangaId", "slug", "sourceId", "chapterUrl"] as const) {
+      const value = (raw as Record<string, unknown>)[key];
+      if (typeof value === "string" && value.trim() !== "") {
+        if (value.length > 1024) {
+          return NextResponse.json({ error: `invalid ${key}` }, { status: 400 });
+        }
+        link[key] = value.trim();
+      }
+    }
+
     // Data-only payload: `notification`-only messages are rendered by the
     // system tray when the app is backgrounded and never reach
     // onMessageReceived, so they were never logged to the app's Notification
@@ -48,6 +67,8 @@ export async function POST(request: NextRequest) {
       body: msgBody,
       type: "push",
       topic,
+      ...link,
+      ...(imageUrl ? { imageUrl } : {}),
     };
 
     async function persistHistory(sent: number, failed: number) {
@@ -56,6 +77,8 @@ export async function POST(request: NextRequest) {
           title,
           body: msgBody,
           topic,
+          imageUrl: imageUrl ?? null,
+          link: Object.keys(link).length > 0 ? link : null,
           targetUids: null,
           sentAt: Date.now(),
           sentBy: "admin",

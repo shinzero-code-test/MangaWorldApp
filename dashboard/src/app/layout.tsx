@@ -24,6 +24,15 @@ try {
 } catch (e) {}
 `;
 
+// Registers the installability-only service worker (no caching — see public/sw.js).
+const swRegisterScript = `
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("/sw.js").catch(function () {});
+  });
+}
+`;
+
 export default function RootLayout({
   children,
 }: {
@@ -33,6 +42,7 @@ export default function RootLayout({
     <html lang="ar" dir="rtl" className="dark" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script dangerouslySetInnerHTML={{ __html: swRegisterScript }} />
       </head>
       <body className="antialiased min-h-screen">{children}</body>
     </html>
