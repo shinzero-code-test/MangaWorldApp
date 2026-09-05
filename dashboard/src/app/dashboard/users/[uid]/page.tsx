@@ -231,7 +231,7 @@ export default function UserDetailPage() {
       <ConfirmDialog
         open={banOpen}
         title={user.disabled ? "إلغاء حظر المستخدم" : "حظر المستخدم"}
-        description={user.disabled ? `هل تريد إلغاء حظر "${user.email}"؟` : `هل تريد حظر "${user.email}"؟ لن يتمكن من الدخول حتى يتم رفع الحظر.`}
+        description={user.disabled ? `هل تريد إلغاء حظر "${user.email ?? "—"}"؟` : `هل تريد حظر "${user.email ?? "—"}"؟ لن يتمكن من الدخول حتى يتم رفع الحظر.`}
         confirmLabel={user.disabled ? "إلغاء الحظر" : "حظر"}
         variant="danger"
         onConfirm={handleBanToggle}

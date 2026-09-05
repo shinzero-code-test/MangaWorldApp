@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
+import { getAdminRemoteConfig } from "@/lib/firebase-admin";
 import { validateRemoteConfigParams } from "@/lib/validate";
 import { genericErrorResponse } from "@/lib/security";
 
@@ -8,13 +9,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     await requireRole("super-admin");
-    const { getApps } = await import("firebase-admin/app");
-    const { getRemoteConfig } = await import("firebase-admin/remote-config");
-
-    const app = getApps()[0];
-    if (!app) return NextResponse.json({ parameters: {}, template: null });
-
-    const rc = getRemoteConfig(app);
+    const rc = getAdminRemoteConfig();
     const template = await rc.getTemplate();
 
     const params: Record<string, any> = {};
@@ -51,13 +46,7 @@ export async function PUT(request: NextRequest) {
     if (!validation.ok) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
-    const { getApps } = await import("firebase-admin/app");
-    const { getRemoteConfig } = await import("firebase-admin/remote-config");
-
-    const app = getApps()[0];
-    if (!app) return NextResponse.json({ error: "Firebase not initialized" }, { status: 500 });
-
-    const rc = getRemoteConfig(app);
+    const rc = getAdminRemoteConfig();
     const template = await rc.getTemplate();
 
     for (const [key, value] of Object.entries(parameters)) {

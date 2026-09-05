@@ -1,14 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clearMfaGrantCookie, DASHBOARD_ROLES, type DashboardRole } from "@/lib/auth";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
-import { logSecurityEvent } from "@/lib/security";
+import { consumeRateLimit, logSecurityEvent } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
 
+function clientIp(request: NextRequest): string {
+  return (
+    request.headers.get("x-real-ip")?.split(",")[0]?.trim() ||
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown"
+  );
+}
+
 export async function POST(request: NextRequest) {
   try {
+    // Public token-exchange endpoint: throttle like the sibling auth routes.
+    const ipAttempt = await consumeRateLimit("auth-google-ip", clientIp(request), 30, 15 * 60 * 1000);
+    if (!ipAttempt.allowed) {
+      return NextResponse.json(
+        { error: "تم إرسال عدد كبير من المحاولات. حاول مرة أخرى لاحقاً." },
+        { status: 429 }
+      );
+    }
     const { idToken } = await request.json();
-    if (!idToken) {
+    if (typeof idToken !== "string" || idToken.length === 0 || idToken.length > 8192) {
       return NextResponse.json({ error: "Missing ID token" }, { status: 400 });
     }
 

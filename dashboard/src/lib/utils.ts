@@ -30,6 +30,7 @@ function arabicCount(n: number, singular: string, dual: string, plural: string):
 
 // ─── Duration ────────────────────────────────────────
 export const formatDuration = (ms: number): string => {
+  if (!Number.isFinite(ms) || ms < 0) return "—";
   if (ms < 1000) return `${formatAr(Math.round(ms))} م.ث`;
   return `${formatAr(Number((ms / 1000).toFixed(1)))} ث`;
 };
@@ -60,9 +61,9 @@ export const cn = (...c: (string | boolean | undefined | null)[]) => c.filter(Bo
 
 // ─── Bytes ────────────────────────────────────────────
 export const formatBytes = (b: number): string => {
-  if (b === 0) return "0 B";
+  if (!Number.isFinite(b) || b <= 0) return b === 0 ? "0 B" : "—";
   const k = 1024, sizes = ["B","KB","MB","GB","TB"];
-  const i = Math.floor(Math.log(b) / Math.log(k));
+  const i = Math.min(sizes.length - 1, Math.floor(Math.log(b) / Math.log(k)));
   return `${formatAr(Number((b / Math.pow(k, i)).toFixed(1)))} ${sizes[i]}`;
 };
 

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
 import { getAccessToken } from "@/lib/firebase-admin";
 import { genericErrorResponse } from "@/lib/security";

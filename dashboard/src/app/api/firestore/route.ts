@@ -3,12 +3,15 @@ import { getAdminDb } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
 import { validateFirestoreDoc } from "@/lib/validate";
 import { genericErrorResponse } from "@/lib/security";
+import { isDataBrowserCollection, isValidDocId } from "@/lib/firestore-whitelist";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
     await requireRole("super-admin");
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get("limit") || "50");
+    const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || "50", 10) || 50, 1), 200);
     const startAfter = searchParams.get("startAfter") || "";
 
     const db = getAdminDb();
@@ -42,9 +45,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing collection or data" }, { status: 400 });
     }
 
-    // Whitelist allowed collections
-    const allowed = ["publicProfiles", "app_config", "moderationReports", "user_achievements"];
-    if (!allowed.includes(collection)) {
+    // Whitelist allowed collections (shared with the dynamic browser routes).
+    if (!isDataBrowserCollection(collection)) {
       return NextResponse.json({ error: "Collection not allowed" }, { status: 403 });
     }
 
@@ -54,7 +56,7 @@ export async function POST(request: NextRequest) {
     if (!docCheck.ok) {
       return NextResponse.json({ error: docCheck.error }, { status: 400 });
     }
-    if (docId !== undefined && (typeof docId !== "string" || docId.length < 1 || docId.length > 512 || docId.includes("/"))) {
+    if (docId !== undefined && !isValidDocId(docId)) {
       return NextResponse.json({ error: "Invalid docId" }, { status: 400 });
     }
 

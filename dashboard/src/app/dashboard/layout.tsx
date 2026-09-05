@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { ErrorBoundary } from "@/components/shared/error-boundary";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { Ban } from "lucide-react";
 import { Spinner } from "@/components/ui";
 
 interface UserInfo {
@@ -96,10 +97,10 @@ export default function DashboardLayout({
             style={{ background: "var(--card)", border: "1px solid var(--border)" }}
           >
             <div
-              className="w-16 h-16 rounded-full flex items-center justify-center text-3xl"
-              style={{ background: "rgba(239,68,68,0.15)" }}
+              className="w-16 h-16 rounded-full flex items-center justify-center"
+              style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444" }}
             >
-              🚫
+              <Ban size={30} />
             </div>
             <h1
               className="text-xl font-bold"

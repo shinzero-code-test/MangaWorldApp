@@ -56,7 +56,9 @@ export default function CommentsPage() {
         body: JSON.stringify({
           commentId: target.id,
           mangaId: target.mangaId,
-          chapterUrl: target.chapterUrl,
+          // Server accepts null|string only: JSON.stringify drops undefined
+          // keys, which 400s manga-level comments with no error shown.
+          chapterUrl: target.chapterUrl ?? null,
         }),
       });
       if (response.ok) {
@@ -65,6 +67,8 @@ export default function CommentsPage() {
           comment.mangaId !== target.mangaId ||
           comment.chapterUrl !== target.chapterUrl,
         ));
+      } else {
+        setError("تعذر حذف التعليق. حاول مرة أخرى.");
       }
     } finally { setDeleteLoading(false); setDeleteTarget(null); }
   };
@@ -124,7 +128,7 @@ export default function CommentsPage() {
                       <td>
                         <p className="text-sm font-medium">{c.authorName || c.authorUsername || "مجهول"}</p>
                         <p className="text-xs font-mono" style={{ color: "var(--muted-foreground)" }} dir="ltr">
-                           {c.authorUid.slice(0, 8)}…
+                           {(c.authorUid ?? "").slice(0, 8)}…
                         </p>
                       </td>
                       <td className="max-w-[300px]">

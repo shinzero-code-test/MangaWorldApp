@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  AreaChart, Area, PieChart, Pie, Cell
+  PieChart, Pie, Cell
 } from "recharts";
 import { PageHeader, SkeletonCard, Skeleton } from "@/components/ui";
 import { formatAr } from "@/lib/utils";

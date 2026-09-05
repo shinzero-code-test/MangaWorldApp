@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
+import { genericErrorResponse } from "@/lib/security";
 import type { ModerationReport } from "@/types/community";
 
 export const dynamic = 'force-dynamic';
@@ -80,6 +81,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function errorResponse(error: unknown) {
-  const message = error instanceof Error ? error.message : "Unexpected error";
-  return NextResponse.json({ error: message }, { status: message === "Forbidden" ? 403 : 500 });
+  const { body, status } = genericErrorResponse(error);
+  return NextResponse.json(body, { status });
 }

@@ -22,7 +22,8 @@ export async function GET() {
         .count().get(),
     ]);
 
-    // Aggregate comments + reviews across manga subcollections
+    // Aggregate comments + reviews across manga subcollections.
+    // Capped at 50 mangas: totals are best-effort on large fleets.
     let totalComments = 0;
     let totalReviews  = 0;
     try {
@@ -30,14 +31,13 @@ export async function GET() {
       const counts = await Promise.all(
         mangaDocs.docs.map(async (m) => {
           const [cSnap, rSnap] = await Promise.all([
-            getAdminDb().collectionGroup
-              ? getAdminDb().collectionGroup("comments").where("mangaId", "==", m.id).count().get()
-              : m.ref.collection("reviews").count().get(),
+            getAdminDb().collectionGroup("comments").where("mangaId", "==", m.id).count().get(),
             m.ref.collection("reviews").count().get(),
           ]);
           return { comments: cSnap.data().count, reviews: rSnap.data().count };
         })
       );
+      totalComments = counts.reduce((a, c) => a + c.comments, 0);
       totalReviews = counts.reduce((a, c) => a + c.reviews, 0);
     } catch { /* Subcollections may not exist */ }
 

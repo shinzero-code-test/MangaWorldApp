@@ -1,10 +1,11 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
-import { verifyAppIdToken } from "@/lib/app-auth";
+import { rejectAnonymousUser, verifyAppIdToken } from "@/lib/app-auth";
 import { allowAppMutation } from "@/lib/app-rate-limit";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { cloudinaryAssetId } from "@/lib/cloudinary-assets";
+import { genericErrorResponse } from "@/lib/security";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -24,22 +25,34 @@ const IMAGE_PATTERN = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2}
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
+  let user;
   try {
-    const user = await verifyAppIdToken(request);
+    user = await verifyAppIdToken(request);
+    rejectAnonymousUser(user);
+  } catch (authError) {
+    const { body, status } = genericErrorResponse(authError);
+    return NextResponse.json(body, { status });
+  }
+  try {
     const clientKey = `${user.uid}:${request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown"}`;
     if (!(await allowAppMutation(clientKey, 20, 60 * 60 * 1000))){
-      return NextResponse.json({ error: "Too many uploads" }, { status: 429 });
+      return NextResponse.json({ error: "تم إرسال عدد كبير من المحاولات. حاول مرة أخرى لاحقاً." }, { status: 429 });
     }
 
     const { image, assetType } = await request.json();
     if (typeof image !== "string" || !isAssetType(assetType)) {
-      return NextResponse.json({ error: "A valid image and assetType are required" }, { status: 400 });
+      return NextResponse.json({ error: "صورة ونوع أصل صالحين مطلوبان" }, { status: 400 });
+    }
+    // Pre-cap the raw string BEFORE base64 decoding: without this a 50–100 MB
+    // JSON body is decoded in a serverless function before the byte check runs.
+    if (image.length > 8_000_000) {
+      return NextResponse.json({ error: "الصورة كبيرة جداً" }, { status: 400 });
     }
     const match = image.match(IMAGE_PATTERN);
-    if (!match) return NextResponse.json({ error: "Unsupported image format" }, { status: 400 });
+    if (!match) return NextResponse.json({ error: "صيغة الصورة غير مدعومة" }, { status: 400 });
     const bytes = Buffer.from(match[2], "base64");
     if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) {
-      return NextResponse.json({ error: "Image too large" }, { status: 400 });
+      return NextResponse.json({ error: "الصورة كبيرة جداً" }, { status: 400 });
     }
 
     const result = await cloudinary.uploader.upload(image, {
@@ -58,8 +71,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: result.secure_url, publicId: result.public_id, width: result.width, height: result.height });
   } catch (error) {
-    console.error("Cloudinary app upload error:", error);
-    return NextResponse.json({ error: "Upload failed" }, { status: 401 });
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }
 

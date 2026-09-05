@@ -83,7 +83,9 @@ export default function EventsPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{e.name}</span>
                     <span className="text-xs text-[var(--muted-foreground)]">
-                      {new Date(e.timestamp).toLocaleString("ar-EG")}
+                      {Number.isFinite(new Date(e.timestamp).getTime())
+                        ? new Date(e.timestamp).toLocaleString("ar-EG")
+                        : "—"}
                     </span>
                   </div>
                   {e.params && Object.keys(e.params).length > 0 && (

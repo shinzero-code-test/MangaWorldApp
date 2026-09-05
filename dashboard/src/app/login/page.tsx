@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Eye, EyeOff, Loader2 } from "lucide-react";
+import { AlertCircle, BarChart3, Eye, EyeOff, Loader2, ShieldCheck, Users } from "lucide-react";
 import {
   GoogleAuthProvider,
   getRedirectResult,
@@ -396,9 +396,9 @@ export default function LoginPage() {
           {/* Feature highlights */}
           <div className="flex gap-4 justify-center mt-8 flex-wrap">
             {[
-              { icon: "👥", label: "إدارة المستخدمين" },
-              { icon: "📊", label: "تحليلات مباشرة" },
-              { icon: "🛡️", label: "مراقبة المحتوى" },
+              { icon: Users, label: "إدارة المستخدمين" },
+              { icon: BarChart3, label: "تحليلات مباشرة" },
+              { icon: ShieldCheck, label: "مراقبة المحتوى" },
             ].map((s) => (
               <div
                 key={s.label}
@@ -408,7 +408,7 @@ export default function LoginPage() {
                   border: "1px solid rgba(139,92,246,0.2)",
                 }}
               >
-                <p className="text-xl">{s.icon}</p>
+                <p className="text-xl flex justify-center" style={{ color: "rgba(167,139,250,0.9)" }}><s.icon size={22} /></p>
                 <p className="text-xs mt-0.5" style={{ color: "rgba(167,139,250,0.7)" }}>
                   {s.label}
                 </p>

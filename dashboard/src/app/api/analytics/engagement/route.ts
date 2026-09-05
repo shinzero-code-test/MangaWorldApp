@@ -10,7 +10,9 @@ export async function GET(request: NextRequest) {
     // Moderator minimum: "viewer" rank would admit the viewer role itself (M-4).
     await requireRole("moderator");
     const { searchParams } = new URL(request.url);
-    const days = parseInt(searchParams.get("days") || "7", 10);
+    // Clamp the window: each day costs sequential count queries; an unbounded
+    // `days` turns one request into thousands of Firestore reads.
+    const days = Math.min(31, Math.max(1, parseInt(searchParams.get("days") || "7", 10) || 7));
     const db = getAdminDb();
 
     // Daily active users (from publicProfiles.updatedAt)

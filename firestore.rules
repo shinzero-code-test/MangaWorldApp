@@ -379,6 +379,12 @@ service cloud.firestore {
       allow read, write: if owner(uid);
     }
 
+    // Admin-dashboard bookkeeping only (ownership enforced in
+    // /api/cloudinary/*). No direct client access — Admin SDK bypasses rules.
+    match /cloudinaryAssets/{assetId} {
+      allow read, write: if false;
+    }
+
     match /email_registry/{email} {
       allow read, write: if false;
     }

@@ -85,7 +85,12 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    await requireRole("super-admin");
+    const user = await requireRole("super-admin");
+
+    const limiter = await consumeRateLimit("cloudinary-delete", user.uid, 30, 5 * 60 * 1000);
+    if (!limiter.allowed) {
+      return NextResponse.json({ error: "Too many deletes — try later" }, { status: 429 });
+    }
 
     const { searchParams } = new URL(request.url);
     const publicId = searchParams.get("publicId");
@@ -95,6 +100,15 @@ export async function DELETE(request: NextRequest) {
     }
 
     const result = await cloudinary.uploader.destroy(publicId);
+    // Keep the tracking row in sync so the data browser (and any re-delete)
+    // doesn't reference bytes that no longer exist.
+    try {
+      const { getAdminDb } = await import("@/lib/firebase-admin");
+      const { cloudinaryAssetId } = await import("@/lib/cloudinary-assets");
+      await getAdminDb().collection("cloudinaryAssets").doc(cloudinaryAssetId(publicId)).delete();
+    } catch {
+      /* tracking cleanup is best-effort; the bytes are already gone */
+    }
     return NextResponse.json({ result });
   } catch (error) {
     const { body, status } = genericErrorResponse(error, "Delete failed");

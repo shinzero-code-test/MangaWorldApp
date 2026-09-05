@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Bug, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
-import { RadialBarChart, RadialBar, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { Bug, ChevronDown, ChevronUp } from "lucide-react";
+import { RadialBarChart, RadialBar, ResponsiveContainer } from "recharts";
 import { PageHeader, StatusBadge, EmptyState, SkeletonCard, Skeleton } from "@/components/ui";
 import { formatAr, formatRelative } from "@/lib/utils";
 

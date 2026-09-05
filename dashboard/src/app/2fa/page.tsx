@@ -451,6 +451,7 @@ export default function TwoFAPage() {
                         inputMode="numeric"
                         maxLength={6}
                         value={digit}
+                        aria-label={`خانة رمز التحقق ${i + 1}`}
                         onChange={(e) => handleOtpChange(i, e.target.value)}
                         onKeyDown={(e) => handleKeyDown(i, e)}
                         onFocus={(e) => e.target.select()}
@@ -542,6 +543,7 @@ export default function TwoFAPage() {
                       inputMode="numeric"
                       maxLength={6}
                       value={digit}
+                      aria-label={`خانة رمز التحقق ${i + 1}`}
                       onChange={(e) => handleOtpChange(i, e.target.value)}
                       onKeyDown={(e) => handleKeyDown(i, e)}
                       onFocus={(e) => e.target.select()}

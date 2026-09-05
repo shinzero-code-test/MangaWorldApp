@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { DASHBOARD_ROLES, requireRole } from "@/lib/auth";
 import { genericErrorResponse } from "@/lib/security";
+import { isValidEmail } from "@/lib/validate";
+import { isValidDocId } from "@/lib/firestore-whitelist";
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +11,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   try {
     await requireRole("moderator");
     const { uid } = await params;
+    if (!isValidDocId(uid)) {
+      return NextResponse.json({ error: "Invalid uid" }, { status: 400 });
+    }
 
     // Get Firebase Auth user
     let authUser: any = null;
@@ -82,10 +87,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   try {
     await requireRole("super-admin");
     const { uid } = await params;
+    if (!isValidDocId(uid)) {
+      return NextResponse.json({ error: "Invalid uid" }, { status: 400 });
+    }
     const body = await request.json();
 
     // Update profile
-    const profileUpdates: any = { updatedAt: Date.now() };
+    const profileUpdates: Record<string, unknown> = { updatedAt: Date.now() };
     if (body.role !== undefined && !DASHBOARD_ROLES.includes(body.role)) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
@@ -101,8 +109,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
       profileUpdates.bio = body.bio;
     }
-    if (body.isPublic !== undefined && typeof body.isPublic !== "boolean") {
-      return NextResponse.json({ error: "Invalid isPublic" }, { status: 400 });
+    if (body.isPublic !== undefined) {
+      if (typeof body.isPublic !== "boolean") {
+        return NextResponse.json({ error: "Invalid isPublic" }, { status: 400 });
+      }
+      profileUpdates.isPublic = body.isPublic;
     }
 
     await getAdminDb().collection("publicProfiles").doc(uid).update(profileUpdates);
@@ -116,7 +127,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     if (body.email) {
       // Email format check before hitting the Auth API (M-6).
-      if (typeof body.email !== "string" || body.email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(body.email)) {
+      if (typeof body.email !== "string" || body.email.length > 320 || !isValidEmail(body.email)) {
         return NextResponse.json({ error: "Invalid email" }, { status: 400 });
       }
       await getAdminAuth().updateUser(uid, { email: body.email });

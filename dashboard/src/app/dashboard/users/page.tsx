@@ -16,6 +16,7 @@ const PAGE_SIZE = 20;
 export default function UsersPage() {
   const [users,     setUsers]     = useState<User[]>([]);
   const [total,     setTotal]     = useState(0);
+  const [globalRoleCounts, setGlobalRoleCounts] = useState<Record<string, number>>({});
   const [loading,   setLoading]   = useState(true);
   const [page,      setPage]      = useState(1);
   const [search,    setSearch]    = useState("");
@@ -39,6 +40,9 @@ export default function UsersPage() {
         const data = await res.json();
         setUsers(data.users ?? []);
         setTotal(data.total ?? 0);
+        if (data.roleCounts && typeof data.roleCounts === "object") {
+          setGlobalRoleCounts(data.roleCounts as Record<string, number>);
+        }
       } catch (e) {
         if ((e as Error).name !== "AbortError") { setUsers([]); }
       } finally { setLoading(false); }
@@ -46,10 +50,12 @@ export default function UsersPage() {
     return () => { clearTimeout(timer); controller.abort(); };
   }, [page, search, roleFilter, provFilter]);
 
-  // Count by role from current page (approximate)
-  const roleCounts = users.reduce((acc, u) => {
-    acc[u.role] = (acc[u.role] ?? 0) + 1; return acc;
-  }, {} as Record<string, number>);
+  // Global role totals from the server (fleet-wide, not page-scoped).
+  const roleCounts = (Object.keys(globalRoleCounts).length > 0)
+    ? globalRoleCounts
+    : users.reduce((acc, u) => {
+        acc[u.role] = (acc[u.role] ?? 0) + 1; return acc;
+      }, {} as Record<string, number>);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const hasFilters = !!(search || roleFilter || provFilter);

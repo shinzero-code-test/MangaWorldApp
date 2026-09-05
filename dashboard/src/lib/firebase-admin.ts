@@ -11,21 +11,40 @@ let _storage:   Storage   | undefined;
 let _messaging: Messaging | undefined;
 let _remoteConfig: RemoteConfig | undefined;
 
+function parsedServiceAccount(): { projectId: string; clientEmail: string; privateKey: string } {
+  const sa = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (sa) {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(sa) as Record<string, unknown>;
+    } catch {
+      throw new Error("FIREBASE_SERVICE_ACCOUNT is not valid JSON");
+    }
+    const projectId = typeof parsed.project_id === "string" ? parsed.project_id : "";
+    const clientEmail = typeof parsed.client_email === "string" ? parsed.client_email : "";
+    const privateKey = typeof parsed.private_key === "string" ? parsed.private_key : "";
+    if (!projectId || !clientEmail || !privateKey) {
+      throw new Error("FIREBASE_SERVICE_ACCOUNT is missing project_id/client_email/private_key");
+    }
+    return { projectId, clientEmail, privateKey };
+  }
+  const projectId = process.env.FIREBASE_PROJECT_ID ?? "";
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL ?? "";
+  const privateKey = (process.env.FIREBASE_PRIVATE_KEY ?? "").replace(/\\n/g, "\n");
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error("Firebase Admin credentials are not configured (FIREBASE_SERVICE_ACCOUNT or FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY)");
+  }
+  return { projectId, clientEmail, privateKey };
+}
+
 function getApp() {
   const existing = getApps();
   if (existing.length > 0) return existing[0];
 
-  const sa   = process.env.FIREBASE_SERVICE_ACCOUNT;
-  const cred: ServiceAccount = sa
-    ? (JSON.parse(sa) as ServiceAccount)
-    : {
-        projectId:   process.env.FIREBASE_PROJECT_ID   ?? "",
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? "",
-        privateKey:  (process.env.FIREBASE_PRIVATE_KEY ?? "").replace(/\\n/g, "\n"),
-      };
+  const cred = parsedServiceAccount();
 
   return initializeApp({
-    credential:    cert(cred),
+    credential: cert(cred as ServiceAccount),
     storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
   });
 }
@@ -37,6 +56,9 @@ export function getAdminDb(): Firestore {
   return (_db ??= getFirestore(getApp()));
 }
 export function getAdminStorage(): Storage {
+  // Reserved for a future admin storage browser. Cloudinary is currently the
+  // ONLY image upload mechanism — do NOT add Firebase Storage uploads without
+  // revisiting that architecture decision (see docs; lint forbids the imports).
   return (_storage ??= getStorage(getApp()));
 }
 export function getAdminMessaging(): Messaging {
@@ -51,16 +73,16 @@ export function getAdminRemoteConfig(): RemoteConfig {
  * Used for calling Google Cloud REST APIs (Crashlytics, Performance, Analytics).
  */
 export async function getAccessToken(): Promise<string> {
-  const app = getApp();
-  const credential = app.options.credential;
-  if (!credential) throw new Error("No Firebase credentials configured");
+  const cred = parsedServiceAccount();
+  if (!cred) throw new Error("No Firebase credentials configured");
 
-  // Use the Firebase Admin SDK's internal credential to get an access token
+  // Use explicit credential fields — never the Admin SDK's internal
+  // credential shape, which is not a public API.
   const { GoogleAuth } = await import("google-auth-library");
   const auth = new GoogleAuth({
     credentials: {
-      client_email: (credential as any).serviceAccount?.clientEmail || process.env.FIREBASE_CLIENT_EMAIL,
-      private_key: (credential as any).serviceAccount?.privateKey || process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      client_email: cred.clientEmail,
+      private_key: cred.privateKey,
     },
     scopes: ["https://www.googleapis.com/auth/cloud-platform"],
   });

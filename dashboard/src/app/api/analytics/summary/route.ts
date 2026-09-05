@@ -10,7 +10,10 @@ export async function GET(request: NextRequest) {
     // Moderator minimum: "viewer" rank would admit the viewer role itself (M-4).
     await requireRole("moderator");
     const { searchParams } = new URL(request.url);
-    const period = searchParams.get("period") || "7d";
+    // Honored period: 7d/30d/90d drive both the sign-up window and the
+    // daily-active series length below.
+    const periodDays = searchParams.get("period") === "90d" ? 90
+      : searchParams.get("period") === "30d" ? 30 : 7;
 
     // Get real data from Firestore
     const [profilesSnap, reportsSnap, listsSnap] = await Promise.all([
@@ -21,14 +24,14 @@ export async function GET(request: NextRequest) {
 
     const roleCounts = await getDashboardRoleCounts();
 
-    // Get recent sign-ups (last 7 days)
-    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    // Get recent sign-ups (period window)
+    const weekAgo = Date.now() - periodDays * 24 * 60 * 60 * 1000;
     const recentProfiles = await getAdminDb().collection("publicProfiles")
       .where("updatedAt", ">=", weekAgo).count().get();
 
     // Real daily active users from Firestore
     const dailyActive = [];
-    for (let i = 6; i >= 0; i--) {
+    for (let i = periodDays - 1; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       d.setHours(0, 0, 0, 0);

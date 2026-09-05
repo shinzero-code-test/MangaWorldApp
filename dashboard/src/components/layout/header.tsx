@@ -16,8 +16,6 @@ const routeLabels: Record<string, string> = {
   "/dashboard/moderation": "الإشراف",
   "/dashboard/community/comments": "التعليقات",
   "/dashboard/community/reviews": "المراجعات",
-  "/dashboard/community/chat": "المحادثات",
-  "/dashboard/community/lists": "القوائم",
   "/dashboard/analytics": "التحليلات",
   "/dashboard/performance": "الأداء",
   "/dashboard/crashlytics": "الأعطال",
@@ -28,6 +26,10 @@ const routeLabels: Record<string, string> = {
   "/dashboard/storage": "التخزين",
   "/dashboard/settings": "الإعدادات",
   "/dashboard/releases": "الإصدارات",
+  "/dashboard/analytics/engagement": "التفاعل",
+  "/dashboard/analytics/events": "الأحداث",
+  "/dashboard/moderation/banned-keywords": "الكلمات المحظورة",
+  "/dashboard/remote-config/sources": "نطاقات المصادر",
 };
 
 interface HeaderProps {
@@ -57,7 +59,12 @@ export function Header({ onToggleSidebar, userEmail, userRole }: HeaderProps) {
     return () => clearInterval(timer);
   }, []);
 
-  const pageLabel = routeLabels[pathname] || "لوحة التحكم";
+  const pageLabel = routeLabels[pathname]
+    ?? Object.keys(routeLabels)
+      .filter((p) => pathname.startsWith(p + "/") || pathname === p)
+      .sort((a, b) => b.length - a.length)
+      .map((p) => routeLabels[p])[0]
+    ?? "لوحة التحكم";
 
   const handleLogout = async () => {
     await fetch("/api/auth/login", { method: "DELETE" }).catch(() => {});

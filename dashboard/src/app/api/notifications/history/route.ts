@@ -37,16 +37,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "invalid topic" }, { status: 400 });
     }
     const targetUids = raw.targetUids == null ? null : raw.targetUids;
-    if (targetUids !== null && !(Array.isArray(targetUids) && targetUids.length <= 500 && targetUids.every((u: unknown) => typeof u === "string" && u.length > 0))) {
+    if (targetUids !== null && !(Array.isArray(targetUids)
+        && targetUids.length <= 500
+        && targetUids.every((u: unknown) => typeof u === "string" && u.length >= 1 && u.length <= 128))) {
       return NextResponse.json({ error: "invalid targetUids" }, { status: 400 });
     }
+    const dedupedUids = targetUids === null ? null : Array.from(new Set(targetUids as string[]));
 
     // Save to history
     const entry = {
       title,
       body,
       topic,
-      targetUids,
+      targetUids: dedupedUids,
       sentAt: Date.now(),
       sentBy: "admin",
       status: "sent",

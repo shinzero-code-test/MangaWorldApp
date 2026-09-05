@@ -9,13 +9,17 @@ export async function GET(request: NextRequest) {
   try {
     const admin = await requireRole("moderator");
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get("search")?.toLowerCase() || "";
+    const search = (searchParams.get("search") ?? "").trim().toLowerCase().slice(0, 128);
     const roleFilter = searchParams.get("role") || "";
     const providerFilter = searchParams.get("provider") || "";
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "20");
-    const sortBy = searchParams.get("sortBy") || "createdAt";
-    const sortDir = searchParams.get("sortDir") || "desc";
+    // Clamp pagination: unbounded page/limit turns a full listUsers scan into
+    // a DoS/cost vector with giant offsets.
+    const page = Math.min(10000, Math.max(1, parseInt(searchParams.get("page") || "1") || 1));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20") || 20));
+    const SORT_KEYS = ["createdAt", "lastSignIn", "email", "username", "role"] as const;
+    const rawSort = searchParams.get("sortBy") || "createdAt";
+    const sortBy: string = (SORT_KEYS as readonly string[]).includes(rawSort) ? rawSort : "createdAt";
+    const sortDir = searchParams.get("sortDir") === "asc" ? "asc" : "desc";
 
     // 1. Fetch all users from Auth (since publicProfiles may be incomplete)
     let allAuthUsers: any[] = [];
@@ -39,6 +43,14 @@ export async function GET(request: NextRequest) {
       providers: authUser.providerData.map((p: { providerId: string }) => p.providerId),
       phoneNumber: authUser.phoneNumber || null,
     }));
+
+    // Global role counts (pre-filter) so the UI chips show fleet totals,
+    // not just the current page.
+    const roleCounts: Record<string, number> = { "super-admin": 0, moderator: 0, viewer: 0 };
+    for (const u of enriched) {
+      const r = typeof u.role === "string" && u.role in roleCounts ? u.role : "viewer";
+      roleCounts[r] += 1;
+    }
 
     // 3. Apply filters
     if (roleFilter) enriched = enriched.filter(u => u.role === roleFilter);
@@ -76,6 +88,7 @@ export async function GET(request: NextRequest) {
       page,
       limit,
       hasMore,
+      roleCounts,
     });
   } catch (error: unknown) {
     const { body, status } = genericErrorResponse(error);
@@ -88,21 +101,38 @@ export async function PATCH(request: NextRequest) {
     const admin = await requireRole("super-admin");
     const { uid, role, username, bio, disabled } = await request.json();
 
-    if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+    if (typeof uid !== "string" || uid.length < 1 || uid.length > 128) {
+      return NextResponse.json({ error: "معرف المستخدم غير صالح" }, { status: 400 });
+    }
 
-    const updates: any = { updatedAt: Date.now() };
+    const updates: Record<string, unknown> = { updatedAt: Date.now() };
     if (role !== undefined) {
-      if (!DASHBOARD_ROLES.includes(role)) return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+      if (typeof role !== "string" || !DASHBOARD_ROLES.includes(role as (typeof DASHBOARD_ROLES)[number])) {
+        return NextResponse.json({ error: "الدور غير صالح" }, { status: 400 });
+      }
       const authUser = await getAdminAuth().getUser(uid);
       await getAdminAuth().setCustomUserClaims(uid, { ...authUser.customClaims, role });
       await getAdminAuth().revokeRefreshTokens(uid);
     }
-    if (username !== undefined) updates.username = username;
-    if (bio !== undefined) updates.bio = bio;
+    if (username !== undefined) {
+      if (typeof username !== "string" || username.trim().length < 1 || username.length > 64) {
+        return NextResponse.json({ error: "اسم المستخدم غير صالح" }, { status: 400 });
+      }
+      updates.username = username.trim();
+    }
+    if (bio !== undefined) {
+      if (typeof bio !== "string" || bio.length > 1000) {
+        return NextResponse.json({ error: "النبذة غير صالحة" }, { status: 400 });
+      }
+      updates.bio = bio;
+    }
 
     await getAdminDb().collection("publicProfiles").doc(uid).update(updates);
 
     if (disabled !== undefined) {
+      if (typeof disabled !== "boolean") {
+        return NextResponse.json({ error: "حالة التعطيل غير صالحة" }, { status: 400 });
+      }
       await getAdminAuth().updateUser(uid, { disabled });
     }
 
@@ -144,8 +174,8 @@ export async function DELETE(request: NextRequest) {
     await getAdminDb().collection("users").doc(uid).delete();
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    const status = error.message === "Forbidden" ? 403 : error.message === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: error.message === "Forbidden" ? "Forbidden" : error.message === "Unauthorized" ? "Unauthorized" : "فشل حذف المستخدم" }, { status });
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }

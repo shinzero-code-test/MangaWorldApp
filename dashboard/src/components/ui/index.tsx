@@ -116,8 +116,10 @@ export function Toggle({ enabled, onChange, disabled, ariaLabel }: ToggleProps) 
       }}
     >
       <span
-        className="inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200"
-        style={{ transform: enabled ? "translateX(-22px)" : "translateX(-4px)" }}
+        className="absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-200"
+        // Logical insets (not physical translateX): the knob travels correctly
+        // in both RTL and LTR. Do not "simplify" back to translateX.
+        style={enabled ? { insetInlineEnd: "4px" } : { insetInlineStart: "4px" }}
       />
     </button>
   );

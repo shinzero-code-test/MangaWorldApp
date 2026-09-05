@@ -83,6 +83,14 @@ export async function POST(request: NextRequest) {
         ? String((lookupError as Record<string, unknown>).code)
         : "";
       if (code !== "auth/user-not-found") throw lookupError;
+      // No open enrollment: unknown Google emails get a Firebase account only
+      // when they match the configured super-admin (owner bootstrap). Any
+      // other new admin must be pre-provisioned; otherwise arbitrary Google
+      // users would accumulate orphan Auth accounts.
+      const configuredSuperAdmin = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+      if (!configuredSuperAdmin || email !== configuredSuperAdmin) {
+        return NextResponse.json({ error: "تعذر تسجيل الدخول بـ Google" }, { status: 401 });
+      }
       uid = (await adminAuth.createUser({
         email,
         emailVerified: true,

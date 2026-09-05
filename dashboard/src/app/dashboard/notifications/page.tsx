@@ -54,10 +54,13 @@ export default function NotificationsPage() {
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ title, body: body, topic }),
       });
-      if (!res.ok) throw new Error((await res.json()).error || "خطأ في الإرسال");
+      if (!res.ok) {
+        const data = await res.json().catch(() => null) as { error?: string } | null;
+        throw new Error(data?.error || "خطأ في الإرسال");
+      }
       setSent(true); setTimeout(() => setSent(false), 3000);
       setTitle(""); setBody("");
-    } catch (e:any) { setError(e.message); }
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "خطأ في الإرسال"); }
     finally { setSending(false); }
   };
 

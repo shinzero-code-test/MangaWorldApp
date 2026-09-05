@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from "crypto";
 import { FieldValue, type CollectionReference, type Firestore } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAppIdToken } from "@/lib/app-auth";
+import { rejectAnonymousUser, verifyAppIdToken } from "@/lib/app-auth";
 import { allowAppMutation } from "@/lib/app-rate-limit";
 import { getAdminDb, getAdminMessaging } from "@/lib/firebase-admin";
+import { genericErrorResponse } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
 const MAX_MENTION_RECIPIENTS = 10;
@@ -11,12 +12,13 @@ const MAX_MENTION_RECIPIENTS = 10;
 export async function POST(request: NextRequest) {
   try {
     const user = await verifyAppIdToken(request);
+    rejectAnonymousUser(user);
     if (!(await allowAppMutation(`comment-notification:${user.uid}`, 60, 60 * 60 * 1000))){
-      return NextResponse.json({ error: "Too many notification requests" }, { status: 429 });
+      return NextResponse.json({ error: "تم إرسال عدد كبير من المحاولات. حاول مرة أخرى لاحقاً." }, { status: 429 });
     }
     const { mangaId, chapterUrl, commentId } = await request.json();
     if (!isIdentifier(mangaId) || !isIdentifier(commentId) || !isValidChapterUrl(chapterUrl)) {
-      return NextResponse.json({ error: "A valid comment event is required" }, { status: 400 });
+      return NextResponse.json({ error: "حدث تعليق غير صالح" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
     const commentSnapshot = await commentRef.get();
     const comment = commentSnapshot.data();
     if (!comment || comment.authorUid !== user.uid) {
-      return NextResponse.json({ error: "Comment not found" }, { status: 404 });
+      return NextResponse.json({ error: "التعليق غير موجود" }, { status: 404 });
     }
 
     const recipients = new Map<string, { type: "REPLY" | "MENTION"; title: string; body: string }>();
@@ -117,12 +119,16 @@ export async function POST(request: NextRequest) {
     const sent = await Promise.all([...recipients.entries()].map(async ([targetUid, notification]) => {
       const devices = await db.collection("users").doc(targetUid).collection("devices").get();
       const tokens = devices.docs.map((device) => device.data().token).filter((token): token is string => typeof token === "string");
-      return sendPush(tokens, notification.title, notification.body, data);
+      // Data-only (same rationale as notifications/send): a `notification`
+      // payload would render in the tray while backgrounded WITHOUT calling
+      // onMessageReceived, so the reply would never reach the Notification
+      // Centre. Title/body/type ride in data, which the app reads first.
+      return sendPush(tokens, notification.title, notification.body, notification.type, data);
     }));
     return NextResponse.json({ success: true, sent: sent.reduce((total, count) => total + count, 0) });
   } catch (error) {
-    console.error("Comment notification error:", error);
-    return NextResponse.json({ error: "Unable to send notification" }, { status: 401 });
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }
 
@@ -148,10 +154,13 @@ async function resolveCommentThreadRoot(
   return comments.doc(currentId).get();
 }
 
-async function sendPush(tokens: string[], title: string, body: string, data: Record<string, string>): Promise<number> {
+async function sendPush(tokens: string[], title: string, body: string, type: string, data: Record<string, string>): Promise<number> {
   let sent = 0;
   for (let index = 0; index < tokens.length; index += 500) {
-    const response = await getAdminMessaging().sendEachForMulticast({ tokens: tokens.slice(index, index + 500), notification: { title, body }, data });
+    const response = await getAdminMessaging().sendEachForMulticast({
+      tokens: tokens.slice(index, index + 500),
+      data: { ...data, title, body, type: type === "MENTION" ? "mention" : "reply" },
+    });
     sent += response.successCount;
   }
   return sent;

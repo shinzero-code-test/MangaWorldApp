@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { type DocumentReference } from "firebase-admin/firestore";
-import { verifyAppIdToken } from "@/lib/app-auth";
+import { rejectAnonymousUser, verifyAppIdToken } from "@/lib/app-auth";
 import { allowAppMutation } from "@/lib/app-rate-limit";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { genericErrorResponse } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +12,9 @@ type TargetType = "comment" | "review";
 export async function POST(request: NextRequest) {
   try {
     const user = await verifyAppIdToken(request);
+    rejectAnonymousUser(user);
     if (!(await allowAppMutation(`community-vote:${user.uid}`, 120, 60 * 1000))){
-      return NextResponse.json({ error: "Too many vote requests" }, { status: 429 });
+      return NextResponse.json({ error: "تم إرسال عدد كبير من المحاولات. حاول مرة أخرى لاحقاً." }, { status: 429 });
     }
 
     const payload = await request.json();
@@ -21,7 +23,7 @@ export async function POST(request: NextRequest) {
     const targetId = typeof payload.targetId === "string" ? payload.targetId : payload.commentId;
     const mangaId = payload.mangaId;
     if (!isIdentifier(targetId) || !isVote(payload.vote) || (targetType === "review" && !isIdentifier(mangaId))) {
-      return NextResponse.json({ error: "A valid content vote is required" }, { status: 400 });
+      return NextResponse.json({ error: "طلب تصويت غير صالح" }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest) {
         .get();
       if (comments.empty) throw new ContentNotFoundError();
       if (comments.size > 1) {
-        return NextResponse.json({ error: "Ambiguous comment identifier" }, { status: 409 });
+        return NextResponse.json({ error: "معرف التعليق غير واضح" }, { status: 409 });
       }
       contentRef = comments.docs[0].ref;
     }
@@ -69,13 +71,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     if (error instanceof ContentNotFoundError) {
-      return NextResponse.json({ error: "Content not found" }, { status: 404 });
+      return NextResponse.json({ error: "المحتوى غير موجود" }, { status: 404 });
     }
     if (error instanceof SelfVoteError) {
-      return NextResponse.json({ error: "You cannot vote on your own content" }, { status: 403 });
+      return NextResponse.json({ error: "لا يمكنك التصويت على المحتوى الخاص بك" }, { status: 403 });
     }
-    console.error("Community vote error:", error);
-    return NextResponse.json({ error: "Unable to update content vote" }, { status: 401 });
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }
 

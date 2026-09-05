@@ -209,13 +209,15 @@ export default function AchievementsPage() {
           </div>
           <div className="divide-y" style={{ borderColor: "var(--border)" }}>
             {goals.map((goal) => {
-              const pct = Math.min(100, (goal.current / goal.target) * 100);
+              const current = goal.current ?? 0;
+              const target = goal.target ?? 0;
+              const pct = target > 0 ? Math.min(100, (current / target) * 100) : 0;
               return (
                 <div key={goal.id} className="px-5 py-4">
                   <div className="flex items-center justify-between mb-2">
                     <p className="font-medium text-sm">{goal.label}</p>
                     <span className="text-xs font-mono" style={{ color: "var(--muted-foreground)" }}>
-                      {formatAr(goal.current)} / {formatAr(goal.target)} {goal.unit}
+                      {formatAr(current)} / {formatAr(target)} {goal.unit}
                     </span>
                   </div>
                   <div

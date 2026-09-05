@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Database, Users, MessageSquare, Shield, Trophy,
-  Eye, Trash2, Plus, RefreshCcw, ChevronLeft, X, Loader2
+  Eye, Trash2, Plus, RefreshCcw, X, Loader2
 } from "lucide-react";
 import { PageHeader, ConfirmDialog, EmptyState, Spinner } from "@/components/ui";
 import { truncate } from "@/lib/utils";
@@ -16,13 +16,14 @@ interface Collection {
 }
 
 // Only collections that actually exist in this project's Firestore topology.
-// Keep in sync with ALLOWED_COLLECTIONS in /api/firestore/[collection]/route.ts.
+// Keep in sync with DATA_BROWSER_COLLECTIONS in src/lib/firestore-whitelist.ts.
 const COLLECTIONS: Collection[] = [
   { id: "publicProfiles",    label: "الملفات العامة", description: "ملفات المستخدمين العامة",        icon: Users },
   { id: "community_manga",   label: "المجتمع",        description: "مانجا المجتمع وتعليقاتها",       icon: MessageSquare },
   { id: "moderationReports", label: "البلاغات",       description: "تقارير المخالفات",               icon: Shield },
   { id: "user_achievements", label: "الإنجازات",      description: "إنجازات المستخدمين",             icon: Trophy },
   { id: "cloudinaryAssets",  label: "الأصول",         description: "أصول الصور المرفوعة على Cloudinary", icon: Database },
+  { id: "releases",          label: "الإصدارات",      description: "إصدارات التطبيق المنشورة",       icon: Database },
 ];
 
 interface DocRow {
@@ -140,10 +141,10 @@ export default function DataBrowserPage() {
         }
       />
 
-      <div className="flex gap-5 min-h-[500px]">
+      <div className="flex flex-col md:flex-row gap-5 min-h-[500px]">
         {/* Collection sidebar */}
         <div
-          className="w-[220px] shrink-0 rounded-[var(--radius-lg)] border overflow-hidden"
+          className="w-full md:w-[220px] shrink-0 rounded-[var(--radius-lg)] border overflow-hidden"
           style={{ background: "var(--card)", borderColor: "var(--border)" }}
         >
           <div

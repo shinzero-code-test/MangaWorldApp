@@ -106,7 +106,7 @@ export default function ReviewsPage() {
                     <td>
                        <p className="text-sm font-medium">{r.authorName || r.authorUsername || "مجهول"}</p>
                        <p className="text-xs font-mono" style={{ color: "var(--muted-foreground)" }} dir="ltr">
-                         {r.authorUid.slice(0, 8)}…
+                         {(r.authorUid ?? "").slice(0, 8)}…
                       </p>
                     </td>
                     <td>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { genericErrorResponse } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,8 @@ export async function GET() {
       );
     }
     return NextResponse.json(user);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 401 });
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }
