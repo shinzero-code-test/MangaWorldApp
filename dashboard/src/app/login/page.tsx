@@ -6,11 +6,31 @@ import { AlertCircle, Eye, EyeOff, Loader2 } from "lucide-react";
 import {
   GoogleAuthProvider,
   getRedirectResult,
+  signInWithCustomToken,
   signInWithEmailAndPassword,
   signInWithRedirect,
 } from "firebase/auth";
 import { clientAuth } from "@/lib/firebase-client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+
+// Google Identity Services button (primary Google flow — works where the
+// firebaseapp.com iframe relay used by popup/redirect is dead).
+const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
+const GIS_CLIENT_ID = (process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "").trim();
+
+interface GisCredentialResponse {
+  credential?: string;
+  select_by?: string;
+}
+interface GisIdClient {
+  initialize: (options: Record<string, unknown>) => void;
+  renderButton: (element: HTMLElement, options: Record<string, unknown>) => void;
+}
+declare global {
+  interface Window {
+    google?: { accounts?: { id?: GisIdClient } };
+  }
+}
 
 function authErrorCode(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
@@ -83,6 +103,9 @@ export default function LoginPage() {
   const [googleDetails, setGoogleDetails] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [gisReady, setGisReady] = useState(false);
+  const [gisFailed, setGisFailed] = useState(false);
+  const gisButtonRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
 
   // Caps the claims-refresh handshake: a persistently true `refreshRequired` (stale custom
@@ -116,9 +139,9 @@ export default function LoginPage() {
     setError("");
     setGoogleDetails("");
     try {
-      // Redirect-first: navigates to Google and back. Every failure mode here
-      // is visible (unlike a hung popup, which resolves nothing and rejects
-      // nothing). The mount effect below completes the flow on return.
+      // Redirect fallback (only used when the GIS button cannot load):
+      // navigates to Google and back. The mount effect below completes the
+      // flow on return.
       await startGoogleRedirect();
       return;
     } catch (error: unknown) {
@@ -130,6 +153,96 @@ export default function LoginPage() {
       setGoogleLoading(false);
     }
   };
+
+  // GIS credential → Firebase custom token → normal session pipeline.
+  // signInWithCustomToken is a direct Identity Toolkit call: no firebaseapp
+  // iframe involved, so it works where popup/redirect find no result.
+  const handleGisCredential = async (credential: string) => {
+    setGoogleLoading(true);
+    setError("");
+    setGoogleDetails("");
+    try {
+      const res = await fetch("/api/auth/google-credential", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "تعذر تسجيل الدخول بـ Google");
+      }
+      if (typeof data?.customToken !== "string" || !data.customToken) {
+        throw new Error("تعذر تسجيل الدخول بـ Google");
+      }
+      await signInWithCustomToken(clientAuth, data.customToken);
+      const user = clientAuth.currentUser;
+      if (!user) throw new Error("تعذر تسجيل الدخول بـ Google");
+      await handleSession(await user.getIdToken(), () => user.getIdToken(true));
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "تعذر تسجيل الدخول بـ Google");
+      setGoogleDetails(googleSignInDetails("gis", error instanceof Error ? { code: "", message: error.message } : error));
+      console.error("[login] gis sign-in failed:", error);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  // Loads the GIS button. If the script cannot load (or no client ID is
+  // configured), the legacy redirect button below takes over.
+  useEffect(() => {
+    if (!GIS_CLIENT_ID) {
+      setGisFailed(true);
+      return;
+    }
+    let cancelled = false;
+    const init = () => {
+      if (cancelled) return;
+      try {
+        const gis = window.google?.accounts?.id;
+        if (!gis) throw new Error("gis unavailable");
+        gis.initialize({
+          client_id: GIS_CLIENT_ID,
+          callback: (response: unknown) => {
+            const credential = typeof response === "object" && response !== null && "credential" in response
+              ? (response as GisCredentialResponse).credential
+              : undefined;
+            if (typeof credential === "string" && credential) void handleGisCredential(credential);
+          },
+          auto_select: false,
+          itp_support: true,
+        });
+        if (gisButtonRef.current) {
+          gis.renderButton(gisButtonRef.current, {
+            type: "standard",
+            theme: "filled_black",
+            size: "large",
+            text: "signin_with",
+            shape: "pill",
+            logo_alignment: "left",
+          });
+          setGisReady(true);
+        } else {
+          throw new Error("gis container missing");
+        }
+      } catch (error: unknown) {
+        console.error("[login] gis init failed:", error);
+        if (!cancelled) setGisFailed(true);
+      }
+    };
+    if (document.querySelector(`script[src="${GIS_SCRIPT_SRC}"]`)) {
+      init();
+      return () => { cancelled = true; };
+    }
+    const script = document.createElement("script");
+    script.src = GIS_SCRIPT_SRC;
+    script.async = true;
+    script.defer = true;
+    script.onload = init;
+    script.onerror = () => { if (!cancelled) setGisFailed(true); };
+    document.head.appendChild(script);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Completes the redirect flow started by handleGoogle (redirect-first).
   // The marker distinguishes a genuine redirect return from a plain page load.
@@ -334,7 +447,28 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Google button */}
+          {/* Google button: official GIS button (primary — no firebaseapp iframe).
+              Falls back to the redirect flow only if GIS cannot load. */}
+          {!gisFailed && (
+            <div className="w-full" dir="ltr">
+              <div ref={gisButtonRef} className="w-full flex justify-center" />
+              {!gisReady && (
+                <div
+                  className="w-full flex items-center justify-center gap-3 py-3 rounded-xl border font-medium text-sm"
+                  style={{
+                    borderColor: "var(--border)",
+                    color: "var(--muted-foreground)",
+                    background: "var(--card)",
+                  }}
+                  aria-hidden="true"
+                >
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>جاري تحميل زر Google...</span>
+                </div>
+              )}
+            </div>
+          )}
+          {gisFailed && (
           <button
             onClick={handleGoogle}
             disabled={googleLoading || loading}
@@ -357,6 +491,7 @@ export default function LoginPage() {
             )}
             <span>{googleLoading ? "جاري تسجيل الدخول..." : "تسجيل الدخول بـ Google"}</span>
           </button>
+          )}
 
           {/* Divider */}
           <div className="relative">
