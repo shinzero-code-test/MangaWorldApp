@@ -31,6 +31,7 @@ function googleSignInErrorMessage(error: unknown): string {
     "auth/account-exists-with-different-credential": "هذا البريد مسجّل بطريقة أخرى — سجّل الدخول بالبريد وكلمة المرور أولاً.",
     "auth/user-disabled": "تم تعطيل هذا الحساب. تواصل مع مدير النظام.",
     "auth/web-storage-unsupported": "المتصفح يمنع التخزين المحلي (ملفات تعريف الارتباط/التخزين) — فعّله أو جرّب متصفحاً آخر.",
+    "auth/popup-timeout": "انتهت مهلة النافذة المنبثقة — جارٍ التحويل لتسجيل الدخول عبر التحويل",
   };
   return (code && messages[code]) || "تعذر بدء تسجيل الدخول بـ Google. حاول مرة أخرى.";
 }
@@ -56,7 +57,23 @@ function isRedirectFallbackError(error: unknown): boolean {
     || code === "auth/operation-not-supported-in-this-environment"
     || code === "auth/cancelled-popup-request"
     || code === "auth/network-request-failed"
+    || code === "auth/popup-timeout"
     || code === "auth/internal-error";
+}
+
+// Popup blockers and third-party-storage walls can leave signInWithPopup
+// hanging forever (never resolves, never rejects): the account chooser
+// completes and the popup closes, but the auth event never reaches the
+// opener, so no session POST is ever sent. This is the ceiling for that hang.
+const POPUP_TIMEOUT_MS = 45_000;
+
+async function startGoogleRedirect(): Promise<never> {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  if (typeof sessionStorage !== "undefined") sessionStorage.setItem(REDIRECT_MARKER, "1");
+  await signInWithRedirect(clientAuth, provider);
+  // signInWithRedirect navigates away; if it ever returns, treat as failure.
+  throw { code: "auth/internal-error", message: "redirect did not navigate" };
 }
 
 // sessionStorage marker so the return leg knows a Google redirect was
@@ -114,20 +131,29 @@ export default function LoginPage() {
     setGoogleLoading(true);
     setError("");
     setGoogleDetails("");
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: "select_account" });
-      const result = await signInWithPopup(clientAuth, provider);
+      const popup = signInWithPopup(clientAuth, provider);
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject({ code: "auth/popup-timeout" }), POPUP_TIMEOUT_MS);
+      });
+      // If the popup wins, the timer is cleared and never rejects (no
+      // unhandled rejection). If the timer wins, navigation below unloads the
+      // page and the still-pending popup promise is discarded with it.
+      const result = await Promise.race([popup, timeout]);
+      if (timer) clearTimeout(timer);
       await handleSession(await result.user.getIdToken(), () => result.user.getIdToken(true));
     } catch (error: unknown) {
-      // Popup blocked / unsupported environment → fall back to full-page redirect.
-      // getRedirectResult below completes the flow after returning from Google.
+      if (timer) clearTimeout(timer);
+      // Popup blocked / hung / unsupported environment → fall back to
+      // full-page redirect. getRedirectResult below completes the flow after
+      // returning from Google; redirect delivers the result via URL params
+      // and first-party storage, so it survives the walls that kill popups.
       if (isRedirectFallbackError(error)) {
         try {
-          const provider = new GoogleAuthProvider();
-          provider.setCustomParameters({ prompt: "select_account" });
-          if (typeof sessionStorage !== "undefined") sessionStorage.setItem(REDIRECT_MARKER, "1");
-          await signInWithRedirect(clientAuth, provider);
+          await startGoogleRedirect();
           return;
         } catch (redirectError: unknown) {
           setError(googleSignInErrorMessage(redirectError));
