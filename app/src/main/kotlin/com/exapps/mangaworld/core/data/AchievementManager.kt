@@ -222,9 +222,12 @@ class AchievementManager @Inject constructor(
             }
         }
 
+        // Write back ONLY what this check changed. Totals are intentionally NOT
+        // rewritten here: recordPageRead/recordChapterRead already incremented
+        // them in their own serialized edit blocks, and this snapshot predates
+        // them — writing the stale values back would silently drop increments
+        // from concurrent record calls that landed in between (lost update).
         dataStore.edit { store ->
-            store[totalPagesReadKey] = totalPages
-            store[totalChaptersReadKey] = totalChapters
             if (changed) {
                 store[achievementsKey] = achievementsToJson(mergedAchievements)
             }

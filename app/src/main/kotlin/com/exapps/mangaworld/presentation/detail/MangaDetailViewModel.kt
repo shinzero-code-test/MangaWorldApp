@@ -119,9 +119,9 @@ class MangaDetailViewModel @Inject constructor(
                 .onSuccess { detail ->
                     firebaseTelemetry.setActiveSource(detail.source.id)
                     // Preserve cached chapters when network returns empty
-                    val chapters = if (detail.chapters.isEmpty()
-                        && (_state.value.manga?.chapters?.isNotEmpty() == true)
-                    ) _state.value.manga!!.chapters else detail.chapters
+                    val cachedChapters = _state.value.manga?.chapters
+                    val chapters = if (detail.chapters.isEmpty() && !cachedChapters.isNullOrEmpty()
+                    ) cachedChapters else detail.chapters
 
                     _state.update {
                         it.copy(isLoading = false, manga = detail.copy(chapters = chapters))

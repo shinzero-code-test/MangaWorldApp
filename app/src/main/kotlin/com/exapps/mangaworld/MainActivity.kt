@@ -239,23 +239,13 @@ private fun MangaApp(
                         }
                     }
 
-                    // Keep the SDK registration scoped to the displayed login flow.
-                    val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
-                    DisposableEffect(facebookCallbackManager) {
-                        val loginManager = com.facebook.login.LoginManager.getInstance()
-                        val callback = object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
-                            override fun onSuccess(result: com.facebook.login.LoginResult) {
-                                loginViewModel.signInWithFacebook(result.accessToken.token)
-                            }
-                            override fun onCancel() = Unit
-                            override fun onError(error: com.facebook.FacebookException) {
-                                loginViewModel.clearError()
-                            }
-                        }
-                        setFacebookCallbackManager(facebookCallbackManager)
-                        loginManager.registerCallback(facebookCallbackManager, callback)
-                        onDispose { loginManager.unregisterCallback(facebookCallbackManager) }
-                    }
+                    // Single shared registration (FacebookAuthEffect) scoped to the
+                    // displayed login flow — see its KDoc before adding another.
+                    com.exapps.mangaworld.presentation.auth.FacebookAuthEffect(
+                        onAccessToken = loginViewModel::signInWithFacebook,
+                        onFailure = loginViewModel::clearError,
+                        setFacebookCallbackManager = setFacebookCallbackManager
+                    )
 
                     when (postOnboardingScreen) {
                         "signup" -> {

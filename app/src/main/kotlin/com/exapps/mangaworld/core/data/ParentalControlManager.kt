@@ -46,7 +46,7 @@ class ParentalControlManager @Inject constructor(
     fun verifyPin(pin: String): Boolean {
         val storedHash = prefs.getString(KEY_PIN_HASH, null) ?: return false
         return if (storedHash.startsWith(HASH_PREFIX)) {
-            constantTimeEquals(hashPin(pin), storedHash)
+            verifySaltedPin(pin, storedHash)
         } else {
             // Legacy rows stored a bare String.hashCode() — verify against it, then
             // transparently upgrade to the salted PBKDF2 format on first success.
@@ -105,13 +105,32 @@ class ParentalControlManager @Inject constructor(
     /**
      * Derives a salted PBKDF2-SHA256 hash formatted as "v2<base64salt>:<base64hash>".
      * A numeric PIN has at most 10^4 candidates, so unsalted fast hashes are trivially
-     * reversible from any prefs backup.
+     * reversible from any prefs backup. Each call mints a FRESH salt — the result
+     * must only be stored, never compared directly (see [verifySaltedPin]).
      */
     private fun hashPin(pin: String): String {
         val salt = ByteArray(SALT_BYTES).also { SecureRandom().nextBytes(it) }
         val hash = pbkdf2(pin.toCharArray(), salt)
         return HASH_PREFIX + Base64.encodeToString(salt, Base64.NO_WRAP) +
             ":" + Base64.encodeToString(hash, Base64.NO_WRAP)
+    }
+
+    /**
+     * Re-derives the hash with the STORED salt and compares in constant time.
+     * Malformed rows fail closed (false) rather than throwing.
+     */
+    private fun verifySaltedPin(pin: String, storedHash: String): Boolean {
+        val body = storedHash.removePrefix(HASH_PREFIX)
+        val separator = body.indexOf(':')
+        if (separator <= 0) return false
+        val salt = runCatching {
+            Base64.decode(body.substring(0, separator), Base64.NO_WRAP)
+        }.getOrNull() ?: return false
+        if (salt.size != SALT_BYTES) return false
+        val expected = body.substring(separator + 1)
+        if (expected.isEmpty()) return false
+        val actual = Base64.encodeToString(pbkdf2(pin.toCharArray(), salt), Base64.NO_WRAP)
+        return constantTimeEquals(actual, expected)
     }
 
     private fun pbkdf2(password: CharArray, salt: ByteArray): ByteArray =

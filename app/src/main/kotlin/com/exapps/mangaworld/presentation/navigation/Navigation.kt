@@ -679,23 +679,13 @@ private fun SocialAuthEffects(
         if (state.isSignedIn) onSignedIn()
     }
 
-    // Keep SDK registration scoped to the current auth destination.
-    val facebookCallbackManager = remember { com.facebook.CallbackManager.Factory.create() }
-    DisposableEffect(facebookCallbackManager) {
-        val loginManager = com.facebook.login.LoginManager.getInstance()
-        val callback = object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
-            override fun onSuccess(loginResult: com.facebook.login.LoginResult) {
-                viewModel.signInWithFacebook(loginResult.accessToken.token)
-            }
-            override fun onCancel() = Unit
-            override fun onError(error: com.facebook.FacebookException) {
-                viewModel.clearError()
-            }
-        }
-        setFacebookCallbackManager(facebookCallbackManager)
-        loginManager.registerCallback(facebookCallbackManager, callback)
-        onDispose { loginManager.unregisterCallback(facebookCallbackManager) }
-    }
+    // Single shared registration (FacebookAuthEffect) scoped to the current auth
+    // destination — see its KDoc before adding another.
+    com.exapps.mangaworld.presentation.auth.FacebookAuthEffect(
+        onAccessToken = viewModel::signInWithFacebook,
+        onFailure = viewModel::clearError,
+        setFacebookCallbackManager = setFacebookCallbackManager
+    )
 
     return { googleLauncher.launch(googleSignInClient.signInIntent) }
 }
