@@ -112,15 +112,34 @@ abstract class BaseScraperImpl(
         }
 
     protected fun String.absoluteUrl(base: String = resolvedBaseUrl): String {
+        val t = trim()
         return when {
-            startsWith("http") -> this
-            startsWith("//") -> "https:$this"
-            startsWith("/") -> "$base$this"
-            else -> "$base/$this"
+            t.startsWith("http://") || t.startsWith("https://") -> t
+            t.startsWith("//") -> "https:$t"
+            t.startsWith("/") -> "$base$t"
+            // Explicit: callers must filter data: URIs before persisting;
+            // never absolutize them into a bogus https://host/data:... URL.
+            t.startsWith("data:") -> t
+            t.isBlank() -> t
+            else -> "$base/$t"
         }
     }
 
-    protected fun String.toChapterId() = replace("[^a-zA-Z0-9._-]".toRegex(), "_")
+    /**
+     * Canonical lazy-image preference: data-src/data-lazy-src first, then
+     * abs:src, then src — skipping any base64 `data:` placeholder at each
+     * step. Returns null when no usable URL exists. Use this from every
+     * chapter-page path instead of hand-rolling the order per file.
+     */
+    protected fun org.jsoup.nodes.Element.preferredImageUrl(): String? {
+        val dataSrc = attr("data-src").ifEmpty { attr("data-lazy-src") }.trim()
+        if (dataSrc.isNotBlank() && !dataSrc.startsWith("data:")) return dataSrc
+        val absSrc = attr("abs:src").trim()
+        if (absSrc.isNotBlank() && !absSrc.startsWith("data:")) return absSrc
+        val src = attr("src").trim()
+        if (src.isNotBlank() && !src.startsWith("data:")) return src
+        return null
+    }
 
     protected fun String.cleanText() = trim().replace("\\s+".toRegex(), " ")
 

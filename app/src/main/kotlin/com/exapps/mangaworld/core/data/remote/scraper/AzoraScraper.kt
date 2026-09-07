@@ -199,6 +199,7 @@ class AzoraScraper @Inject constructor(
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
         val rawHtml = fetchRawHtml(resolvedBaseUrl)
+        if (rawHtml.isBlank()) error("Azora home HTML unavailable")
 
         // ── 1. Latest chapters ← ChapterUpdatesSectionIsland.items ────────────
         //    item keys: chapterId, chapterSlug, chapterNumber, chapterTitle,
@@ -217,7 +218,7 @@ class AzoraScraper @Inject constructor(
                 val createdAt   = decodeStr(obj["createdAt"])
                 val dateLong = runCatching {
                     java.time.Instant.parse(createdAt).toEpochMilli()
-                }.getOrNull()
+                }.getOrNull() ?: ScraperText.parseArabicDate(createdAt)
                 val isNew = dateLong != null &&
                         System.currentTimeMillis() - dateLong < 24 * 3600 * 1000L
 
@@ -341,7 +342,7 @@ class AzoraScraper @Inject constructor(
             val cdate= decodeStr(obj["createdAt"])
             val dateLong = runCatching {
                 java.time.Instant.parse(cdate).toEpochMilli()
-            }.getOrNull()
+            }.getOrNull() ?: ScraperText.parseArabicDate(cdate)
             val locked = decodeBool(obj["isLocked"])
                       || decodeBool(obj["isPermanentlyLocked"])
                       || (decodeFloat(obj["price"]) > 0)
@@ -409,16 +410,18 @@ class AzoraScraper @Inject constructor(
         val doc = fetchDocument(chapterUrl)
 
         // Primary: images inside .comic-images-wrapper (SSR-rendered)
-        var pages = doc.select("img[src*='WP-manga'], img[src*='storage.azorafly.com']")
+        var pages = doc.select("img[src*='WP-manga'], img[src*='storage.azorafly.com'], img[data-src]")
             .filter { it.attr("src").contains("WP-manga") || it.attr("src").matches(
                 Regex(".*storage\\.azorafly\\.com/\\d{4}/.*")
-            )}
+            ) || it.hasAttr("data-src") }
             .mapIndexed { idx, img ->
                 val readerIdx = img.attr("data-reader-index").toIntOrNull() ?: idx
-                val src = img.attr("abs:src").encodeForUrl()
+                val rawSrc = img.preferredImageUrl() ?: return@mapIndexed null
+                val src = rawSrc.encodeForUrl()
                 ChapterPage(index = readerIdx, url = src,
                     headers = buildImageHeaders(src, chapterUrl))
             }
+            .mapNotNull { it }
             .sortedBy { it.index }
 
         // Fallback: any img with storage.azorafly.com
@@ -426,9 +429,11 @@ class AzoraScraper @Inject constructor(
             pages = doc.select("img[src*='storage.azorafly.com']")
                 .filter { !it.attr("src").contains("logo") && !it.attr("src").contains("avatar") }
                 .mapIndexed { idx, img ->
-                    val src = img.attr("abs:src").encodeForUrl()
+                    val rawSrc = img.preferredImageUrl() ?: return@mapIndexed null
+                    if (rawSrc.startsWith("data:")) return@mapIndexed null
+                    val src = rawSrc.encodeForUrl()
                     ChapterPage(idx, src, headers = buildImageHeaders(src, chapterUrl))
-                }
+                }.mapNotNull { it }
         }
 
         pages
@@ -439,8 +444,8 @@ class AzoraScraper @Inject constructor(
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val enc   = java.net.URLEncoder.encode(query, "UTF-8")
         // Page must reach the API or every page returns identical results (H-review).
-        val json  = apiGet("https://api.azorafly.com/api/query?searchTerm=$enc&perPage=30&page=$page")
-            ?: return@runCatching emptyList()
+        val json  = apiGet("https://api.azorafly.com/api/query?searchTerm=$enc&perPage=30&page=$page") // NOTE: hardcoded API host — NOT covered by source_<id>_base_url RC overrides
+            ?: error("Azora API unavailable")
         val posts = json.optJSONArray("posts") ?: return@runCatching emptyList()
         val result = mutableListOf<MangaItem>()
         for (i in 0 until posts.length()) {
@@ -482,7 +487,7 @@ class AzoraScraper @Inject constructor(
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
         // API gives rating-sorted results
-        val json  = apiGet("https://api.azorafly.com/api/query?searchTerm=&perPage=30")
+        val json  = apiGet("https://api.azorafly.com/api/query?searchTerm=&perPage=30") // NOTE: hardcoded API host — NOT covered by RC overrides
         val posts = json?.optJSONArray("posts")
         if (posts != null && posts.length() > 0) {
             val result = mutableListOf<MangaItem>()

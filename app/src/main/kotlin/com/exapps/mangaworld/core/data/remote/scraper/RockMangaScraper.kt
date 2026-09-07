@@ -109,9 +109,8 @@ class RockMangaScraper @Inject constructor(
 
         doc.select("div#ch-images div.page img.preload-image, div#ch-images img")
             .mapNotNull { img ->
-                val src = img.attr("data-src").ifEmpty { img.attr("abs:src") }.ifEmpty { img.attr("src").absoluteUrl() }
-                    .encodeForUrl()
-                src.takeIf { it.isNotBlank() }
+                val src = img.preferredImageUrl()?.encodeForUrl()
+                src.takeIf { !it.isNullOrBlank() && !it.startsWith("data:") }
             }
             .distinct()
             .mapIndexed { index, src ->
@@ -121,7 +120,7 @@ class RockMangaScraper @Inject constructor(
 
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-        val doc = fetchDocument("${resolvedBaseUrl}/?post_type=wp-manga&s=$encoded&page=$page")
+        val doc = fetchDocument("${resolvedBaseUrl}/?post_type=wp-manga&s=$encoded&paged=$page")
         parseMangaCards(doc)
     }
 
@@ -164,7 +163,7 @@ class RockMangaScraper @Inject constructor(
         return doc.select("div.unit, div.original.card-lg div.unit").mapNotNull { unit ->
             val linkEl = unit.selectFirst("a.poster[href*='/manga/'], a[href*='/manga/']") ?: return@mapNotNull null
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-            val slug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
+            val slug = ScraperText.slugFromHref(href) ?: return@mapNotNull null
             if (slug.isBlank()) return@mapNotNull null
             val img = unit.selectFirst("a.poster img, img")
             val title = unit.selectFirst("div.info > a")?.text()?.cleanText() ?: slug

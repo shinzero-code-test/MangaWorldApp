@@ -27,6 +27,20 @@ class ProComicScraper @Inject constructor(
     settingsRepo: SettingsRepository
 ) : BaseScraperImpl(client, MangaSource.PROCOMIC, settingsRepo) {
 
+    /** HTML fallbacks must trigger the WebView solver like apiGet does — a Turnstile
+     * interstitial parses as content otherwise and surfaces as an "empty chapter". */
+    private fun throwIfTurnstile(html: String, url: String) {
+        if (html.contains("__cf_chl_", ignoreCase = true) ||
+            html.contains("turnstile", ignoreCase = true) ||
+            html.contains("challenges.cloudflare.com", ignoreCase = true)
+        ) {
+            throw CloudflareChallengeException(
+                resolvedBaseUrl.removePrefix("https://").removePrefix("http://"),
+                url
+            )
+        }
+    }
+
     private suspend fun apiGet(url: String): JSONObject? = withContext(Dispatchers.IO) {
         val cookies = getCookiesForDomain(url)
         val req = Request.Builder()
@@ -141,15 +155,8 @@ class ProComicScraper @Inject constructor(
                 url = matchedItem.url
             )
         } else {
-            // Fallback: try the series page directly
-            MangaDetail(
-                id = "procomic_$slug",
-                slug = slug,
-                title = slug.replace("-", " ").replaceFirstChar { it.uppercase() },
-                coverUrl = "",
-                source = source,
-                url = "${resolvedBaseUrl}/series/manga/$slug/$slug"
-            )
+            // No fabricated placeholder: a guessed URL would be persisted/shared as if real.
+            error("Series $slug not found")
         }
     }
 
@@ -199,6 +206,7 @@ class ProComicScraper @Inject constructor(
             // Fallback: scrape chapter page HTML
             // Procomic SSR embeds image URLs in page content, not always as <img> tags
             val doc = fetchDocument(chapterUrl)
+            throwIfTurnstile(doc.outerHtml(), chapterUrl)
             // Unescape so &amp; inside signed URLs doesn't corrupt matches.
             val html = org.jsoup.parser.Parser.unescapeEntities(doc.outerHtml(), false)
             
@@ -243,7 +251,7 @@ class ProComicScraper @Inject constructor(
         // Fallback: HTML scraping
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
         // Fallback must page too, or Paging loops on identical results (H-review).
-        val doc = fetchDocument("${resolvedBaseUrl}/series?search=$encoded&page=$page")
+        val doc = fetchDocument("${resolvedBaseUrl}/series?search=$encoded&page=$page").also { throwIfTurnstile(it.outerHtml(), "${resolvedBaseUrl}/series") }
         parseMangaGridFromHtml(doc)
     }
 
@@ -260,7 +268,7 @@ class ProComicScraper @Inject constructor(
             if (items.isNotEmpty()) return@runCatching items.distinctBy { it.id }
         } catch (e: CloudflareChallengeException) { throw e }
           catch (e: Exception) { ScraperTelemetry.logFailure(source.id, "popular_api", e) }
-        val doc = fetchDocument("${resolvedBaseUrl}/series?sort=popular")
+        val doc = fetchDocument("${resolvedBaseUrl}/series?sort=popular").also { throwIfTurnstile(it.outerHtml(), "${resolvedBaseUrl}/series") }
         parseMangaGridFromHtml(doc)
     }
 
@@ -283,7 +291,7 @@ class ProComicScraper @Inject constructor(
         } catch (e: CloudflareChallengeException) { throw e }
           catch (e: Exception) { ScraperTelemetry.logFailure(source.id, "browse_api", e) }
         // Fallback: HTML scraping (paged)
-        val doc = fetchDocument("${resolvedBaseUrl}/series?page=$page")
+        val doc = fetchDocument("${resolvedBaseUrl}/series?page=$page").also { throwIfTurnstile(it.outerHtml(), "${resolvedBaseUrl}/series") }
         parseMangaGridFromHtml(doc)
     }
 

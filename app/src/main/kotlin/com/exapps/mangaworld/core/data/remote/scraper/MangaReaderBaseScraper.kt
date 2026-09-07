@@ -421,8 +421,7 @@ open class MangaReaderBaseScraper(
                 val linkEl = card.selectFirst("a.legend-poster[href*='/manga/']") ?: return@forEach
                 val imgEl = card.selectFirst("img.legend-img, img")
                 val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-                val slug = href.substringBefore("?").trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
-                if (slug.isBlank()) return@forEach
+                val slug = ScraperText.slugFromHref(href) ?: return@forEach
                 val title = imgEl?.attr("alt")?.cleanText()
                     ?: card.selectFirst(".legend-info h3, .legend-title")?.text()?.cleanText()
                     ?: slug
@@ -448,8 +447,7 @@ open class MangaReaderBaseScraper(
                 val linkEl = li.selectFirst("a.series[href*='/manga/'], a[href*='/manga/']") ?: return@forEach
                 val imgEl = li.selectFirst("img.ts-post-image, img")
                 val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-                val slug = href.substringBefore("?").trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
-                if (slug.isBlank()) return@forEach
+                val slug = ScraperText.slugFromHref(href) ?: return@forEach
                 val title = linkEl.text().cleanText().ifBlank {
                     imgEl?.attr("alt")?.cleanText() ?: slug
                 }

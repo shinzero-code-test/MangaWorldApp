@@ -12,7 +12,7 @@ import java.util.Locale
 object ScraperText {
 
     private val FIRST_NUMBER = Regex("[0-9]+(?:\\.[0-9]+)?")
-    private val VIEWS = Regex("(\\d[\\d,]*)\\s*(?:مشاهدة|view)")
+    private val VIEWS = Regex("(\\d[\\d,.]*)\\s*([KkMm]?)\\s*(?:مشاهدة|مشاهدات|views?|view)")
 
     private val ARABIC_MONTHS = mapOf(
         "يناير" to "Jan", "فبراير" to "Feb", "مارس" to "Mar", "أبريل" to "Apr",
@@ -50,11 +50,18 @@ object ScraperText {
         return if (valid) last.trim() else null
     }
 
-    /** View-count from Arabic/English label text ("1,234 مشاهدة" / "5.6K views"). */
+    /** View-count from Arabic/English label text ("1,234 مشاهدة" / "5.6K views" / "2M مشاهدة"). */
     fun extractViews(text: String?): Long? {
         if (text.isNullOrBlank()) return null
-        val digits = VIEWS.find(text)?.groupValues?.get(1)?.replace(",", "") ?: return null
-        return digits.toLongOrNull()
+        val m = VIEWS.find(text) ?: return null
+        val digits = m.groupValues[1].replace(",", "")
+        val base = digits.toDoubleOrNull() ?: return null
+        val mult = when (m.groupValues[2].uppercase()) {
+            "K" -> 1_000L
+            "M" -> 1_000_000L
+            else -> 1L
+        }
+        return (base * mult).toLong()
     }
 
     /**

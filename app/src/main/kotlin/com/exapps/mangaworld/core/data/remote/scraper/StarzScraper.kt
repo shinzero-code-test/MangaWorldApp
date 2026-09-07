@@ -51,12 +51,12 @@ import javax.inject.Inject
  *   Chapter  → /manga/{slug}/{chapter_number}/
  *   Browse   → /manga/?genre={slug}
  *   Search   → /?s={query}&post_type=wp-manga
- *   AJAX     → /wp-admin/admin-ajax.php (POST, for full chapter list)
+ *   AJAX     → /ajax/chapters/ primary (POST), /wp-admin/admin-ajax.php fallback
  */
 class StarzScraper @Inject constructor(
     client: OkHttpClient,
     settingsRepo: SettingsRepository
-) : BaseScraperImpl(client, MangaSource.STARZ, settingsRepo) {
+) : MadaraBaseScraper(client, MangaSource.STARZ, settingsRepo) {
 
     // ─── Home ─────────────────────────────────────────────────────────────────
 
@@ -73,8 +73,7 @@ class StarzScraper @Inject constructor(
             val titleEl = card.selectFirst(".post-title a, .post-title h3 a, .item-summary .post-title a")
 
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-            val slug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
-            if (slug.isEmpty()) return@forEach
+            val slug = ScraperText.slugFromHref(href) ?: return@forEach
 
             val coverUrl = imgEl.attr("abs:src").ifEmpty {
                 (imgEl.attr("data-src").ifEmpty { imgEl.attr("src") }).absoluteUrl()
@@ -94,7 +93,7 @@ class StarzScraper @Inject constructor(
             card.select("a.btn-link[href*='/manga/']").take(2).forEach chapters@{ chLink ->
                 val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
                 val chNum = chHref.trimEnd('/').substringAfterLast("/").toFloatOrNull()
-                    ?: chLink.text().replace("[^0-9.]".toRegex(), "").trim().toFloatOrNull()
+                    ?: ScraperText.firstChapterNumber(chLink.text())
                     ?: return@chapters
                 val isNew = false   // no .c-new-tag at this level in real HTML
 
@@ -115,7 +114,7 @@ class StarzScraper @Inject constructor(
             val title = item.selectFirst(".post-title a, .popular-title")?.text()?.cleanText()
                 ?: link.attr("title")
             val href = link.attr("abs:href").ifEmpty { link.attr("href").absoluteUrl() }
-            val slug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
+            val slug = ScraperText.slugFromHref(href) ?: return@mapNotNull null
             MangaItem(
                 id = "starz_$slug", slug = slug, title = title,
                 coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() },
@@ -133,8 +132,20 @@ class StarzScraper @Inject constructor(
     // ─── Manga Detail ─────────────────────────────────────────────────────────
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
-        val url = "${resolvedBaseUrl}/manga/$slug/"
-        val doc = fetchDocument(url)
+        // Progressive path resolution (matches MadaraBaseScraper): /manga/ → /comics/ → /manhwa/ → bare.
+        var url = "${resolvedBaseUrl}/manga/$slug/"
+        var resolvedDoc: org.jsoup.nodes.Document? = null
+        for (candidate in listOf(url, "${resolvedBaseUrl}/comics/$slug/", "${resolvedBaseUrl}/manhwa/$slug/", "${resolvedBaseUrl}/$slug/")) {
+            val tryDoc = runCatching { fetchDocument(candidate) }.getOrNull() ?: continue
+            val looksLikeDetail = tryDoc.selectFirst(".summary_image, .listing-chapters_wrap, h1.entry-title, .post-title h1") != null
+            val is404 = tryDoc.selectFirst("body.error-404, .page-404, .error-page") != null
+            if (!is404 && looksLikeDetail) {
+                url = candidate
+                resolvedDoc = tryDoc
+                break
+            }
+        }
+        val doc = resolvedDoc ?: fetchDocument(url)
 
         val coverUrl = doc.selectFirst(".summary_image img, .profile-manga img")
             ?.let { img ->
@@ -210,7 +221,7 @@ class StarzScraper @Inject constructor(
                 val datetime = dateEl.attr("datetime")
                 if (datetime.isNotBlank()) java.time.Instant.parse(datetime).toEpochMilli()
                 else null
-            } catch (e: Exception) { null }
+            } catch (e: Exception) { null } ?: ScraperText.parseArabicDate(dateText)
             return dateText to dateLong
         }
 
@@ -258,8 +269,37 @@ class StarzScraper @Inject constructor(
                 )
             }
 
+        // Try AJAX for full chapter list — /ajax/chapters/ primary, admin-ajax fallback.
+        val ajaxPrimary = try {
+            val ajaxUrl = "${url.trimEnd('/')}/ajax/chapters/"
+            val ajaxReq = Request.Builder()
+                .url(ajaxUrl)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "*/*")
+                .header("Accept-Language", "ar,en;q=0.9")
+                .header("Referer", url.encodeForHeader())
+                .header("X-Requested-With", "XMLHttpRequest")
+                .post(FormBody.Builder().build())
+                .build()
+            val body = client.newCall(ajaxReq).execute().use { it.body?.string().orEmpty() }
+            if (body.contains("wp-manga-chapter")) {
+                val chapDoc = Jsoup.parse(body, resolvedBaseUrl)
+                chapDoc.select("li.wp-manga-chapter, li").mapNotNull { li ->
+                    val chLink = li.selectFirst("a[href]") ?: return@mapNotNull null
+                    val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
+                    val chText = chLink.text().cleanText()
+                    val chNum = ScraperText.firstChapterNumber(chText)
+                        ?: ScraperText.lastSegmentNumber(chHref)
+                        ?: return@mapNotNull null
+                    Chapter(id = "${slug}_$chNum", mangaId = "starz_$slug", number = chNum, title = parseChapterTitle(chText), url = chHref)
+                }.takeIf { it.isNotEmpty() }
+            } else null
+        } catch (e: Exception) {
+            ScraperTelemetry.logFailure(source.id, "detail_chapters_ajax_primary", e)
+            null
+        }
         // Try AJAX for full chapter list (Madara admin-ajax endpoint)
-        val ajaxChapters = try {
+        val ajaxChapters = ajaxPrimary ?: try {
             val postId = doc.selectFirst("input.rating-post-id")?.attr("value")
                 ?: doc.selectFirst("body")?.let { body ->
                     body.classNames().firstOrNull { it.startsWith("postid-") }
@@ -281,7 +321,7 @@ class StarzScraper @Inject constructor(
                         .header("User-Agent", USER_AGENT)
                         .header("Accept", "*/*")
                         .header("Accept-Language", "ar,en;q=0.9")
-                        .header("Referer", url)
+                        .header("Referer", url.encodeForHeader())
                         .header("X-Requested-With", "XMLHttpRequest")
                         .post(formBody)
                         .build()
@@ -290,6 +330,7 @@ class StarzScraper @Inject constructor(
                         response.body?.string() ?: "{}"
                     }
 
+                    if (bodyStr.trimStart().startsWith("{").not()) continue
                     val json = JSONObject(bodyStr)
                     if (json.optBoolean("success", false)) {
                         val html = json.optString("data", "")
@@ -465,8 +506,7 @@ class StarzScraper @Inject constructor(
             val imgEl = card.selectFirst("img.img-responsive, .item-thumb img, img") ?: return@mapNotNull null
             val linkEl = card.selectFirst(".post-title a[href], .item-thumb a[href], a[href*=\"/manga/\"]") ?: return@mapNotNull null
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-            val slug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
-            if (slug.isEmpty()) return@mapNotNull null
+            val slug = ScraperText.slugFromHref(href) ?: return@mapNotNull null
             val titleEl = card.selectFirst(".post-title a, h3 a, [class*=\"post-title\"] a")
             val title = titleEl?.text()?.cleanText()
                 ?: linkEl.attr("title").cleanText()

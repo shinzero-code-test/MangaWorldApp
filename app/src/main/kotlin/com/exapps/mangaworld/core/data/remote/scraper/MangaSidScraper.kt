@@ -97,7 +97,7 @@ class MangaSidScraper @Inject constructor(
                 val createdAt = decodeStr(chapterMap["created_at"])
                 val dateLong = runCatching {
                     java.time.Instant.parse(createdAt).toEpochMilli()
-                }.getOrNull()
+                }.getOrNull() ?: ScraperText.parseArabicDate(createdAt)
 
                 Chapter(
                     id = "${slug}_$chapterId",
@@ -170,13 +170,13 @@ class MangaSidScraper @Inject constructor(
 
         doc.select(".manga-page img[src], .manga-page img[data-src], img.block.relative.z-20.w-full.h-auto")
             .mapNotNull { img ->
-                val raw = img.attr("data-src").ifEmpty { img.attr("src") }
+                val raw = img.preferredImageUrl() ?: return@mapNotNull null
                 if (raw.isBlank()) return@mapNotNull null
                 
                 val src = when {
                     raw.startsWith("http") -> raw
                     raw.startsWith("//") -> "https:$raw"
-                    else -> "https://api.mangasid.com${if (raw.startsWith("/")) "" else "/"}$raw"
+                    else -> "https://api.mangasid.com${if (raw.startsWith("/")) "" else "/"}$raw" // NOTE: hardcoded API host — NOT covered by source_<id>_base_url RC overrides
                 }.encodeForUrl()
                 
                 src.takeIf { it.isNotBlank() }
@@ -246,8 +246,7 @@ class MangaSidScraper @Inject constructor(
                 ?: return@mapNotNull null
 
             val href = titleLink.attr("abs:href").ifEmpty { titleLink.attr("href").absoluteUrl() }
-            val slug = href.substringAfter("/manga/").trimEnd('/')
-            if (slug.isBlank()) return@mapNotNull null
+            val slug = ScraperText.slugFromHref(href) ?: return@mapNotNull null
 
             val image = card.selectFirst("img[src], img[data-src]")
             val coverUrl = image?.let { img ->

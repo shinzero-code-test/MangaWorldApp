@@ -31,7 +31,10 @@ open class MadaraBaseScraper(
 
     protected open val listPath: String = "/manga/"
 
-    protected fun parseArabicDate(text: String): Long? = ScraperText.parseArabicDate(text)
+    protected fun parseArabicDate(text: String): Long? =
+        ScraperText.parseArabicDate(text) ?: runCatching {
+            java.text.SimpleDateFormat(datePattern, java.util.Locale("ar")).parse(text.trim())?.time
+        }.getOrNull()
 
     // ─── Home ─────────────────────────────────────────────────────────────────
 
@@ -297,7 +300,7 @@ open class MadaraBaseScraper(
             card.select("a.btn-link[href*='/manga/'], .chapter-item a, a.btn-link").take(2).forEach chLoop@{ chLink ->
                 val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
                 val chNum = chHref.trimEnd('/').substringAfterLast("/").toFloatOrNull()
-                    ?: chLink.text().replace("[^0-9.]".toRegex(), "").trim().toFloatOrNull()
+                    ?: ScraperText.firstChapterNumber(chLink.text())
                     ?: return@chLoop
 
                 val timeEl = chLink.closest(".chapter-item, .list-chapter, .item-summary")
@@ -452,6 +455,9 @@ open class MadaraBaseScraper(
                         val (bodyStr, json) = withContext(Dispatchers.IO) {
                             val response = client.newCall(ajaxRequest).execute()
                             val body = response.use { it.body?.string() ?: "{}" }
+                            // Non-JSON (CF block page / truncated body) is transport-unexpected:
+                            // skip without telemetry instead of logging a JSONException as an app bug.
+                            if (body.trimStart().startsWith("{").not()) error("Unexpected non-JSON AJAX body")
                             body to JSONObject(body)
                         }
                         if (json.optBoolean("success", false)) {

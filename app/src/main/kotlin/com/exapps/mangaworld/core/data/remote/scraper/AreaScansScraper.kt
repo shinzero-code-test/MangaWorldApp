@@ -99,8 +99,9 @@ class AreaScansScraper @Inject constructor(
                     id = "${slug}_$chNum",
                     mangaId = "${source.id}_$slug",
                     number = chNum,
-                    title = chLink.selectFirst(".chap-num")?.text()?.cleanText()?.replace("الفصل", "")?.trim()?.ifBlank { null }
-                        ?: context.getString(com.exapps.mangaworld.R.string.fmt_059, chNum.toInt().toString()),
+                    title = chLink.selectFirst(".chap-num")?.text()?.cleanText()?.replace("الفصل", "")?.trim()?.ifBlank { null },
+                        // Null lets MangaDetailViewModel/ReaderScreen format at render time;
+                        // baking fmt_059 here would freeze the locale string in DB/cache and truncate 12.5 via toInt().
                     url = chHref
                 )
             }.distinctBy { it.url }.sortedByDescending { it.number }
@@ -151,6 +152,7 @@ class AreaScansScraper @Inject constructor(
                 .build()
             val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
             val body = response.use { it.body?.string() ?: "{}" }
+            if (body.trimStart().startsWith("{").not()) return@runCatching images
             val json = org.json.JSONObject(body)
             if (json.optBoolean("success", false)) {
                 val html = json.optJSONObject("data")?.optString("content", "") ?: ""
@@ -295,8 +297,7 @@ class AreaScansScraper @Inject constructor(
                 ?: card.selectFirst("a[href*='/manga/']") ?: return@mapNotNull null
             val imgEl = card.selectFirst("img")
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-            val slug = href.trimEnd('/').substringAfterLast("/manga/").trimEnd('/')
-            if (slug.isBlank()) return@mapNotNull null
+            val slug = ScraperText.slugFromHref(href) ?: return@mapNotNull null
 
             val title = card.selectFirst("h3.manga-title a, h3.manga-title")?.text()?.cleanText()
                 ?: imgEl?.attr("alt")?.cleanText()

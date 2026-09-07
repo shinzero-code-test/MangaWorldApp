@@ -91,4 +91,21 @@ class ScraperTextTest {
     fun `bare slug works`() {
         assertEquals("title", ScraperText.slugFromHref("https://site.com/title/"))
     }
+
+    // ── extractViews (LOW-2: K/M suffixes) ────────────────────────────────────
+
+    @Test
+    fun `plain arabic views`() {
+        assertEquals(1234L, ScraperText.extractViews("1,234 مشاهدة"))
+    }
+
+    @Test
+    fun `k-suffix english views`() {
+        assertEquals(5600L, ScraperText.extractViews("5.6K views"))
+    }
+
+    @Test
+    fun `m-suffix views`() {
+        assertEquals(2000000L, ScraperText.extractViews("2M مشاهدة"))
+    }
 }

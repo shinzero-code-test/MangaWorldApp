@@ -15,7 +15,7 @@ class MeshmangaScraper @Inject constructor(
     settingsRepo: SettingsRepository
 ) : BaseScraperImpl(client, MangaSource.MESHMANGA, settingsRepo) {
 
-    private val apiBase = "https://appswat.com/v2/api/v2"
+    private val apiBase = "https://appswat.com/v2/api/v2 // NOTE: hardcoded API host — NOT covered by source_<id>_base_url Remote Config overrides"
     @Volatile private var genreIdCache: Map<String, Int>? = null
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
@@ -131,7 +131,7 @@ class MeshmangaScraper @Inject constructor(
     }
 
     private suspend fun fetchSeriesPage(url: String): List<MangaItem> {
-        val json = apiGetObject(url) ?: return emptyList()
+        val json = apiGetObject(url) ?: error("Meshmanga API unavailable: $url")
         val results = json.optJSONArray("results") ?: return emptyList()
         return (0 until results.length())
             .mapNotNull { i -> results.optJSONObject(i) }
@@ -195,7 +195,7 @@ class MeshmangaScraper @Inject constructor(
         val chapterNumber = parseChapterNumber(obj.optString("chapter").ifBlank { obj.optString("title") })
             ?: return null
         val publishedAt = obj.optString("created_at").takeIf { it.isNotBlank() }?.let {
-            runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
+runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() ?: ScraperText.parseArabicDate(it)
         }
         return LatestChapterItem(
             mangaId = "meshmanga_$seriesId",
@@ -218,7 +218,7 @@ class MeshmangaScraper @Inject constructor(
         val chapterNumber = parseChapterNumber(obj.optString("chapter").ifBlank { obj.optString("title") })
             ?: return null
         val createdAt = obj.optString("created_at").ifBlank { null }
-        val date = createdAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
+        val date = createdAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() ?: ScraperText.parseArabicDate(it) }
         return Chapter(
             id = "${seriesId}_$chapterId",
             mangaId = "meshmanga_$seriesId",
@@ -267,7 +267,7 @@ class MeshmangaScraper @Inject constructor(
                 .build()
             val response = client.newCall(request).execute()
             val body = response.use { it.body?.string() ?: "" }
-            if (body.isBlank()) null else JSONObject(body)
+            if (body.isBlank() || !body.trimStart().startsWith("{")) null else JSONObject(body)
         }.getOrNull()
     }
 

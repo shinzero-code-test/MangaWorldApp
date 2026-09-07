@@ -85,7 +85,7 @@ class OlympusScraper @Inject constructor(
                     ?: return@mapNotNull null
 
                 val chapterNumber = chapterHref.trimEnd('/').substringAfterLast("/").toFloatOrNull()
-                    ?: chapterEl.text().replace("[^0-9.]".toRegex(), "").toFloatOrNull()
+                    ?: ScraperText.firstChapterNumber(chapterEl.text())
                     ?: return@mapNotNull null
 
                 val timeText = box.selectFirst(".info ul li .post-on, .info .post-on")?.text()?.cleanText().orEmpty()
@@ -112,7 +112,7 @@ class OlympusScraper @Inject constructor(
                 val linkEl = box.selectFirst(remoteSelector("popular_link", "a.box, .entry-image a")) ?: return@mapNotNull null
 
                 val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-                val slug = href.substringAfterLast("/series/").trimEnd('/')
+                val slug = ScraperText.slugFromHref(href) ?: return@mapNotNull null
                 MangaItem(
                     id = "olympus_$slug",
                     slug = slug,
@@ -223,15 +223,21 @@ class OlympusScraper @Inject constructor(
             )
             }
 
-        // Dynamic page count from pagination nav
+        // Dynamic page count from pagination nav — BOUNDED: a large/inflated
+        // page count (or markup change yielding a bogus number) must not turn
+        // one detail open into dozens of sequential 30s-timeout fetches.
+        // 10 pages ≫ any real series here; beyond that the list is truncated.
         val maxPage = doc.select("ul.pagination a.page-link")
             .mapNotNull { it.text().toIntOrNull() }
-            .maxOrNull() ?: 1
+            .maxOrNull()?.coerceAtMost(10) ?: 1
 
         val chaptersMap = linkedMapOf<String, Chapter>()
         parseChapterCards(doc).forEach { chaptersMap[it.url] = it }
+        val visitedPages = mutableSetOf(url)
         for (pageNum in 2..maxPage) {
-            val pageDoc = runCatching { fetchDocument("$url?page=$pageNum") }.getOrNull() ?: break
+            val pageUrl = "$url?page=$pageNum"
+            if (!visitedPages.add(pageUrl)) break
+            val pageDoc = runCatching { fetchDocument(pageUrl) }.getOrNull() ?: break
             val pageChapters = parseChapterCards(pageDoc)
             if (pageChapters.isEmpty()) break
             var added = 0
@@ -349,7 +355,7 @@ class OlympusScraper @Inject constructor(
             val titleEl = box.selectFirst(".entry-title a, h3 a") ?: return@mapNotNull null
             val linkEl = box.selectFirst("a.box, .entry-image a") ?: return@mapNotNull null
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
-            val slug = href.substringAfterLast("/series/").trimEnd('/')
+            val slug = ScraperText.slugFromHref(href) ?: return@mapNotNull null
             MangaItem(
                 id = "olympus_$slug", slug = slug, title = titleEl.text().cleanText(),
                 coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() },
@@ -418,7 +424,7 @@ class OlympusScraper @Inject constructor(
                 title = titleEl.text().cleanText(),
                 coverUrl = imgEl.attr("abs:src").ifEmpty { imgEl.attr("src").absoluteUrl() }.encodeForUrl(),
                 source = source,
-                latestChapter = chapterEl?.text()?.replace("[^0-9.]".toRegex(), "")?.toFloatOrNull()?.toInt(),
+                latestChapter = ScraperText.firstChapterNumber(chapterEl?.text())?.toInt(),
                 url = href
             )
         }
