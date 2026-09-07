@@ -64,6 +64,13 @@ class WebViewSolverActivity : ComponentActivity() {
             finish()
             return
         }
+        // Bind URL host to the expected domain: a confused caller must not let
+        // us harvest another host's cookies under an allowlisted domain.
+        val urlHost = runCatching { android.net.Uri.parse(url).host?.lowercase() }.getOrNull()
+        if (urlHost == null || urlHost != domain.lowercase()) {
+            finish()
+            return
+        }
 
         // Clear old cookies for this domain so the WebView solver
         // doesn't immediately close thinking the old cf_clearance is still valid
@@ -150,7 +157,8 @@ private fun CloudflareWebView(
                         useWideViewPort    = true
                         allowContentAccess = false
                         setSupportZoom(true)
-                        mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                        // HTTPS challenges have no legitimate HTTP subresources.
+                        mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
                     }
 
                     val cm = CookieManager.getInstance()
@@ -162,12 +170,32 @@ private fun CloudflareWebView(
                     // wiping cookies from other sources.
 
                     wv.webViewClient = object : WebViewClient() {
+                        @Deprecated("Needed for API < 23")
+                        @Suppress("OverridingDeprecatedMember")
+                        override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                            // Solver trap: taps/links leaving the expected host are
+                            // blocked so the header row never mislabels the page.
+                            val host = runCatching { android.net.Uri.parse(url).host?.lowercase() }.getOrNull()
+                            return host != domain.lowercase()
+                        }
+
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            request: android.webkit.WebResourceRequest?
+                        ): Boolean {
+                            val host = runCatching { request?.url?.host?.lowercase() }.getOrNull()
+                            return host != domain.lowercase()
+                        }
+
                         override fun onPageFinished(view: WebView?, pageUrl: String?) {
                             if (pageUrl == null) return
                             val title = view?.title ?: ""
                             val isCfPage = title.contains("Just a moment", ignoreCase = true) ||
                                            title.contains("Attention Required", ignoreCase = true)
-                            if (!isCfPage && pageUrl.contains(domain)) {
+                            // Exact host match: "evil.com/?x=<domain>".contains(domain)
+                            // is true, and its cookies must never be stored under ours.
+                            val pageHost = runCatching { android.net.Uri.parse(pageUrl).host?.lowercase() }.getOrNull()
+                            if (!isCfPage && pageHost == domain.lowercase()) {
                                 val cookies = cm.getCookie(pageUrl) ?: ""
                                 if (cookies.contains("cf_clearance")) {
                                     cm.flush()

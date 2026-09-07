@@ -105,6 +105,11 @@ jobs:
       # Room schemas are the migration safety net: exportSchema=true writes them
       # here on every compile. Published as artifacts so migration review never
       # needs a local build (and so missing schemas fail visibly, not silently).
+      # Explicit KSP invocation: the schemas live outside buildDir, so a Gradle
+      # cache hit on compile tasks could otherwise skip their regeneration.
+      - name: Generate Room Schemas
+        run: ./gradlew :app:kspDebugKotlin --stacktrace
+
       - name: Upload Room Schemas
         if: always()
         uses: actions/upload-artifact@v4

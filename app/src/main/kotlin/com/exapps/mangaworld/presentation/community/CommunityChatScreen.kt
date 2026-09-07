@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -92,12 +93,13 @@ class CommunityChatViewModel @Inject constructor(
 @Composable
 fun CommunityChatScreen(
     onBack: () -> Unit,
+    isSignedIn: Boolean = true,
     viewModel: CommunityChatViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
-    var message by remember { mutableStateOf("") }
+    var message by rememberSaveable { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize().background(MangaColors.Background)) {
         Row(
@@ -129,11 +131,21 @@ fun CommunityChatScreen(
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = message, onValueChange = { message = it }, modifier = Modifier.weight(1f), label = { Text(context.getString(R.string.type_message)) })
-                IconButton(onClick = { if (message.isNotBlank()) { viewModel.send(message); message = "" } }) {
-                    Icon(Icons.Filled.Send, contentDescription = context.getString(R.string.accessibility_send), tint = MangaColors.Cyan)
+            // Guests: composer hidden — RTDB rules would reject the write anyway.
+            if (isSignedIn) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = message, onValueChange = { message = it }, modifier = Modifier.weight(1f), label = { Text(stringResource(R.string.type_message)) })
+                    IconButton(onClick = { if (message.isNotBlank()) { viewModel.send(message); message = "" } }) {
+                        Icon(Icons.Filled.Send, contentDescription = stringResource(R.string.accessibility_send), tint = MangaColors.Cyan)
+                    }
                 }
+            } else {
+                Text(
+                    stringResource(R.string.reader_sign_in_to_participate),
+                    color = MangaColors.Muted,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }

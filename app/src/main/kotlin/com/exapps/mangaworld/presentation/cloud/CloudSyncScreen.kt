@@ -78,67 +78,67 @@ class CloudSyncViewModel @Inject constructor(
     fun hasGoogleSignIn(): Boolean = sessionManager.hasGoogleClientId()
 
     fun signInWithGoogleIdToken(idToken: String?) {
-        if (idToken.isNullOrBlank()) { _state.value = CloudSyncUiState(errorMessage = "Failed to get Google token"); return }
+        if (idToken.isNullOrBlank()) { _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_no_token)); return }
         viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "Signing in...")
+            _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_signing_in))
             runCatching { sessionManager.signInWithGoogleIdToken(idToken); syncManager.pushLocalSnapshot(); remoteConfigManager.refresh() }
-                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Signed in and synced") }
-                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Google sign-in failed") }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_signed_in_synced)) }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_google_failed)) }
         }
     }
 
     fun signInWithEmail(email: String, password: String) {
         viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "Signing in...")
+            _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_signing_in))
             runCatching { sessionManager.signInWithEmail(email, password); syncManager.pushLocalSnapshot() }
-                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Signed in successfully") }
-                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Sign-in failed") }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_signed_in)) }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_sign_in_failed)) }
         }
     }
 
     fun signUpWithEmail(email: String, password: String) {
         viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "Creating account...")
+            _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_creating))
             runCatching { sessionManager.signUpWithEmail(email, password, displayName = "", username = ""); syncManager.pushLocalSnapshot() }
-                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Account created and synced") }
-                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Account creation failed") }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_created_synced)) }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_create_failed)) }
         }
     }
 
     fun syncNow() {
         viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "Uploading data...")
+            _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_uploading))
             runCatching { syncManager.pushLocalSnapshot() }
-                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Data uploaded to cloud") }
-                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Upload failed") }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_uploaded)) }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_upload_failed)) }
         }
     }
 
     fun restoreFromCloud() {
         viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "Fetching cloud data...")
+            _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_fetching))
             runCatching { syncManager.previewRemoteSnapshot() }
-                .onSuccess { preview -> _state.value = CloudSyncUiState(restorePreview = preview, statusMessage = "Review conflicts before restoring") }
-                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Restore preview failed") }
+                .onSuccess { preview -> _state.value = CloudSyncUiState(restorePreview = preview, statusMessage = context.getString(R.string.cloud_sync_review_conflicts)) }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_preview_failed)) }
         }
     }
 
     fun applyRestore(strategy: CloudRestoreStrategy) {
         viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "Applying restore...")
+            _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_applying))
             runCatching { syncManager.applyRemoteRestore(strategy) }
-                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Restore applied successfully") }
-                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Restore failed") }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_applied)) }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_restore_failed)) }
         }
     }
 
     fun saveProfile(username: String, bio: String, isPublic: Boolean) {
         viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "Saving profile...")
+            _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_saving_profile))
             val currentProfile = profile.value
             runCatching { communityRepository.upsertProfile(username, bio, isPublic, currentProfile?.avatarUrl, displayName = currentProfile?.displayName ?: "") }
-                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Profile saved") }
-                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Profile save failed") }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_profile_saved)) }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_profile_failed)) }
         }
     }
 
@@ -146,10 +146,10 @@ class CloudSyncViewModel @Inject constructor(
 
     fun signOut() {
         viewModelScope.launch {
-            _state.value = CloudSyncUiState(busy = true, statusMessage = "Signing out...")
+            _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_signing_out))
             runCatching { sessionManager.signOut() }
-                .onSuccess { _state.value = CloudSyncUiState(statusMessage = "Signed out") }
-                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = e.message ?: "Sign-out failed") }
+                .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_signed_out)) }
+                .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_sign_out_failed)) }
         }
     }
 
@@ -457,7 +457,7 @@ private fun ProfileCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(checked = isPublic, onCheckedChange = onPublicChange)
                 Spacer(Modifier.width(8.dp))
-                Text("public profile", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.cloud_sync_public_profile), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
             Button(
                 onClick = onSave,

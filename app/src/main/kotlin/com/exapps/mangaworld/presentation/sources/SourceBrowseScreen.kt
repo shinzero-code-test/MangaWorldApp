@@ -1,4 +1,5 @@
 package com.exapps.mangaworld.presentation.sources
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
@@ -52,7 +53,7 @@ fun SourceBrowseScreen(
     onBack: () -> Unit,
     viewModel: SourceBrowseViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showSortSheet by remember { mutableStateOf(false) }
 

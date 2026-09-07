@@ -3,7 +3,6 @@ package com.exapps.mangaworld.presentation.reader
 import android.content.Context
 import com.exapps.mangaworld.R
 
-import android.app.Application
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -106,7 +105,6 @@ data class ReaderUiState(
 @HiltViewModel
 class ReaderViewModel @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
-    private val app: Application,
     private val mangaRepo: MangaRepository,
     private val libraryRepo: LibraryRepository,
     private val settingsRepo: SettingsRepository,
@@ -348,7 +346,7 @@ class ReaderViewModel @Inject constructor(
                 .onFailure { e ->
                     val msg = if (e is CloudflareChallengeException) {
                         "CLOUDFLARE_REQUIRED|${e.domain}|${e.targetUrl}"
-                    } else e.message
+                    } else context.getString(R.string.download_error)
                     _state.update { it.copy(isLoading = false, error = msg) }
                 }
         }
@@ -856,6 +854,42 @@ class ReaderViewModel @Inject constructor(
                 lastTapNormalizedY = normalizedY.coerceIn(0f, 1f)
             )
         }
+        // Tap routing used to live in the composable capturing whole UiState,
+        // recomposing every page on any state change. It reads a state snapshot
+        // here instead; the UI passes a stable reference (viewModel::onReaderTap).
+        val st = _state.value
+        // Horizontal modes: side taps turn pages (respect RTL),
+        // centre toggles UI. Vertical/webtoon: tap toggles UI so
+        // scrolling never triggers accidental page jumps.
+        when (st.readerMode) {
+            com.exapps.mangaworld.domain.model.ReaderMode.HORIZONTAL_RTL -> {
+                when {
+                    normalizedX < 0.33f -> {
+                        val next = (st.currentPage + 1).coerceAtMost(maxOf(0, st.totalPages - 1))
+                        if (next != st.currentPage) onPageChanged(next) else toggleControls()
+                    }
+                    normalizedX > 0.67f -> {
+                        val prev = (st.currentPage - 1).coerceAtLeast(0)
+                        if (prev != st.currentPage) onPageChanged(prev) else toggleControls()
+                    }
+                    else -> toggleControls()
+                }
+            }
+            com.exapps.mangaworld.domain.model.ReaderMode.HORIZONTAL_LTR -> {
+                when {
+                    normalizedX < 0.33f -> {
+                        val prev = (st.currentPage - 1).coerceAtLeast(0)
+                        if (prev != st.currentPage) onPageChanged(prev) else toggleControls()
+                    }
+                    normalizedX > 0.67f -> {
+                        val next = (st.currentPage + 1).coerceAtMost(maxOf(0, st.totalPages - 1))
+                        if (next != st.currentPage) onPageChanged(next) else toggleControls()
+                    }
+                    else -> toggleControls()
+                }
+            }
+            else -> toggleControls()
+        }
     }
 
     fun saveCurrentPage() {
@@ -863,7 +897,7 @@ class ReaderViewModel @Inject constructor(
         val page = st.pages.getOrNull(st.currentPage) ?: return
         viewModelScope.launch {
             try {
-                val context = app.applicationContext
+                val context = context.applicationContext
                 val bitmap = imageLoader.execute(
                     coil.request.ImageRequest.Builder(context)
                         .data(page.url)
@@ -1046,7 +1080,7 @@ class ReaderViewModel @Inject constructor(
                     .build()
             )
             .build()
-        WorkManager.getInstance(app).enqueueUniqueWork(
+        WorkManager.getInstance(context).enqueueUniqueWork(
             "cleanup_${mangaId}_${chapterUrl.hashCode()}",
             ExistingWorkPolicy.REPLACE,
             request

@@ -196,7 +196,7 @@ class HomeViewModel @Inject constructor(
                     analyticsManager.logHomeLayoutExposure(_state.value.homeLayoutVariant, source.id)
                 }
                 .onFailure { e ->
-                    _state.update { it.copy(isLoading = false, error = e.message) }
+                    _state.update { it.copy(isLoading = false, error = context.getString(R.string.download_error)) }
                 }
         }
     }

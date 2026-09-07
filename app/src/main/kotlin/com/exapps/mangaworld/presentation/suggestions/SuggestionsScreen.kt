@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import coil.imageLoader
@@ -45,17 +46,17 @@ class SuggestionsViewModel @Inject constructor(
     private val cacheDao: MangaCacheDao
 ) : ViewModel() {
 
-    private val _suggestions = mutableStateListOf<MangaItem>()
-    val suggestions: List<MangaItem> get() = _suggestions
-    var isLoading by mutableStateOf(false)
-        private set
-    var errorMessage by mutableStateOf<String?>(null)
-        private set
+    private val _suggestions = kotlinx.coroutines.flow.MutableStateFlow<List<MangaItem>>(emptyList())
+    val suggestions: kotlinx.coroutines.flow.StateFlow<List<MangaItem>> = _suggestions
+    private val _isLoading = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val isLoading: kotlinx.coroutines.flow.StateFlow<Boolean> = _isLoading
+    private val _errorMessage = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    val errorMessage: kotlinx.coroutines.flow.StateFlow<String?> = _errorMessage
 
     fun loadSuggestions() {
         viewModelScope.launch {
-            isLoading = true
-            errorMessage = null
+            _isLoading.value = true
+            _errorMessage.value = null
             try {
                 // Load cached manga as candidates for recommendations
                 val cachedMangas = cacheDao.getAll(200).mapNotNull { cache ->
@@ -86,14 +87,13 @@ class SuggestionsViewModel @Inject constructor(
                 }
 
                 if (cachedMangas.isEmpty()) {
-                    errorMessage = context.getString(R.string.str_367)
-                    isLoading = false
+                    _errorMessage.value = context.getString(R.string.str_367)
+                    _isLoading.value = false
                     return@launch
                 }
 
                 val recommendations = recommendationEngine.getSmartRecommendations(cachedMangas, limit = 20)
-                _suggestions.clear()
-                _suggestions.addAll(recommendations)
+                _suggestions.value = recommendations
 
                 // Update persistent suggestions
                 val mangaSuggestions = recommendations.map { manga ->
@@ -106,9 +106,11 @@ class SuggestionsViewModel @Inject constructor(
                 }
                 suggestionsManager.updateSuggestions(mangaSuggestions)
             } catch (e: Exception) {
-                errorMessage = context.getString(R.string.fmt_075, e.message ?: "")
+                // Generic message (matches dashboard convention); detail stays in logcat.
+                android.util.Log.w("Suggestions", "loadSuggestions failed", e)
+                _errorMessage.value = context.getString(R.string.str_367)
             }
-            isLoading = false
+            _isLoading.value = false
         }
     }
 
@@ -124,9 +126,9 @@ fun SuggestionsScreen(
     onMangaClick: (source: MangaSource, slug: String) -> Unit,
     viewModel: SuggestionsViewModel = hiltViewModel()
 ) {
-    val suggestions = viewModel.suggestions
-    val isLoading = viewModel.isLoading
-    val errorMessage = viewModel.errorMessage
+    val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = MangaColors.Background,

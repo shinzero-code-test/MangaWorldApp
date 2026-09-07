@@ -66,7 +66,7 @@ fun MoreScreen(
     onOpenSuggestions: () -> Unit = {},
     onOpenProfile: () -> Unit = {},
     onOpenModeration: () -> Unit = {},
-    isSignedIn: Boolean = true,
+    isSignedIn: Boolean,
     viewModel: MoreViewModel = hiltViewModel()
 ) {
     val role by viewModel.role.collectAsStateWithLifecycle()

@@ -128,7 +128,7 @@ class LatestUpdatesViewModel @Inject constructor(
                     next.copy(items = filterItems(next))
                 }
             }.onFailure { e ->
-                _state.update { it.copy(isLoading = false, error = e.message ?: context.getString(R.string.str_229)) }
+                _state.update { it.copy(isLoading = false, error = context.getString(R.string.str_229)) }
             }
 
             if (result.isSuccess) {

@@ -523,7 +523,7 @@ private fun BiometricLockOverlay(onUnlocked: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MangaColors.OnSurfaceVariant
                 )
-                Button(onClick = ::launchPrompt) { Text("إعادة المحاولة") }
+                Button(onClick = ::launchPrompt) { Text(stringResource(R.string.retry)) }
             }
         }
     }

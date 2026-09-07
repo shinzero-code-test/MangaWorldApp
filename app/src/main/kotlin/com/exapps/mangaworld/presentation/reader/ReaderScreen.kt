@@ -81,7 +81,7 @@ fun ReaderScreen(
     chapterUrl: String,
     onBack: () -> Unit,
     communityEnabled: Boolean,
-    isSignedIn: Boolean = true,
+    isSignedIn: Boolean,
     onOpenCommunity: () -> Unit,
     viewModel: ReaderViewModel = hiltViewModel()
 ) {
@@ -213,49 +213,25 @@ fun ReaderScreen(
                 }
             }
             state.pages.isEmpty() -> ReaderError(stringResource(R.string.no_pages), onBack)
-                else -> ReaderContent(
+                else -> {
+                    val hapticsNow = rememberUpdatedState(state.hapticsEnabled)
+                    ReaderContent(
                     state = state,
+                    // Updated-state read: stable across recompositions.
                     onPageChanged = viewModel::onPageChanged,
                     onVisibleRangeChanged = viewModel::onVisibleRangeChanged,
-                    onTap = { x, y ->
-                        viewModel.onReaderTap(x, y)
-                        if (state.hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        // Horizontal modes: side taps turn pages (respect RTL),
-                        // centre toggles UI. Vertical/webtoon: tap toggles UI so
-                        // scrolling never triggers accidental page jumps.
-                        when (state.readerMode) {
-                            ReaderMode.HORIZONTAL_RTL -> {
-                                when {
-                                    x < 0.33f -> {
-                                        val next = (state.currentPage + 1).coerceAtMost(maxOf(0, state.totalPages - 1))
-                                        if (next != state.currentPage) viewModel.onPageChanged(next) else viewModel.toggleControls()
-                                    }
-                                    x > 0.67f -> {
-                                        val prev = (state.currentPage - 1).coerceAtLeast(0)
-                                        if (prev != state.currentPage) viewModel.onPageChanged(prev) else viewModel.toggleControls()
-                                    }
-                                    else -> viewModel.toggleControls()
-                                }
-                            }
-                            ReaderMode.HORIZONTAL_LTR -> {
-                                when {
-                                    x < 0.33f -> {
-                                        val prev = (state.currentPage - 1).coerceAtLeast(0)
-                                        if (prev != state.currentPage) viewModel.onPageChanged(prev) else viewModel.toggleControls()
-                                    }
-                                    x > 0.67f -> {
-                                        val next = (state.currentPage + 1).coerceAtMost(maxOf(0, state.totalPages - 1))
-                                        if (next != state.currentPage) viewModel.onPageChanged(next) else viewModel.toggleControls()
-                                    }
-                                    else -> viewModel.toggleControls()
-                                }
-                            }
-                            else -> viewModel.toggleControls()
+                    // Stable reference: routing lives in the VM (snapshot read),
+                    // so brightness/page-spacing churn no longer recomposes pages.
+                    onTap = remember(viewModel) {
+                        { x, y ->
+                            viewModel.onReaderTap(x, y)
+                            if (hapticsNow.value) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         }
                     },
                     onLongPress = { showSavePageDialog = true },
                     onModeChange = viewModel::setReaderMode
                 )
+                }
         }
 
         // Top bar
@@ -349,7 +325,8 @@ fun ReaderScreen(
                 if (state.showLiveReadersOverlay) {
                     Text(stringResource(R.string.fmt_041, state.liveReaders), color = Color.White, style = MaterialTheme.typography.labelMedium)
                 }
-                if (state.showReactionOverlay) {
+                // Guests: reactions are writes — hidden like the comments composer below.
+                if (state.showReactionOverlay && isSignedIn) {
                     listOf("🔥", "😂", "😱", "❤️").forEach { emoji ->
                         TextButton(onClick = { viewModel.sendReaction(emoji) }) { Text(emoji) }
                     }

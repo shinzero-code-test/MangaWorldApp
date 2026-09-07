@@ -1,4 +1,5 @@
 package com.exapps.mangaworld.presentation.browse
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
@@ -29,7 +30,7 @@ fun BrowseScreen(
     onMangaClick: (sourceId: String, slug: String) -> Unit,
     viewModel: BrowseViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val pagingItems = viewModel.mangaFlow.collectAsLazyPagingItems()
     var showFilterSheet by remember { mutableStateOf(false) }
 

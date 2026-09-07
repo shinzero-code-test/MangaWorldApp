@@ -416,10 +416,10 @@ fun CommunityRepliesScreen(
                                 onOpenReplies = { viewModel.selectReplyTarget() },
                                 onEdit = { reviewEditor = root.value },
                                 onDelete = { deleteTarget = root },
-                                onReport = { reportTarget = root },
-                                onMute = { viewModel.muteUser(root.value.authorUid) },
-                                onLike = { viewModel.likeReview(root.value) },
-                                onDislike = { viewModel.dislikeReview(root.value) }
+                                onReport = { gatedReport(root) },
+                                onMute = { if (isSignedIn) viewModel.muteUser(root.value.authorUid) },
+                                onLike = { gatedLikeReview(root.value) },
+                                onDislike = { gatedDislikeReview(root.value) }
                             )
                         }
                     }

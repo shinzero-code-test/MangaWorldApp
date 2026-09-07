@@ -446,7 +446,14 @@ private suspend fun importManga(
     return withContext(Dispatchers.IO) {
         try {
             val downloadsDir = File(context.getExternalFilesDir(null), "downloads")
-            val mangaId = "imported_${mangaName.replace("[^a-zA-Z0-9]".toRegex(), "_").lowercase()}"
+            // Unicode letters survive (Arabic titles must not all collapse to
+            // imported____), and the timestamp suffix keeps repeats distinct.
+            val idBase = mangaName.replace("[^\\p{L}\\p{Nd}]".toRegex(), "_")
+                .trim('_')
+                .take(40)
+                .lowercase()
+                .ifBlank { "manga" }
+            val mangaId = "imported_${idBase}_${System.currentTimeMillis() % 100000}"
             val mangaDir = File(downloadsDir, mangaId)
             mangaDir.mkdirs()
 
@@ -471,6 +478,7 @@ private suspend fun importManga(
             }
 
             var processedCount = 0
+            var failedChapters = 0
 
             val archiveExtensions = setOf("zip", "cbz", "rar")
             val imageExtensions = setOf("jpg", "jpeg", "png", "webp")
@@ -492,7 +500,12 @@ private suspend fun importManga(
                 } ?: 0f
             }.forEach { entry ->
                 processedCount++
-                val chapterName = entry.name?.substringBeforeLast('.') ?: "chapter_$processedCount"
+                // Provider names are path segments: strip separators, reject "..".
+                val chapterName = entry.name?.substringBeforeLast('.')
+                    ?.replace('/', '_').replace('\\', '_').trim()
+                    ?.take(60)
+                    ?.takeIf { it.isNotBlank() && it != "." && it != ".." }
+                    ?: "chapter_$processedCount"
                 val chapterDir = File(mangaDir, chapterName)
                 chapterDir.mkdirs()
 
@@ -502,6 +515,19 @@ private suspend fun importManga(
                     currentChapter = chapterName
                 ))
 
+                // Zip-slip guard: entry names must stay inside chapterDir.
+                fun safeOutput(name: String?): File? {
+                    val clean = name?.substringAfterLast('/')
+                        ?.replace("\\", "_").trim()
+                        ?.take(80)
+                        ?.takeIf { it.isNotBlank() && it != "." && it != ".." }
+                        ?: return null
+                    val out = File(chapterDir, clean).canonicalFile
+                    return if (runCatching {
+                            out.canonicalPath.startsWith(chapterDir.canonicalPath + File.separator)
+                        }.getOrDefault(false)) out else null
+                }
+                var chapterFailed = false
                 if (entry.isFile) {
                     // Extract archive (ZIP format)
                     try {
@@ -509,39 +535,56 @@ private suspend fun importManga(
                         if (inputStream != null) {
                             ZipInputStream(inputStream).use { zip ->
                                 var entry2 = zip.nextEntry
+                                var extracted = 0
                                 while (entry2 != null) {
                                     if (!entry2.isDirectory) {
                                         val ext = entry2.name?.substringAfterLast('.', "")?.lowercase() ?: ""
                                         if (ext in imageExtensions) {
                                             // Use original filename from archive
-                                            val originalName = entry2.name?.substringAfterLast('/') ?: "page"
-                                            val outputFile = File(chapterDir, originalName)
-                                            FileOutputStream(outputFile).use { out ->
-                                                zip.copyTo(out)
+                                            val outputFile = safeOutput(entry2.name)
+                                            if (outputFile == null) {
+                                                chapterFailed = true
+                                            } else {
+                                                runCatching {
+                                                    FileOutputStream(outputFile).use { out ->
+                                                        zip.copyTo(out)
+                                                    }
+                                                    extracted++
+                                                }.onFailure { chapterFailed = true }
                                             }
                                         }
                                     }
                                     entry2 = zip.nextEntry
                                 }
-                                File(chapterDir, ".completed").createNewFile()
+                                // .completed marks a READABLE chapter: no silent
+                                // success stamps on corrupt/empty extracts.
+                                if (!chapterFailed && extracted > 0) {
+                                    File(chapterDir, ".completed").createNewFile()
+                                } else {
+                                    chapterFailed = true
+                                }
                             }
+                        } else {
+                            chapterFailed = true
                         }
-                    } catch (_: Exception) { }
+                    } catch (_: Exception) { chapterFailed = true }
                 } else if (entry.isDirectory) {
                     // Copy images from directory, preserving original names with sort prefix
                     val images = entry.listFiles()
                         ?.filter { it.name?.substringAfterLast('.', "")?.lowercase() in imageExtensions }
                         ?.sortedBy { it.name } ?: emptyList()
+                    if (images.isEmpty()) chapterFailed = true
                     images.forEach { img ->
-                        val outputFile = File(chapterDir, img.name ?: "page")
+                        val outputFile = safeOutput(img.name) ?: File(chapterDir, "page")
                         try {
                             context.contentResolver.openInputStream(img.uri)?.use { input ->
                                 FileOutputStream(outputFile).use { output -> input.copyTo(output) }
                             }
-                        } catch (_: Exception) { }
+                        } catch (_: Exception) { chapterFailed = true }
                     }
-                    File(chapterDir, ".completed").createNewFile()
+                    if (!chapterFailed) File(chapterDir, ".completed").createNewFile()
                 }
+                if (chapterFailed) failedChapters++
             }
 
             // Create manga metadata JSON
@@ -557,10 +600,15 @@ private suspend fun importManga(
             }
             File(mangaDir, "metadata.json").writeText(metadata.toString())
 
+            // Partial success is reported, not swallowed: empty/corrupt
+            // chapters lack .completed and the count reaches the user.
             onProgress(ImportProgress(
                 totalChapters = chapters.size,
                 processedChapters = chapters.size,
-                isComplete = true
+                isComplete = true,
+                error = if (failedChapters > 0) {
+                    context.getString(R.string.import_partial_failed, failedChapters)
+                } else null
             ))
 
             // Return entity so caller can persist it to Room database
@@ -578,7 +626,7 @@ private suspend fun importManga(
                 description = description
             )
         } catch (e: Exception) {
-            onProgress(ImportProgress(error = e.message ?: context.getString(R.string.unknown_error)))
+            onProgress(ImportProgress(error = context.getString(R.string.unknown_error)))
             null
         }
     }

@@ -101,8 +101,10 @@ fun SourceSettingsSheet(
                 subtitle = source.effectiveBaseUrl(),
                 onClick = {
                     onDismiss()
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(source.effectiveBaseUrl()))
-                    context.startActivity(intent)
+                    // Devices without a browser must not crash here.
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(source.effectiveBaseUrl())))
+                    }
                 }
             )
 

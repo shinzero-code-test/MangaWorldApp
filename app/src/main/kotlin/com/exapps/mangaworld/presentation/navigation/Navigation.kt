@@ -143,7 +143,7 @@ fun MangaNavGraph(
     navController: NavHostController,
     googleSignInClient: GoogleSignInClient,
     setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit,
-    isSignedIn: Boolean = true
+    isSignedIn: Boolean
 ) {
     NavHost(
         navController = navController,
@@ -248,7 +248,7 @@ fun MangaNavGraph(
         ) { back ->
             // roomId/title are reserved for the chat screen's future room switcher;
             // nothing consumes them today, so skip decoding entirely (M-review).
-            CommunityChatScreen(onBack = { navController.popBackStack() })
+            CommunityChatScreen(onBack = { navController.popBackStack() }, isSignedIn = isSignedIn)
         }
         composable(Screen.Settings.route)    {
             SettingsScreen(

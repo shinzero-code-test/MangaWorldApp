@@ -87,7 +87,7 @@ class SettingsViewModel @Inject constructor(
             .onSuccess { written ->
                 _backupMessage.value = context.getString(if (written) R.string.str_240 else R.string.str_336)
             }
-            .onFailure { _backupMessage.value = it.message ?: context.getString(R.string.str_336) }
+            .onFailure { _backupMessage.value = context.getString(R.string.str_336) }
     }
 
     fun importBackup(uri: android.net.Uri) = viewModelScope.launch {
@@ -102,7 +102,7 @@ class SettingsViewModel @Inject constructor(
                 else -> context.getString(R.string.str_332)
             }
         }.onSuccess { _backupMessage.value = it }
-            .onFailure { _backupMessage.value = it.message ?: context.getString(R.string.str_332) }
+            .onFailure { _backupMessage.value = context.getString(R.string.str_332) }
     }
 
     fun clearBackupMessage() { _backupMessage.value = null }

@@ -198,7 +198,7 @@ class MangaDetailViewModel @Inject constructor(
                             _state.update {
                                 it.copy(
                                     isLoading = false,
-                                    error = if (it.manga == null) (e.message ?: context.getString(R.string.download_error)) else null,
+                                    error = if (it.manga == null) context.getString(R.string.download_error) else null,
                                     cloudflareUrl = if (e is CloudflareChallengeException) e.targetUrl else null,
                                     cloudflareDomain = if (e is CloudflareChallengeException) e.domain else null
                                 )
@@ -339,7 +339,7 @@ class MangaDetailViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, error = e.message ?: context.getString(R.string.local_manga_load_error)) }
+                _state.update { it.copy(isLoading = false, error = context.getString(R.string.local_manga_load_error)) }
             }
             } // withContext(Dispatchers.IO)
         }
@@ -490,7 +490,7 @@ class MangaDetailViewModel @Inject constructor(
                         SourceComparison(
                             source = source,
                             match = null,
-                            error = e.message ?: context.getString(R.string.unknown_error)
+                            error = context.getString(R.string.unknown_error)
                         )
                     }
                 }

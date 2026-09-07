@@ -405,7 +405,7 @@ class CommunityViewModel @Inject constructor(
             } catch (throwable: CancellationException) {
                 throw throwable
             } catch (throwable: Throwable) {
-                error.value = throwable.message ?: context.getString(fallbackRes)
+                error.value = context.getString(fallbackRes)
             }
         }
     }
@@ -550,7 +550,7 @@ fun CommunityScreen(
                     glowColors = listOf(MangaColors.Error, MangaColors.Error)
                 ) {
                     Row(
-                        modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 6.dp),
+                        modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Filled.Close, null, tint = MangaColors.Error, modifier = Modifier.size(18.dp))
