@@ -20,6 +20,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoMap
 import dagger.multibindings.StringKey
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import javax.inject.Qualifier
 import com.exapps.mangaworld.core.firebase.FirebaseNetworkInterceptor
 import androidx.work.WorkManager
 import coil.ImageLoader
@@ -31,6 +34,20 @@ import okhttp3.logging.HttpLoggingInterceptor
 import java.io.File
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
+
+/** Testability hook: inject dispatchers instead of hardcoding them. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class IoDispatcher
+
+@Module
+@InstallIn(SingletonComponent::class)
+object CoroutineModule {
+    @Provides
+    @Singleton
+    @IoDispatcher
+    fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.IO
+}
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -206,15 +223,33 @@ object DatabaseModule {
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
-    @Provides fun provideFavoriteDao(db: MangaDatabase) = db.favoriteDao()
-    @Provides fun provideHistoryDao(db: MangaDatabase) = db.readingHistoryDao()
-    @Provides fun provideReadChapterDao(db: MangaDatabase) = db.readChapterDao()
-    @Provides fun provideProgressDao(db: MangaDatabase) = db.readingProgressDao()
-    @Provides fun provideReaderAnnotationDao(db: MangaDatabase) = db.readerAnnotationDao()
-    @Provides fun provideCacheDao(db: MangaDatabase) = db.mangaCacheDao()
-    @Provides fun provideDownloadTaskDao(db: MangaDatabase) = db.downloadTaskDao()
-    @Provides fun provideDownloadBatchDao(db: MangaDatabase) = db.downloadBatchDao()
-    @Provides fun provideDownloadedMangaDao(db: MangaDatabase) = db.downloadedMangaDao()
+    @Provides
+    @Singleton
+    fun provideFavoriteDao(db: MangaDatabase) = db.favoriteDao()
+    @Provides
+    @Singleton
+    fun provideHistoryDao(db: MangaDatabase) = db.readingHistoryDao()
+    @Provides
+    @Singleton
+    fun provideReadChapterDao(db: MangaDatabase) = db.readChapterDao()
+    @Provides
+    @Singleton
+    fun provideProgressDao(db: MangaDatabase) = db.readingProgressDao()
+    @Provides
+    @Singleton
+    fun provideReaderAnnotationDao(db: MangaDatabase) = db.readerAnnotationDao()
+    @Provides
+    @Singleton
+    fun provideCacheDao(db: MangaDatabase) = db.mangaCacheDao()
+    @Provides
+    @Singleton
+    fun provideDownloadTaskDao(db: MangaDatabase) = db.downloadTaskDao()
+    @Provides
+    @Singleton
+    fun provideDownloadBatchDao(db: MangaDatabase) = db.downloadBatchDao()
+    @Provides
+    @Singleton
+    fun provideDownloadedMangaDao(db: MangaDatabase) = db.downloadedMangaDao()
 }
 
 @Module

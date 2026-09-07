@@ -852,6 +852,8 @@
     <string name="cloud_sync_signed_out">Signed out</string>
     <string name="cloud_sync_sign_out_failed">Sign-out failed</string>
     <string name="cloud_sync_public_profile">public profile</string>
+    <string name="shortcut_continue_short">تابع %1$s</string>
+    <string name="shortcut_continue_long">تابع القراءة: %1$s - %2$s</string>
     <string name="import_partial_failed">تعذر استيراد %1$d من الفصول</string>
     <string name="fmt_073">خطأ: %s</string>
     <string name="fmt_074">عرض العناصر (%s)</string>

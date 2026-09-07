@@ -115,8 +115,8 @@ private fun ContinueReadingContent(
         if (data.progressPercent > 0) {
             val progressFraction = (data.progressPercent / 100f).coerceIn(0f, 1f)
             // Glance has no weight-with-fraction; derive inner width from LocalSize.
-            val widgetWidth = androidx.glance.LocalSize.current.width
-            val fillWidth = (widgetWidth.value * progressFraction).dp
+            // WidgetCard pads 14.dp per side — the fill must not overshoot the track.
+            val fillWidth = ((size.width.value - 28).coerceAtLeast(0f) * progressFraction).dp
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = GlanceModifier

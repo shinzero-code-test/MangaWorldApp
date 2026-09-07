@@ -18,8 +18,11 @@ class WidgetRefreshScheduler @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     fun schedule() {
+        // Battery guard mirrors the app's Firebase sync: a 6h full-fan-out
+        // refresh defers on low battery.
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiresBatteryNotLow(true)
             .build()
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
@@ -27,6 +30,10 @@ class WidgetRefreshScheduler @Inject constructor(
             ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<RemoteWidgetRefreshWorker>(6, TimeUnit.HOURS)
                 .setConstraints(constraints)
+                .setBackoffCriteria(
+                    androidx.work.BackoffPolicy.EXPONENTIAL,
+                    30, TimeUnit.MINUTES
+                )
                 .build()
         )
 
@@ -35,6 +42,10 @@ class WidgetRefreshScheduler @Inject constructor(
             ExistingWorkPolicy.KEEP,
             OneTimeWorkRequestBuilder<RemoteWidgetRefreshWorker>()
                 .setConstraints(constraints)
+                .setBackoffCriteria(
+                    androidx.work.BackoffPolicy.EXPONENTIAL,
+                    30, TimeUnit.MINUTES
+                )
                 .build()
         )
     }

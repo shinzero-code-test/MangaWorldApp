@@ -21,6 +21,11 @@ class RemoteWidgetRefreshWorker @AssistedInject constructor(
             widgetDataRepository.refreshRemoteSnapshot()
             widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
             Result.success()
-        }.getOrElse { Result.retry() }
+        }.getOrElse { e ->
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            // A persistent failure (all sources down, snapshot schema change)
+            // must not retry the 18-source fan-out forever.
+            if (runAttemptCount >= 3) Result.failure() else Result.retry()
+        }
     }
 }

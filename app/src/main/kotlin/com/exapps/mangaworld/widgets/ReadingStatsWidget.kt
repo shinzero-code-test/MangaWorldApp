@@ -30,7 +30,6 @@ import com.exapps.mangaworld.core.data.ReadingStatsWidgetData
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.core.widget.WidgetEntryPoint
 import dagger.hilt.android.EntryPointAccessors
-import androidx.glance.LocalContext
 
 class ReadingStatsWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(
@@ -63,25 +62,25 @@ private fun ReadingStatsContent(
     val transparentBg = settings.isTransparentBg()
 
     WidgetCard(
-        title = LocalContext.current.getString(R.string.widget_stats_section),
+        title = context.getString(R.string.widget_stats_section),
         showTitle = showTitles,
         transparentBg = transparentBg
     ) {
         if (stats.totalChaptersRead == 0 && stats.totalReadingMinutes == 0L) {
             WidgetEmptyState(
-                title = LocalContext.current.getString(R.string.widget_empty_stats),
-                subtitle = LocalContext.current.getString(R.string.widget_empty_stats_hint),
+                title = context.getString(R.string.widget_empty_stats),
+                subtitle = context.getString(R.string.widget_empty_stats_hint),
                 intent = AppLaunchIntents.home(context),
-                actionLabel = LocalContext.current.getString(R.string.widget_start_reading),
+                actionLabel = context.getString(R.string.widget_start_reading),
             )
             return@WidgetCard
         }
 
-        StatsRow(icon = "🔥", label = LocalContext.current.getString(R.string.widget_reading_streak), value = context.getString(R.string.widget_streak_days, stats.readingStreakDays))
+        StatsRow(icon = "🔥", label = context.getString(R.string.widget_reading_streak), value = context.getString(R.string.widget_streak_days, stats.readingStreakDays))
         Spacer(GlanceModifier.height(8.dp))
-        StatsRow(icon = "📖", label = LocalContext.current.getString(R.string.widget_chapters_read), value = stats.totalChaptersRead.toString())
+        StatsRow(icon = "📖", label = context.getString(R.string.widget_chapters_read), value = stats.totalChaptersRead.toString())
         Spacer(GlanceModifier.height(8.dp))
-        StatsRow(icon = "⏱️", label = LocalContext.current.getString(R.string.widget_reading_time), value = formatMinutes(context, stats.totalReadingMinutes))
+        StatsRow(icon = "⏱️", label = context.getString(R.string.widget_reading_time), value = formatMinutes(context, stats.totalReadingMinutes))
     }
 }
 

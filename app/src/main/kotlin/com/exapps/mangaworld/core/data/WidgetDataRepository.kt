@@ -2,7 +2,6 @@ package com.exapps.mangaworld.core.data
 
 import android.content.Context
 import android.graphics.Bitmap
-import androidx.core.graphics.drawable.toBitmap
 import coil.ImageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
@@ -16,7 +15,6 @@ import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -38,7 +36,9 @@ class WidgetDataRepository @Inject constructor(
     private val mangaRepository: MangaRepository,
     private val settingsRepository: SettingsRepository,
     private val snapshotStore: WidgetSnapshotStore,
-    private val readingStatsStore: ReadingStatsStore
+    private val readingStatsStore: ReadingStatsStore,
+    private val imageLoader: ImageLoader,
+    @com.exapps.mangaworld.core.di.IoDispatcher private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher
 ) {
 
     suspend fun getContinueReading(): ContinueReadingWidgetData? {
@@ -181,21 +181,16 @@ class WidgetDataRepository @Inject constructor(
 
     suspend fun loadCoverBitmap(url: String?, width: Int, height: Int): Bitmap? {
         if (url.isNullOrBlank()) return null
-        return withContext(Dispatchers.IO) {
+        // Singleton lean image client (no scraper perf interceptor), sampled to
+        // widget size. Aspect-preserving: never force-square portrait covers.
+        return withContext(ioDispatcher) {
             runCatching {
-                val app = (context.applicationContext as android.app.Application)
-                    .let { it as? com.exapps.mangaworld.MangaWorldApp }
-                val imageLoader = app?.newImageLoader() ?: ImageLoader(context)
-                // Cap at 200KB max to prevent OOM in Glance's remote views memory
-                val safeWidth = width.coerceAtMost(200)
-                val safeHeight = height.coerceAtMost(200)
                 val request = ImageRequest.Builder(context)
                     .data(url)
-                    .size(safeWidth, safeHeight)
+                    .size(width.coerceAtMost(320), height.coerceAtMost(440))
                     .allowHardware(false)
                     .build()
-                val result = imageLoader.execute(request)
-                result.drawable?.toBitmap(width = safeWidth, height = safeHeight)
+                (imageLoader.execute(request).drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
             }.getOrNull()
         }
     }

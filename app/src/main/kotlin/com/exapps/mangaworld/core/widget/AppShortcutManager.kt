@@ -34,8 +34,8 @@ class AppShortcutManager @Inject constructor(
 
     private fun buildContinueReadingShortcut(item: ContinueReadingWidgetData): ShortcutInfoCompat =
         ShortcutInfoCompat.Builder(context, "continue_reading")
-            .setShortLabel("تابع ${item.title}")
-            .setLongLabel("تابع القراءة: ${item.title} - ${item.chapterLabel}")
+            .setShortLabel(context.getString(R.string.shortcut_continue_short, item.title))
+            .setLongLabel(context.getString(R.string.shortcut_continue_long, item.title, item.chapterLabel))
             .setIcon(IconCompat.createWithResource(context, R.drawable.ic_shortcut_continue))
             .setIntent(AppLaunchIntents.reader(context, item.sourceId, item.mangaId, item.chapterUrl))
             .setRank(0)
