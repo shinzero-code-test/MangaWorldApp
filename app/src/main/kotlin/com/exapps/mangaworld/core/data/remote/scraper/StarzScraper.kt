@@ -452,7 +452,7 @@ class StarzScraper @Inject constructor(
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
         val url = "${resolvedBaseUrl}/?s=$encoded&post_type=wp-manga&paged=$page"
         val doc = fetchDocument(url)
-        parseMangaGrid(doc)
+        parseStarzGrid(doc)
     }
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
@@ -460,13 +460,13 @@ class StarzScraper @Inject constructor(
         val encodedGenre = java.net.URLEncoder.encode(genre, "UTF-8")
         val url = "${resolvedBaseUrl}/manga/?genre=$encodedGenre&page=$page"
         val doc = fetchDocument(url)
-        parseMangaGrid(doc)
+        parseStarzGrid(doc)
     }
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
         val url = "${resolvedBaseUrl}/manga/?m_orderby=views"
         val doc = fetchDocument(url)
-        parseMangaGrid(doc)
+        parseStarzGrid(doc)
     }
 
     override suspend fun browseManga(
@@ -486,7 +486,7 @@ class StarzScraper @Inject constructor(
         val params = mutableListOf("m_orderby=$order")
         genre?.takeIf { it.isNotBlank() }?.let { params += "genre=${java.net.URLEncoder.encode(it, "UTF-8")}" }
         val doc = fetchDocument(pagePart + "?" + params.joinToString("&"))
-        parseMangaGrid(doc)
+        parseStarzGrid(doc)
     }
 
     override suspend fun getGenres(): Result<List<String>> = runCatching {
@@ -499,7 +499,7 @@ class StarzScraper @Inject constructor(
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
-    private fun parseMangaGrid(doc: org.jsoup.nodes.Document): List<MangaItem> {
+    private fun parseStarzGrid(doc: org.jsoup.nodes.Document): List<MangaItem> {
         return doc.select(
             "div.page-item-detail.manga, div.c-tabs-item__content, div.row.c-tabs-item__content, div.c-image-hover"
         ).mapNotNull { card ->

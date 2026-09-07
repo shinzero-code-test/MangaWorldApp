@@ -152,8 +152,7 @@ class AreaScansScraper @Inject constructor(
                 .build()
             val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
             val body = response.use { it.body?.string() ?: "{}" }
-            if (body.trimStart().startsWith("{").not()) return@runCatching images
-            val json = org.json.JSONObject(body)
+            val json = if (body.trimStart().startsWith("{")) org.json.JSONObject(body) else org.json.JSONObject()
             if (json.optBoolean("success", false)) {
                 val html = json.optJSONObject("data")?.optString("content", "") ?: ""
                 if (html.isNotBlank()) {
