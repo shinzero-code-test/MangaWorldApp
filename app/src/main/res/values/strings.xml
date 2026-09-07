@@ -978,4 +978,6 @@
     <string name="suggestion_channel_name">اقتراحات المانجا</string>
     <string name="suggestion_channel_desc">اقتراحات مانجا قد تعجبك</string>
     <string name="push_notification_type">إشعار</string>
+    <string name="reminder_channel_name">تذكيرات القراءة</string>
+    <string name="reminder_channel_desc">تذكيرات غير مزعجة للمتابعة</string>
 </resources>

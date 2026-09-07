@@ -71,11 +71,19 @@ class FirebaseAnalyticsManager @Inject constructor(
     }
 
     fun logSearchQuery(query: String, sourceId: String?, enabledSources: Int) {
+        // Privacy: free-form queries can contain names/PII. Log a truncated
+        // SHA-256 (repeat-query counting only, not reversible) plus length.
+        val normalized = query.trim().take(100)
+        val queryHash = runCatching {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(normalized.lowercase(java.util.Locale.US).toByteArray())
+            digest.take(8).joinToString("") { "%02x".format(it) }
+        }.getOrNull()
         logEvent(
             name = "search_query",
             params = mapOf(
-                "query" to query.trim().take(100),
-                "query_length" to query.trim().length,
+                "query_hash" to queryHash,
+                "query_length" to normalized.length,
                 "source_id" to (sourceId ?: "all"),
                 "enabled_sources" to enabledSources
             )

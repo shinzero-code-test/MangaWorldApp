@@ -28,9 +28,21 @@ class FirebaseMessagingRegistrar @Inject constructor(
     /** Last persisted token — skips Firestore write if unchanged. */
     @Volatile private var lastPersistedToken: String? = null
 
+    private val messagingPrefs by lazy {
+        context.getSharedPreferences("messaging_prefs", Context.MODE_PRIVATE)
+    }
+
     suspend fun syncCurrentToken() {
         val token = runCatching { messaging.token.await() }.getOrNull() ?: return
         if (token == lastPersistedToken) return  // Skip if token hasn't changed
+        // Memory-only dedup loses state on process restart — confirm against prefs
+        // so every cold start doesn't re-read the devices collection.
+        if (token == messagingPrefs.getString("last_token", null) &&
+            messagingPrefs.getString("device_doc_id", null) != null
+        ) {
+            lastPersistedToken = token
+            return
+        }
         persistToken(token)
     }
 
@@ -42,23 +54,12 @@ class FirebaseMessagingRegistrar @Inject constructor(
     private suspend fun persistToken(token: String) {
         val uid = sessionManager.ensureFirebaseSession() ?: return
         val deviceDocId = token.sha256().take(32)
+        val previousDocId = messagingPrefs.getString("device_doc_id", null)
 
-        // Clean up old tokens — delete any device docs that have a different token hash
-        try {
-            val devices = firestore.collection("users").document(uid)
-                .collection("devices").get().await()
-            val oldDocs = devices.documents.filter { doc ->
-                val docHash = doc.id
-                docHash != deviceDocId && doc.getString("token") != token
-            }
-            for (old in oldDocs) {
-                old.reference.delete().await()
-                Log.d(TAG, "Cleaned up stale device token: ${old.id}")
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to clean old tokens: ${e.message}")
-        }
-
+        // Device-scoped cleanup only: never delete sibling devices' docs (each
+        // device owns exactly one doc). Write-then-delete is crash-safe — a
+        // crash leaves at most one stale self doc, never zero registrations.
+        // Sibling cleanup belongs server-side with an updatedAt TTL.
         firestore.collection("users")
             .document(uid)
             .collection("devices")
@@ -75,6 +76,19 @@ class FirebaseMessagingRegistrar @Inject constructor(
             )
             .await()
 
+        if (previousDocId != null && previousDocId != deviceDocId) {
+            runCatching {
+                firestore.collection("users").document(uid)
+                    .collection("devices").document(previousDocId).delete().await()
+            }.onFailure { e ->
+                Log.w(TAG, "Failed to delete previous device doc: ${e.message}")
+            }
+        }
+
+        messagingPrefs.edit()
+            .putString("device_doc_id", deviceDocId)
+            .putString("last_token", token)
+            .apply()
         lastPersistedToken = token
     }
 

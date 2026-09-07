@@ -42,7 +42,6 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val DASHBOARD_BASE_URL = "https://mangaworld-admin.vercel.app"
 private const val MAX_COMMUNITY_MENTIONS = 10
 
 @Singleton
@@ -70,7 +69,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("updatedAt", Query.Direction.DESCENDING)
             .limit(200)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toReview() })
             }
         awaitClose { reg.remove() }
@@ -82,7 +81,7 @@ class FirebaseCommunityRepository @Inject constructor(
         // Bounded listener: presence is a live-reader *hint*, so counts saturate
         // at 100 rather than downloading an unbounded subcollection per keystroke.
         val reg = members.limit(100).addSnapshotListener { snapshot, error ->
-            if (error != null) return@addSnapshotListener
+            if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
             trySend(snapshot?.size() ?: 0)
         }
         awaitClose { reg.remove() }
@@ -95,7 +94,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(20)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toReaction() })
             }
         awaitClose { reg.remove() }
@@ -112,7 +111,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(limit.toLong())
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toNotification() })
             }
         awaitClose { reg.remove() }
@@ -147,7 +146,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("updatedAt", Query.Direction.DESCENDING)
             .limit(100)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toCustomUserList() })
             }
         awaitClose { reg.remove() }
@@ -156,7 +155,7 @@ class FirebaseCommunityRepository @Inject constructor(
     override fun observePublicProfile(userId: String): Flow<CommunityProfile?> = callbackFlow {
         val reg = firestore.collection("publicProfiles").document(userId)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
                 trySend(snapshot?.toProfile())
             }
         awaitClose { reg.remove() }
@@ -167,7 +166,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .whereEqualTo("isPublic", true)
             .orderBy("updatedAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toCustomUserList() })
             }
         awaitClose { reg.remove() }
@@ -179,7 +178,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(30)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toComment() })
             }
         awaitClose { reg.remove() }
@@ -190,7 +189,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(100)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toModerationReport() })
             }
         awaitClose { reg.remove() }
@@ -208,7 +207,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("addedAt", Query.Direction.DESCENDING)
             .limit(200)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toCustomUserListItem() })
             }
         awaitClose { reg.remove() }
@@ -221,7 +220,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("addedAt", Query.Direction.DESCENDING)
             .limit(200)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toCustomUserListItem() })
             }
         awaitClose { reg.remove() }
@@ -391,7 +390,7 @@ class FirebaseCommunityRepository @Inject constructor(
         // read-then-write below mid-flight while the UI already showed success.
         // NonCancellable lets this block finish even after the parent scope dies.
         withContext(NonCancellable) {
-        val profile = currentProfileOrThrow()
+        val profile = requireNamedProfile()
         val trimmedTitle = title.trim()
         val trimmedBody = body.trim()
         require(trimmedTitle.isNotBlank() || trimmedBody.isNotBlank()) {
@@ -446,7 +445,7 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override suspend fun updateComment(comment: CommunityComment, text: String, spoiler: Boolean) {
         withContext(NonCancellable) {
-        val profile = currentProfileOrThrow()
+        val profile = requireNamedProfile()
         require(profile.uid == comment.authorUid) { context.getString(R.string.community_error_author_edit) }
         val trimmed = text.trim()
         require(trimmed.isNotBlank()) { context.getString(R.string.community_error_empty_content) }
@@ -466,7 +465,7 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override suspend fun deleteComment(comment: CommunityComment) {
         withContext(NonCancellable) {
-        val profile = currentProfileOrThrow()
+        val profile = requireNamedProfile()
         require(profile.uid == comment.authorUid) { context.getString(R.string.community_error_author_delete) }
         val docRef = commentsCollection(comment.mangaId, comment.chapterUrl).document(comment.id)
         if (comment.replyCount > 0) {
@@ -508,7 +507,7 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override suspend fun deleteReview(review: MangaReview) {
         withContext(NonCancellable) {
-        val profile = currentProfileOrThrow()
+        val profile = requireNamedProfile()
         require(profile.uid == review.authorUid) { context.getString(R.string.community_error_author_delete) }
         val reviewRef = firestore.collection("community_manga").document(review.mangaId)
             .collection("reviews").document(review.id)
@@ -545,7 +544,8 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override suspend fun sendPageReaction(mangaId: String, chapterUrl: String, pageIndex: Int, emoji: String, normalizedX: Float, normalizedY: Float) {
         withContext(NonCancellable) {
-        val profile = currentProfileOrThrow()
+        val profile = requireNamedProfile()
+        require(emoji.trim().length <= 16) { context.getString(R.string.community_error_empty_content) }
         val reaction = ReaderReaction(
             id = UUID.randomUUID().toString(),
             mangaId = mangaId,
@@ -573,7 +573,7 @@ class FirebaseCommunityRepository @Inject constructor(
         if (currentUser == null || currentUser.isAnonymous) {
             error(context.getString(R.string.community_error_sign_in))
         }
-        val profile = currentProfileOrThrow()
+        val profile = requireNamedProfile()
         val trimmed = text.trim()
         require(trimmed.isNotBlank()) { context.getString(R.string.community_error_empty_message) }
         require(trimmed.length <= 500) { context.getString(R.string.community_error_banned_content) }
@@ -632,7 +632,7 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean) {
         withContext(NonCancellable) {
-        val profile = currentProfileOrThrow()
+        val profile = requireNamedProfile()
         val memberDoc = firestore.collection("community_presence").document(threadId(mangaId, chapterUrl))
             .collection("members").document(profile.uid)
         if (active) {
@@ -680,7 +680,7 @@ class FirebaseCommunityRepository @Inject constructor(
     private fun observeComments(collection: com.google.firebase.firestore.CollectionReference): Flow<List<CommunityComment>> = callbackFlow {
         val reg = collection.orderBy("createdAt", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toComment() })
             }
         awaitClose { reg.remove() }
@@ -696,7 +696,7 @@ class FirebaseCommunityRepository @Inject constructor(
         replyTarget: com.exapps.mangaworld.domain.model.CommunityReplyTarget?
     ) {
         withContext(NonCancellable) {
-        val profile = currentProfileOrThrow()
+        val profile = requireNamedProfile()
         val trimmed = text.trim()
         require(trimmed.isNotBlank()) { context.getString(R.string.community_error_empty_content) }
         validateModeration(trimmed)
@@ -738,7 +738,7 @@ class FirebaseCommunityRepository @Inject constructor(
                     put("commentId", commentId)
                     if (chapterUrl != null) put("chapterUrl", chapterUrl)
                 }
-                val conn = java.net.URL("$DASHBOARD_BASE_URL/api/notifications/push-reply").openConnection() as java.net.HttpURLConnection
+                val conn = java.net.URL("${CloudinaryUploader.DASHBOARD_BASE_URL}/api/notifications/push-reply").openConnection() as java.net.HttpURLConnection
                 try {
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("Content-Type", "application/json")
@@ -771,7 +771,7 @@ class FirebaseCommunityRepository @Inject constructor(
                 if (mangaId != null) put("mangaId", mangaId)
                 put("vote", vote)
             }
-            val conn = java.net.URL("$DASHBOARD_BASE_URL/api/community/vote").openConnection() as java.net.HttpURLConnection
+            val conn = java.net.URL("${CloudinaryUploader.DASHBOARD_BASE_URL}/api/community/vote").openConnection() as java.net.HttpURLConnection
             try {
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
@@ -797,8 +797,8 @@ class FirebaseCommunityRepository @Inject constructor(
         reason: String
     ) {
         withContext(NonCancellable) {
-        val reporter = currentProfileOrThrow()
-        val trimmedReason = reason.trim()
+        val reporter = requireNamedProfile()
+        val trimmedReason = reason.trim().take(500)
         require(trimmedReason.isNotBlank()) { context.getString(R.string.community_error_report_reason_required) }
         val reportId = UUID.randomUUID().toString()
         firestore.collection("moderationReports").document(reportId)
@@ -825,6 +825,21 @@ class FirebaseCommunityRepository @Inject constructor(
     private suspend fun currentProfileOrThrow(): CommunityProfile {
         val uid = sessionManager.ensureFirebaseSession() ?: error(context.getString(R.string.community_error_sign_in))
         return getCurrentProfile() ?: defaultProfile(uid)
+    }
+
+    /**
+     * Write-path gate: community writes are named-users-only. This must run
+     * BEFORE [currentProfileOrThrow], which silently provisions an anonymous
+     * session that server rules reject — guests get a sign-in error, not an
+     * opaque PERMISSION_DENIED. (F8: defense in depth alongside
+     * firestore.rules canWriteCommunity.)
+     */
+    private suspend fun requireNamedProfile(): CommunityProfile {
+        val currentUser = sessionManager.currentUser()
+        if (currentUser == null || currentUser.isAnonymous) {
+            error(context.getString(R.string.community_error_sign_in))
+        }
+        return currentProfileOrThrow()
     }
 
     private suspend fun defaultProfile(uid: String): CommunityProfile {
@@ -946,7 +961,7 @@ class FirebaseCommunityRepository @Inject constructor(
             try {
                 val token = sessionManager.currentIdToken() ?: return@withContext
                 val body = org.json.JSONObject().apply { put("text", text) }
-                val conn = java.net.URL("$DASHBOARD_BASE_URL/api/community/moderate").openConnection() as java.net.HttpURLConnection
+                val conn = java.net.URL("${CloudinaryUploader.DASHBOARD_BASE_URL}/api/community/moderate").openConnection() as java.net.HttpURLConnection
                 try {
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("Content-Type", "application/json")
@@ -1189,7 +1204,7 @@ class FirebaseCommunityRepository @Inject constructor(
             body = getString("body") ?: return null,
             mangaId = getString("mangaId") ?: return null,
             slug = getString("slug") ?: "",
-            sourceId = getString("sourceId") ?: "azora",
+            sourceId = getString("sourceId")?.takeIf { id -> com.exapps.mangaworld.domain.model.MangaSource.entries.any { it.id == id } } ?: "azora",
             chapterUrl = getString("chapterUrl"),
             commentId = getString("commentId"),
             createdAt = getLong("createdAt") ?: 0L,
@@ -1298,7 +1313,7 @@ class FirebaseCommunityRepository @Inject constructor(
     override fun observeFollowing(userId: String): Flow<List<UserFollow>> = callbackFlow {
         val reg = firestore.collection("relationships").document(userId).collection("following")
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { doc ->
                     UserFollow(uid = doc.getString("uid") ?: doc.id, username = doc.getString("username") ?: "", followedAt = doc.getLong("followedAt") ?: 0L)
                 })
@@ -1309,7 +1324,7 @@ class FirebaseCommunityRepository @Inject constructor(
     override fun observeFollowers(userId: String): Flow<List<UserFollow>> = callbackFlow {
         val reg = firestore.collection("relationships").document(userId).collection("followers")
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { doc ->
                     UserFollow(uid = doc.getString("uid") ?: doc.id, username = doc.getString("username") ?: "", followedAt = doc.getLong("followedAt") ?: 0L)
                 })

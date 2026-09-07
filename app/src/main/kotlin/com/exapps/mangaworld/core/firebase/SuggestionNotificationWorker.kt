@@ -232,6 +232,8 @@ class SuggestionNotificationWorker @AssistedInject constructor(
 
             prefs.edit().putLong("last_suggestion_notification", System.currentTimeMillis()).apply()
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "Suggestion worker failed: ${e.message}")
             Result.retry()
@@ -239,6 +241,7 @@ class SuggestionNotificationWorker @AssistedInject constructor(
     }
 
     companion object {
-        private const val SUGGESTION_NOTIFICATION_ID = 8000
+        // Firebase lane: 90000+ — 8000 sat inside the download progress band.
+        private const val SUGGESTION_NOTIFICATION_ID = 90010
     }
 }

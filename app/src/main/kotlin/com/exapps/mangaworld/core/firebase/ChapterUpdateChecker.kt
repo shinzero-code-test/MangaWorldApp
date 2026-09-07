@@ -169,6 +169,8 @@ class ChapterUpdateCheckerCore @Inject constructor(
                             prefs.edit().putFloat("max_chapter_${favorite.mangaId}", currentMaxChapter.toFloat()).apply()
                         }
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.w("ChapterUpdateChecker", "Failed to check updates for source $sourceId: ${e.message}")
                 }

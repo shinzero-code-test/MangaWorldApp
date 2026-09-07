@@ -4,6 +4,7 @@ import android.content.Context
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -48,7 +49,16 @@ class FirebaseStartupCoordinator @Inject constructor(
         }
 
         runCatching {
-            favoriteDao.getFavoritesList().forEach { topicManager.subscribeToManga(it.mangaId) }
+            // Bounded concurrency: N serial subscribeToTopic round-trips stall
+            // cold start with 100+ favorites. Failures stay logged in the manager.
+            val favorites = favoriteDao.getFavoritesList()
+            kotlinx.coroutines.coroutineScope {
+                favorites.chunked(10).forEach { chunk ->
+                    chunk.map { fav ->
+                        kotlinx.coroutines.async { topicManager.subscribeToManga(fav.mangaId) }
+                    }.awaitAll()
+                }
+            }
         }
         runCatching { notificationPolicyManager.checkAndSendReminders() }
     }

@@ -34,7 +34,8 @@ class CloudinaryUploader @Inject constructor(
     private val okHttpClient: OkHttpClient
 ) {
     companion object {
-        private const val DASHBOARD_URL = "https://mangaworld-admin.vercel.app"
+        internal const val DASHBOARD_BASE_URL = "https://mangaworld-admin.vercel.app"
+        private const val DASHBOARD_URL = DASHBOARD_BASE_URL
         private const val MAX_IMAGE_BYTES = 5 * 1024 * 1024
     }
 
@@ -45,6 +46,9 @@ class CloudinaryUploader @Inject constructor(
      * Returns [UploadResult] with the Cloudinary URL and publicId, or null on failure.
      */
     suspend fun uploadImage(uri: Uri, assetType: String = "avatar"): UploadResult? {
+        require(assetType in setOf("avatar", "banner", "list-cover")) {
+            "Unsupported Cloudinary assetType: $assetType"
+        }
         return withContext(Dispatchers.IO) {
             try {
                 val base64 = uriToBase64(uri) ?: return@withContext null
@@ -118,7 +122,11 @@ class CloudinaryUploader @Inject constructor(
      */
     fun extractPublicId(cloudinaryUrl: String): String? {
         return try {
-            val path = URL(cloudinaryUrl).path
+            val url = URL(cloudinaryUrl)
+            // Only our Cloudinary tenant yields deletable publicIds — scraper
+            // cover URLs containing "/upload/" must never fabricate one.
+            if (url.host != "res.cloudinary.com") return null
+            val path = url.path
             val segments = path.split("/").filter { it.isNotEmpty() }
             // Find the "upload" segment index
             val uploadIdx = segments.indexOf("upload")
@@ -142,9 +150,25 @@ class CloudinaryUploader @Inject constructor(
 
     private fun uriToBase64(uri: Uri): String? {
         return try {
+            // Bounds pass first: a hostile gallery pick must not OOM the
+            // process with a full-res decode before the 800px downscale.
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                android.graphics.BitmapFactory.decodeStream(inputStream, null, bounds)
+            }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            var sampleSize = 1
+            while (bounds.outWidth / sampleSize > 1600 || bounds.outHeight / sampleSize > 1600) {
+                sampleSize *= 2
+            }
+            val decodeOpts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sampleSize }
             val bitmap = context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                android.graphics.BitmapFactory.decodeStream(inputStream)
+                android.graphics.BitmapFactory.decodeStream(inputStream, null, decodeOpts)
             } ?: return null
+            if (bitmap.width <= 0 || bitmap.height <= 0) {
+                bitmap.recycle()
+                return null
+            }
 
             val maxSize = 800
             val scale = minOf(maxSize.toFloat() / bitmap.width, maxSize.toFloat() / bitmap.height, 1f)

@@ -194,9 +194,15 @@ class FirebaseRemoteConfigManager @Inject constructor() {
             retryCount = remoteConfig.getLong("scraper_retry_count").toInt().coerceIn(0, 3)
         )
         RemoteSelectorOverridesStore.replaceAll(parseOverrides(overridesJson))
-        _engagementWarmingMs.value = remoteConfig.getLong("engagement_tier_warming_ms").coerceAtLeast(0)
-        _engagementActiveMs.value = remoteConfig.getLong("engagement_tier_active_ms").coerceAtLeast(0)
-        _engagementAvidMs.value = remoteConfig.getLong("engagement_tier_avid_ms").coerceAtLeast(0)
+        // A Remote Config typo must not invert tiers: enforce warming <= active <= avid.
+        val tiers = listOf(
+            remoteConfig.getLong("engagement_tier_warming_ms"),
+            remoteConfig.getLong("engagement_tier_active_ms"),
+            remoteConfig.getLong("engagement_tier_avid_ms")
+        ).map { it.coerceAtLeast(0) }.sorted()
+        _engagementWarmingMs.value = tiers[0]
+        _engagementActiveMs.value = tiers[1]
+        _engagementAvidMs.value = tiers[2]
     }
 
     private fun parseOverrides(json: String): Map<String, Map<String, String>> = runCatching {
@@ -210,5 +216,9 @@ class FirebaseRemoteConfigManager @Inject constructor() {
                 put(sourceId, nested)
             }
         }
-    }.getOrDefault(emptyMap())
+    }.getOrElse { e ->
+        // Malformed JSON must not silently wipe all selector overrides.
+        android.util.Log.w("RemoteConfig", "parseOverrides failed, keeping previous: ${e.message}")
+        RemoteSelectorOverridesStore.snapshot()
+    }
 }

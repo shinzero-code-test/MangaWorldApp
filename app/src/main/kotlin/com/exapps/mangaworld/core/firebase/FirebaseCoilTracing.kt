@@ -12,29 +12,45 @@ private const val TRACE_NAME = "coil_image_load"
  * Firebase Performance custom trace limits. Uses a single shared trace
  * with counter metrics instead of creating a new trace per image.
  */
-private var loadCount = 0L
-private val sharedTrace by lazy {
-    FirebasePerformance.getInstance().newTrace(TRACE_NAME).apply {
-        putAttribute("sampling", "counter_based")
-        start()
-    }
-}
+private val loadCounter = java.util.concurrent.atomic.AtomicLong(0L)
+
+// Allowlisted surfaces — free-form names would explode metric cardinality.
+private val ALLOWED_SURFACES = setOf(
+    "detail", "reader", "home", "search", "browse", "lists",
+    "history", "downloads", "favorites", "notifications"
+)
 
 fun ImageRequest.Builder.withFirebaseTrace(surface: String): ImageRequest.Builder {
     // Sample 10% of image loads
-    loadCount++
-    if (loadCount % 10 != 0L) return this
+    if (loadCounter.incrementAndGet() % 10 != 0L) return this
 
-    sharedTrace.incrementMetric("load_count", 1)
-    sharedTrace.incrementMetric("surface_${surface.take(16)}", 1)
+    // Each sample gets its own short trace that is always stopped, so it
+    // flushes. (The old shared never-stopped trace could exceed max duration
+    // and never upload.)
+    val trace = runCatching {
+        FirebasePerformance.getInstance().newTrace(TRACE_NAME).apply {
+            putAttribute("sampling", "counter_based")
+            start()
+        }
+    }.getOrNull() ?: return this
+    val safeSurface = surface.take(16).takeIf { it in ALLOWED_SURFACES } ?: "other"
+    trace.incrementMetric("load_count", 1)
+    trace.incrementMetric("surface_$safeSurface", 1)
 
     return listener(
         onStart = { _ -> },
-        onSuccess = { _, _ -> sharedTrace.incrementMetric("success_count", 1) },
-        onError = { _, throwable ->
-            sharedTrace.incrementMetric("failure_count", 1)
-            Log.w(TAG, "Image load failed: ${throwable.toString()}")
+        onSuccess = { _, _ ->
+            trace.incrementMetric("success_count", 1)
+            runCatching { trace.stop() }
         },
-        onCancel = { _ -> sharedTrace.incrementMetric("cancel_count", 1) }
+        onError = { _, throwable ->
+            trace.incrementMetric("failure_count", 1)
+            Log.w(TAG, "Image load failed: ${throwable.toString()}")
+            runCatching { trace.stop() }
+        },
+        onCancel = { _ ->
+            trace.incrementMetric("cancel_count", 1)
+            runCatching { trace.stop() }
+        }
     )
 }

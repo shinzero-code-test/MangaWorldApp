@@ -21,6 +21,8 @@ class FavoriteDigestWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         return try {
             chapterUpdateCheckerCore.checkForNewChapters()
+        } catch (ce: kotlinx.coroutines.CancellationException) {
+            throw ce
         } catch (_: Exception) {
             Result.retry()
         }

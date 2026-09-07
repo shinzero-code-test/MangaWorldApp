@@ -23,6 +23,16 @@ class FirebaseTopicManager @Inject constructor() {
             .onFailure { e -> Log.w(TAG, "Failed to unsubscribe from topic for $mangaId: ${e.message}") }
     }
 
-    private fun topicFor(mangaId: String): String =
-        "manga_${mangaId.replace(Regex("[^A-Za-z0-9-_.~%]"), "_")}".take(MAX_TOPIC_LENGTH)
+    private fun topicFor(mangaId: String): String {
+        val sanitized = mangaId.replace(Regex("[^A-Za-z0-9-_.~%]"), "_")
+        // Short hash suffix: two long IDs sharing a 200-char prefix previously
+        // aliased onto one topic after take(). (Old exact-name topics leak
+        // server-side but resubscription self-heals delivery.)
+        val hash = runCatching {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(mangaId.toByteArray())
+            digest.take(4).joinToString("") { "%02x".format(it) }
+        }.getOrNull() ?: mangaId.hashCode().toString()
+        return "manga_${sanitized.take(180)}_$hash".take(MAX_TOPIC_LENGTH)
+    }
 }

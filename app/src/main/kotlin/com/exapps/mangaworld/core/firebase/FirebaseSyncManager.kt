@@ -168,7 +168,9 @@ class FirebaseSyncManager @Inject constructor(
                 }
             }
             (profile.get("enabledSources") as? List<*>)?.mapNotNull { it?.toString() }?.toSet()?.let { sourceIds ->
-                settingsRepository.setEnabledSources(sourceIds)
+                // Drop unknown IDs (hijacked/corrupt docs must not plant phantom sources).
+                val known = com.exapps.mangaworld.domain.model.MangaSource.entries.map { it.id }.toSet()
+                settingsRepository.setEnabledSources(sourceIds.intersect(known))
             }
             profile.getBoolean("useDynamicColors")?.let { settingsRepository.setDynamicColors(it) }
             // Security-sensitive: biometric lock is DEVICE-LOCAL and never pulled
@@ -183,11 +185,11 @@ class FirebaseSyncManager @Inject constructor(
             profile.getBoolean("autoCleanupReadDownloads")?.let { settingsRepository.setAutoCleanupReadDownloads(it) }
             profile.getLong("cleanupAfterHours")?.toInt()?.let { settingsRepository.setCleanupAfterHours(it) }
             profile.getLong("imageCacheLimitMb")?.toInt()?.let { settingsRepository.setImageCacheLimitMb(it) }
-            (profile.get("contentBlacklist") as? List<*>)?.mapNotNull { it?.toString() }?.toSet()?.let { blacklist ->
+            (profile.get("contentBlacklist") as? List<*>)?.mapNotNull { it?.toString() }?.take(200)?.toSet()?.let { blacklist ->
                 settingsRepository.setContentBlacklist(blacklist)
             }
             profile.getBoolean("spoilerCollapseDefault")?.let { settingsRepository.setSpoilerCollapseDefault(it) }
-            (profile.get("mutedUserIds") as? List<*>)?.mapNotNull { it?.toString() }?.toSet()?.let { muted ->
+            (profile.get("mutedUserIds") as? List<*>)?.mapNotNull { it?.toString() }?.take(100)?.toSet()?.let { muted ->
                 settingsRepository.setMutedUserIds(muted)
             }
 
@@ -323,7 +325,9 @@ class FirebaseSyncManager @Inject constructor(
             }
         }
         if (failedChunks > 0) {
-            android.util.Log.w("FirebaseSync", "$failedChunks/${chunks.size} sync chunks failed — will retry on next sync")
+            // Partial push must NOT report success: the worker maps this to retry,
+            // and silent success would park lost chunks behind the hourly throttle.
+            error("FirebaseSync: $failedChunks/${chunks.size} sync chunks failed")
         }
     }
 
@@ -336,7 +340,7 @@ class FirebaseSyncManager @Inject constructor(
                     // annotationDocId = "mangaId_chapterUrlHash_pageIndex"
                     // We can't reverse the chapterUrl hash, so find by matching key and delete atomically
                     val all = readerAnnotationDao.getAll()
-                    all.find { annotationDocId(it) == tombstone.documentId && it.updatedAt <= tombstone.deletedAt }
+                    all.find { (annotationDocId(it) == tombstone.documentId || FirebaseSyncMerge.legacyAnnotationDocId(it) == tombstone.documentId) && it.updatedAt <= tombstone.deletedAt }
                         ?.let { readerAnnotationDao.deleteIfOlder(it.mangaId, it.chapterUrl, it.pageIndex, tombstone.deletedAt) }
                 }
             }

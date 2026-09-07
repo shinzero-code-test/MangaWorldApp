@@ -33,9 +33,11 @@ class NotificationPolicyManager @Inject constructor(
             notificationManager.createNotificationChannel(
                 NotificationChannel(
                     REMINDER_CHANNEL_ID,
-                    "تذكيرات القراءة",
+                    context.getString(com.exapps.mangaworld.R.string.reminder_channel_name),
                     NotificationManager.IMPORTANCE_LOW
-                ).apply { description = "تذكيرات غير مزعجة للمتابعة" }
+                ).apply {
+                    description = context.getString(com.exapps.mangaworld.R.string.reminder_channel_desc)
+                }
             )
         }
     }
@@ -117,8 +119,10 @@ class NotificationPolicyManager @Inject constructor(
     }
 
     companion object {
-        private const val NOTIFICATION_ID_FAVORITE_UPDATE = 5000
-        private const val NOTIFICATION_ID_INACTIVITY = 5001
+        // Firebase lane: 90000+ — must stay out of the download progress band
+        // [1001..10000] (untagged notify(id) shares one namespace).
+        private const val NOTIFICATION_ID_FAVORITE_UPDATE = 90001
+        private const val NOTIFICATION_ID_INACTIVITY = 90002
         private const val REMINDER_REQUEST_CODE = 1001
         private const val REMINDER_CHANNEL_ID = "reminder_channel"
     }

@@ -37,9 +37,15 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 val slug = intent.getStringExtra(EXTRA_SLUG).orEmpty()
                 val coverUrl = intent.getStringExtra(EXTRA_COVER_URL).orEmpty()
 
-                // Validate required fields
+                // Validate required fields (sourceId against known sources —
+                // a crafted intent must not plant phantom-source favorites).
                 if (mangaId.isNullOrBlank() || sourceId.isNullOrBlank()) {
                     Log.w(TAG, "Missing required extras: mangaId=$mangaId, sourceId=$sourceId")
+                    pendingResult.finish()
+                    return
+                }
+                if (com.exapps.mangaworld.domain.model.MangaSource.entries.none { it.id == sourceId }) {
+                    Log.w(TAG, "Unknown sourceId in intent: $sourceId")
                     pendingResult.finish()
                     return
                 }

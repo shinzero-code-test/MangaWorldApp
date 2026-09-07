@@ -14,7 +14,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 8.2.6 (versionCode 199)
+- **Current version**: 8.2.7 (versionCode 200)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 35 · **Compile SDK**: 35
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -75,7 +75,7 @@ Dashboard: `dashboard/src/` (Next.js App Router) with `dashboard/vercel.json`, `
 - Use `context.getString(R.string.xxx)` NOT `stringResource()`
 - Import `androidx.compose.ui.platform.LocalContext`
 - `GlanceModifier.defaultWeight()` does NOT exist in Glance 1.1.x — use `fillMaxWidth()` on track + computed inner width via `LocalSize.current.width * fraction`
-- Notification IDs partitioned: progress [1001..10000], complete [20000..29999], fail [30000..39999], batch [40000..40999]
+- Notification IDs partitioned: progress [1001..10000], complete [20000..29999], fail [30000..39999], batch [40000..40999], firebase lane [90000..90999] (untagged notify shares one namespace — keep every lane disjoint), per-manga [70000..89999], FCM [200000..300000)
 
 ## Anonymous/Guest User Handling
 
@@ -139,7 +139,7 @@ Each scraper must:
 - **LazyColumn keys**: Composite unique keys (source_id + url/id) — never bare url or id alone
 - **Cloudflare**: `requiresVerification` triggers WebView solver; cookies expire
 - **Proguard/R8**: Models and scrapers have keep-rules in proguard-rules.pro
-- **Notification ID ranges**: progress [1001..10000], complete [20000..29999], fail [30000..39999], batch [40000+]. Don't overlap
+- **Notification ID ranges**: progress [1001..10000], complete [20000..29999], fail [30000..39999], batch [40000+], firebase lane [90000..90999], per-manga [70000..89999], FCM [200000..300000). Don't overlap
 - **Parental PIN**: salted PBKDF2-SHA256 (120k iter) with legacy hashCode upgrade path — don't simplify
 - **Backup schemaVersion**: currently v3; imports of older versions accepted; newer versions rejected
 - **Favourites architecture**: `isFavorite` boolean separate from `readingStatus`. `removeFavorite` sets `isFavorite=false`, doesn't delete entity
