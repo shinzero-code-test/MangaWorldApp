@@ -25,6 +25,11 @@ class ParentalControlManager @Inject constructor(
         private const val KEY_MUTED_GENRES = "muted_genres"
         private const val KEY_LOCKED_MANGA = "locked_manga"
         private const val KEY_MAX_READING_MINUTES = "max_reading_minutes"
+        private const val KEY_PIN_ATTEMPTS = "pin_attempts"
+        private const val KEY_PIN_LOCKOUT_UNTIL = "pin_lockout_until"
+
+        /** Free tries before exponential lockout engages. */
+        private const val FREE_PIN_ATTEMPTS = 5
 
         private const val HASH_PREFIX = "v2"
         private const val HASH_ALGORITHM = "PBKDF2WithHmacSHA256"
@@ -40,12 +45,20 @@ class ParentalControlManager @Inject constructor(
     }
 
     fun setPin(pin: String) {
-        prefs.edit().putString(KEY_PIN_HASH, hashPin(pin)).apply()
+        require(pin.isNotBlank() && pin.trim().length >= 4) { "PIN must be at least 4 characters" }
+        prefs.edit()
+            .putString(KEY_PIN_HASH, hashPin(pin))
+            .remove(KEY_PIN_ATTEMPTS)
+            .remove(KEY_PIN_LOCKOUT_UNTIL)
+            .apply()
     }
 
     fun verifyPin(pin: String): Boolean {
+        // Brute-force throttle: a short numeric PIN is ~10k candidates, so the
+        // hash cost alone is not enough friction. Exponential lockout past 5 fails.
+        if (System.currentTimeMillis() < prefs.getLong(KEY_PIN_LOCKOUT_UNTIL, 0L)) return false
         val storedHash = prefs.getString(KEY_PIN_HASH, null) ?: return false
-        return if (storedHash.startsWith(HASH_PREFIX)) {
+        val matched = if (storedHash.startsWith(HASH_PREFIX)) {
             verifySaltedPin(pin, storedHash)
         } else {
             // Legacy rows stored a bare String.hashCode() — verify against it, then
@@ -56,6 +69,23 @@ class ParentalControlManager @Inject constructor(
             }
             legacyMatches
         }
+        recordPinAttempt(matched)
+        return matched
+    }
+
+    private fun recordPinAttempt(success: Boolean) {
+        if (success) {
+            prefs.edit().remove(KEY_PIN_ATTEMPTS).remove(KEY_PIN_LOCKOUT_UNTIL).apply()
+            return
+        }
+        val attempts = prefs.getInt(KEY_PIN_ATTEMPTS, 0) + 1
+        // 30s doubling from the 5th failure, capped at 30 minutes.
+        val lockoutMs = if (attempts < FREE_PIN_ATTEMPTS) 0L
+        else (30_000L shl (attempts - FREE_PIN_ATTEMPTS)).coerceAtMost(1_800_000L)
+        prefs.edit()
+            .putInt(KEY_PIN_ATTEMPTS, attempts)
+            .putLong(KEY_PIN_LOCKOUT_UNTIL, System.currentTimeMillis() + lockoutMs)
+            .apply()
     }
 
     fun hasPin(): Boolean = prefs.getString(KEY_PIN_HASH, null) != null

@@ -84,19 +84,25 @@ class SettingsViewModel @Inject constructor(
 
     fun exportBackup(uri: android.net.Uri) = viewModelScope.launch {
         runCatching { localBackupManager.exportTo(uri) }
-            .onSuccess { _backupMessage.value = context.getString(R.string.str_240) }
+            .onSuccess { written ->
+                _backupMessage.value = context.getString(if (written) R.string.str_240 else R.string.str_336)
+            }
             .onFailure { _backupMessage.value = it.message ?: context.getString(R.string.str_336) }
     }
 
     fun importBackup(uri: android.net.Uri) = viewModelScope.launch {
         runCatching {
-            localBackupManager.importFrom(uri)
-            firebaseSyncManager.pushLocalSnapshot()
-        }.onSuccess {
-            _backupMessage.value = context.getString(R.string.str_238)
-        }.onFailure {
-            _backupMessage.value = it.message ?: context.getString(R.string.str_332)
-        }
+            when (val result = localBackupManager.importFrom(uri)) {
+                is com.exapps.mangaworld.core.data.LocalBackupManager.ImportResult.Success -> {
+                    firebaseSyncManager.pushLocalSnapshot()
+                    context.getString(R.string.str_238)
+                }
+                // Sync push only runs on success: pushing after an aborted import
+                // would upload a half-merged library over good cloud state.
+                else -> context.getString(R.string.str_332)
+            }
+        }.onSuccess { _backupMessage.value = it }
+            .onFailure { _backupMessage.value = it.message ?: context.getString(R.string.str_332) }
     }
 
     fun clearBackupMessage() { _backupMessage.value = null }

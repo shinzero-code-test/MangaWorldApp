@@ -395,7 +395,8 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun markAllChaptersUnread(mangaId: String, chapterNumbers: Collection<Float>) {
-        chapterNumbers.forEach { readChapterDao.markUnread(mangaId, it) }
+        // Room IN () on an empty list is a runtime crash — guard first.
+        if (chapterNumbers.isNotEmpty()) readChapterDao.markUnreadAll(mangaId, chapterNumbers.toList())
         syncFavoriteProgress(mangaId)
     }
 
@@ -474,8 +475,14 @@ class LibraryRepositoryImpl @Inject constructor(
         favoriteDao.updateProgress(mangaId, readCount, total)
     }
 
-    private fun annotationDocumentId(mangaId: String, chapterUrl: String, pageIndex: Int): String =
-        listOf(mangaId, chapterUrl.hashCode().toString(), pageIndex.toString()).joinToString("_")
+    private fun annotationDocumentId(mangaId: String, chapterUrl: String, pageIndex: Int): String {
+        // 64-bit SHA-256 prefix: colliding 32-bit hashCodes shared one tombstone
+        // across chapters and could suppress a live annotation's sync.
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(chapterUrl.toByteArray())
+        val short = digest.take(8).joinToString("") { "%02x".format(it) }
+        return listOf(mangaId, short, pageIndex.toString()).joinToString("_")
+    }
 }
 
 // ─── SettingsRepository ───────────────────────────────────────────────────────

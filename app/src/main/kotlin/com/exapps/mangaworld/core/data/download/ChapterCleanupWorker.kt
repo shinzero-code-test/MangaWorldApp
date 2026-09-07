@@ -20,7 +20,11 @@ class ChapterCleanupWorker @AssistedInject constructor(
         return runCatching {
             downloadQueueManager.deleteDownloadedChapterDir(mangaId, chapterUrl)
             Result.success()
-        }.getOrElse { Result.retry() }
+        }.getOrElse {
+            // deleteDownloadedChapterDir swallows its own errors, so reaching here
+            // is already unexpected — fail closed after 3 attempts, don't loop forever.
+            if (runAttemptCount >= 3) Result.failure() else Result.retry()
+        }
     }
 
     companion object {

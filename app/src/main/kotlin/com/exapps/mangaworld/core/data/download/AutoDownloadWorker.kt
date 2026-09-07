@@ -65,10 +65,20 @@ class AutoDownloadWorker @AssistedInject constructor(
                     ).getOrNull() ?: continue
 
                     if (pages.isNotEmpty()) {
+                        // Minimal metadata so auto chapters enter the offline
+                        // library (row + cover + metadata.json) like manual ones.
+                        val autoMetadata = com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity(
+                            mangaId = favorite.mangaId,
+                            slug = favorite.slug,
+                            title = favorite.title,
+                            coverUrl = favorite.coverUrl,
+                            sourceId = source.id
+                        )
                         downloadQueueManager.enqueueAndRun(
                             taskId = "auto_${UUID.randomUUID()}",
                             mangaId = favorite.mangaId,
                             mangaTitle = favorite.title,
+                            mangaMetadata = autoMetadata,
                             chapterUrl = chapter.url,
                             chapterTitle = chapter.title
                                 ?: applicationContext.getString(R.string.fmt_059, chapter.displayNumber),

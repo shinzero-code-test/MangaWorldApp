@@ -150,8 +150,13 @@ class ReadingStatsStore @Inject constructor(
     /** Restores a snapshot produced by [snapshot]; absent keys are left untouched. */
     suspend fun restore(snapshot: JSONObject) {
         dataStore.edit { prefs ->
+            // Monotonic counters merge with max(): restoring an older backup
+            // must not zero stats accumulated since the export.
             if (snapshot.has("totalReadingTimeMs")) {
-                prefs[totalReadingTimeKey] = snapshot.getLong("totalReadingTimeMs")
+                prefs[totalReadingTimeKey] = maxOf(
+                    prefs[totalReadingTimeKey] ?: 0L,
+                    snapshot.getLong("totalReadingTimeMs")
+                )
             }
             if (snapshot.has("dailyPages")) {
                 prefs[dailyPagesKey] = snapshot.getString("dailyPages")
@@ -166,10 +171,16 @@ class ReadingStatsStore @Inject constructor(
                 prefs[currentStreakKey] = snapshot.getInt("currentStreak")
             }
             if (snapshot.has("longestStreak")) {
-                prefs[longestStreakKey] = snapshot.getInt("longestStreak")
+                prefs[longestStreakKey] = maxOf(
+                    prefs[longestStreakKey] ?: 0,
+                    snapshot.getInt("longestStreak")
+                )
             }
             if (snapshot.has("totalMangaRead")) {
-                prefs[totalMangaReadKey] = snapshot.getInt("totalMangaRead")
+                prefs[totalMangaReadKey] = maxOf(
+                    prefs[totalMangaReadKey] ?: 0,
+                    snapshot.getInt("totalMangaRead")
+                )
             }
         }
     }

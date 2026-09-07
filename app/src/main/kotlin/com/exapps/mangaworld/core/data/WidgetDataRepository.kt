@@ -55,7 +55,9 @@ class WidgetDataRepository @Inject constructor(
             .distinctBy { it.mangaId }
             .take(limit)
 
-        val cacheMap = cacheDao.getByIds(recentLibrary.map { it.mangaId }).associateBy { it.mangaId }
+        val ids = recentLibrary.map { it.mangaId }
+        // Room IN () on an empty list crashes on affected versions.
+        val cacheMap = if (ids.isEmpty()) emptyMap() else cacheDao.getByIds(ids).associateBy { it.mangaId }
 
         return recentLibrary.mapNotNull { item ->
             val favorite = favoriteMap[item.mangaId] ?: return@mapNotNull null

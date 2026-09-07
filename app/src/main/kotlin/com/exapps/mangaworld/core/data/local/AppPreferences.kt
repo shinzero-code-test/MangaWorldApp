@@ -43,6 +43,8 @@ class AppPreferences @Inject constructor(
         val KEY_READING_LIST_STATUS = stringPreferencesKey("reading_list_status")
         val KEY_FAVORITE_GENRES = stringPreferencesKey("favorite_genres")
         val KEY_SYNC_TOMBSTONES = stringPreferencesKey("sync_tombstones")
+        const val MAX_SYNC_TOMBSTONES = 500
+        const val TOMBSTONE_TTL_MS = 90L * 24L * 60L * 60L * 1000L
         val KEY_SHOW_LIBRARY_PUBLIC = booleanPreferencesKey("show_library_public")
 
         val KEY_READER_MODE = stringPreferencesKey("reader_mode")
@@ -229,7 +231,14 @@ class AppPreferences @Inject constructor(
             val tombstone = SyncTombstone(collection, documentId, deletedAt)
             val existing = tombstones[tombstone.key]
             if (existing == null || existing.deletedAt < deletedAt) tombstones[tombstone.key] = tombstone
-            prefs[KEY_SYNC_TOMBSTONES] = encodeSyncTombstones(tombstones.values)
+            // Bound the blob: keep the 500 newest, drop anything acknowledged
+            // more than 90 days ago. Unbounded growth slowed every sync read.
+            val cutoff = System.currentTimeMillis() - TOMBSTONE_TTL_MS
+            val pruned = tombstones.values
+                .filter { it.deletedAt >= cutoff }
+                .sortedByDescending { it.deletedAt }
+                .take(MAX_SYNC_TOMBSTONES)
+            prefs[KEY_SYNC_TOMBSTONES] = encodeSyncTombstones(pruned)
         }
     }
 
@@ -322,7 +331,13 @@ class AppPreferences @Inject constructor(
                 ).takeIf { it.collection.isNotBlank() && it.documentId.isNotBlank() && it.deletedAt > 0L }
             }
         }
-    }.getOrDefault(emptyList())
+    }.getOrElse {
+        // Corrupt blob previously discarded all tombstones silently (sync
+        // correctness). Log loudly; the raw string stays in DataStore for
+        // diagnostics instead of being overwritten until the next mark.
+        android.util.Log.w("AppPreferences", "Sync tombstones corrupt, starting fresh: ${it.message}")
+        emptyList()
+    }
 
     private fun encodeSyncTombstones(tombstones: Collection<SyncTombstone>): String =
         JSONArray().apply {
@@ -339,6 +354,9 @@ class AppPreferences @Inject constructor(
         .catch { emit(emptyPreferences()) }
         .map { it[cookieKey(domain)] }
 
+    // Session bearer tokens stay in plaintext DataStore ONLY because allowBackup=false
+    // keeps them off backups/cloud, and LocalBackupManager never exports cookie_*
+    // keys. Revisit EncryptedPreferences if the backup policy ever changes.
     suspend fun saveCookies(domain: String, cookies: String) =
         dataStore.edit { it[cookieKey(domain)] = cookies }
 

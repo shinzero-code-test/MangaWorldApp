@@ -79,6 +79,7 @@ class RecommendationEngine @Inject constructor(
 
     private suspend fun buildGenreAffinity(mangaIds: List<String>): Map<String, Int> {
         val affinity = mutableMapOf<String, Int>()
+        if (mangaIds.isEmpty()) return emptyMap()
         val cached = cacheDao.getByIds(mangaIds)
 
         cached.forEach { cache ->

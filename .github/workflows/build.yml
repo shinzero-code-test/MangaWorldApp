@@ -102,6 +102,18 @@ jobs:
           path: app/build/reports/lint-results-debug.html
           retention-days: 7
 
+      # Room schemas are the migration safety net: exportSchema=true writes them
+      # here on every compile. Published as artifacts so migration review never
+      # needs a local build (and so missing schemas fail visibly, not silently).
+      - name: Upload Room Schemas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: room-schemas
+          path: app/schemas/**/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
   # ─── Debug Build ────────────────────────────────────────────────────────────
   build-debug:
     name: Build Debug APKs (All ABIs)

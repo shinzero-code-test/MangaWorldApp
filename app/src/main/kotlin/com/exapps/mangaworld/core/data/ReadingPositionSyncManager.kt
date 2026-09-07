@@ -31,7 +31,7 @@ class ReadingPositionSyncManager @Inject constructor(
             .collection("preferences")
 
         // Write in chunks of [CHUNK_SIZE] to stay under Firestore's 1MB document limit
-        localProgress.chunked(CHUNK_SIZE).forEach { chunk ->
+        localProgress.chunked(CHUNK_SIZE).forEachIndexed { chunkIndex, chunk ->
             val positionsMap = chunk.associate { progress ->
                 "${progress.mangaId}_${progress.chapterNumber}" to mapOf(
                     "mangaId" to progress.mangaId,
@@ -41,7 +41,6 @@ class ReadingPositionSyncManager @Inject constructor(
                     "updatedAt" to progress.updatedAt
                 )
             }
-            val chunkIndex = localProgress.indexOf(chunk.first()) / CHUNK_SIZE
             userRef.document("reading_positions_$chunkIndex").set(positionsMap, SetOptions.merge()).await()
         }
     }

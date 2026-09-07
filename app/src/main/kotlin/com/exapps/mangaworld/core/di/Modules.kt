@@ -197,6 +197,10 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): MangaDatabase =
+        // No upgrade path below v8 by decision (not accident): pre-8 schemas are
+        // unrecoverable without the historical DDL, and the cohort that skipped
+        // every update since is negligible. No fallbackToDestructiveMigration on
+        // upgrade — a missing migration must crash loudly, never wipe silently.
         Room.databaseBuilder(ctx, MangaDatabase::class.java, "mangaworld.db")
             .addMigrations(MangaDatabase.MIGRATION_8_9, MangaDatabase.MIGRATION_9_10, MangaDatabase.MIGRATION_10_11, MangaDatabase.MIGRATION_11_12, MangaDatabase.MIGRATION_12_13, MangaDatabase.MIGRATION_13_14)
             .fallbackToDestructiveMigrationOnDowngrade()

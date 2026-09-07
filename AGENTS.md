@@ -14,7 +14,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 8.2.7 (versionCode 200)
+- **Current version**: 8.2.8 (versionCode 201)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 35 · **Compile SDK**: 35
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -135,6 +135,8 @@ Each scraper must:
 - **Sequence + suspend**: `asSequence().filter { suspendCall() }` fails — Sequence lambdas defer past coroutine scope. Use eager `.filter{}`
 - **`combine` max 5 flows**: Use nested combine for 6+
 - **Room migrations**: ALTER TABLE ADD COLUMN works for nullable/defaulted columns. Register in MangaDatabase companion + bump version. Schema JSON auto-exported
+- **Room DB < v8**: no upgrade path by decision (pre-8 DDL unrecoverable, negligible cohort) — missing migration must crash loudly, never wipe (no `fallbackToDestructiveMigration` on upgrade)
+- **Room schemas**: `app/schemas/` is not committed — schemas publish as CI `room-schemas` artifacts; commit the v14 JSONs from there when present
 - **DropdownMenuItem Material3 BOM 2025.01.00**: Use Text + Modifier.clickable inside DropdownMenu
 - **LazyColumn keys**: Composite unique keys (source_id + url/id) — never bare url or id alone
 - **Cloudflare**: `requiresVerification` triggers WebView solver; cookies expire

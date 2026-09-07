@@ -109,6 +109,10 @@ interface ReadChapterDao {
     @Query("DELETE FROM read_chapters WHERE mangaId = :mangaId AND chapterNumber = :chapterNumber")
     suspend fun markUnread(mangaId: String, chapterNumber: Float)
 
+    /** Atomic bulk counterpart — a 1000-chapter mark-all must not half-apply on crash. */
+    @Query("DELETE FROM read_chapters WHERE mangaId = :mangaId AND chapterNumber IN (:chapterNumbers)")
+    suspend fun markUnreadAll(mangaId: String, chapterNumbers: List<Float>)
+
     @Query("SELECT EXISTS(SELECT 1 FROM read_chapters WHERE mangaId = :mangaId AND chapterNumber = :chapterNumber)")
     suspend fun isRead(mangaId: String, chapterNumber: Float): Boolean
 

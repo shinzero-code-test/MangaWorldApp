@@ -218,7 +218,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
                 status = "failed",
                 totalPages = pages.size,
                 retryCount = retries,
-                reason = e.message
+                reason = userFacingError
             )
             if (batchId == null) {
                 // A terminal failure is shown once only. Manual retry explicitly resets this
@@ -253,13 +253,26 @@ class ChapterDownloadWorker @AssistedInject constructor(
         okHttpClient.newCall(reqBuilder.build()).execute().use { response ->
             if (!response.isSuccessful) error("HTTP ${response.code} for $pageUrl")
             val body = response.body ?: error("Empty body for $pageUrl")
+            // Per-file cap: a pathological response must not stream unbounded to disk.
+            var copied = 0L
             body.byteStream().use { input ->
-                tempFile.outputStream().use { out -> input.copyTo(out) }
+                tempFile.outputStream().use { out ->
+                    val buf = ByteArray(32 * 1024)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        copied += n
+                        if (copied > MAX_PAGE_BYTES) error("Page exceeds size cap for $pageUrl")
+                        out.write(buf, 0, n)
+                    }
+                }
             }
         }
-        if (tempFile.length() <= 0L) {
+        // An HTTP-200 HTML challenge/block page must not complete as N.jpg:
+        // size floor + magic sniff engage the existing MAX_DOWNLOAD_ATTEMPTS retry.
+        if (tempFile.length() < MIN_PAGE_BYTES || !tempFile.hasImageMagic()) {
             tempFile.delete()
-            error("Downloaded empty image for $pageUrl")
+            error("Downloaded non-image body for $pageUrl")
         }
         check(tempFile.renameTo(outFile)) { appContext.getString(R.string.download_error) }
         return true
@@ -314,7 +327,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
             .setAutoCancel(true)
             .build()
         (appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-            .notify(NOTIF_ID_COMPLETE + System.currentTimeMillis().toInt() % 10000, notif)
+            .notify(stableNotifId(NOTIF_ID_COMPLETE, mangaId + chapterUrl), notif)
     }
 
     private fun showFailureNotification(title: String, mangaId: String, chapterUrl: String) {
@@ -333,11 +346,19 @@ class ChapterDownloadWorker @AssistedInject constructor(
             .setAutoCancel(true)
             .build()
         (appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-            .notify(NOTIF_ID_FAIL + System.currentTimeMillis().toInt() % 10000, notif)
+            .notify(stableNotifId(NOTIF_ID_FAIL, mangaId + chapterUrl), notif)
     }
 
+    /**
+     * Stable per-task IDs inside disjoint bands ([20000..28999] complete,
+     * [30000..38999] fail). The old currentTimeMillis().toInt() % 10000 could
+     * go negative and cross bands, letting failures replace completions.
+     */
+    private fun stableNotifId(base: Int, key: String): Int =
+        base + ((key.hashCode() and Int.MAX_VALUE) % 9000)
+
     private fun existingPageCount(dir: File): Int =
-        dir.listFiles()?.count { it.isFile && it.extension.lowercase() == "jpg" && it.length() > 0L } ?: 0
+        dir.listFiles()?.count { it.isFile && it.extension.lowercase() in setOf("jpg", "png", "webp") && it.length() > 0L } ?: 0
 
     private suspend fun updateProgress(taskId: String, title: String, done: Int, total: Int, mangaId: String, chapterUrl: String) {
         downloadTaskDao.updateStateIfActive(
@@ -374,6 +395,8 @@ class ChapterDownloadWorker @AssistedInject constructor(
         private const val NOTIF_ID_FAIL = 30000
         private const val PARALLEL_DOWNLOADS = 4
         private const val MAX_DOWNLOAD_ATTEMPTS = 3
+        private const val MIN_PAGE_BYTES = 1024L
+        private const val MAX_PAGE_BYTES = 50L * 1024L * 1024L
         private val ACTIVE_TASK_STATUSES = setOf("queued", "running")
     }
 }
