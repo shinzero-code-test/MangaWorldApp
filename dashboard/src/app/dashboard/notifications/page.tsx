@@ -265,7 +265,7 @@ export default function NotificationsPage() {
               {history.map(item => (
                 <div key={item.id} className="flex items-start gap-4 px-5 py-4">
                   <div className="w-2 h-2 mt-2 rounded-full shrink-0"
-                    style={{ background: item.status==="sent"?"var(--success)":"var(--destructive)" }} />
+                    style={{ background: item.status==="sent"?"var(--success)":item.status==="manual"?"var(--warning, #f59e0b)":"var(--destructive)" }} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-sm">{item.title}</p>
@@ -274,7 +274,7 @@ export default function NotificationsPage() {
                           {topicLabel(item.topic)}
                         </span>
                       )}
-                      <StatusBadge status={item.status==="sent"?"active":"banned"} label={item.status==="sent"?"أُرسل":"فشل"} size="sm" />
+                      <StatusBadge status={item.status==="sent"?"active":item.status==="manual"?"warning":"banned"} label={item.status==="sent"?"أُرسل":item.status==="manual"?"يدوي":"فشل"} size="sm" />
                     </div>
                     <p className="text-sm mt-0.5 line-clamp-1" style={{ color:"var(--muted-foreground)" }}>{item.body}</p>
                     <p className="text-xs mt-1" style={{ color:"var(--muted-foreground)" }}>{formatRelative(item.sentAt)}</p>

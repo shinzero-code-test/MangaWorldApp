@@ -148,7 +148,9 @@ function safeEquals(a: string, b: string): boolean {
 export function verifyTotpConstantTime(
   secret: string,
   token: string,
-  window = 0
+  // ±1 step absorbs >30s clock skew that otherwise false-rejects into the
+  // 5-fail lockout (availability self-DoS).
+  window = 1
 ): boolean {
   const normalized = String(token ?? "").replace(/\s+/g, "");
   if (!/^\d{6}$/.test(normalized)) return false;
@@ -250,6 +252,22 @@ export async function recordOtpFailure(uid: string): Promise<{ locked: boolean }
 
 export async function clearOtpFailures(uid: string): Promise<void> {
   await getAdminDb().collection("adminOtpAttempts").doc(uid).delete();
+}
+
+const USED_TOKEN_TTL_MS = 90_000;
+
+/** Single-use guard: a still-valid code must not mint a second grant on repost. */
+export async function consumeUsedToken(uid: string, token: string): Promise<boolean> {
+  const { createHash } = await import("crypto");
+  const digest = createHash("sha256").update(`${uid}:${token}`).digest("hex");
+  const ref = getAdminDb().collection("adminUsedTokens").doc(digest);
+  const claimed = await getAdminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (snap.exists) return false;
+    tx.set(ref, { at: Date.now(), expiresAt: Date.now() + USED_TOKEN_TTL_MS });
+    return true;
+  });
+  return claimed;
 }
 
 // ─── Security audit log (H-4, M-7) ───────────────────────────────────────────

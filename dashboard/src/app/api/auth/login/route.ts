@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { idToken } = await signInRes.json();
-    const decoded = await getAdminAuth().verifyIdToken(idToken);
+    const decoded = await getAdminAuth().verifyIdToken(idToken, true);
 
     // Block viewers from accessing the dashboard
     const userRole = decoded.role;

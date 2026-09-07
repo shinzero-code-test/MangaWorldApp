@@ -5,6 +5,7 @@ import {
   clearOtpFailures,
   genericErrorResponse,
   isOtpLocked,
+  consumeUsedToken,
   logSecurityEvent,
   recordOtpFailure,
   resolveTotpSecret,
@@ -63,6 +64,14 @@ export async function POST(request: NextRequest) {
       await recordOtpFailure(user.uid);
       return NextResponse.json(
         { error: "رمز التحقق غير صحيح" },
+        { status: 400 }
+      );
+    }
+    // Grants are session-fingerprint-bound, but a replayed code must not mint
+    // a second grant at all.
+    if (!(await consumeUsedToken(user.uid, token))) {
+      return NextResponse.json(
+        { error: "رمز التحقق مستخدم مسبقاً" },
         { status: 400 }
       );
     }

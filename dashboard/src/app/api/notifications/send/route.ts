@@ -3,13 +3,18 @@ import type { DocumentReference } from "firebase-admin/firestore";
 import { getAdminMessaging, getAdminDb } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
 import { boundedString, isPlainObject } from "@/lib/validate";
-import { genericErrorResponse } from "@/lib/security";
+import { consumeRateLimit, genericErrorResponse } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    await requireRole("super-admin");
+    const admin = await requireRole("super-admin");
+    // Broadcasts reach up to 5000 devices: throttle harder than reads.
+    const sendRl = await consumeRateLimit("admin-broadcast", admin.uid, 10, 60 * 60 * 1000);
+    if (!sendRl.allowed) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
     const raw = await request.json();
     if (!isPlainObject(raw)) {
       return NextResponse.json({ error: "Invalid body" }, { status: 400 });

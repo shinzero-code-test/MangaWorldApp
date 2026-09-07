@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
+import { consumeRateLimit } from "@/lib/security";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { genericErrorResponse } from "@/lib/security";
 
@@ -52,7 +53,12 @@ const GOAL_LABELS: Record<string, { label: string; unit: string }> = {
 
 export async function GET() {
   try {
-    await requireRole("moderator");
+    const admin = await requireRole("moderator");
+    // Quota-burn guard: full Auth/fleet scans per request need a per-admin throttle.
+    const rl = await consumeRateLimit("admin-read", admin.uid, 60, 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
 
     // The app syncs per-user progress into `user_achievements/{uid}` (totals
     // plus JSON-encoded achievements[]/goals[]). There is no global

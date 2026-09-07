@@ -34,8 +34,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(body, { status });
   }
   try {
-    const clientKey = `${user.uid}:${request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown"}`;
-    if (!(await allowAppMutation(clientKey, 20, 60 * 60 * 1000))){
+    // Key on uid alone: X-Forwarded-For is client-controlled, so mixing it
+    // into the key minted a fresh 20/hr bucket per spoofed IP (cost guard bypass).
+    if (!(await allowAppMutation(`upload:${user.uid}`, 20, 60 * 60 * 1000))){
       return NextResponse.json({ error: "تم إرسال عدد كبير من المحاولات. حاول مرة أخرى لاحقاً." }, { status: 429 });
     }
 

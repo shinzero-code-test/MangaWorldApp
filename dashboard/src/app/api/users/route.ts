@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
-import { DASHBOARD_ROLES, requireRole } from "@/lib/auth";
-import { genericErrorResponse } from "@/lib/security";
+import { DASHBOARD_ROLES, requireRole, wouldStrandLastSuperAdmin } from "@/lib/auth";
+import { genericErrorResponse, logSecurityEvent, consumeRateLimit} from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
     const admin = await requireRole("moderator");
+    // Quota-burn guard: full Auth/fleet scans per request need a per-admin throttle.
+    const rl = await consumeRateLimit("admin-read", admin.uid, 60, 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
     const { searchParams } = new URL(request.url);
     const search = (searchParams.get("search") ?? "").trim().toLowerCase().slice(0, 128);
     const roleFilter = searchParams.get("role") || "";
@@ -107,13 +112,20 @@ export async function PATCH(request: NextRequest) {
     }
 
     const updates: Record<string, unknown> = { updatedAt: Date.now() };
+    if (uid === admin.uid && (role !== undefined || disabled === true)) {
+      return NextResponse.json({ error: "لا يمكنك تغيير دورك أو تعطيل حسابك بنفسك" }, { status: 400 });
+    }
     if (role !== undefined) {
       if (typeof role !== "string" || !DASHBOARD_ROLES.includes(role as (typeof DASHBOARD_ROLES)[number])) {
         return NextResponse.json({ error: "الدور غير صالح" }, { status: 400 });
       }
+      if (await wouldStrandLastSuperAdmin(uid, role, undefined)) {
+        return NextResponse.json({ error: "لا يمكن إزالة آخر مدير عام" }, { status: 400 });
+      }
       const authUser = await getAdminAuth().getUser(uid);
       await getAdminAuth().setCustomUserClaims(uid, { ...authUser.customClaims, role });
       await getAdminAuth().revokeRefreshTokens(uid);
+      await logSecurityEvent("role_change", { by: admin.uid, target: uid, role });
     }
     if (username !== undefined) {
       if (typeof username !== "string" || username.trim().length < 1 || username.length > 64) {
@@ -134,7 +146,13 @@ export async function PATCH(request: NextRequest) {
       if (typeof disabled !== "boolean") {
         return NextResponse.json({ error: "حالة التعطيل غير صالحة" }, { status: 400 });
       }
+      if (disabled === true && (await wouldStrandLastSuperAdmin(uid, undefined, true))) {
+        return NextResponse.json({ error: "لا يمكن تعطيل آخر مدير عام" }, { status: 400 });
+      }
       await getAdminAuth().updateUser(uid, { disabled });
+      if (disabled !== undefined) {
+        await logSecurityEvent("account_disable_toggle", { by: admin.uid, target: uid, disabled });
+      }
     }
 
     return NextResponse.json({ success: true });
@@ -160,7 +178,8 @@ export async function DELETE(request: NextRequest) {
 
     // Delete user subcollections — paginate to completion so residual PII
     // doesn't survive when a subcollection exceeds the first page.
-    const subcols = ["favorites", "readingHistory", "readerAnnotations"];
+    // devices/lists/notifications leave push tokens + PII behind otherwise.
+    const subcols = ["favorites", "readingHistory", "readerAnnotations", "devices", "lists", "notifications"];
     for (const subcol of subcols) {
       for (;;) {
         const snap = await getAdminDb().collection("users").doc(uid).collection(subcol).limit(500).get();
@@ -170,6 +189,10 @@ export async function DELETE(request: NextRequest) {
         await batch.commit();
       }
     }
+
+    // 2FA/OTP rows are keyed by uid outside users/ — remove them too.
+    await getAdminDb().collection("admin2fa").doc(uid).delete().catch(() => {});
+    await getAdminDb().collection("adminOtpAttempts").doc(uid).delete().catch(() => {});
 
     // Delete user doc
     await getAdminDb().collection("users").doc(uid).delete();

@@ -73,9 +73,19 @@ export async function POST(request: NextRequest) {
     if (!email || !emailVerified || !validIssuer || info.aud !== GOOGLE_CLIENT_ID) {
       return NextResponse.json({ error: "تعذر التحقق من حساب Google" }, { status: 401 });
     }
+    // Account-keyed bucket (same XFF-rotation rationale as /api/auth/google).
+    const gisEmailAttempt = await consumeRateLimit("gis-email", email, 20, 15 * 60 * 1000);
+    if (!gisEmailAttempt.allowed) {
+      return NextResponse.json(
+        { error: "تم إرسال عدد كبير من المحاولات. حاول مرة أخرى لاحقاً." },
+        { status: 429 }
+      );
+    }
 
     const adminAuth = getAdminAuth();
     let uid: string;
+    // Owner-bootstrap carve-out: a user we just created has no providers yet.
+    let isNewBootstrap = false;
     try {
       uid = (await adminAuth.getUserByEmail(email)).uid;
     } catch (lookupError: unknown) {
@@ -97,10 +107,17 @@ export async function POST(request: NextRequest) {
         displayName: typeof info.name === "string" ? info.name.slice(0, 128) : undefined,
         photoURL: typeof info.picture === "string" ? info.picture.slice(0, 2048) : undefined,
       })).uid;
+      isNewBootstrap = true;
     }
     // A Google-verified address must satisfy the email_verified gate used by
     // the super-admin auto-promotion in /api/auth/google.
+    // Provider check: "Google proved this address" must not adopt a Firebase
+    // account someone else registered with Email/Password for the same address.
     const current = await adminAuth.getUser(uid);
+    const googleLinked = (current.providerData ?? []).some((p) => p.providerId === "google.com");
+    if (!googleLinked && !isNewBootstrap) {
+      return NextResponse.json({ error: "تعذر تسجيل الدخول بـ Google" }, { status: 401 });
+    }
     if (!current.emailVerified) {
       await adminAuth.updateUser(uid, { emailVerified: true });
     }

@@ -29,7 +29,37 @@ export async function requireRole(minRole: DashboardRole): Promise<AuthUser> {
   return user;
 }
 
-export async function getDashboardRoleCounts(): Promise<Record<DashboardRole, number>> {
+/**
+ * True when demoting/disabling `uid` would strand the fleet with zero
+ * super-admins (Console break-glass territory). Callers refuse the change.
+ */
+export async function wouldStrandLastSuperAdmin(
+  uid: string,
+  role: unknown,
+  disabled: unknown
+): Promise<boolean> {
+  const demoting = role !== undefined && role !== "super-admin";
+  const disabling = disabled === true;
+  if (!demoting && !disabling) return false;
+  const { getAdminAuth } = await import("@/lib/firebase-admin");
+  const counts = await getDashboardRoleCounts(true);
+  if ((counts["super-admin"] ?? 0) > 1) return false;
+  try {
+    const target = await getAdminAuth().getUser(uid);
+    const targetRole = (target.customClaims as Record<string, unknown> | undefined)?.role;
+    return (counts["super-admin"] ?? 0) === 1 && targetRole === "super-admin";
+  } catch {
+    return true;
+  }
+}
+
+let roleCountsCache: { counts: Record<DashboardRole, number>; at: number } | null = null;
+const ROLE_COUNTS_TTL_MS = 5 * 60 * 1000;
+
+export async function getDashboardRoleCounts(fresh = false): Promise<Record<DashboardRole, number>> {
+  if (!fresh && roleCountsCache && Date.now() - roleCountsCache.at < ROLE_COUNTS_TTL_MS) {
+    return roleCountsCache.counts;
+  }
   const counts: Record<DashboardRole, number> = { viewer: 0, moderator: 0, "super-admin": 0 };
   let pageToken: string | undefined;
   do {
@@ -40,6 +70,7 @@ export async function getDashboardRoleCounts(): Promise<Record<DashboardRole, nu
     });
     pageToken = page.pageToken;
   } while (pageToken);
+  roleCountsCache = { counts, at: Date.now() };
   return counts;
 }
 

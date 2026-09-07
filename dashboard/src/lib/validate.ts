@@ -67,9 +67,20 @@ export function validateFirestoreDoc(data: unknown): ParamValidationResult {
   if (json.length > 100_000) {
     return { ok: false, error: "document too large (100KB max)" };
   }
-  for (const key of Object.keys(data)) {
-    if (key.startsWith("__")) {
-      return { ok: false, error: `reserved field name: ${key.slice(0, 16)}` };
+  // Recursive: nested {"a":{"__proto__":{}}} and dotted "a.b" keys (nested
+  // paths under merge:true) must not slip past a top-level-only check.
+  const stack: unknown[] = [data];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!isPlainObject(node)) continue;
+    for (const key of Object.keys(node)) {
+      if (key.startsWith("__")) {
+        return { ok: false, error: `reserved field name: ${key.slice(0, 16)}` };
+      }
+      if (key.includes(".")) {
+        return { ok: false, error: `dotted field name: ${key.slice(0, 16)}` };
+      }
+      stack.push((node as Record<string, unknown>)[key]);
     }
   }
   return { ok: true };

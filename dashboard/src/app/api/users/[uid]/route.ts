@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
-import { DASHBOARD_ROLES, requireRole } from "@/lib/auth";
-import { genericErrorResponse } from "@/lib/security";
+import { DASHBOARD_ROLES, requireRole, wouldStrandLastSuperAdmin } from "@/lib/auth";
+import { genericErrorResponse, logSecurityEvent } from "@/lib/security";
 import { isValidEmail } from "@/lib/validate";
 import { isValidDocId } from "@/lib/firestore-whitelist";
 
@@ -90,12 +90,15 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ uid: string }> }) {
   try {
-    await requireRole("super-admin");
+    const admin = await requireRole("super-admin");
     const { uid } = await params;
     if (!isValidDocId(uid)) {
       return NextResponse.json({ error: "Invalid uid" }, { status: 400 });
     }
     const body = await request.json();
+    if (uid === admin.uid && (body.role !== undefined || body.disabled === true)) {
+      return NextResponse.json({ error: "You cannot change your own role or disable your account" }, { status: 400 });
+    }
 
     // Update profile
     const profileUpdates: Record<string, unknown> = { updatedAt: Date.now() };
@@ -128,6 +131,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (typeof body.disabled !== "boolean") {
         return NextResponse.json({ error: "Invalid disabled flag" }, { status: 400 });
       }
+      if (body.disabled === true && (await wouldStrandLastSuperAdmin(uid, undefined, true))) {
+        return NextResponse.json({ error: "Cannot disable the last super-admin" }, { status: 400 });
+      }
       await getAdminAuth().updateUser(uid, { disabled: body.disabled });
     }
     if (body.email) {
@@ -138,9 +144,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       await getAdminAuth().updateUser(uid, { email: body.email });
     }
     if (body.role !== undefined) {
+      if (await wouldStrandLastSuperAdmin(uid, body.role, undefined)) {
+        return NextResponse.json({ error: "Cannot remove the last super-admin" }, { status: 400 });
+      }
       const authUser = await getAdminAuth().getUser(uid);
       await getAdminAuth().setCustomUserClaims(uid, { ...authUser.customClaims, role: body.role });
       await getAdminAuth().revokeRefreshTokens(uid);
+      await logSecurityEvent("role_change", { by: admin.uid, target: uid, role: body.role });
     }
 
     return NextResponse.json({ success: true });

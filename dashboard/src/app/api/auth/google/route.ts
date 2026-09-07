@@ -28,7 +28,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing ID token" }, { status: 400 });
     }
 
-    const decoded = await getAdminAuth().verifyIdToken(idToken);
+    const decoded = await getAdminAuth().verifyIdToken(idToken, true);
+    // Second bucket keyed on the verified address: XFF rotation must not buy
+    // a fresh throttle for the same account (IP-only gate stays above).
+    if (decoded.email) {
+      const emailAttempt = await consumeRateLimit(
+        "auth-google-email",
+        decoded.email.trim().toLowerCase(),
+        30,
+        15 * 60 * 1000
+      );
+      if (!emailAttempt.allowed) {
+        return NextResponse.json(
+          { error: "تم إرسال عدد كبير من المحاولات. حاول مرة أخرى لاحقاً." },
+          { status: 429 }
+        );
+      }
+    }
     const adminAuth = getAdminAuth();
     const configuredSuperAdmin = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
     // email_verified is mandatory: during config drift (typo'd env var, freed and

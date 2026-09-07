@@ -19,6 +19,18 @@ const MAX_TEXT_LENGTH = 2_000;
  * Fail-open by design on transient errors: post-hoc moderationReports remain
  * the backstop, and blocking all posting during an outage would be worse.
  */
+let cachedTemplate: { template: unknown; at: number } | null = null;
+const RC_TEMPLATE_TTL_MS = 60_000;
+
+async function getCachedRcTemplate() {
+  if (cachedTemplate && Date.now() - cachedTemplate.at < RC_TEMPLATE_TTL_MS) {
+    return cachedTemplate.template as Awaited<ReturnType<ReturnType<typeof getAdminRemoteConfig>["getTemplate"]>>;
+  }
+  const template = await getAdminRemoteConfig().getTemplate();
+  cachedTemplate = { template, at: Date.now() };
+  return template;
+}
+
 export async function POST(request: NextRequest) {
   // Auth + validation are fail-CLOSED: an invalid token or bad body must
   // never yield allowed:true. Only the keyword-scan itself (Remote Config
@@ -46,7 +58,9 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const template = await getAdminRemoteConfig().getTemplate();
+      // Module-level 60s cache: uncached getTemplate() per request turns Sybil
+      // volume into Remote Config quota pressure (fail-open then degrades).
+      const template = await getCachedRcTemplate();
       const paramValue = template.parameters?.["community_banned_keywords"]?.defaultValue;
       // RemoteConfigParameterValue is a union — only conditional/default values carry `.value`.
       const rawKeywords =

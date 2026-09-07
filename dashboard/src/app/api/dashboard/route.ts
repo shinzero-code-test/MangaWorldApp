@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { getDashboardRoleCounts, requireRole } from "@/lib/auth";
-import { genericErrorResponse } from "@/lib/security";
+import { genericErrorResponse, consumeRateLimit} from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
     // Moderator minimum: "viewer" rank would admit the viewer role itself (M-4).
-    await requireRole("moderator");
+    const admin = await requireRole("moderator");
+    // Quota-burn guard: full Auth/fleet scans per request need a per-admin throttle.
+    const rl = await consumeRateLimit("admin-read", admin.uid, 60, 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
 
     const [
       usersSnap, openReportsSnap,

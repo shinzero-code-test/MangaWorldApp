@@ -32,6 +32,11 @@ export async function GET() {
       },
     });
   } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    // Remote Config etag/version conflicts: concurrent edit lost, retry on fresh read.
+    if (/etag|version.*match|already exists|out of date|conflict/i.test(msg)) {
+      return NextResponse.json({ error: "تعارض مع تعديل آخر. أعد التحميل وحاول مجدداً." }, { status: 409 });
+    }
     const { body, status } = genericErrorResponse(error);
     return NextResponse.json(body, { status });
   }
@@ -57,6 +62,8 @@ export async function PUT(request: NextRequest) {
     }
 
     await rc.publishTemplate(template);
+    // Note: the fetched template carries its etag, so a concurrent publish
+    // fails here instead of silently winning (last-write-wins avoided).
     return NextResponse.json({ success: true, etag: template.etag });
   } catch (error: unknown) {
     const { body, status } = genericErrorResponse(error, "فشل نشر الإعدادات");

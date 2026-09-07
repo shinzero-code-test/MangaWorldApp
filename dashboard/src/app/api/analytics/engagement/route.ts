@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
+import { consumeRateLimit } from "@/lib/security";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { genericErrorResponse } from "@/lib/security";
 
@@ -8,7 +9,12 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     // Moderator minimum: "viewer" rank would admit the viewer role itself (M-4).
-    await requireRole("moderator");
+    const admin = await requireRole("moderator");
+    // Quota-burn guard: full Auth/fleet scans per request need a per-admin throttle.
+    const rl = await consumeRateLimit("admin-read", admin.uid, 60, 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
     const { searchParams } = new URL(request.url);
     // Clamp the window: each day costs sequential count queries; an unbounded
     // `days` turns one request into thousands of Firestore reads.

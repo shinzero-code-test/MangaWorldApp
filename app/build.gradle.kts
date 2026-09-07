@@ -12,6 +12,12 @@ plugins {
 }
 
 // Room schema history — exported JSON per version enables MigrationTestHelper regression tests.
+// KSP outputs must not be cache-skipped: room.schemaLocation is an
+// out-of-build-dir sidecar, so a FROM-CACHE hit restores classes but never
+// regenerates schemas (proven by empty room-schemas artifacts on CI).
+tasks.withType<com.google.devtools.ksp.gradle.KspTask>().configureEach {
+    outputs.cacheIf { false }
+}
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
     arg("room.incremental", "true")

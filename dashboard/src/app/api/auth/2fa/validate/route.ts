@@ -5,6 +5,7 @@ import {
   clearOtpFailures,
   genericErrorResponse,
   isOtpLocked,
+  consumeUsedToken,
   recordOtpFailure,
   resolveTotpSecret,
   verifyTotpConstantTime,
@@ -47,6 +48,12 @@ export async function POST(request: NextRequest) {
       await recordOtpFailure(user.uid);
       return NextResponse.json(
         { error: "رمز التحقق غير صحيح. تأكد من الرمز وحاول مرة أخرى" },
+        { status: 400 }
+      );
+    }
+    if (!(await consumeUsedToken(user.uid, token))) {
+      return NextResponse.json(
+        { error: "رمز التحقق مستخدم مسبقاً" },
         { status: 400 }
       );
     }

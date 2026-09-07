@@ -23,6 +23,6 @@ export async function GET() {
     });
   } catch (error: unknown) {
     const { body, status } = genericErrorResponse(error);
-    return NextResponse.json(body, { status: status === 500 ? 401 : status });
+    return NextResponse.json(body, { status });
   }
 }

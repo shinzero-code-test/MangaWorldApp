@@ -79,10 +79,14 @@ export async function POST() {
     });
 
     // The plaintext seed is returned exactly once here and only ever stored encrypted.
-    return NextResponse.json({ secret, qrDataUrl });
+    const res = NextResponse.json({ secret, qrDataUrl });
+    res.headers.set("Cache-Control", "no-store");
+    return res;
   } catch (error: unknown) {
+    // Real status: server faults (unset secret, Firestore down) must not
+    // masquerade as "unauthenticated" and mislead triage.
     const { body, status } = genericErrorResponse(error);
-    return NextResponse.json(body, { status: status === 500 ? 401 : status });
+    return NextResponse.json(body, { status });
   }
 }
 

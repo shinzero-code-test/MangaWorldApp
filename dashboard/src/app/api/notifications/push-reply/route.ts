@@ -116,16 +116,26 @@ export async function POST(request: NextRequest) {
     if (recipients.size === 0) return NextResponse.json({ success: true, sent: 0 });
 
     const data = compactData({ mangaId, slug, sourceId, chapterUrl, commentId });
-    const sent = await Promise.all([...recipients.entries()].map(async ([targetUid, notification]) => {
-      const devices = await db.collection("users").doc(targetUid).collection("devices").get();
-      const tokens = devices.docs.map((device) => device.data().token).filter((token): token is string => typeof token === "string");
-      // Data-only (same rationale as notifications/send): a `notification`
-      // payload would render in the tray while backgrounded WITHOUT calling
-      // onMessageReceived, so the reply would never reach the Notification
-      // Centre. Title/body/type ride in data, which the app reads first.
-      return sendPush(tokens, notification.title, notification.body, notification.type, data);
-    }));
-    return NextResponse.json({ success: true, sent: sent.reduce((total, count) => total + count, 0) });
+    // Per-recipient isolation: one failing target must not 500 the whole
+    // (already-committed) dispatch. Partial counts are reported honestly.
+    const results = await Promise.all(
+      [...recipients.entries()].map(async ([targetUid, notification]) => {
+        try {
+          const devices = await db.collection("users").doc(targetUid).collection("devices").get();
+          const tokens = devices.docs.map((device) => device.data().token).filter((token): token is string => typeof token === "string");
+          // Data-only (same rationale as notifications/send): a `notification`
+          // payload would render in the tray while backgrounded WITHOUT calling
+          // onMessageReceived, so the reply would never reach the Notification
+          // Centre. Title/body/type ride in data, which the app reads first.
+          return await sendPush(tokens, notification.title, notification.body, notification.type, data);
+        } catch {
+          return 0;
+        }
+      })
+    );
+    const sent = results.reduce((total, count) => total + count, 0);
+    const failedTargets = results.filter((count) => count === 0).length;
+    return NextResponse.json({ success: true, sent, failedTargets });
   } catch (error) {
     const { body, status } = genericErrorResponse(error);
     return NextResponse.json(body, { status });

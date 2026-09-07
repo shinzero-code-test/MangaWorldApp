@@ -51,8 +51,10 @@ export async function POST(request: NextRequest) {
       topic,
       targetUids: dedupedUids,
       sentAt: Date.now(),
-      sentBy: "admin",
-      status: "sent",
+      sentBy: "admin-manual",
+      // Never "sent": no push was dispatched for this row, and the history
+      // page is the audit trail — fabricated sent-status corrupts it.
+      status: "manual",
     };
 
     await getAdminDb().collection("notification_history").add(entry);
