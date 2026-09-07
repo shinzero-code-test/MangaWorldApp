@@ -44,7 +44,17 @@ class ParentalControlManagerTest {
 
         val editor = mockk<SharedPreferences.Editor>(relaxed = true)
         every { editor.putString(any(), any()) } answers {
-            store[firstArg()] = secondArg<String?>()
+            val key = firstArg<String>()
+            val value = secondArg<String?>()
+            if (value == null) store.remove(key) else store[key] = value
+            editor
+        }
+        every { editor.putInt(any(), any()) } answers {
+            store[firstArg()] = secondArg<Int>()
+            editor
+        }
+        every { editor.putLong(any(), any()) } answers {
+            store[firstArg()] = secondArg<Long>()
             editor
         }
         every { editor.remove(any()) } answers {
@@ -56,6 +66,12 @@ class ParentalControlManagerTest {
         val prefs = mockk<SharedPreferences>()
         every { prefs.getString(any(), any()) } answers {
             store[it.invocation.args[0] as String] as? String ?: it.invocation.args[1] as String?
+        }
+        every { prefs.getLong(any(), any()) } answers {
+            store[it.invocation.args[0] as String] as? Long ?: it.invocation.args[1] as Long
+        }
+        every { prefs.getInt(any(), any()) } answers {
+            store[it.invocation.args[0] as String] as? Int ?: it.invocation.args[1] as Int
         }
         every { prefs.edit() } returns editor
 
@@ -121,6 +137,20 @@ class ParentalControlManagerTest {
 
         assertFalse(manager.verifyPin("0000"))
         assertFalse((store["pin_hash"] as String).startsWith("v2"))
+    }
+
+    @Test
+    fun `lockout engages after repeated failures and resets on success`() {
+        manager.setPin("1234")
+        repeat(5) { assertFalse(manager.verifyPin("0000")) }
+        // Locked out: even the correct PIN fails until the window passes.
+        assertFalse(manager.verifyPin("1234"))
+    }
+
+    @Test
+    fun `setPin rejects blank and short PINs`() {
+        runCatching { manager.setPin("") }.let { assertTrue(it.isFailure) }
+        runCatching { manager.setPin("12") }.let { assertTrue(it.isFailure) }
     }
 
     @Test
