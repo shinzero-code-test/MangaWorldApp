@@ -60,6 +60,7 @@ data class CloudSyncUiState(
 
 @HiltViewModel
 class CloudSyncViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val sessionManager: FirebaseSessionManager,
     private val syncManager: FirebaseSyncManager,
     private val remoteConfigManager: FirebaseRemoteConfigManager,
