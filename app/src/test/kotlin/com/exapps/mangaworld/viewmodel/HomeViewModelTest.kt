@@ -109,7 +109,9 @@ class HomeViewModelTest {
         vm.loadHome(MangaSource.AZORA)
         val state = vm.state.value
         assertFalse(state.isLoading)
-        assertEquals("Network error", state.error)
+        // Raw backend text must not reach UI state (generic R.string.download_error
+        // instead — relaxed context mock returns "" for it).
+        assertNotEquals("Network error", state.error)
     }
 
     @Test
