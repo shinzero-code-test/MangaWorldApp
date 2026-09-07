@@ -57,6 +57,7 @@ fun Modifier.glassSurface(
     baseAlpha: Float = 0.72f,
     glowIntensity: Float = 1f
 ): Modifier = composed {
+    require(glowColors.isNotEmpty()) { "glassSurface requires at least one glow color" }
     val colors = mangaColors()
     this
         .drawBehind {
@@ -116,6 +117,7 @@ fun Modifier.pulsingGlow(
     cornerRadius: Dp,
     glowColors: List<Color>
 ): Modifier = composed {
+    require(glowColors.isNotEmpty()) { "pulsingGlow requires at least one glow color" }
     val transition = rememberInfiniteTransition(label = "glass_pulse")
     val phase by transition.animateFloat(
         initialValue = 0.85f,

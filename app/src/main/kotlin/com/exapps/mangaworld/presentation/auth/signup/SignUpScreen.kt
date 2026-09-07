@@ -51,7 +51,7 @@ fun SignUpScreen(
         normalizedUsername.isEmpty() -> null
         normalizedUsername.length < 3 -> stringResource(R.string.auth_error_username_short)
         normalizedUsername.length > 20 -> stringResource(R.string.auth_error_username_long)
-        !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$")) -> stringResource(R.string.str_012)
+        !normalizedUsername.matches(com.exapps.mangaworld.domain.UsernameRules.REGEX) -> stringResource(R.string.str_012)
         else -> null
     }
 

@@ -14,6 +14,7 @@ import com.exapps.mangaworld.domain.model.CustomUserListItem
 import com.exapps.mangaworld.domain.model.MangaReview
 import com.exapps.mangaworld.domain.model.ReaderReaction
 import com.exapps.mangaworld.domain.model.UserFollow
+import com.exapps.mangaworld.domain.UsernameRules
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -43,9 +44,6 @@ import javax.inject.Singleton
 
 private const val DASHBOARD_BASE_URL = "https://mangaworld-admin.vercel.app"
 private const val MAX_COMMUNITY_MENTIONS = 10
-
-/** Username must be 3-20 chars: alphanumeric and underscores only, no leading/trailing underscores. */
-private val USERNAME_REGEX = Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$")
 
 @Singleton
 class FirebaseCommunityRepository @Inject constructor(
@@ -241,7 +239,7 @@ class FirebaseCommunityRepository @Inject constructor(
         val normalized = username.trim().lowercase()
         require(normalized.isNotBlank()) { context.getString(R.string.auth_error_username_required) }
         require(normalized.length in 3..20) { context.getString(R.string.auth_error_username_invalid) }
-        require(USERNAME_REGEX.matches(normalized)) { context.getString(R.string.auth_error_username_invalid) }
+        require(UsernameRules.REGEX.matches(normalized)) { context.getString(R.string.auth_error_username_invalid) }
 
         val existing = getCurrentProfile() ?: defaultProfile(uid)
         // Recalculate badge based on current achievements

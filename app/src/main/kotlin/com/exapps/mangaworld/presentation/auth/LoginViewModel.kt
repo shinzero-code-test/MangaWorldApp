@@ -102,7 +102,7 @@ class LoginViewModel @Inject constructor(
             return
         }
         val normalizedUsername = username.trim().lowercase()
-        if (normalizedUsername.length !in 3..20 || !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$"))) {
+        if (normalizedUsername.length !in 3..20 || !normalizedUsername.matches(com.exapps.mangaworld.domain.UsernameRules.REGEX)) {
             _uiState.update { it.copy(error = context.getString(R.string.str_108)) }
             return
         }
