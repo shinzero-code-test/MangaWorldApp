@@ -52,10 +52,10 @@ class FirebaseStartupCoordinator @Inject constructor(
             // Bounded concurrency: N serial subscribeToTopic round-trips stall
             // cold start with 100+ favorites. Failures stay logged in the manager.
             val favorites = favoriteDao.getFavoritesList()
-            kotlinx.coroutines.coroutineScope {
+            coroutineScope {
                 favorites.chunked(10).forEach { chunk ->
                     chunk.map { fav ->
-                        kotlinx.coroutines.async { topicManager.subscribeToManga(fav.mangaId) }
+                        async { topicManager.subscribeToManga(fav.mangaId) }
                     }.awaitAll()
                 }
             }
