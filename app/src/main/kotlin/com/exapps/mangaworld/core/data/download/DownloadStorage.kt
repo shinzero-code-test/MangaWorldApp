@@ -5,7 +5,7 @@ import java.io.File
 internal object DownloadStorage {
     // Control chars and Unicode bidi overrides are filesystem-legal but
     // produce spoofed/confusing display names — strip them at the chokepoint.
-    private val UNSAFE_CHARS = Regex("[\p{C}\u200E\u200F\u202A-\u202E\u2066-\u2069]")
+    private val UNSAFE_CHARS = Regex("""[\p{C}\u200E\u200F\u202A-\u202E\u2066-\u2069]""")
 
     private fun safeName(name: String, fallback: String): String =
         name.replace(Regex("""[/\\:*?"<>|]"""), "_")
