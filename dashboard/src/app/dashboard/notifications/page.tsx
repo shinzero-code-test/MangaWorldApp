@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Bell, Smartphone, Megaphone, BookOpen, RefreshCcw, Check, Send, Loader2, CheckCircle2 } from "lucide-react";
 import { PageHeader, StatusBadge, EmptyState } from "@/components/ui";
 import { formatRelative } from "@/lib/utils";
+import { api, isAbortError } from "@/lib/api-client";
 
 const TOPICS = [
   { id:"general",     label:"عام",              desc:"إشعار لجميع المستخدمين",    icon:Megaphone,  color:"var(--primary)",
@@ -37,20 +38,22 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     // API returns { tokens: [{token, platform, updatedAt}] }
-    fetch("/api/notifications/tokens")
-      .then(r => r.json())
+    const controller = new AbortController();
+    api<{ tokens?: unknown[] }>("/api/notifications/tokens", { signal: controller.signal })
       .then(d => setDeviceCount((d.tokens ?? []).length))
-      .catch(() => setDeviceCount(null));
+      .catch((e) => { if (!isAbortError(e)) setDeviceCount(null); });
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
     if (tab !== "history") return;
+    const controller = new AbortController();
     setHistLoading(true);
-    fetch("/api/notifications/history")
-      .then(r => r.json())
+    api<{ history?: HistoryItem[] }>("/api/notifications/history", { signal: controller.signal })
       .then(d => setHistory(d.history ?? []))
-      .catch(() => setHistory([]))
+      .catch((e) => { if (!isAbortError(e)) setHistory([]); })
       .finally(() => setHistLoading(false));
+    return () => controller.abort();
   }, [tab]);
 
   const handleSend = async (e: React.FormEvent) => {

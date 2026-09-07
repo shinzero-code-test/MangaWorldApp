@@ -22,7 +22,8 @@ export default function CommentsPage() {
       setLoading(true);
       setError("");
       try {
-        const p   = search ? `?search=${encodeURIComponent(search)}` : "";
+        // Bounded at 100 (server cap): the table shows the newest slice, not the universe.
+        const p   = `?limit=100${search ? `&search=${encodeURIComponent(search)}` : ""}`;
         const res = await fetch(`/api/community/comments${p}`, { signal: controller.signal });
         if (!res.ok) {
           setComments([]);

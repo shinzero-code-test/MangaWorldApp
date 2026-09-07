@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Shield, Plus, X, Save, CheckCircle2, Loader2 } from "lucide-react";
+import { Shield, Plus, X, CheckCircle2, Loader2 } from "lucide-react";
 import { PageHeader, EmptyState } from "@/components/ui";
+import { api, ApiError, isAbortError } from "@/lib/api-client";
 
 export default function BannedKeywordsPage() {
   const [keywords,  setKeywords]  = useState<string[]>([]);
@@ -11,9 +12,10 @@ export default function BannedKeywordsPage() {
   const [saveError, setSaveError] = useState("");
   const [newKw,     setNewKw]     = useState("");
 
+  const [forbidden, setForbidden] = useState(false);
   useEffect(() => {
-    fetch("/api/moderation/banned-keywords")
-      .then(r => r.json())
+    const controller = new AbortController();
+    api<{ keywords?: unknown }>("/api/moderation/banned-keywords", { signal: controller.signal })
       .then(d => {
         // API returns { keywords: "word1,word2,word3" } as comma-separated string
         const raw = d.keywords ?? "";
@@ -23,7 +25,13 @@ export default function BannedKeywordsPage() {
         setKeywords(arr);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((e) => {
+        if (isAbortError(e)) return;
+        // A 403 must read as "no permission", never as "no keywords".
+        if (e instanceof ApiError && e.forbidden) setForbidden(true);
+        setLoading(false);
+      });
+    return () => controller.abort();
   }, []);
 
   const saveKeywords = async (newList: string[]) => {
@@ -91,6 +99,8 @@ export default function BannedKeywordsPage() {
           <div className="flex flex-wrap gap-2">
             {Array.from({length:8}).map((_,i) => <div key={i} className="h-8 w-20 rounded-full skeleton-shimmer" />)}
           </div>
+        ) : forbidden ? (
+          <EmptyState icon={Shield} title="صلاحية غير كافية" description="إدارة الكلمات المحظورة متاحة للمديرين العامين فقط" />
         ) : keywords.length === 0 ? (
           <EmptyState icon={Shield} title="لا توجد كلمات محظورة" description="أضف كلمات لمنع ظهورها في التعليقات" />
         ) : (

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Package, CheckCircle2, Clock, Download } from "lucide-react";
+import { Package, Clock, Download } from "lucide-react";
 import { PageHeader, StatusBadge, EmptyState } from "@/components/ui";
 import { formatDate, formatAr } from "@/lib/utils";
+import { api, isAbortError } from "@/lib/api-client";
 
 interface Release {
   id:          string;
@@ -20,16 +21,21 @@ export default function ReleasesPage() {
   const [releases, setReleases] = useState<Release[]>([]);
   const [loading,  setLoading]  = useState(true);
 
+  const [error, setError] = useState("");
   useEffect(() => {
     // Real releases from the GitHub release pipeline (APKs/AABs per tag).
-    fetch("/api/releases")
-      .then((r) => r.json())
-      .then((d) => {
-        const list = Array.isArray(d.releases) ? d.releases : [];
-        setReleases(list);
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const d = await api<{ releases?: Release[] }>("/api/releases", { signal: controller.signal });
+        setReleases(Array.isArray(d.releases) ? d.releases : []);
+      } catch (e) {
+        if (!isAbortError(e)) setError("فشل تحميل الإصدارات");
+      } finally {
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      }
+    })();
+    return () => controller.abort();
   }, []);
 
   const platforms: Record<string, string> = {
@@ -45,6 +51,15 @@ export default function ReleasesPage() {
         subtitle="إدارة إصدارات التطبيق"
         icon={Package}
       />
+
+      {!loading && error !== "" && (
+        <div
+          className="px-4 py-3 rounded-xl text-sm font-medium"
+          style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}
+        >
+          {error}
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-3">

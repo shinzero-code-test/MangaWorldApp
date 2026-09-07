@@ -5,7 +5,6 @@ import { genericErrorResponse } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
 
-const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? "";
 const GA4_PROPERTY_ID = process.env.GA4_PROPERTY_ID ?? "";
 
 export async function GET() {

@@ -23,23 +23,28 @@ export default function DashboardLayout({
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [authError, setAuthError] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((res) => {
+    let cancelled = false;
+    const loadMe = async () => {
+      try {
+        const res = await fetch("/api/auth/me");
+        if (cancelled) return;
         if (res.status === 403) {
           setAccessDenied(true);
           setLoading(false);
-          return null;
+          return;
         }
-        if (!res.ok) throw new Error("Unauthorized");
-        return res.json();
-      })
-      .then(async (data) => {
-        if (!data) return;
+        if (res.status === 401) {
+          router.push("/login");
+          return;
+        }
+        if (!res.ok) throw new Error(`me:${res.status}`);
+        const data = await res.json();
         // Check 2FA status
         try {
           const tfaRes = await fetch("/api/auth/2fa/status");
@@ -51,13 +56,20 @@ export default function DashboardLayout({
             }
           }
         } catch { /* proceed if 2FA check fails */ }
+        if (cancelled) return;
         setUser(data);
+        setAuthError(false);
         setLoading(false);
-      })
-      .catch(() => {
-        router.push("/login");
-        setLoading(false);
-      });
+      } catch {
+        // Network blip: retryable error state, not a blind login push.
+        if (!cancelled) {
+          setAuthError(true);
+          setLoading(false);
+        }
+      }
+    };
+    loadMe();
+    return () => { cancelled = true; };
   }, [router]);
 
   if (loading) {
@@ -83,8 +95,31 @@ export default function DashboardLayout({
     );
   }
 
-  if (!user) return null;
+  if (authError && !user) {
+    return (
+      <ThemeProvider>
+        <div
+          className="min-h-screen flex items-center justify-center"
+          style={{ background: "var(--background)" }}
+        >
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+              تعذر الاتصال بالخادم
+            </p>
+            <button
+              onClick={() => { setAuthError(false); setLoading(true); window.location.reload(); }}
+              className="px-4 py-2 rounded-lg text-sm font-semibold"
+              style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
+            >
+              إعادة المحاولة
+            </button>
+          </div>
+        </div>
+      </ThemeProvider>
+    );
+  }
 
+  // Denied-before-null: on 403 `user` stays null, so this branch must win.
   if (accessDenied) {
     return (
       <ThemeProvider>
@@ -133,6 +168,8 @@ export default function DashboardLayout({
     );
   }
 
+  if (!user) return null;
+
   return (
     <ThemeProvider>
       <div
@@ -148,7 +185,9 @@ export default function DashboardLayout({
           />
         )}
 
-        {/* Sidebar */}
+        {/* Sidebar — note: physical -translate-x-full is correct here because the
+            panel is end-0 in an always-RTL shell. If dir ever flips to LTR,
+            switch to logical rtl:/ltr: translate variants. */}
         <div
           className={`fixed end-0 top-0 z-50 h-screen lg:sticky transition-transform duration-300 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"

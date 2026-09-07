@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { User, ChevronRight, ShieldOff, Shield, Save, Loader2, Mail, Calendar, Key, Globe, BookOpen, Heart, MessageSquare, PenLine, Star } from "lucide-react";
+import { ChevronRight, ShieldOff, Shield, Save, Loader2, Mail, Calendar, Key, Globe, BookOpen, Heart, MessageSquare, PenLine, Star } from "lucide-react";
 import { StatusBadge, ConfirmDialog, Skeleton } from "@/components/ui";
 import { formatDate, formatRelative, avatarColor, getInitials } from "@/lib/utils";
 
@@ -12,7 +12,6 @@ interface UserDetail {
   bio?: string; avatarUrl?: string;
   favoriteCount?: number; historyCount?: number; annotationCount?: number; deviceCount?: number;
   commentsCount?: number; reviewsCount?: number;
-  customClaims?: Record<string, any>;
 }
 
 export default function UserDetailPage() {
@@ -113,7 +112,7 @@ export default function UserDetailPage() {
             <div className="flex items-start gap-4">
               <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold text-white shrink-0"
                 style={{ background: user.avatarUrl ? undefined : avatarBg }}>
-                {user.avatarUrl ? (
+                {user.avatarUrl?.startsWith("https://") ? (
                   <img src={user.avatarUrl} alt={initials} className="w-full h-full rounded-2xl object-cover" />
                 ) : initials}
               </div>

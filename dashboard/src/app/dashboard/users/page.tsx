@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Users, Search, ExternalLink, Shield, Eye, ChevronLeft, ChevronRight, UserCheck } from "lucide-react";
 import { StatusBadge, SkeletonTable, EmptyState, PageHeader } from "@/components/ui";

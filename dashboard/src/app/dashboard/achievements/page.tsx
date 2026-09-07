@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { PageHeader, SkeletonCard, EmptyState } from "@/components/ui";
 import { formatAr } from "@/lib/utils";
+import { api, isAbortError } from "@/lib/api-client";
 
 interface Achievement {
   id:          string;
@@ -49,11 +50,19 @@ export default function AchievementsPage() {
   const [data,    setData]    = useState<AchievementsData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [error, setError] = useState("");
   useEffect(() => {
-    fetch("/api/achievements")
-      .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    const controller = new AbortController();
+    (async () => {
+      try {
+        setData(await api<AchievementsData>("/api/achievements", { signal: controller.signal }));
+      } catch (e) {
+        if (!isAbortError(e)) setError("فشل تحميل الإنجازات");
+      } finally {
+        setLoading(false);
+      }
+    })();
+    return () => controller.abort();
   }, []);
 
   const achievements = data?.achievements ?? [];
@@ -66,6 +75,15 @@ export default function AchievementsPage() {
         subtitle="تتبع إنجازات المستخدمين وأهدافهم"
         icon={Trophy}
       />
+
+      {!loading && error !== "" && (
+        <div
+          className="px-4 py-3 rounded-xl text-sm font-medium"
+          style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}
+        >
+          {error}
+        </div>
+      )}
 
       {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

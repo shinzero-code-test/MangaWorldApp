@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Radio, Save, Loader2, CheckCircle2 } from "lucide-react";
 import { PageHeader } from "@/components/ui";
+import { api, ApiError, isAbortError } from "@/lib/api-client";
 
 const SOURCE_DOMAINS: { id: string; label: string; def: string }[] = [
   { id: "olympus",       label: "تيم اكس",            def: "https://olympustaff.com" },
@@ -43,10 +44,10 @@ export default function SourcesConfigPage() {
   const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
-    fetch("/api/settings")
-      .then((r) => r.json())
+    const controller = new AbortController();
+    api<{ settings?: Record<string, unknown> }>("/api/settings", { signal: controller.signal })
       .then((d) => {
-        const s = (d.settings ?? d ?? {}) as Record<string, unknown>;
+        const s = (d.settings ?? {}) as Record<string, unknown>;
         setUrls((prev) => {
           const next = { ...prev };
           for (const key of Object.keys(prev)) {
@@ -56,7 +57,13 @@ export default function SourcesConfigPage() {
         });
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((e) => {
+        // A failed load leaves previous (default) URLs in place and flags it —
+        // merging `undefined` over state would still PUT, per the F3 finding.
+        if (!isAbortError(e)) setSaveError("فشل تحميل الإعدادات الحالية.");
+        setLoading(false);
+      });
+    return () => controller.abort();
   }, []);
 
   const handleSave = async () => {
@@ -70,8 +77,9 @@ export default function SourcesConfigPage() {
     setSaving(true);
     try {
       // Merge with the live template first so unrelated keys are preserved.
-      const current = await fetch("/api/settings").then((r) => r.json());
-      const merged = { ...((current.settings ?? {}) as Record<string, unknown>), ...urls };
+      const current = await api<{ settings?: Record<string, unknown> }>("/api/settings");
+      if (current.settings === undefined) throw new ApiError(500, "missing settings");
+      const merged = { ...(current.settings as Record<string, unknown>), ...urls };
       const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

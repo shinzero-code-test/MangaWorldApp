@@ -12,6 +12,7 @@ import {
 } from "firebase/auth";
 import { clientAuth } from "@/lib/firebase-client";
 import { useEffect, useRef } from "react";
+import { api, ApiError } from "@/lib/api-client";
 
 // Google Identity Services button (primary Google flow — works where the
 // firebaseapp.com iframe relay used by popup/redirect is dead).
@@ -112,16 +113,31 @@ export default function LoginPage() {
   // claims, clock skew) must never loop forever hammering forced token refreshes.
   const MAX_REFRESH_ATTEMPTS = 2;
 
+  // Extracts {error, email} from an ApiError's raw body without crashing
+  // on non-JSON payloads (HTML error pages, empty bodies).
+  const loginApiMessage = (e: unknown, fallback: string): string => {
+    if (!(e instanceof ApiError)) return fallback;
+    try {
+      const parsed = JSON.parse(e.body) as { email?: unknown; error?: unknown };
+      const suffix = typeof parsed.email === "string" && parsed.email ? ` (${parsed.email})` : "";
+      return ((typeof parsed.error === "string" && parsed.error) || fallback) + suffix;
+    } catch {
+      return fallback;
+    }
+  };
+
   const handleSession = async (idToken: string, refreshToken: () => Promise<string>, attempt = 0) => {
-    const res = await fetch("/api/auth/google", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      const suffix = typeof data?.email === "string" && data.email ? ` (${data.email})` : "";
-      throw new Error((data.error || "خطأ في تسجيل الدخول") + suffix);
+    // api() checks status before parsing: an HTML error page must not throw
+    // SyntaxError out of .json() and mask the real failure.
+    let data: { refreshRequired?: boolean; email?: string; error?: string };
+    try {
+      data = await api<{ refreshRequired?: boolean; email?: string; error?: string }>("/api/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+    } catch (e) {
+      throw new Error(loginApiMessage(e, "خطأ في تسجيل الدخول"));
     }
     if (data.refreshRequired) {
       if (attempt >= MAX_REFRESH_ATTEMPTS) {
@@ -162,15 +178,11 @@ export default function LoginPage() {
     setError("");
     setGoogleDetails("");
     try {
-      const res = await fetch("/api/auth/google-credential", {
+      const data = await api<{ customToken?: unknown; error?: string }>("/api/auth/google-credential", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ credential }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "تعذر تسجيل الدخول بـ Google");
-      }
       if (typeof data?.customToken !== "string" || !data.customToken) {
         throw new Error("تعذر تسجيل الدخول بـ Google");
       }

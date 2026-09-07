@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
-import { Settings2, Search, ChevronDown, Upload, CheckCircle2, Loader2, Palette, Radio, Smartphone, Wrench, Globe } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Settings2, Search, ChevronDown, Upload, CheckCircle2, Loader2, Palette, Radio, Smartphone, Globe } from "lucide-react";
 import { PageHeader, Toggle } from "@/components/ui";
+import { api, isAbortError } from "@/lib/api-client";
 
 interface RCParam {
   key: string; defaultValue: string; valueType: string; description: string;
@@ -68,10 +69,14 @@ export default function RemoteConfigPage() {
   const [etag,     setEtag]     = useState("");
   const [paramCount,setParamCount] = useState(0);
 
+  const [loadError, setLoadError] = useState("");
   useEffect(() => {
     setLoading(true);
-    fetch("/api/remote-config")
-      .then(r => r.json())
+    const controller = new AbortController();
+    api<{ parameters?: Record<string, { defaultValue?: string; valueType?: string; description?: string }>; template?: { etag?: string; parameterCount?: number } }>(
+      "/api/remote-config",
+      { signal: controller.signal }
+    )
       .then(d => {
         const raw = d.parameters ?? {};
         const etag = d.template?.etag ?? "";
@@ -105,7 +110,8 @@ export default function RemoteConfigPage() {
         setValues(init);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((e) => { if (!isAbortError(e)) setLoadError("فشل تحميل الإعدادات."); setLoading(false); });
+    return () => controller.abort();
   }, []);
 
   const handlePublish = async () => {
@@ -164,6 +170,15 @@ export default function RemoteConfigPage() {
           </div>
         }
       />
+
+      {loadError !== "" && (
+        <div
+          className="px-4 py-3 rounded-xl text-sm font-medium"
+          style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}
+        >
+          {loadError}
+        </div>
+      )}
 
       <div className="relative">
         <Search size={15} className="absolute end-3 top-1/2 -translate-y-1/2" style={{ color:"var(--muted-foreground)" }} />

@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
-  Menu, Bell, Sun, Moon, ChevronLeft,
-  User, LogOut, Settings2
+  Menu, Bell, Sun, Moon,
+  LogOut
 } from "lucide-react";
 import { useTheme } from "@/components/providers/theme-provider";
 import { useRouter } from "next/navigation";

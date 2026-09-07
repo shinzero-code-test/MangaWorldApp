@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { PageHeader, ConfirmDialog, EmptyState, Spinner } from "@/components/ui";
 import { truncate } from "@/lib/utils";
+import { api, isAbortError } from "@/lib/api-client";
 
 interface Collection {
   id:          string;
@@ -56,20 +57,34 @@ export default function DataBrowserPage() {
   const [newJson,        setNewJson]        = useState("{\n  \n}");
   const [createLoading,  setCreateLoading]  = useState(false);
   const [jsonError,      setJsonError]      = useState("");
+  // Consistency gate (mirrors users/[uid] canManage): the server still
+  // enforces super-admin on /api/firestore/* — this only hides the UI.
+  const [canManage,      setCanManage]      = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then(r => (r.ok ? r.json() : null))
+      .then(u => setCanManage(u?.role === "super-admin"))
+      .catch(() => setCanManage(false));
+  }, []);
 
   const loadCollection = useCallback(async (col: string) => {
     setLoading(true);
     setViewDoc(null);
     try {
-      const res  = await fetch(`/api/firestore/${col}`);
-      const data = await res.json();
+      // Explicit limit: the browser must not pull unbounded collections.
+      const data = await api<{ documents?: Record<string, unknown>[]; docs?: Record<string, unknown>[] }>(
+        `/api/firestore/${col}?limit=100`
+      );
       setDocs(
-        (data.documents ?? data.docs ?? []).map((d: any) => ({
-          id:     d.id ?? d._id ?? "?",
-          fields: d.data ?? d.fields ?? d,
+        (data.documents ?? data.docs ?? []).map((d: Record<string, unknown>) => ({
+          id:     String(d.id ?? d._id ?? "?"),
+          fields: (d.data ?? d.fields ?? d) as Record<string, unknown>,
         }))
       );
-    } catch { setDocs([]); }
+    } catch (e) {
+      if (!isAbortError(e)) setDocs([]);
+    }
     finally  { setLoading(false); }
   }, []);
 
@@ -91,7 +106,7 @@ export default function DataBrowserPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setJsonError("");
-    let parsed: any;
+    let parsed: Record<string, unknown>;
     try { parsed = JSON.parse(newJson); }
     catch { setJsonError("JSON غير صالح"); return; }
     setCreateLoading(true);
@@ -111,7 +126,9 @@ export default function DataBrowserPage() {
   };
 
   const colCfg = COLLECTIONS.find((c) => c.id === selected) ?? COLLECTIONS[0];
-  const previewFields = (fields: Record<string, any>) =>
+  const previewValue = (v: unknown): string =>
+    v !== null && typeof v === "object" ? JSON.stringify(v)?.slice(0, 20) ?? "{}" : String(v).slice(0, 20);
+  const previewFields = (fields: Record<string, unknown>) =>
     Object.entries(fields).slice(0, 2).map(([k, v]) => (
       <span
         key={k}
@@ -119,9 +136,21 @@ export default function DataBrowserPage() {
         style={{ background: "var(--muted)", color: "var(--muted-foreground)" }}
         dir="ltr"
       >
-        {k}: {String(v).slice(0, 20)}
+        {k}: {previewValue(v)}
       </span>
     ));
+
+  if (canManage === false) {
+    return (
+      <div className="space-y-5">
+        <EmptyState
+          icon={Shield}
+          title="صلاحية غير كافية"
+          description="متصفح البيانات متاح للمديرين العامين فقط"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -238,7 +267,7 @@ export default function DataBrowserPage() {
                           style={{ color: "var(--primary)" }}
                           dir="ltr"
                         >
-                          {truncate(doc.id, 24)}
+                          <span title={doc.id}>{truncate(doc.id, 24)}</span>
                         </code>
                       </td>
                       <td>

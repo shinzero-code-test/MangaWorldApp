@@ -5,6 +5,7 @@ import { HardDrive, Image, FileText, Database, Folder } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { PageHeader, SkeletonCard } from "@/components/ui";
 import { formatBytes, formatAr } from "@/lib/utils";
+import { api, isAbortError } from "@/lib/api-client";
 
 interface StorageBreakdown {
   id:        string;
@@ -34,11 +35,19 @@ export default function StoragePage() {
   const [data,    setData]    = useState<StorageData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [error, setError] = useState("");
   useEffect(() => {
-    fetch("/api/storage")
-      .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    const controller = new AbortController();
+    (async () => {
+      try {
+        setData(await api<StorageData>("/api/storage", { signal: controller.signal }));
+      } catch (e) {
+        if (!isAbortError(e)) setError("فشل تحميل بيانات التخزين");
+      } finally {
+        setLoading(false);
+      }
+    })();
+    return () => controller.abort();
   }, []);
 
   const breakdown: StorageBreakdown[] = (data?.breakdown ?? [
@@ -46,7 +55,7 @@ export default function StoragePage() {
     { id: "documents", label: "المستندات",     bytes: 0, fileCount: 0 },
     { id: "cache",     label: "الذاكرة المؤقتة",bytes: 0, fileCount: 0 },
     { id: "other",     label: "أخرى",          bytes: 0, fileCount: 0 },
-  ]).map((b: any, i: number) => ({
+  ]).map((b: { id: string; label: string; bytes: number; fileCount: number }, i: number) => ({
     ...b,
     icon:  ICONS[b.id] ?? Folder,
     color: COLORS[i % COLORS.length],
@@ -63,6 +72,15 @@ export default function StoragePage() {
         subtitle="Cloudinary — إحصاءات مساحة التخزين"
         icon={HardDrive}
       />
+
+      {!loading && error !== "" && (
+        <div
+          className="px-4 py-3 rounded-xl text-sm font-medium"
+          style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}
+        >
+          {error}
+        </div>
+      )}
 
       {/* Hero card */}
       <div
@@ -109,7 +127,7 @@ export default function StoragePage() {
                     outerRadius="80%"
                     paddingAngle={3}
                   >
-                    {breakdown.map((b, i) => (
+                    {breakdown.map((b) => (
                       <Cell key={b.id} fill={b.color} />
                     ))}
                   </Pie>

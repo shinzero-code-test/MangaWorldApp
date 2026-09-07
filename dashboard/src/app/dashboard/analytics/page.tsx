@@ -22,7 +22,19 @@ const ROLE_COLORS: Record<string,string> = {
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState("30d");
-  const [data, setData] = useState<any>(null);
+  interface SummaryOverview {
+    totalUsers?: number; openReports?: number; totalLists?: number;
+    recentSignUps?: number; roleDistribution?: Record<string, number>;
+  }
+  interface SummaryEngagement {
+    dailyActive?: { date: string; count: number }[];
+    sourceUsage?: { source: string; count: number }[];
+    avgReadingTime?: number; retentionRate?: number; avgPagesPerSession?: number;
+  }
+  interface SummaryData {
+    overview?: SummaryOverview; engagement?: SummaryEngagement;
+  }
+  const [data, setData] = useState<SummaryData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

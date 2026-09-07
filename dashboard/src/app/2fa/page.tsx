@@ -115,7 +115,7 @@ export default function TwoFAPage() {
     }
   };
 
-  const handleVerify = async () => {
+  const handleVerify = useCallback(async () => {
     if (otpValue.length !== 6) {
       setError("أدخل الرمز المكون من 6 أرقام");
       return;
@@ -149,15 +149,14 @@ export default function TwoFAPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [otpValue, state, router]);
 
   // Auto-submit when 6 digits entered
   useEffect(() => {
     if (otpValue.length === 6 && !loading) {
       handleVerify();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [otpValue]);
+  }, [otpValue, loading, handleVerify]);
 
   // ─── Loading ───
   if (state === "loading") {

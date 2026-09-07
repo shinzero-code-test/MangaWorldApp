@@ -4,6 +4,7 @@ import { Bug, ChevronDown, ChevronUp } from "lucide-react";
 import { RadialBarChart, RadialBar, ResponsiveContainer } from "recharts";
 import { PageHeader, StatusBadge, EmptyState, SkeletonCard, Skeleton } from "@/components/ui";
 import { formatAr, formatRelative } from "@/lib/utils";
+import { api, isAbortError } from "@/lib/api-client";
 
 interface CrashIssue {
   id:string; title:string; subtitle?:string; state:"open"|"resolved";
@@ -31,16 +32,25 @@ export default function CrashlyticsPage() {
   const [filter,  setFilter]  = useState<"all"|"open"|"resolved">("all");
   const [expanded,setExpanded]= useState<Set<string>>(new Set());
 
+  const [error, setError] = useState("");
   useEffect(() => {
-    fetch("/api/crashlytics")
-      .then(r => r.json())
-      .then(d => {
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const d = await api<{ issues?: CrashIssue[]; stats?: Stats | null; bigquery?: BigQueryState | null }>(
+          "/api/crashlytics",
+          { signal: controller.signal }
+        );
         setIssues(d.issues ?? []);
         setStats(d.stats ?? null);
         setBq(d.bigquery ?? null);
+      } catch (e) {
+        if (!isAbortError(e)) setError("فشل تحميل بيانات الأعطال");
+      } finally {
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      }
+    })();
+    return () => controller.abort();
   }, []);
 
   const toggleExpand = (id:string) =>
@@ -61,6 +71,15 @@ export default function CrashlyticsPage() {
     <div className="space-y-6">
       <PageHeader title="الأعطال" subtitle="Crashlytics — تتبع أعطال التطبيق" icon={Bug} />
 
+      {!loading && error !== "" && (
+        <div
+          className="px-4 py-3 rounded-xl text-sm font-medium"
+          style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}
+        >
+          {error}
+        </div>
+      )}
+
       {bq && !bq.available && (
         <div className="p-4 rounded-xl border text-sm leading-relaxed"
           style={{ background: "rgba(245,158,11,0.08)", borderColor: "rgba(245,158,11,0.3)", color: "var(--warning)" }}>
@@ -79,7 +98,7 @@ export default function CrashlyticsPage() {
               <div className="relative w-24 h-24">
                 <ResponsiveContainer width="100%" height="100%">
                   <RadialBarChart innerRadius="65%" outerRadius="85%" data={[{value:cfr ?? 0}]} startAngle={90} endAngle={-270}>
-                    <RadialBar dataKey="value" fill={cfrColor} cornerRadius={4} background={{ fill:"var(--muted)" } as any} />
+                    <RadialBar dataKey="value" fill={cfrColor} cornerRadius={4} background={{ fill:"var(--muted)" } as { fill: string }} />
                   </RadialBarChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex items-center justify-center">

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Smartphone, Globe, Shield, Palette, Save, CheckCircle2, Loader2, Zap, type LucideIcon } from "lucide-react";
 import { PageHeader, Toggle } from "@/components/ui";
+import { api, ApiError, isAbortError } from "@/lib/api-client";
 
 interface AppSettings {
   home_layout_variant?: string;
@@ -101,24 +102,40 @@ export default function SettingsPage() {
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState(false);
 
+  const [loadError, setLoadError] = useState("");
   useEffect(() => {
-    fetch("/api/settings")
-      .then(r => r.json())
-      .then(d => {
-        // API returns { settings: {...} }
-        const s = d.settings ?? d ?? {};
-        setSettings({ ...DEFAULT, ...s });
+    const controller = new AbortController();
+    (async () => {
+      try {
+        // API returns { settings: {...} } — a failed load must not masquerade
+        // as defaults (an error payload merged over DEFAULT looks identical).
+        const d = await api<{ settings?: Partial<AppSettings> }>("/api/settings", {
+          signal: controller.signal,
+        });
+        if (d.settings === undefined) throw new ApiError(500, "missing settings");
+        setSettings({ ...DEFAULT, ...d.settings });
+      } catch (e) {
+        if (!isAbortError(e)) setLoadError("فشل تحميل الإعدادات — تُعرض القيم الافتراضية.");
+      } finally {
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      }
+    })();
+    return () => controller.abort();
   }, []);
 
-  const update = (key: string, val: any) => setSettings(p => ({ ...p, [key]: val }));
+  const update = (key: string, val: string | number | boolean) => setSettings(p => ({ ...p, [key]: val }));
 
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
 
   const handleSave = async () => {
+    // Clamp to the documented server ranges before PUT.
+    setSettings(p => ({
+      ...p,
+      scraper_connect_timeout_seconds: Math.min(90, Math.max(5, Number(p.scraper_connect_timeout_seconds) || 5)),
+      scraper_read_timeout_seconds: Math.min(120, Math.max(5, Number(p.scraper_read_timeout_seconds) || 5)),
+      scraper_retry_count: Math.min(3, Math.max(0, Number(p.scraper_retry_count) || 0)),
+    }));
     // Validate JSON fields client-side before publishing to the live template.
     const rawOverrides = String(settings.scraper_selector_overrides ?? "").trim();
     if (rawOverrides && !isValidJsonObject(rawOverrides)) {
@@ -144,6 +161,15 @@ export default function SettingsPage() {
   return (
     <div className="space-y-5 pb-24">
       <PageHeader title="إعدادات التطبيق" subtitle="ضبط إعدادات تطبيق مانجا وورلد" icon={Smartphone} />
+
+      {loadError !== "" && (
+        <div
+          className="px-4 py-3 rounded-xl text-sm font-medium"
+          style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}
+        >
+          {loadError}
+        </div>
+      )}
       <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
         تُنشر التغييرات على Remote Config فور الحفظ، ويلتقطها التطبيق خلال ساعة كحد أقصى (عند التشغيل) — أعد تشغيل التطبيق لرؤية الأثر فوراً.
       </p>

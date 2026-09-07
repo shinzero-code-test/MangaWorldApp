@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import { PageHeader, SkeletonCard, Skeleton } from "@/components/ui";
 import { formatDuration, formatAr } from "@/lib/utils";
+import { api, isAbortError } from "@/lib/api-client";
 
 interface TraceItem {
   name:      string;
@@ -35,11 +36,19 @@ export default function PerformancePage() {
   const [data,    setData]    = useState<PerformanceData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [error, setError] = useState("");
   useEffect(() => {
-    fetch("/api/performance")
-      .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    const controller = new AbortController();
+    (async () => {
+      try {
+        setData(await api<PerformanceData>("/api/performance", { signal: controller.signal }));
+      } catch (e) {
+        if (!isAbortError(e)) setError("فشل تحميل بيانات الأداء");
+      } finally {
+        setLoading(false);
+      }
+    })();
+    return () => controller.abort();
   }, []);
 
   const traces       = data?.traces ?? [];
@@ -54,6 +63,15 @@ export default function PerformancePage() {
         subtitle="Firebase Performance Monitoring"
         icon={Zap}
       />
+
+      {!loading && error !== "" && (
+        <div
+          className="px-4 py-3 rounded-xl text-sm font-medium"
+          style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}
+        >
+          {error}
+        </div>
+      )}
 
       {bq && !bq.available && (
         <div className="p-4 rounded-xl border text-sm leading-relaxed"
@@ -225,7 +243,7 @@ export default function PerformancePage() {
                       border:       "1px solid var(--border)",
                       borderRadius: 8,
                     }}
-                    formatter={(v: any) => [`${v}ms`, "وقت الرسم"]}
+                    formatter={(v: number | string) => [`${v}ms`, "وقت الرسم"]}
                   />
                   <Bar
                     dataKey="renderMs"

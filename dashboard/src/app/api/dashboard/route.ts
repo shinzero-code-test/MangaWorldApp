@@ -17,11 +17,10 @@ export async function GET() {
 
     const [
       usersSnap, openReportsSnap,
-      mangasSnap, weekAgoSnap
+      weekAgoSnap
     ] = await Promise.all([
       getAdminDb().collection("publicProfiles").count().get(),
       getAdminDb().collection("moderationReports").where("status", "==", "open").count().get(),
-      getAdminDb().collection("community_manga").count().get(),
       getAdminDb().collection("publicProfiles")
         .where("updatedAt", ">=", Date.now() - 7 * 86400000)
         .count().get(),

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { SkeletonCard, StatusBadge } from "@/components/ui";
 import { formatAr } from "@/lib/utils";
+import { api, isAbortError } from "@/lib/api-client";
 
 interface KPIData {
   totalUsers: number; totalComments: number; totalReviews: number;
@@ -32,14 +33,19 @@ const QUICK_ACTIONS = [
 export default function DashboardOverview() {
   const [kpis, setKpis] = useState<KPIData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [svcs, setSvcs] = useState<Record<string,boolean>>({});
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   useEffect(() => {
-    fetch("/api/dashboard")
-      .then(r => r.json())
-      .then(d => {
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const d = await api<KPIData & { services?: Record<string, boolean> }>(
+          "/api/dashboard",
+          { signal: controller.signal }
+        );
         if (!mounted.current) return;
         setKpis({
           totalUsers: d.totalUsers ?? 0, totalComments: d.totalComments ?? 0,
@@ -47,9 +53,13 @@ export default function DashboardOverview() {
           recentSignUps: d.recentSignUps ?? 0, roleCounts: d.roleCounts ?? {},
         });
         setSvcs(d.services ?? { auth:true, db:true, rc:true, fcm:true, crash:false });
-        setLoading(false);
-      })
-      .catch(() => { if (mounted.current) setLoading(false); });
+      } catch (e) {
+        if (!isAbortError(e) && mounted.current) setError("فشل تحميل لوحة التحكم");
+      } finally {
+        if (mounted.current) setLoading(false);
+      }
+    })();
+    return () => controller.abort();
   }, []);
 
   const kpiConfig = [
@@ -61,6 +71,14 @@ export default function DashboardOverview() {
 
   return (
     <div className="space-y-6">
+      {!loading && error !== "" && (
+        <div
+          className="px-4 py-3 rounded-xl text-sm font-medium"
+          style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}
+        >
+          {error}
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {loading ? Array.from({length:4}).map((_,i) => <SkeletonCard key={i} />) :
           kpiConfig.map((cfg, idx) => {
@@ -79,7 +97,7 @@ export default function DashboardOverview() {
                   {cfg.key==="totalUsers" && (kpis?.recentSignUps ?? 0) > 0 && (
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
                       style={{ background:"rgba(16,185,129,0.1)", color:"#10b981" }}>
-                      +{formatAr(kpis!.recentSignUps)} هذا الأسبوع
+                      +{formatAr(kpis?.recentSignUps ?? 0)} هذا الأسبوع
                     </span>
                   )}
                 </div>

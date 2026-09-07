@@ -5,6 +5,7 @@ import { Star, Trash2 } from "lucide-react";
 import { PageHeader, EmptyState, SkeletonTable, ConfirmDialog } from "@/components/ui";
 import { formatRelative, truncate } from "@/lib/utils";
 import type { MangaReview } from "@/types/community";
+import { api, ApiError, isAbortError } from "@/lib/api-client";
 
 function StarRating({ rating, max = 5 }: { rating: number; max?: number }) {
   return (
@@ -31,20 +32,23 @@ export default function ReviewsPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/community/reviews")
-      .then((r) => {
-        if (!r.ok) throw new Error(r.status === 403 ? "forbidden" : "failed");
-        return r.json();
-      })
-      .then((d) => {
+    const controller = new AbortController();
+    (async () => {
+      try {
+        // Bounded at 100 (server cap).
+        const d = await api<{ reviews?: MangaReview[] }>("/api/community/reviews?limit=100", {
+          signal: controller.signal,
+        });
         // Defensive: never render soft-deleted rows even if the API regresses.
         setReviews((Array.isArray(d.reviews) ? d.reviews : []).filter((rv: MangaReview) => !rv.isDeleted));
+      } catch (e) {
+        if (isAbortError(e)) return;
+        setError(e instanceof ApiError && e.forbidden ? "ليست لديك صلاحية عرض المراجعات" : "فشل تحميل المراجعات");
+      } finally {
         setLoading(false);
-      })
-      .catch((e: Error) => {
-        setError(e.message === "forbidden" ? "ليست لديك صلاحية عرض المراجعات" : "فشل تحميل المراجعات");
-        setLoading(false);
-      });
+      }
+    })();
+    return () => controller.abort();
   }, []);
 
   const handleDelete = async () => {
