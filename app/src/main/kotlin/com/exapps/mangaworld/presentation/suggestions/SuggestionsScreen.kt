@@ -170,7 +170,7 @@ fun SuggestionsScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text("😅", style = MaterialTheme.typography.displayMedium)
-                        Text(errorMessage, color = MangaColors.OnSurfaceVariant)
+                        errorMessage?.let { Text(it, color = MangaColors.OnSurfaceVariant) }
                         Button(
                             onClick = { viewModel.loadSuggestions() },
                             colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Primary)

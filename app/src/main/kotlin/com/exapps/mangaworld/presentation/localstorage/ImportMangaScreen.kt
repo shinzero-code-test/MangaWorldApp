@@ -502,7 +502,7 @@ private suspend fun importManga(
                 processedCount++
                 // Provider names are path segments: strip separators, reject "..".
                 val chapterName = entry.name?.substringBeforeLast('.')
-                    ?.replace('/', '_').replace('\\', '_').trim()
+                    ?.replace('/', '_')?.replace('\\', '_')?.trim()
                     ?.take(60)
                     ?.takeIf { it.isNotBlank() && it != "." && it != ".." }
                     ?: "chapter_$processedCount"
@@ -518,7 +518,7 @@ private suspend fun importManga(
                 // Zip-slip guard: entry names must stay inside chapterDir.
                 fun safeOutput(name: String?): File? {
                     val clean = name?.substringAfterLast('/')
-                        ?.replace("\\", "_").trim()
+                        ?.replace("\\", "_")?.trim()
                         ?.take(80)
                         ?.takeIf { it.isNotBlank() && it != "." && it != ".." }
                         ?: return null
