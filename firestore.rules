@@ -19,6 +19,18 @@ service cloud.firestore {
       return signedIn() && request.auth.token.role in ['moderator', 'super-admin'];
     }
 
+    // Server-side text bounds (F1) + badge allowlist (F2): badgeLabel is
+    // client-computed from achievements, so free text would let any user wear
+    // "Admin" in chat snapshots. The 7 values mirror AchievementManager.
+    function validProfileStrings() {
+      return (!request.resource.data.keys().hasAny(['username']) || (request.resource.data.username is string && request.resource.data.username.size() <= 20))
+        && (!request.resource.data.keys().hasAny(['displayName']) || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 64))
+        && (!request.resource.data.keys().hasAny(['bio']) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 1000))
+        && (!request.resource.data.keys().hasAny(['avatarUrl']) || (request.resource.data.avatarUrl is string && request.resource.data.avatarUrl.size() <= 2048))
+        && (!request.resource.data.keys().hasAny(['bannerUrl']) || (request.resource.data.bannerUrl is string && request.resource.data.bannerUrl.size() <= 2048))
+        && (!request.resource.data.keys().hasAny(['badgeLabel']) || (request.resource.data.badgeLabel is string && request.resource.data.badgeLabel in ['Beginner', 'Page Turner', 'Chapter Hunter', 'Manga Enthusiast', 'Shonen Specialist', 'Avid Reader', 'Pirate King']));
+    }
+
     function hasInitialContentCounters() {
       return (!request.resource.data.keys().hasAny(['likes']) || request.resource.data.likes == 0)
         && (!request.resource.data.keys().hasAny(['dislikes']) || request.resource.data.dislikes == 0)
@@ -32,6 +44,7 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['text', 'spoiler', 'mentions', 'isDeleted', 'editedAt', 'authorName', 'authorUsername', 'authorAvatarUrl'])
         && request.resource.data.text is string
+        && request.resource.data.text.size() <= 2000
         && request.resource.data.spoiler is bool
         && request.resource.data.mentions is list
         && request.resource.data.mentions.size() <= 10
@@ -56,7 +69,9 @@ service cloud.firestore {
         && request.resource.data.rating >= 1
         && request.resource.data.rating <= 5
         && request.resource.data.title is string
+        && request.resource.data.title.size() <= 200
         && request.resource.data.body is string
+        && request.resource.data.body.size() <= 5000
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['rating', 'title', 'body', 'isDeleted', 'updatedAt', 'authorName', 'authorUsername', 'authorAvatarUrl'])
         && authorSnapshotMatchesPublicProfile()
@@ -160,6 +175,7 @@ service cloud.firestore {
         && request.resource.data.id == commentId
         && request.resource.data.mangaId == mangaId
         && request.resource.data.text is string
+        && request.resource.data.text.size() <= 2000
         && request.resource.data.mentions is list
         && request.resource.data.mentions.size() <= 10
         && request.resource.data.spoiler is bool
@@ -216,13 +232,20 @@ service cloud.firestore {
         && request.resource.data.rating >= 1
         && request.resource.data.rating <= 5
         && request.resource.data.title is string
+        && request.resource.data.title.size() <= 200
         && request.resource.data.body is string
+        && request.resource.data.body.size() <= 5000
         && request.resource.data.isDeleted == false
         && hasInitialContentCounters();
     }
 
+    // Latent priv-esc guard: role authority is the Auth custom claim, never a
+    // Firestore field. Reject role-shaped keys now so no future reader can be
+    // fooled by a self-written `role: "super-admin"`.
     match /users/{userId} {
-      allow read, write: if owner(userId);
+      allow read: if owner(userId);
+      allow write: if owner(userId)
+        && !(request.resource.data.keys().hasAny(['role', 'isAdmin', 'isModerator']));
 
       match /favorites/{document=**} {
         allow read, write: if owner(userId);
@@ -272,16 +295,19 @@ service cloud.firestore {
     match /publicProfiles/{userId} {
       allow read: if resource.data.isPublic == true || owner(userId);
       allow create: if owner(userId)
+        && validProfileStrings()
         && request.resource.data.keys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'badgeLabel', 'updatedAt']);
       allow update: if owner(userId)
+        && validProfileStrings()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'badgeLabel', 'updatedAt']);
       allow delete: if owner(userId);
     }
 
     match /usernames/{username} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
-      allow update: if signedIn()
+      allow create: if canWriteCommunity(request.resource.data.uid)
+        && username.size() >= 3 && username.size() <= 20;
+      allow update: if canWriteCommunity(request.resource.data.uid)
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == resource.data.uid;
       allow delete: if signedIn() && resource.data.uid == request.auth.uid;
@@ -347,12 +373,18 @@ service cloud.firestore {
 
       match /members/{memberId} {
         allow read: if true;
-        allow write: if signedIn() && request.auth.uid == memberId;
+        allow write: if signedIn() && request.auth.uid == memberId
+          && request.resource.data.keys().hasOnly(['uid', 'username', 'updatedAt'])
+          && request.resource.data.uid is string
+          && request.resource.data.username is string
+          && request.resource.data.username.size() <= 64;
       }
 
       match /reactions/{reactionId} {
         allow read: if true;
-        allow create: if canWriteCommunity(request.resource.data.authorUid);
+        allow create: if canWriteCommunity(request.resource.data.authorUid)
+          && request.resource.data.emoji is string
+          && request.resource.data.emoji.size() <= 16;
         allow update: if canWriteCommunity(resource.data.authorUid)
           && request.resource.data.authorUid == resource.data.authorUid;
         allow delete: if canWriteCommunity(resource.data.authorUid);
@@ -371,6 +403,7 @@ service cloud.firestore {
         && request.resource.data.mangaId is string
         && request.resource.data.reportedUid is string
         && request.resource.data.reason is string
+        && request.resource.data.reason.size() <= 500
         && request.resource.data.status == 'open';
       allow read, update, delete: if canModerate();
     }
@@ -395,7 +428,7 @@ service cloud.firestore {
 
       match /following/{targetUid} {
         allow read: if signedIn();
-        allow create: if owner(uid) && request.resource.data.uid == targetUid;
+        allow create: if owner(uid) && request.resource.data.uid == targetUid && uid != targetUid;
         allow update: if owner(uid) && request.resource.data.uid == resource.data.uid;
         allow delete: if owner(uid);
       }

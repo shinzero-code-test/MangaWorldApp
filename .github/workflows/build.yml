@@ -7,8 +7,7 @@ on:
   push:
     branches: [ main, master, develop ]
     tags:
-      - 'v*'
-      - '*.*.*'
+      - 'v[0-9]*.[0-9]*.[0-9]*'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
@@ -116,7 +115,7 @@ jobs:
         with:
           name: room-schemas
           path: app/schemas/**/*.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
 
   # ─── Debug Build ────────────────────────────────────────────────────────────
@@ -216,10 +215,13 @@ jobs:
             exit 0
           fi
           groups="${FIREBASE_APP_DISTRIBUTION_GROUPS:-internal-testers}"
+          # Tag/branch names are pusher-controlled: sanitize before interpolation
+          # or a crafted tag name breaks out of the release-notes string (F3).
+          safe_ref="${GITHUB_REF_NAME//[^A-Za-z0-9._-]/_}"
           firebase appdistribution:distribute "${apks[0]}" \
             --app "${{ steps.firebase-app.outputs.app_id }}" \
             --groups "$groups" \
-            --release-notes "Internal debug build from ${GITHUB_REF_NAME} (${GITHUB_SHA::7})"
+            --release-notes "Internal debug build from ${safe_ref} (${GITHUB_SHA::7})"
 
       - name: List APK files
         run: find app/build/outputs/apk -name "*.apk" -type f
@@ -229,7 +231,7 @@ jobs:
         with:
           name: MangaWorld-debug-arm64-v8a
           path: app/build/outputs/apk/debug/*arm64-v8a*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload armeabi-v7a Debug APK
@@ -237,7 +239,7 @@ jobs:
         with:
           name: MangaWorld-debug-armeabi-v7a
           path: app/build/outputs/apk/debug/*armeabi-v7a*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload x86_64 Debug APK
@@ -245,7 +247,7 @@ jobs:
         with:
           name: MangaWorld-debug-x86_64
           path: app/build/outputs/apk/debug/*x86_64*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload x86 Debug APK
@@ -255,7 +257,7 @@ jobs:
           path: |
             app/build/outputs/apk/debug/*x86*.apk
             !app/build/outputs/apk/debug/*x86_64*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload Universal Debug APK
@@ -263,7 +265,7 @@ jobs:
         with:
           name: MangaWorld-debug-universal
           path: app/build/outputs/apk/debug/*universal*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
   # ─── Release Build ──────────────────────────────────────────────────────────
@@ -406,10 +408,11 @@ jobs:
             exit 1
           fi
           groups="${FIREBASE_APP_DISTRIBUTION_GROUPS:-internal-testers}"
+          safe_ref="${GITHUB_REF_NAME//[^A-Za-z0-9._-]/_}"
           firebase appdistribution:distribute "${apks[0]}" \
             --app "${{ steps.firebase-app.outputs.app_id }}" \
             --groups "$groups" \
-            --release-notes "Internal release build from ${GITHUB_REF_NAME} (${GITHUB_SHA::7})"
+            --release-notes "Internal release build from ${safe_ref} (${GITHUB_SHA::7})"
 
       - name: List output files
         run: |
@@ -424,7 +427,7 @@ jobs:
         with:
           name: MangaWorld-release-arm64-v8a
           path: app/build/outputs/apk/release/*arm64-v8a*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 90
 
       - name: Upload armeabi-v7a Release APK
@@ -432,7 +435,7 @@ jobs:
         with:
           name: MangaWorld-release-armeabi-v7a
           path: app/build/outputs/apk/release/*armeabi-v7a*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 90
 
       - name: Upload x86 Release APK
@@ -442,7 +445,7 @@ jobs:
           path: |
             app/build/outputs/apk/release/*x86*.apk
             !app/build/outputs/apk/release/*x86_64*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 90
 
       - name: Upload x86_64 Release APK
@@ -450,7 +453,7 @@ jobs:
         with:
           name: MangaWorld-release-x86_64
           path: app/build/outputs/apk/release/*x86_64*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 90
 
       - name: Upload Universal Release APK
@@ -458,7 +461,7 @@ jobs:
         with:
           name: MangaWorld-release-universal
           path: app/build/outputs/apk/release/*universal*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 90
 
       - name: Upload Release AAB (Play Store)
@@ -466,7 +469,7 @@ jobs:
         with:
           name: MangaWorld-release-bundle-aab
           path: app/build/outputs/bundle/release/*.aab
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 90
 
   # ─── GitHub Release ─────────────────────────────────────────────────────────
@@ -512,7 +515,7 @@ jobs:
             ### المصادر المدعومة
             - ✅ Olympus Staff / تيم اكس (olympustaff.com)
             - ✅ Azora Moon (azorafly.com)
-            - ✅ Manga Starz (manga-starz.net)
+            - ✅ Manga Starz (starzmanga.com)
             - ✅ MangaSid (mangasid.com)
             - ✅ MeshManga / مانجا سوات (meshmanga.com)
             - ✅ مانجا العاشق (3asq.online)
@@ -536,7 +539,7 @@ jobs:
             release-artifacts/**/*.aab
           draft: false
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
 
   # ─── Artifact Verification ───────────────────────────────────────────────────
   verify-debug-artifacts:
@@ -593,7 +596,7 @@ jobs:
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [ lint-and-test, build-debug, verify-debug-artifacts ]
+    needs: [ lint-and-test, build-debug, verify-debug-artifacts, build-release, verify-release-artifacts, create-release ]
     if: always()
     steps:
       - name: Summary

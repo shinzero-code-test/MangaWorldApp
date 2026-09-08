@@ -31,3 +31,8 @@ dashboard/tsconfig.tsbuildinfo
 firebase-debug.log
 firebase-debug.log
 firebase-debug.*.log
+
+# Local build outputs must never be staged by accident (F11).
+build/
+*.apk
+*.aab

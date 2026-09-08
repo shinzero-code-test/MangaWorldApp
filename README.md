@@ -13,7 +13,7 @@ A modern Arabic manga reader app built with Kotlin and Jetpack Compose.
 - Smart prefetching
 
 ### Content
-- 5 manga sources (Olympus, Azora, Starz, MangaSid, Meshmanga)
+- 18 manga sources (Olympus, Azora, Starz, MangaSid, Meshmanga, 3asq, LekManga, +11 more — see the app source list)
 - Smart content recommendations
 - Advanced search with filters and history
 - Manga collections and custom lists
