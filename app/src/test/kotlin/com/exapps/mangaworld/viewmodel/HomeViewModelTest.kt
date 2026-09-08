@@ -144,6 +144,7 @@ class HomeViewModelTest {
         runTest(dispatcher) {
         Dispatchers.setMain(dispatcher)
         val vm = createViewModel()
+        advanceUntilIdle()
         vm.selectSource(MangaSource.OLYMPUS)
         advanceUntilIdle()
         assertEquals(MangaSource.OLYMPUS, vm.state.value.activeSource)
@@ -164,6 +165,7 @@ class HomeViewModelTest {
             )
         )
         val vm = createViewModel()
+        advanceUntilIdle()
         vm.loadHome(MangaSource.AZORA, setOf("blocked"))
         advanceUntilIdle()
         val ids = vm.state.value.featured.map { it.id }

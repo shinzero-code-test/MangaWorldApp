@@ -307,11 +307,9 @@ open class MangaReaderBaseScraper(
             }.trimEnd('/')
             if (slug.isBlank()) return@forEach
 
-            val coverUrl = imgEl?.let {
-                it.attr("abs:src").ifEmpty {
-                    (it.attr("data-src").ifEmpty { it.attr("src") }).absoluteUrl()
-                }
-            }.orEmpty()
+            // Lazy rule: abs:src may BE a base64 placeholder — data-src first,
+            // data: URIs never (caught by MangaReaderThemeFixtureTest).
+            val coverUrl = imgEl?.preferredImageUrl()?.absoluteUrl().orEmpty()
 
             val title = card.selectFirst(".tt, .bigor .adds .epxs")?.text()?.cleanText()
                 ?: linkEl.attr("title").cleanText().ifBlank { slug }
@@ -398,11 +396,9 @@ open class MangaReaderBaseScraper(
                 ?: imgEl?.attr("alt")?.cleanText()
                 ?: linkEl.attr("title").cleanText().ifBlank { slug }
             if (title.isBlank()) return@forEach
-            val coverUrl = imgEl?.let {
-                it.attr("abs:src").ifEmpty {
-                    (it.attr("data-src").ifEmpty { it.attr("src") }).absoluteUrl()
-                }
-            }.orEmpty()
+            // Lazy rule: abs:src may BE a base64 placeholder — data-src first,
+            // data: URIs never (caught by MangaReaderThemeFixtureTest).
+            val coverUrl = imgEl?.preferredImageUrl()?.absoluteUrl().orEmpty()
             results.add(
                 MangaItem(
                     id = "${source.id}_$slug",
@@ -425,9 +421,8 @@ open class MangaReaderBaseScraper(
                 val title = imgEl?.attr("alt")?.cleanText()
                     ?: card.selectFirst(".legend-info h3, .legend-title")?.text()?.cleanText()
                     ?: slug
-                val coverUrl = imgEl?.let {
-                    it.attr("abs:src").ifEmpty { it.attr("src").absoluteUrl() }
-                }.orEmpty()
+                // Same lazy rule as Pattern 1: data-src first, never data: URIs.
+                val coverUrl = imgEl?.preferredImageUrl()?.absoluteUrl().orEmpty().orEmpty()
                 results.add(
                     MangaItem(
                         id = "${source.id}_$slug",
@@ -451,9 +446,8 @@ open class MangaReaderBaseScraper(
                 val title = linkEl.text().cleanText().ifBlank {
                     imgEl?.attr("alt")?.cleanText() ?: slug
                 }
-                val coverUrl = imgEl?.let {
-                    it.attr("abs:src").ifEmpty { it.attr("src").absoluteUrl() }
-                }.orEmpty()
+                // Same lazy rule as Pattern 1: data-src first, never data: URIs.
+                val coverUrl = imgEl?.preferredImageUrl()?.absoluteUrl().orEmpty().orEmpty()
                 results.add(
                     MangaItem(
                         id = "${source.id}_$slug",

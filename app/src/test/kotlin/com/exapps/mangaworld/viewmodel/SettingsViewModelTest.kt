@@ -95,6 +95,8 @@ class SettingsViewModelTest {
             kotlinx.coroutines.runBlocking { vm.setAutoCleanup(true) }
             kotlinx.coroutines.runBlocking { vm.setCleanupHours(48) }
             kotlinx.coroutines.runBlocking { vm.setImageCacheLimit(100) }
+            kotlinx.coroutines.runBlocking { vm.setContentBlacklist(setOf("x")) }
+            kotlinx.coroutines.runBlocking { vm.setMutedUserIds(setOf("u1")) }
             kotlinx.coroutines.runBlocking { vm.setSpoilerCollapseDefault(false) }
             kotlinx.coroutines.runBlocking { vm.setReaderMode(RM) }
             kotlinx.coroutines.runBlocking { vm.setBrightness(0.5f) }
