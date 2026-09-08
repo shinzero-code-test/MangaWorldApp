@@ -97,10 +97,10 @@ class AuthErrorMessagesTest {
 
     @Test
     fun mergeReasonsMapToGuidance() {
-        val C = com.exapps.mangaworld.core.firebase.AccountMergeReason
-        assertEquals("S-merge-exists", accountMergeMessage(context, C.ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL))
-        assertEquals("S-merge-used", accountMergeMessage(context, C.CREDENTIAL_ALREADY_IN_USE))
-        assertEquals("S-merge-email", accountMergeMessage(context, C.EMAIL_ALREADY_IN_USE))
-        assertEquals("S-merge-unknown", accountMergeMessage(context, C.UNKNOWN))
+        val R = com.exapps.mangaworld.core.firebase.AccountMergeReason
+        assertEquals("S-merge-exists", accountMergeMessage(context, R.valueOf("ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL")))
+        assertEquals("S-merge-used", accountMergeMessage(context, R.valueOf("CREDENTIAL_ALREADY_IN_USE")))
+        assertEquals("S-merge-email", accountMergeMessage(context, R.valueOf("EMAIL_ALREADY_IN_USE")))
+        assertEquals("S-merge-unknown", accountMergeMessage(context, R.valueOf("UNKNOWN")))
     }
 }

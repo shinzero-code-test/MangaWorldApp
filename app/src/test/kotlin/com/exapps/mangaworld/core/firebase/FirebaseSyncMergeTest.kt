@@ -3,6 +3,7 @@ package com.exapps.mangaworld.core.firebase
 import com.exapps.mangaworld.core.data.local.entity.ReaderAnnotationEntity
 import com.exapps.mangaworld.core.data.local.entity.ReadingHistoryEntity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FirebaseSyncMergeTest {
@@ -83,9 +84,9 @@ class FirebaseSyncMergeTest {
 
     @Test
     fun emptyInputsMergeToEmpty() {
-        assertEquals(emptyList(), FirebaseSyncMerge.favorites(emptyList(), emptyList()))
-        assertEquals(emptyList(), FirebaseSyncMerge.history(emptyList(), emptyList()))
-        assertEquals(emptyList(), FirebaseSyncMerge.annotations(emptyList(), emptyList()))
+        assertTrue(FirebaseSyncMerge.favorites(emptyList(), emptyList()).isEmpty())
+        assertTrue(FirebaseSyncMerge.history(emptyList(), emptyList()).isEmpty())
+        assertTrue(FirebaseSyncMerge.annotations(emptyList(), emptyList()).isEmpty())
     }
 
     private fun favorite(mangaId: String, addedAt: Long, title: String = "Title") =

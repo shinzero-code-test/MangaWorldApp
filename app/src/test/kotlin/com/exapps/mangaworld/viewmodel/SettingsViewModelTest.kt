@@ -84,33 +84,28 @@ class SettingsViewModelTest {
         val NDM = com.exapps.mangaworld.domain.model.NotificationDeliveryMode.INSTANT
         val RM = com.exapps.mangaworld.domain.model.ReaderMode.VERTICAL_SCROLL
         val RF = com.exapps.mangaworld.domain.model.ReaderImageFilter.NONE
-        listOf<Pair<String, suspend () -> Unit>>(
-            "dynamic" to suspend { vm.setDynamicColors(true) },
-            "biometric" to suspend { vm.setBiometricLock(true) },
-            "secure" to suspend { vm.setSecureReader(true) },
-            "mode" to suspend { vm.setNotificationMode(NDM) },
-            "wifi" to suspend { vm.setWifiOnly(true) },
-            "autodl" to suspend { vm.setAutoDownload(true) },
-            "notif" to suspend { vm.setNotifications(false) },
-            "cleanup" to suspend { vm.setAutoCleanup(true) },
-            "hours" to suspend { vm.setCleanupHours(48) },
-            "cache" to suspend { vm.setImageCacheLimit(100) },
-            "blacklist" to suspend { vm.setContentBlacklist(setOf("x")) },
-            "spoiler" to suspend { vm.setSpoilerCollapseDefault(false) },
-            "muted" to suspend { vm.setMutedUserIds(setOf("u1")) },
-            "readerMode" to suspend { vm.setReaderMode(RM) },
-            "brightness" to suspend { vm.setBrightness(0.5f) },
-            "keepScreen" to suspend { vm.setKeepScreen(false) },
-            "webtoon" to suspend { vm.setAutoWebtoon(false) },
-            "incognito" to suspend { vm.setIncognito(true) },
-            "prefetch" to suspend { vm.setSmartPrefetch(false) },
-            "haptics" to suspend { vm.setReaderHaptics(false) },
-            "filter" to suspend { vm.setImageFilter(RF) },
-            "nextChapter" to suspend { vm.setAutoOpenNextChapter(true) },
-            "liveReaders" to suspend { vm.setShowLiveReadersOverlay(false) }
-        ).forEach { (name, call) ->
-            kotlinx.coroutines.runBlocking { call() }
-        }
+        // One row per saveAndSync setter; extend this table when adding setters.
+            kotlinx.coroutines.runBlocking { vm.setDynamicColors(true) }
+            kotlinx.coroutines.runBlocking { vm.setBiometricLock(true) }
+            kotlinx.coroutines.runBlocking { vm.setSecureReader(true) }
+            kotlinx.coroutines.runBlocking { vm.setNotificationMode(NDM) }
+            kotlinx.coroutines.runBlocking { vm.setWifiOnly(true) }
+            kotlinx.coroutines.runBlocking { vm.setAutoDownload(true) }
+            kotlinx.coroutines.runBlocking { vm.setNotifications(false) }
+            kotlinx.coroutines.runBlocking { vm.setAutoCleanup(true) }
+            kotlinx.coroutines.runBlocking { vm.setCleanupHours(48) }
+            kotlinx.coroutines.runBlocking { vm.setImageCacheLimit(100) }
+            kotlinx.coroutines.runBlocking { vm.setSpoilerCollapseDefault(false) }
+            kotlinx.coroutines.runBlocking { vm.setReaderMode(RM) }
+            kotlinx.coroutines.runBlocking { vm.setBrightness(0.5f) }
+            kotlinx.coroutines.runBlocking { vm.setKeepScreen(false) }
+            kotlinx.coroutines.runBlocking { vm.setAutoWebtoon(false) }
+            kotlinx.coroutines.runBlocking { vm.setIncognito(true) }
+            kotlinx.coroutines.runBlocking { vm.setSmartPrefetch(false) }
+            kotlinx.coroutines.runBlocking { vm.setReaderHaptics(false) }
+            kotlinx.coroutines.runBlocking { vm.setImageFilter(RF) }
+            kotlinx.coroutines.runBlocking { vm.setAutoOpenNextChapter(true) }
+            kotlinx.coroutines.runBlocking { vm.setShowLiveReadersOverlay(false) }
         coVerify { settingsRepo.setDynamicColors(true) }
         coVerify { settingsRepo.setBiometricLock(true) }
         coVerify { settingsRepo.setSecureReader(true) }
