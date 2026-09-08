@@ -15,8 +15,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.*
@@ -25,7 +27,8 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
-    private val testDispatcher = UnconfinedTestDispatcher()
+    private val testDispatcher = StandardTestDispatcher()
+    private val createdVms = mutableListOf<HomeViewModel>()
     private val mangaRepo = mockk<MangaRepository>(relaxed = true)
     private val settingsRepo = mockk<SettingsRepository>(relaxed = true)
     private val libraryRepo = mockk<LibraryRepository>(relaxed = true)
@@ -57,6 +60,8 @@ class HomeViewModelTest {
 
     @After
     fun tearDown() {
+        createdVms.forEach { it.clear() }
+        createdVms.clear()
         Dispatchers.resetMain()
     }
 
@@ -70,13 +75,13 @@ class HomeViewModelTest {
         firebaseTelemetry = firebaseTelemetry,
         sessionManager = sessionManager,
         communityRepo = communityRepo
-    )
+    ).also { createdVms.add(it) }
 
     @Test
-    fun initialState_loadsHomeData() {
+    fun initialState_loadsHomeData() = runTest(testDispatcher) {
+        Dispatchers.setMain(testDispatcher)
         val vm = createViewModel()
-        // init block triggers loadHome via collectLatest, which completes
-        // immediately with UnconfinedTestDispatcher
+        advanceUntilIdle()
         val state = vm.state.value
         assertFalse(state.isLoading)
         assertEquals(1, state.featured.size)
@@ -84,9 +89,11 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun loadHome_populatesStateWithHomeData() {
+    fun loadHome_populatesStateWithHomeData() = runTest(testDispatcher) {
+        Dispatchers.setMain(testDispatcher)
         val vm = createViewModel()
         vm.loadHome(MangaSource.AZORA)
+        advanceUntilIdle()
         val state = vm.state.value
         assertFalse(state.isLoading)
         assertEquals(1, state.featured.size)
@@ -96,17 +103,21 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun loadHome_setsActiveSource() {
+    fun loadHome_setsActiveSource() = runTest(testDispatcher) {
+        Dispatchers.setMain(testDispatcher)
         val vm = createViewModel()
         vm.loadHome(MangaSource.OLYMPUS)
+        advanceUntilIdle()
         assertEquals(MangaSource.OLYMPUS, vm.state.value.activeSource)
     }
 
     @Test
-    fun loadHome_handlesError() {
+    fun loadHome_handlesError() = runTest(testDispatcher) {
+        Dispatchers.setMain(testDispatcher)
         coEvery { mangaRepo.getHomeData(any()) } returns Result.failure(Exception("Network error"))
         val vm = createViewModel()
         vm.loadHome(MangaSource.AZORA)
+        advanceUntilIdle()
         val state = vm.state.value
         assertFalse(state.isLoading)
         // Raw backend text must not reach UI state (generic R.string.download_error
@@ -115,11 +126,52 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun selectSource_updatesActiveSourceAndLoadsData() {
+    fun selectSource_updatesActiveSourceAndLoadsData() = runTest(testDispatcher) {
+        Dispatchers.setMain(testDispatcher)
         val vm = createViewModel()
         vm.selectSource(MangaSource.OLYMPUS)
+        advanceUntilIdle()
         assertEquals(MangaSource.OLYMPUS, vm.state.value.activeSource)
         coVerify { mangaRepo.getHomeData(MangaSource.OLYMPUS) }
+    }
+
+    @Test
+    fun loadHome_filtersBlockedKeywords() = runTest(testDispatcher) {
+        Dispatchers.setMain(testDispatcher)
+        coEvery { mangaRepo.getHomeData(any()) } returns Result.success(
+            HomeData(
+                featured = listOf(testManga("ok"), testManga("blocked-one").copy(title = "Blocked Manga")),
+                latestChapters = listOf(testLatest("l1")),
+                trending = listOf(testManga("t1"))
+            )
+        )
+        val vm = createViewModel()
+        vm.loadHome(MangaSource.AZORA, setOf("blocked"))
+        advanceUntilIdle()
+        val ids = vm.state.value.featured.map { it.id }
+        assertEquals(listOf("ok"), ids)
+    }
+
+    @Test
+    fun loadHome_suggestedHasNoDuplicateIds() = runTest(testDispatcher) {
+        Dispatchers.setMain(testDispatcher)
+        // Echo candidates back as suggestions: without the pre-scoring
+        // distinctBy, the shared id would reach the LazyRow twice (crash).
+        coEvery { mangaRepo.getSuggestedManga(any(), any()) } answers { firstArg() }
+        val dup = testManga("dup")
+        coEvery { mangaRepo.getHomeData(any()) } returns Result.success(
+            HomeData(
+                featured = listOf(dup),
+                latestChapters = listOf(testLatest("l1")),
+                trending = listOf(dup)
+            )
+        )
+        val vm = createViewModel()
+        vm.loadHome(MangaSource.AZORA)
+        advanceUntilIdle()
+        val suggestedIds = vm.state.value.suggested.map { it.id }
+        assertEquals(suggestedIds.distinct(), suggestedIds)
+        assertEquals(1, suggestedIds.size)
     }
 
     private fun testManga(id: String) = MangaItem(

@@ -1,6 +1,8 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
-import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
@@ -74,8 +76,11 @@ object ScraperText {
         for ((ar, en) in ARABIC_MONTHS) {
             normalized = normalized.replace(ar, en)
         }
+        // DateTimeFormatter is immutable/thread-safe; SimpleDateFormat is not,
+        // and this singleton is shared across scraper IO threads.
         return runCatching {
-            SimpleDateFormat("d MMM yyyy", Locale.ENGLISH).parse(normalized)?.time
+            LocalDate.parse(normalized, DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+                .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         }.getOrNull()
     }
 }

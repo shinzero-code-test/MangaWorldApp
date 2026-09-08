@@ -14,7 +14,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 8.2.10 (versionCode 203)
+- **Current version**: 8.2.11 (versionCode 204)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 35 · **Compile SDK**: 35
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -93,6 +93,7 @@ Each scraper must:
 2. Add entry to `MangaSource` enum in `domain/model/Models.kt`
 3. Register in `core/di/Modules.kt` ScraperModule with `@Provides @Singleton @IntoMap @StringKey("sourceId")`
 4. Place logo PNG in `res/drawable/` (underscore naming)
+5. Ship a captured-style fixture under `app/src/test/resources/scrapers/` + a test driving the REAL parser (never re-implement selectors inline — tautological fixtures pass while prod breaks)
 
 **3asq chapters**: `{mangaUrl}/ajax/chapters/` endpoint (NOT wp-admin/admin-ajax.php)
 

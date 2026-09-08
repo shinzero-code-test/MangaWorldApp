@@ -68,7 +68,9 @@ class AppPreferences @Inject constructor(
         val KEY_TAP_RIGHT_ACTION = stringPreferencesKey("reader_tap_right_action")
         val KEY_TAP_MIDDLE_ACTION = stringPreferencesKey("reader_tap_middle_action")
 
-        fun cookieKey(domain: String) = stringPreferencesKey("cookie_$domain")
+        // Normalized: "Example.COM" and "example.com" are one host and must
+        // share one cookie row (callers pass raw URL-derived strings).
+        fun cookieKey(domain: String) = stringPreferencesKey("cookie_" + domain.trim().lowercase())
         fun sourceNotificationKey(sourceId: String) = booleanPreferencesKey("notif_source_$sourceId")
     }
 

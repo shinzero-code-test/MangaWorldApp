@@ -37,6 +37,67 @@ class FirebaseSyncMergeTest {
         assertEquals(listOf(local), merged)
     }
 
+    @Test
+    fun favoritesKeepsNewerRemoteRecordForDuplicateManga() {
+        val local = favorite("m2", addedAt = 50L)
+        val remote = favorite("m2", addedAt = 200L)
+
+        assertEquals(listOf(remote), FirebaseSyncMerge.favorites(listOf(local), listOf(remote)))
+    }
+
+    @Test
+    fun favoritesKeepsNewerLocalRecordForDuplicateManga() {
+        val local = favorite("m2", addedAt = 200L)
+        val remote = favorite("m2", addedAt = 50L)
+
+        assertEquals(listOf(local), FirebaseSyncMerge.favorites(listOf(local), listOf(remote)))
+    }
+
+    @Test
+    fun favoritesUnionDisjointKeys() {
+        val local = favorite("m1", addedAt = 100L)
+        val remote = favorite("m3", addedAt = 10L)
+
+        val merged = FirebaseSyncMerge.favorites(listOf(local), listOf(remote))
+
+        assertEquals(setOf("m1", "m3"), merged.map { it.mangaId }.toSet())
+    }
+
+    @Test
+    fun favoritesTieKeepsLocalRecord() {
+        // Tie-break is order-dependent (local concatenated first): pin it so a
+        // refactor of the concat order fails loudly instead of silently flipping.
+        val local = favorite("m2", addedAt = 100L, title = "Local")
+        val remote = favorite("m2", addedAt = 100L, title = "Remote")
+
+        assertEquals(listOf(local), FirebaseSyncMerge.favorites(listOf(local), listOf(remote)))
+    }
+
+    @Test
+    fun annotationsKeepsNewerRemoteRecord() {
+        val local = ReaderAnnotationEntity("manga", "chapter", 1, "Local", true, 100L)
+        val remote = ReaderAnnotationEntity("manga", "chapter", 1, "Remote", false, 200L)
+
+        assertEquals(listOf(remote), FirebaseSyncMerge.annotations(listOf(local), listOf(remote)))
+    }
+
+    @Test
+    fun emptyInputsMergeToEmpty() {
+        assertEquals(emptyList(), FirebaseSyncMerge.favorites(emptyList(), emptyList()))
+        assertEquals(emptyList(), FirebaseSyncMerge.history(emptyList(), emptyList()))
+        assertEquals(emptyList(), FirebaseSyncMerge.annotations(emptyList(), emptyList()))
+    }
+
+    private fun favorite(mangaId: String, addedAt: Long, title: String = "Title") =
+        com.exapps.mangaworld.core.data.local.entity.FavoriteEntity(
+            mangaId = mangaId,
+            slug = "slug-$mangaId",
+            title = title,
+            coverUrl = "",
+            sourceId = "azora",
+            addedAt = addedAt
+        )
+
     private fun history(lastReadAt: Long, title: String) = ReadingHistoryEntity(
         mangaId = "manga",
         slug = "slug",

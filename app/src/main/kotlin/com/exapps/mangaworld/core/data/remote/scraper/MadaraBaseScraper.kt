@@ -479,7 +479,8 @@ open class MadaraBaseScraper(
         return allChapters.distinctBy { it.url }.sortedByDescending { it.number }
     }
 
-    private fun parseChapterLi(li: org.jsoup.nodes.Element, slug: String): Chapter? {
+    // internal (not private) so fixture tests drive the real parser (F1).
+    internal fun parseChapterLi(li: org.jsoup.nodes.Element, slug: String): Chapter? {
         val chLink = li.selectFirst("a[href]") ?: return null
         val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
         val chText = chLink.text().cleanText()

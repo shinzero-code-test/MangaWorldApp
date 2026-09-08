@@ -10,6 +10,7 @@ import io.mockk.mockkStatic
 import io.mockk.Runs
 import io.mockk.unmockkAll
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -57,6 +58,16 @@ class ParentalControlManagerTest {
             store[firstArg()] = secondArg<Long>()
             editor
         }
+        every { editor.putStringSet(any(), any()) } answers {
+            val key = firstArg<String>()
+            val value = secondArg<Set<String>?>()
+            if (value == null) store.remove(key) else store[key] = value.toSet()
+            editor
+        }
+        every { editor.putBoolean(any(), any()) } answers {
+            store[firstArg()] = secondArg<Boolean>()
+            editor
+        }
         every { editor.remove(any()) } answers {
             store.remove(firstArg<String>())
             editor
@@ -72,6 +83,13 @@ class ParentalControlManagerTest {
         }
         every { prefs.getInt(any(), any()) } answers {
             store[it.invocation.args[0] as String] as? Int ?: it.invocation.args[1] as Int
+        }
+        @Suppress("UNCHECKED_CAST")
+        every { prefs.getStringSet(any(), any()) } answers {
+            (store[it.invocation.args[0] as String] as? Set<String>) ?: it.invocation.args[1] as Set<String>
+        }
+        every { prefs.getBoolean(any(), any()) } answers {
+            store[it.invocation.args[0] as String] as? Boolean ?: it.invocation.args[1] as Boolean
         }
         every { prefs.edit() } returns editor
 
@@ -163,5 +181,41 @@ class ParentalControlManagerTest {
 
         store["pin_hash"] = "v2:also-no-separator"
         assertFalse(manager.verifyPin("1234"))
+    }
+    @Test
+    fun `genre mute lifecycle`() {
+        assertTrue(manager.getMutedGenres().isEmpty())
+        manager.muteGenre("Horror")
+        assertTrue(manager.isGenreMuted("Horror"))
+        manager.unmuteGenre("Horror")
+        assertTrue(!manager.isGenreMuted("Horror"))
+    }
+
+    @Test
+    fun `manga lock lifecycle`() {
+        assertTrue(!manager.isMangaLocked("m1"))
+        manager.lockManga("m1")
+        assertTrue(manager.isMangaLocked("m1"))
+        manager.unlockManga("m1")
+        assertTrue(!manager.isMangaLocked("m1"))
+    }
+
+    @Test
+    fun `reading minutes round trip`() {
+        assertEquals(0, manager.getMaxReadingMinutes())
+        manager.setMaxReadingMinutes(90)
+        assertEquals(90, manager.getMaxReadingMinutes())
+    }
+
+    @Test
+    fun `enabled flag and pin presence`() {
+        assertTrue(!manager.isEnabled())
+        manager.setEnabled(true)
+        assertTrue(manager.isEnabled())
+        assertTrue(!manager.hasPin())
+        manager.setPin("1234")
+        assertTrue(manager.hasPin())
+        manager.clearPin()
+        assertTrue(!manager.hasPin())
     }
 }

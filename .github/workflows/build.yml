@@ -90,8 +90,6 @@ jobs:
       - name: Run Unit Tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
-      - name: Run Scraper Fixture Tests
-        run: ./gradlew :app:testDebugUnitTest --tests "*ScraperFixtureTest*" --stacktrace
 
       - name: Upload Lint Results
         if: always()
@@ -100,6 +98,17 @@ jobs:
           name: lint-results
           path: app/build/reports/lint-results-debug.html
           retention-days: 7
+
+      - name: Upload Unit Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: |
+            app/build/test-results/testDebugUnitTest/*.xml
+            app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: error
+          retention-days: 30
 
       # Room schemas are the migration safety net: exportSchema=true writes them
       # here on every compile. Published as artifacts so migration review never
@@ -117,6 +126,37 @@ jobs:
           path: app/schemas/**/*.json
           if-no-files-found: error
           retention-days: 30
+
+  # ─── Dashboard Checks ───────────────────────────────────────────────────────
+  # The admin dashboard ships to Vercel with zero test coverage; at minimum its
+  # typecheck must gate like the app's lint/tests do. ESLint stays advisory
+  # until the `any`-debt baseline is clean (see F6).
+  dashboard-checks:
+    name: Dashboard Typecheck & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dependencies
+        working-directory: dashboard
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: dashboard
+        run: npm run typecheck
+
+      - name: Lint (advisory until any-debt baseline is clean)
+        working-directory: dashboard
+        continue-on-error: true
+        run: npm run lint
 
   # ─── Debug Build ────────────────────────────────────────────────────────────
   build-debug:

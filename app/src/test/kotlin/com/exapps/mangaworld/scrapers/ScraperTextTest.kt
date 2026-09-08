@@ -108,4 +108,40 @@ class ScraperTextTest {
     fun `m-suffix views`() {
         assertEquals(2000000L, ScraperText.extractViews("2M مشاهدة"))
     }
+
+    @Test
+    fun `views without match returns null`() {
+        assertNull(ScraperText.extractViews(null))
+        assertNull(ScraperText.extractViews(""))
+        assertNull(ScraperText.extractViews("لا توجد مشاهدات بعد"))
+    }
+
+    // ── parseArabicDate ───────────────────────────────────────────────────────
+
+    @Test
+    fun `all twelve arabic months parse`() {
+        val months = listOf(
+            "يناير" to 1, "فبراير" to 2, "مارس" to 3, "أبريل" to 4,
+            "مايو" to 5, "يونيو" to 6, "يوليو" to 7, "أغسطس" to 8,
+            "سبتمبر" to 9, "أكتوبر" to 10, "نوفمبر" to 11, "ديسمبر" to 12
+        )
+        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+        for ((ar, month) in months) {
+            val parsed = ScraperText.parseArabicDate("12 $ar 2024")
+            org.junit.Assert.assertNotNull(ar, parsed)
+            cal.timeInMillis = parsed!!
+            assertEquals(ar, 2024, cal.get(java.util.Calendar.YEAR))
+            assertEquals(ar, month - 1, cal.get(java.util.Calendar.MONTH))
+            assertEquals(ar, 12, cal.get(java.util.Calendar.DAY_OF_MONTH))
+        }
+    }
+
+    @Test
+    fun `garbage dates return null`() {
+        assertNull(ScraperText.parseArabicDate(null))
+        assertNull(ScraperText.parseArabicDate(""))
+        assertNull(ScraperText.parseArabicDate("   "))
+        assertNull(ScraperText.parseArabicDate("not a date"))
+        assertNull(ScraperText.parseArabicDate("32 يناير 2024"))
+    }
 }
