@@ -153,6 +153,10 @@ jobs:
         working-directory: dashboard
         run: npm run typecheck
 
+      - name: Unit tests
+        working-directory: dashboard
+        run: npm test
+
       - name: Lint (advisory until any-debt baseline is clean)
         working-directory: dashboard
         continue-on-error: true
