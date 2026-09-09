@@ -73,7 +73,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const expiresIn = 60 * 60 * 24 * 7 * 1000;
+    // 24h TTL (was 7d): session cookies cannot be server-revoked on logout
+    // (Firebase limitation), so a shorter window bounds exfiltrated-cookie use.
+    const expiresIn = 60 * 60 * 24 * 1000;
     const sessionCookie = await getAdminAuth().createSessionCookie(idToken, { expiresIn });
 
     const response = NextResponse.json({ success: true });
