@@ -356,7 +356,6 @@ class ChapterDownloadWorker @AssistedInject constructor(
      */
     internal fun stableNotifId(base: Int, key: String): Int =
         DownloadNotifIds.stableId(base, key)
-        base + ((key.hashCode() and Int.MAX_VALUE) % 9000)
 
     private fun existingPageCount(dir: File): Int =
         dir.listFiles()?.count { it.isFile && it.extension.lowercase() in setOf("jpg", "png", "webp") && it.length() > 0L } ?: 0
