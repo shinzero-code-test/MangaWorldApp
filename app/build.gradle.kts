@@ -221,6 +221,8 @@ dependencies {
     testImplementation(libs.json.java)
     // Real DataStore/Preferences tests (#16) — JVM DataStore needs a Context.
     testImplementation(libs.robolectric)
+    // ApplicationProvider for Robolectric (androidx.test:core is androidTest-only).
+    testImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.room.testing)
