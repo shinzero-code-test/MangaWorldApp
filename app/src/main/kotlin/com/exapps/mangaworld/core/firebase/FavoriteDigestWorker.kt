@@ -8,9 +8,10 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 
 /**
- * Periodic worker that checks for new chapters on favorited manga.
- * Delegates to [ChapterUpdateCheckerCore] for the actual detection logic.
- * Runs every 6 hours to catch updates even when app is in background.
+ * The single chapter-update sweep (#9): checks favorited manga for new
+ * chapters every 6h in every notification mode. Delegates to
+ * [ChapterUpdateCheckerCore]; owned by [FavoriteDigestScheduler], which
+ * cancels the legacy 12h checker on upgrade.
  */
 @HiltWorker
 class FavoriteDigestWorker @AssistedInject constructor(

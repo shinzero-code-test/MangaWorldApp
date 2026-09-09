@@ -8,7 +8,7 @@ import org.json.JSONArray
 /**
  * Single writer for the `local_notifications` SharedPreferences ring buffer.
  *
- * The worker (ChapterUpdateChecker) and the Notification Center screen both
+ * The worker (FavoriteDigestWorker) and the Notification Center screen both
  * performed read→mutate→write cycles; concurrent runs silently dropped one
  * side's update (M-review). All mutations now funnel through [update], which
  * holds a process-wide mutex across the whole read-modify-write.

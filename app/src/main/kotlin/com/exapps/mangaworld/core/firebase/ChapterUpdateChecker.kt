@@ -6,11 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.hilt.work.HiltWorker
-import androidx.work.CoroutineWorker
 import androidx.work.ListenableWorker
 import androidx.work.WorkManager
-import androidx.work.WorkerParameters
 import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.BackoffPolicy
@@ -23,11 +20,8 @@ import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.domain.model.MangaSource
-import com.exapps.mangaworld.domain.model.NotificationDeliveryMode
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
-import dagger.assisted.Assisted
-import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -39,36 +33,16 @@ import javax.inject.Singleton
 import java.util.concurrent.TimeUnit
 
 /**
- * Local chapter update detector — periodic WorkManager job that checks sources
- * for new chapters on favorited manga and shows notifications without FCM.
- *
- * All detection logic lives in [ChapterUpdateCheckerCore]; this worker (and
- * [FavoriteDigestWorker]) are thin shells around it, following the same
- * @HiltWorker/@AssistedInject pattern as every other worker in the app.
- *
- * Scheduling follows the Kotatsu pattern: periodic work with proper constraints,
- * UPDATE policy, and settings-driven scheduling.
+ * Local chapter update detector — detection core plus its scheduler (#9).
+ * [FavoriteDigestWorker] is the single periodic shell (6h, all modes);
+ * scheduling follows the Kotatsu pattern: periodic work with proper
+ * constraints, UPDATE policy, and settings-driven scheduling.
  */
-@HiltWorker
-class ChapterUpdateChecker @AssistedInject constructor(
-    @Assisted appContext: Context,
-    @Assisted params: WorkerParameters,
-    private val core: ChapterUpdateCheckerCore
-) : CoroutineWorker(appContext, params) {
-
-    override suspend fun doWork(): Result = core.checkForNewChapters()
-
-    companion object {
-        const val TAG = "chapter_update_checker"
-    }
-}
-
 /**
  * Injectable core of the local chapter update detector.
  *
- * Both [ChapterUpdateChecker] (12h periodic) and [FavoriteDigestWorker] (6h
- * digest) delegate here, so the detection strategy and its 2h throttle live in
- * exactly one place and can never race each other (single [checkMutex]).
+ * [FavoriteDigestWorker] (6h digest, all notification modes) delegates here, so
+ * the detection strategy and its 2h throttle live in exactly one place.
  *
  * Detection strategy: For each favorited manga, we look at the home page's
  * `latestChapters` list and find the HIGHEST chapter number for that manga.
@@ -106,11 +80,9 @@ class ChapterUpdateCheckerCore @Inject constructor(
         checkMutex.withLock {
             val settings = settingsRepository.getAppSettings().first()
 
-            // Respect user settings - only run if notifications are enabled
+            // Respect user settings - only run if notifications are enabled.
+            // No delivery-mode gate: the 6h digest serves every mode (#9).
             if (!settings.enableNotifications) return@withContext ListenableWorker.Result.success()
-
-            // Respect delivery mode - only INSTANT notifications fire immediately
-            if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) return@withContext ListenableWorker.Result.success()
 
             // Throttle: check at most once per 2 hours
             val lastCheck = prefs.getLong("last_update_check", 0L)
@@ -330,7 +302,13 @@ class ChapterUpdateCheckerCore @Inject constructor(
  * - Respects user settings (enabled/disabled, wifi only)
  * - Proper constraints (battery not low, network type)
  */
-class ChapterUpdateCheckerScheduler @Inject constructor(
+/**
+ * Owns the single chapter-update sweep: [FavoriteDigestWorker] every 6h (#9).
+ * Replaces the old dual setup (unconditional 6h digest + 12h INSTANT-only
+ * checker running the same sweep). Cancels the legacy unique work so upgrades
+ * never run both.
+ */
+class FavoriteDigestScheduler @Inject constructor(
     private val workManager: WorkManager,
     private val settingsRepository: SettingsRepository,
     @ApplicationContext private val context: Context
@@ -343,12 +321,6 @@ class ChapterUpdateCheckerScheduler @Inject constructor(
             return@withContext
         }
 
-        // Respect delivery mode - only schedule if INSTANT mode
-        if (settings.notificationDeliveryMode != NotificationDeliveryMode.INSTANT) {
-            unschedule()
-            return@withContext
-        }
-
         // Check if already scheduled
         if (isScheduled()) return@withContext
 
@@ -357,7 +329,12 @@ class ChapterUpdateCheckerScheduler @Inject constructor(
             .setRequiresBatteryNotLow(true)
             .build()
 
-        val request = PeriodicWorkRequestBuilder<ChapterUpdateChecker>(12, TimeUnit.HOURS)
+        // One-time orphan cleanup from the pre-#9 dual-worker setup.
+        runCatching {
+            WorkManager.getInstance(context).cancelUniqueWork(LEGACY_TAG).await()
+        }
+
+        val request = PeriodicWorkRequestBuilder<FavoriteDigestWorker>(6, TimeUnit.HOURS)
             .setConstraints(constraints)
             .addTag(TAG)
             .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.MINUTES)
@@ -390,6 +367,7 @@ class ChapterUpdateCheckerScheduler @Inject constructor(
     }
 
     companion object {
-        const val TAG = "chapter_update_checker"
+        const val TAG = "favorite_digest_periodic"
+        private const val LEGACY_TAG = "chapter_update_checker"
     }
 }
