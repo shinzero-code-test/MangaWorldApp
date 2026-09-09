@@ -58,8 +58,19 @@ class DownloadErrorContractTest {
         assertTrue(progress.all { it in 1001..10000 })
         assertTrue(batch.all { it in 40000..40999 })
 
-        val all = complete + fail + progress + batch
-        assertEquals(all.size, all.toSet().size)
+        // The contract is band separation, not global uniqueness: distinct keys
+        // may share an ID within one band (birthday), but a failure must
+        // never land in the completion/progress/batch range.
+        val completeSet = complete.toSet()
+        val failSet = fail.toSet()
+        val progressSet = progress.toSet()
+        val batchSet = batch.toSet()
+        assertTrue(completeSet.intersect(failSet).isEmpty())
+        assertTrue(completeSet.intersect(progressSet).isEmpty())
+        assertTrue(completeSet.intersect(batchSet).isEmpty())
+        assertTrue(failSet.intersect(progressSet).isEmpty())
+        assertTrue(failSet.intersect(batchSet).isEmpty())
+        assertTrue(progressSet.intersect(batchSet).isEmpty())
     }
 
     @Test
