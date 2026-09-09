@@ -404,6 +404,7 @@ service cloud.firestore {
         && request.resource.data.reportedUid is string
         && request.resource.data.reason is string
         && request.resource.data.reason.size() <= 500
+        && request.resource.data.createdAt is number
         && request.resource.data.status == 'open';
       allow read, update, delete: if canModerate();
     }
