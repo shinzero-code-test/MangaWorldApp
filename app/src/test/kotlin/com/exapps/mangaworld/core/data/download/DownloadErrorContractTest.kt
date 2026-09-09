@@ -47,7 +47,7 @@ class DownloadErrorContractTest {
             "", "a", "olympus_solohttps://olympustaff.com/series/solo/12",
             "فصل", "x".repeat(500), "manga: chapter?",
             "12", "-2147483648", "😀", "a/b?c=d&e=f"
-        ) + (0 until 200).map { "manga_$ithttps://source.example/ch/$it" }
+        ) + (0 until 200).map { "manga_${it}https://source.example/ch/$it" }
         val complete = keys.map { DownloadNotifIds.stableId(DownloadNotifIds.COMPLETE_BASE, it) }
         val fail = keys.map { DownloadNotifIds.stableId(DownloadNotifIds.FAIL_BASE, it) }
         val progress = keys.map { DownloadNotifIds.stableId(DownloadNotifIds.PROGRESS_BASE, it) }

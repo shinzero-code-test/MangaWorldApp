@@ -175,7 +175,7 @@ export function verifyTotpConstantTime(
 // disable, so a stolen long-lived session alone cannot mint or kill them.
 
 const BACKUP_CODE_COUNT = 10;
-const BACKUP_CODE_BYTES = 6; // 48 bits → 8 unambiguous chars, no padding
+const BACKUP_CODE_BYTES = 8; // 64 bits → 8 unambiguous chars, one per byte
 const BACKUP_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L
 const BACKUP_HASH_PREFIX = "mw-backup-v1:";
 
