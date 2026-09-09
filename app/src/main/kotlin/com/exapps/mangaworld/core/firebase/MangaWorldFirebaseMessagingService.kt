@@ -135,6 +135,10 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
                     // Keep only last 100 local notifications (same cap as workers).
                     while (arr.length() > 100) { arr.remove(0) }
                 }
+            }.onFailure { e ->
+                // Was silent: a full/corrupt ring buffer then drops pushes
+                // with zero signal (#26).
+                Log.w("MWFMessaging", "notification-center log failed", e)
             }
         }
     }

@@ -5,6 +5,7 @@ import { rejectAnonymousUser, verifyAppIdToken } from "@/lib/app-auth";
 import { allowAppMutation } from "@/lib/app-rate-limit";
 import { getAdminDb, getAdminMessaging } from "@/lib/firebase-admin";
 import { genericErrorResponse } from "@/lib/security";
+import { isTextAllowed } from "@/lib/moderation";
 
 export const dynamic = "force-dynamic";
 const MAX_MENTION_RECIPIENTS = 10;
@@ -34,7 +35,13 @@ export async function POST(request: NextRequest) {
     const parentId = typeof comment.parentId === "string" ? comment.parentId : null;
     const threadRootId = isIdentifier(comment.threadRootId) ? comment.threadRootId : parentId;
     const reviewId = isIdentifier(comment.reviewId) ? comment.reviewId : null;
-    const replyBody = `${String(comment.authorName ?? "مشاهد")}: ${String(comment.text ?? "").slice(0, 80)}`;
+    // Attacker-controlled reply text lands in another user's push tray (#20):
+    // scrub it through the shared keyword gate. Fail-open keeps delivery on
+    // checker hiccups; a flagged body degrades to a generic notice instead.
+    const rawReplyText = String(comment.text ?? "");
+    const replyBody = (await isTextAllowed(rawReplyText))
+      ? `${String(comment.authorName ?? "مشاهد")}: ${rawReplyText.slice(0, 80)}`
+      : "رد جديد على تعليقك";
     const addReplyRecipient = (targetUid: unknown) => {
       if (typeof targetUid === "string" && targetUid !== user.uid) {
         recipients.set(targetUid, {

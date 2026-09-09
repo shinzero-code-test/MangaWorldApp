@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
 import { genericErrorResponse } from "@/lib/security";
-import { bigQueryProjectId, listDatasetTables, runQuery } from "@/lib/bigquery";
+import { bigQueryProjectId, listDatasetTables, pickLatestDatedTable, runQuery } from "@/lib/bigquery";
 
 export const dynamic = "force-dynamic";
 
@@ -11,10 +11,16 @@ const PREFERRED_TABLE = "com_exapps_mangaworld_ANDROID";
 
 function pickTable(tables: string[]): string | null {
   if (tables.includes(PREFERRED_TABLE)) return PREFERRED_TABLE;
-  const android = tables.filter((t) => t.toUpperCase().endsWith("_ANDROID") && !t.toUpperCase().endsWith("_REALTIME"));
-  if (android.length > 0) return [...android].sort()[0];
-  const anyBatch = tables.filter((t) => !t.toUpperCase().endsWith("_REALTIME") && !t.startsWith("INFORMATION_SCHEMA"));
-  return anyBatch.length > 0 ? [...anyBatch].sort()[0] : null;
+  // Dated export tables: latest wins, for the same 7-day-window reason (#34).
+  const android = pickLatestDatedTable(
+    tables,
+    (t) => t.toUpperCase().endsWith("_ANDROID") && !t.toUpperCase().endsWith("_REALTIME")
+  );
+  if (android) return android;
+  return pickLatestDatedTable(
+    tables,
+    (t) => !t.toUpperCase().endsWith("_REALTIME")
+  );
 }
 
 export async function GET() {

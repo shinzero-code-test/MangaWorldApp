@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
 import { genericErrorResponse } from "@/lib/security";
-import { bigQueryProjectId, listDatasetTables, runQuery } from "@/lib/bigquery";
+import { bigQueryProjectId, listDatasetTables, pickLatestDatedTable, runQuery } from "@/lib/bigquery";
 
 export const dynamic = "force-dynamic";
 
 const DATASET = "firebase_performance";
 
 function pickTable(tables: string[]): string | null {
-  const usable = tables.filter((t) => !t.toUpperCase().startsWith("INFORMATION_SCHEMA"));
-  if (usable.length === 0) return null;
-  const android = usable.filter((t) => t.toLowerCase().includes("android"));
-  return android.length > 0 ? [...android].sort()[0] : [...usable].sort()[0];
+  // Firebase exports dated tables (<app>_<platform>_YYYYMMDD): the query's
+  // 7-day window is empty on any table but the latest (#34).
+  const android = pickLatestDatedTable(tables, (t) => t.toLowerCase().includes("android"));
+  return android ?? pickLatestDatedTable(tables, () => true);
 }
 
 export async function GET() {

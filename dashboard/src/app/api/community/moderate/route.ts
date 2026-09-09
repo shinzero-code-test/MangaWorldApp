@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAppIdToken } from "@/lib/app-auth";
 import { consumeRateLimit } from "@/lib/security";
-import { getAdminRemoteConfig } from "@/lib/firebase-admin";
+import { isTextAllowed } from "@/lib/moderation";
 
 export const dynamic = "force-dynamic";
 
@@ -19,18 +19,6 @@ const MAX_TEXT_LENGTH = 2_000;
  * Fail-open by design on transient errors: post-hoc moderationReports remain
  * the backstop, and blocking all posting during an outage would be worse.
  */
-let cachedTemplate: { template: unknown; at: number } | null = null;
-const RC_TEMPLATE_TTL_MS = 60_000;
-
-async function getCachedRcTemplate() {
-  if (cachedTemplate && Date.now() - cachedTemplate.at < RC_TEMPLATE_TTL_MS) {
-    return cachedTemplate.template as Awaited<ReturnType<ReturnType<typeof getAdminRemoteConfig>["getTemplate"]>>;
-  }
-  const template = await getAdminRemoteConfig().getTemplate();
-  cachedTemplate = { template, at: Date.now() };
-  return template;
-}
-
 export async function POST(request: NextRequest) {
   // Auth + validation are fail-CLOSED: an invalid token or bad body must
   // never yield allowed:true. Only the keyword-scan itself (Remote Config
@@ -57,30 +45,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ allowed: false, reason: "too_long" });
     }
 
-    try {
-      // Module-level 60s cache: uncached getTemplate() per request turns Sybil
-      // volume into Remote Config quota pressure (fail-open then degrades).
-      const template = await getCachedRcTemplate();
-      const paramValue = template.parameters?.["community_banned_keywords"]?.defaultValue;
-      // RemoteConfigParameterValue is a union — only conditional/default values carry `.value`.
-      const rawKeywords =
-        paramValue && "value" in paramValue ? paramValue.value : "";
-      const keywords = String(rawKeywords)
-        .split(",")
-        .map((k) => k.trim().toLowerCase())
-        .filter(Boolean);
-
-      if (keywords.length > 0) {
-        const normalized = text.toLowerCase();
-        if (keywords.some((keyword) => normalized.includes(keyword))) {
-          return NextResponse.json({ allowed: false, reason: "banned_keyword" });
-        }
-      }
-    } catch (scanError) {
-      console.error("[community/moderate] scan failure (fail-open):", scanError instanceof Error ? scanError.message : scanError);
-      // Fail-open: never block community participation because the checker hiccuped.
+    if (!(await isTextAllowed(text))) {
+      return NextResponse.json({ allowed: false, reason: "banned_keyword" });
     }
-
     return NextResponse.json({ allowed: true });
   } catch (error) {
     console.error("[community/moderate] failure:", error instanceof Error ? error.message : error);

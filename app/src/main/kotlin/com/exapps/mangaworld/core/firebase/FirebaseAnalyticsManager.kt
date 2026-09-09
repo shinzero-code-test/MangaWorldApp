@@ -43,7 +43,7 @@ class FirebaseAnalyticsManager @Inject constructor(
         logEvent(
             name = "manga_viewed",
             params = buildMap {
-                put("manga_id", mangaId.takeLast(36))
+                put("manga_id", analyticsMangaId(mangaId))
                 put("source_id", sourceId)
                 put("genre_primary", genres.firstOrNull())
                 put("chapter_count", chapterCount)
@@ -61,7 +61,7 @@ class FirebaseAnalyticsManager @Inject constructor(
         logEvent(
             name = "chapter_read",
             params = mapOf(
-                "manga_id" to mangaId.takeLast(36),
+                "manga_id" to analyticsMangaId(mangaId),
                 "source_id" to sourceId,
                 "chapter_number" to chapterNumber?.toDouble(),
                 "total_pages" to totalPages,
@@ -101,7 +101,7 @@ class FirebaseAnalyticsManager @Inject constructor(
         logEvent(
             name = "download_status",
             params = mapOf(
-                "manga_id" to mangaId.takeLast(36),
+                "manga_id" to analyticsMangaId(mangaId),
                 "source_id" to sourceId,
                 "status" to status.lowercase(Locale.US),
                 "total_pages" to totalPages,
@@ -201,4 +201,20 @@ private fun String.toFirebaseKey(maxLength: Int = 40): String {
         .ifBlank { "value" }
     val prefixed = if (normalized.first().isDigit()) "mw_$normalized" else normalized
     return prefixed.take(maxLength)
+}
+
+/**
+ * Bounded analytics ID that cannot alias (#25): two manga sharing a 36-char
+ * tail (long slugs from one source) used to collapse into one row. Short IDs
+ * pass through; long ones keep a readable tail plus an 8-hex SHA-256
+ * disambiguator (same idiom as the search query_hash below).
+ */
+internal fun analyticsMangaId(mangaId: String): String {
+    if (mangaId.length <= 36) return mangaId
+    val hash = runCatching {
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(mangaId.toByteArray())
+            .take(4).joinToString("") { "%02x".format(it) }
+    }.getOrNull() ?: "00000000"
+    return "${mangaId.takeLast(27)}_$hash"
 }

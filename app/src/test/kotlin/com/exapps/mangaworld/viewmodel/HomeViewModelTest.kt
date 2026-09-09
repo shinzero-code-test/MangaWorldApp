@@ -23,6 +23,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
+import app.cash.turbine.test
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -210,4 +211,29 @@ class HomeViewModelTest {
         chapterNumber = 1.0f, chapterUrl = "https://example.com/ch1",
         timeAgo = "1h", source = MangaSource.AZORA
     )
+    @Test
+    fun selectSource_emitsLoadedState() {
+        // First Turbine adoption (#17): collects across dispatcher advances
+        // and asserts the latest emission after a source switch.
+        // expectMostRecentItem (not an ordered awaitItem chain) because
+        // StateFlow conflation may swallow the transient loading pulse.
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        val vm = createViewModel()
+        advanceUntilIdle()
+        assertFalse(vm.state.value.isLoading)
+        vm.state.test {
+            awaitItem() // current init-loaded state
+            vm.selectSource(MangaSource.OLYMPUS)
+            advanceUntilIdle()
+            val final = expectMostRecentItem()
+            assertEquals(MangaSource.OLYMPUS, final.activeSource)
+            assertFalse(final.isLoading)
+            assertEquals(1, final.featured.size)
+            assertNull(final.error)
+            cancelAndIgnoreRemainingEvents()
+        }
+        }
+    }
 }

@@ -157,9 +157,8 @@ jobs:
         working-directory: dashboard
         run: npm test
 
-      - name: Lint (advisory until any-debt baseline is clean)
+      - name: Lint
         working-directory: dashboard
-        continue-on-error: true
         run: npm run lint
 
   # ─── Debug Build ────────────────────────────────────────────────────────────

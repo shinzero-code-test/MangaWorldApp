@@ -25,7 +25,7 @@ class FirebaseTelemetry @Inject constructor(
     fun logScraperFailure(sourceId: String, stage: String, throwable: Throwable) {
         setActiveSource(sourceId)
         refreshNetworkTypeKey()
-        crashlytics.log("scraper_failure source=$sourceId stage=$stage message=${throwable.message}")
+        crashlytics.log("scraper_failure source=$sourceId stage=$stage error=${throwable.javaClass.simpleName}")
         crashlytics.setCustomKey("scraper_source", sourceId)
         crashlytics.setCustomKey("scraper_stage", stage)
         crashlytics.recordException(throwable)

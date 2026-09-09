@@ -90,6 +90,7 @@ class ChapterUpdateCheckerCore @Inject constructor(
             if (now - lastCheck < 2 * 60 * 60 * 1000L) return@withContext ListenableWorker.Result.success()
 
             val favorites = favoriteDao.getFavoritesList()
+            pruneStaleMaxChapterKeys(prefs, favorites.map { it.mangaId }.toSet())
             if (favorites.isEmpty()) return@withContext ListenableWorker.Result.success()
 
             val favoritesBySource = favorites.groupBy { it.sourceId }
@@ -369,5 +370,24 @@ class FavoriteDigestScheduler @Inject constructor(
     companion object {
         const val TAG = "favorite_digest_periodic"
         private const val LEGACY_TAG = "chapter_update_checker"
+    }
+}
+
+/**
+ * Prunes `max_chapter_*` watermarks for manga that are no longer favorited
+ * (#26): one key per favorite ever checked otherwise accumulates forever.
+ */
+private fun pruneStaleMaxChapterKeys(
+    prefs: android.content.SharedPreferences,
+    liveMangaIds: Set<String>
+) {
+    runCatching {
+        val stale = prefs.all.keys
+            .filter { it.startsWith("max_chapter_") }
+            .filterNot { it.removePrefix("max_chapter_") in liveMangaIds }
+            .take(50) // bounded per sweep; the rest age out on later sweeps
+        if (stale.isNotEmpty()) {
+            prefs.edit().apply { stale.forEach { remove(it) } }.apply()
+        }
     }
 }

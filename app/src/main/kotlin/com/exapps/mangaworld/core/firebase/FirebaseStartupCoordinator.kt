@@ -44,8 +44,11 @@ class FirebaseStartupCoordinator @Inject constructor(
         val lastSync = prefs.getLong("last_push_sync", 0L)
         val now = System.currentTimeMillis()
         if (now - lastSync > 3_600_000L) { // 1 hour
-            runCatching { syncManager.pushLocalSnapshot() }
-            prefs.edit().putLong("last_push_sync", now).apply()
+            // Stamp only on success (#26): stamping a failed push would
+            // suppress the retry until the next hour window.
+            if (runCatching { syncManager.pushLocalSnapshot() }.isSuccess) {
+                prefs.edit().putLong("last_push_sync", now).apply()
+            }
         }
 
         runCatching {

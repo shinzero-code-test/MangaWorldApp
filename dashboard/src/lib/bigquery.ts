@@ -24,20 +24,35 @@ async function bqFetch(path: string, init?: RequestInit): Promise<Response> {
   });
 }
 
-/** Lists table IDs in a dataset. Empty array = linked but no exports yet. */
+/**
+ * Lists table IDs in a dataset. Empty array = linked but no exports yet.
+ * Follows page tokens: Crashlytics/Performance datasets accumulate dated
+ * tables past a single 50-row page, and a truncated list picks the wrong
+ * table or reports "no data" while exports exist (#34).
+ */
 export async function listDatasetTables(dataset: string): Promise<{ tables: string[]; error?: string }> {
   if (!PROJECT_ID) return { tables: [], error: "missing-project" };
   try {
-    const res = await bqFetch(
-      `/projects/${PROJECT_ID}/datasets/${dataset}/tables?maxResults=50`
-    );
-    if (res.status === 403 || res.status === 401) return { tables: [], error: "permission-denied" };
-    if (res.status === 404) return { tables: [], error: "dataset-missing" };
-    if (!res.ok) return { tables: [], error: `bq-error-${res.status}` };
-    const data = await res.json();
-    const tables = Array.isArray(data.tables)
-      ? data.tables.map((t: { tableReference?: { tableId?: string } }) => t.tableReference?.tableId ?? "").filter(Boolean)
-      : [];
+    const tables: string[] = [];
+    let pageToken = "";
+    // Bounded: 10 pages × 50 is far past any real export dataset.
+    for (let page = 0; page < 10; page++) {
+      const res = await bqFetch(
+        `/projects/${PROJECT_ID}/datasets/${dataset}/tables?maxResults=50${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`
+      );
+      if (res.status === 403 || res.status === 401) return { tables, error: "permission-denied" };
+      if (res.status === 404) return { tables, error: "dataset-missing" };
+      if (!res.ok) return { tables, error: `bq-error-${res.status}` };
+      const data = await res.json();
+      if (Array.isArray(data.tables)) {
+        for (const t of data.tables as { tableReference?: { tableId?: string } }[]) {
+          const id = t.tableReference?.tableId ?? "";
+          if (id) tables.push(id);
+        }
+      }
+      pageToken = typeof data.nextPageToken === "string" ? data.nextPageToken : "";
+      if (!pageToken) break;
+    }
     return { tables };
   } catch {
     return { tables: [], error: "bq-unreachable" };
@@ -105,4 +120,22 @@ function unwrap(value: unknown): unknown {
 
 export function bigQueryProjectId(): string {
   return PROJECT_ID;
+}
+
+/**
+ * Picks the latest dated export table from a discovery listing (#34).
+ * Firebase Performance/Crashlytics exports append `<app>_<platform>_YYYYMMDD`
+ * tables, which sort lexicographically in chronological order — so the last
+ * match wins. Callers pass their own platform filter; INFORMATION_SCHEMA is
+ * always excluded. Returns null when nothing usable exists.
+ */
+export function pickLatestDatedTable(
+  tables: string[],
+  keep: (tableId: string) => boolean
+): string | null {
+  const usable = tables.filter(
+    (t) => !t.toUpperCase().startsWith("INFORMATION_SCHEMA") && keep(t)
+  );
+  if (usable.length === 0) return null;
+  return [...usable].sort()[usable.length - 1];
 }

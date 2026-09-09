@@ -2,11 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["firebase-admin"],
-  // Lint runs via `npm run lint` (real core-web-vitals flat config).
-  // Builds keep ignoring it until the remaining `any`-debt is typed (F6).
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // Lint gates in CI (`npm run lint`: 0 errors, only <img> warnings) and
+  // runs on every build — warnings never fail a build, errors do.
   poweredByHeader: false,
   // Mirror of vercel.json headers: self-hosted/preview runtimes must keep
   // the same posture when Vercel edge headers don't apply.
