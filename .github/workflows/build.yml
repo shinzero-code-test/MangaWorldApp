@@ -223,6 +223,12 @@ jobs:
       - name: Build Debug APKs
         run: ./gradlew :app:assembleDebug --stacktrace
 
+      # Device-test APK for Firebase Test Lab instrumentation runs. Built here
+      # (never locally) from app/src/androidTest; uploaded beside the debug
+      # APKs so gcloud runs need no local build.
+      - name: Build AndroidTest APK
+        run: ./gradlew :app:assembleDebugAndroidTest --stacktrace
+
       - name: Resolve Firebase app id
         if: github.event_name == 'push'
         id: firebase-app
@@ -308,6 +314,14 @@ jobs:
         with:
           name: MangaWorld-debug-universal
           path: app/build/outputs/apk/debug/*universal*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload AndroidTest APK (FTL instrumentation)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MangaWorld-debug-androidTest
+          path: app/build/outputs/apk/androidTest/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 
