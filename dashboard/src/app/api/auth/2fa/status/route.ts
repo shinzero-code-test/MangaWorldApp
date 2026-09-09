@@ -14,12 +14,15 @@ export async function GET() {
     const enabled = doc.exists && doc.data()?.enabled === true;
 
     const verified = user.mfaVerified;
+    const hashes = doc.data()?.backupCodeHashes;
+    const backupCodesRemaining = enabled && Array.isArray(hashes) ? hashes.length : 0;
 
     return NextResponse.json({
       enabled,
       verified,
       needsSetup: !enabled,
       needsValidation: enabled && !verified,
+      backupCodesRemaining,
     });
   } catch (error: unknown) {
     const { body, status } = genericErrorResponse(error);

@@ -1,6 +1,7 @@
 import {
   createCipheriv,
   createDecipheriv,
+  createHash,
   createHmac,
   randomBytes,
   scryptSync,
@@ -165,6 +166,48 @@ export function verifyTotpConstantTime(
     if (safeEquals(normalized, expected)) return true;
   }
   return false;
+}
+
+// ─── TOTP backup (recovery) codes ──────────────────────────────────────────
+// Lost-authenticator recovery without Firestore surgery (#3). Codes are shown
+// once at generation, stored only as SHA-256 hashes, and single-use: a
+// successful validation deletes the hash. Fresh-auth gates generation and
+// disable, so a stolen long-lived session alone cannot mint or kill them.
+
+const BACKUP_CODE_COUNT = 10;
+const BACKUP_CODE_BYTES = 6; // 48 bits → 8 unambiguous chars, no padding
+const BACKUP_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L
+const BACKUP_HASH_PREFIX = "mw-backup-v1:";
+
+export function hashBackupCode(code: string): string {
+  return createHash("sha256").update(BACKUP_HASH_PREFIX + code.trim().toUpperCase()).digest("hex");
+}
+
+export function generateBackupCodes(count: number = BACKUP_CODE_COUNT): { codes: string[]; hashes: string[] } {
+  const codes: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const bytes = randomBytes(BACKUP_CODE_BYTES);
+    let code = "";
+    for (const b of bytes) code += BACKUP_ALPHABET[b % BACKUP_ALPHABET.length];
+    // 8 chars + unambiguous alphabet: collisions at count=10 are negligible,
+    // but dedupe anyway so every issued set is unique.
+    if (codes.includes(code)) {
+      i--;
+      continue;
+    }
+    codes.push(code);
+  }
+  return { codes, hashes: codes.map(hashBackupCode) };
+}
+
+/** Constant-time lookup: returns the matching stored hash, if any. */
+export function matchBackupCodeHash(candidate: string, hashes: unknown): string | null {
+  if (!Array.isArray(hashes)) return null;
+  const want = hashBackupCode(candidate);
+  for (const h of hashes) {
+    if (typeof h === "string" && h.length === want.length && safeEquals(h, want)) return h;
+  }
+  return null;
 }
 
 // ─── Firestore-backed fixed-window rate limiting ─────────────────────────────

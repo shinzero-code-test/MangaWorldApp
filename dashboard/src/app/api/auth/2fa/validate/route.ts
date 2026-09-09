@@ -6,6 +6,8 @@ import {
   genericErrorResponse,
   isOtpLocked,
   consumeUsedToken,
+  logSecurityEvent,
+  matchBackupCodeHash,
   recordOtpFailure,
   resolveTotpSecret,
   verifyTotpConstantTime,
@@ -31,7 +33,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const doc = await getAdminDb().collection("admin2fa").doc(user.uid).get();
+    const ref = getAdminDb().collection("admin2fa").doc(user.uid);
+    const doc = await ref.get();
     if (!doc.exists || doc.data()?.enabled !== true) {
       return NextResponse.json(
         { error: "المصادقة الثنائية غير مفعلة" },
@@ -44,18 +47,34 @@ export async function POST(request: NextRequest) {
       ? verifyTotpConstantTime(secret, token)
       : false;
 
+    // Lost-authenticator path (#3): a single-use recovery code proves
+    // possession when the TOTP app is gone. Consumed (deleted) on success.
+    let consumedBackupHash: string | null = null;
     if (!isValid) {
+      consumedBackupHash = matchBackupCodeHash(token, doc.data()?.backupCodeHashes);
+    }
+
+    if (!isValid && !consumedBackupHash) {
       await recordOtpFailure(user.uid);
       return NextResponse.json(
         { error: "رمز التحقق غير صحيح. تأكد من الرمز وحاول مرة أخرى" },
         { status: 400 }
       );
     }
-    if (!(await consumeUsedToken(user.uid, token))) {
+    if (isValid && !(await consumeUsedToken(user.uid, token))) {
       return NextResponse.json(
         { error: "رمز التحقق مستخدم مسبقاً" },
         { status: 400 }
       );
+    }
+    if (consumedBackupHash) {
+      const remaining = ((doc.data()?.backupCodeHashes as unknown[]) ?? [])
+        .filter((h) => h !== consumedBackupHash);
+      await ref.set({ backupCodeHashes: remaining }, { merge: true });
+      await logSecurityEvent("2fa_backup_used", {
+        uid: user.uid,
+        remaining: remaining.length,
+      });
     }
 
     await clearOtpFailures(user.uid);

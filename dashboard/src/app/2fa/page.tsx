@@ -12,7 +12,7 @@ import {
   Smartphone,
 } from "lucide-react";
 
-type TwoFAState = "loading" | "setup" | "validate" | "done";
+type TwoFAState = "loading" | "setup" | "validate" | "backup" | "done";
 
 export default function TwoFAPage() {
   const [state, setState] = useState<TwoFAState>("loading");
@@ -21,6 +21,11 @@ export default function TwoFAPage() {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Recovery codes issued once after enrollment (#3) + backup-code login path.
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [backupMode, setBackupMode] = useState(false);
+  const [backupInput, setBackupInput] = useState("");
+  const [backupCopied, setBackupCopied] = useState(false);
   const [copied, setCopied] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -136,7 +141,21 @@ export default function TwoFAPage() {
       if (!res.ok) {
         setError(data.error || "رمز التحقق غير صحيح");
         setOtp(["", "", "", "", "", ""]);
+        setBackupInput("");
         inputRefs.current[0]?.focus();
+        return;
+      }
+      if (state === "setup") {
+        // Enrollment just completed: mint the one-time recovery set (#3)
+        // before leaving — this is the only moment the codes are shown.
+        try {
+          const bc = await fetch("/api/auth/2fa/backup-codes", { method: "POST" });
+          const bj = await bc.json();
+          if (bc.ok && Array.isArray(bj.codes)) setBackupCodes(bj.codes);
+        } catch {
+          /* backup issuance failure must not block enrollment */
+        }
+        setState("backup");
         return;
       }
       setState("done");
@@ -158,6 +177,58 @@ export default function TwoFAPage() {
     }
   }, [otpValue, loading, handleVerify]);
 
+  // Lost-authenticator path (#3): an 8-char recovery code validates like a
+  // TOTP token and is consumed server-side on success.
+  const handleBackupVerify = useCallback(async () => {
+    const code = backupInput.trim().toUpperCase();
+    if (code.length !== 8) {
+      setError("أدخل رمز الاسترداد المكون من 8 أحرف");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/2fa/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: code }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "رمز الاسترداد غير صحيح");
+        setBackupInput("");
+        return;
+      }
+      setState("done");
+      redirectTimer.current = setTimeout(() => {
+        router.replace("/dashboard");
+        router.refresh();
+      }, 1200);
+    } catch {
+      setError("خطأ في الاتصال");
+    } finally {
+      setLoading(false);
+    }
+  }, [backupInput, router]);
+
+  const handleCopyBackup = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(backupCodes.join("\n"));
+      setBackupCopied(true);
+      setTimeout(() => setBackupCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  }, [backupCodes]);
+
+  const handleBackupSaved = useCallback(() => {
+    setState("done");
+    redirectTimer.current = setTimeout(() => {
+      router.replace("/dashboard");
+      router.refresh();
+    }, 800);
+  }, [router]);
+
   // ─── Loading ───
   if (state === "loading") {
     return (
@@ -168,6 +239,82 @@ export default function TwoFAPage() {
         <div className="flex flex-col items-center gap-3">
           <Loader2 size={28} className="animate-spin text-purple-400" />
           <p className="text-sm text-purple-300/60">جاري التحقق...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Recovery codes (shown once, right after enrollment) ───
+  if (state === "backup") {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center p-6"
+        style={{ background: "#0a0812" }}
+        dir="rtl"
+      >
+        <div className="w-full max-w-md space-y-5">
+          <div className="text-center">
+            <div
+              className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              style={{
+                background: "rgba(34,197,94,0.15)",
+                border: "1px solid rgba(34,197,94,0.3)",
+              }}
+            >
+              <ShieldCheck size={24} className="text-green-400" />
+            </div>
+            <h2 className="text-xl font-bold text-white">
+              احفظ رموز الاسترداد
+            </h2>
+            <p className="text-sm mt-1.5 text-purple-300/60">
+              تظهر مرة واحدة فقط. إذا فقدت تطبيق المصادقة فلن تتمكن من الدخول بدونها.
+            </p>
+          </div>
+          <div
+            className="rounded-2xl p-5 grid grid-cols-2 gap-2"
+            style={{
+              background: "rgba(0,0,0,0.3)",
+              border: "1px solid rgba(139,92,246,0.15)",
+            }}
+            dir="ltr"
+          >
+            {backupCodes.length > 0 ? (
+              backupCodes.map((c) => (
+                <code
+                  key={c}
+                  className="text-center text-sm font-mono tracking-widest py-2 rounded-lg"
+                  style={{ background: "rgba(139,92,246,0.1)", color: "#e2d6ff" }}
+                >
+                  {c}
+                </code>
+              ))
+            ) : (
+              <p className="col-span-2 text-center text-sm text-purple-300/60">
+                تعذر إصدار الرموز — يمكنك إصدارها لاحقاً من الإعدادات.
+              </p>
+            )}
+          </div>
+          {backupCodes.length > 0 && (
+            <button
+              onClick={handleCopyBackup}
+              className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition hover:opacity-90"
+              style={{
+                background: "rgba(139,92,246,0.15)",
+                border: "1px solid rgba(139,92,246,0.3)",
+                color: "#c4b5fd",
+              }}
+            >
+              {backupCopied ? <Check size={16} /> : <Copy size={16} />}
+              {backupCopied ? "تم النسخ!" : "نسخ الرموز"}
+            </button>
+          )}
+          <button
+            onClick={handleBackupSaved}
+            className="w-full py-3.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90"
+            style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)" }}
+          >
+            حفظت الرموز — متابعة
+          </button>
         </div>
       </div>
     );
@@ -594,9 +741,46 @@ export default function TwoFAPage() {
                 {loading ? "جاري التحقق..." : "تأكيد والمتابعة"}
               </button>
 
-              <p className="text-xs text-center text-purple-300/40">
-                افتح تطبيق Google Authenticator أو Authy واحصل على الرمز
-              </p>
+              {backupMode ? (
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={backupInput}
+                    onChange={(e) =>
+                      setBackupInput(e.target.value.toUpperCase().replace(/[^A-Z2-9]/g, "").slice(0, 8))
+                    }
+                    placeholder="XXXXXXXX"
+                    dir="ltr"
+                    autoFocus
+                    aria-label="رمز الاسترداد"
+                    className="w-full text-center text-lg font-mono font-bold tracking-[0.3em] rounded-xl border-2 outline-none py-3"
+                    style={{
+                      background: "rgba(0,0,0,0.3)",
+                      borderColor: "rgba(139,92,246,0.3)",
+                      color: "#e2d6ff",
+                    }}
+                  />
+                  <button
+                    onClick={handleBackupVerify}
+                    disabled={loading || backupInput.length !== 8}
+                    className="w-full py-3.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)" }}
+                  >
+                    {loading && <Loader2 size={16} className="animate-spin" />}
+                    {loading ? "جاري التحقق..." : "الدخول برمز الاسترداد"}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-center text-purple-300/40">
+                  افتح تطبيق Google Authenticator أو Authy واحصل على الرمز
+                </p>
+              )}
+              <button
+                onClick={() => { setBackupMode(!backupMode); setError(""); }}
+                className="w-full text-xs text-center text-purple-300/60 hover:text-purple-300 transition"
+              >
+                {backupMode ? "العودة لرمز التطبيق" : "فقدت تطبيق المصادقة؟ استخدم رمز الاسترداد"}
+              </button>
             </div>
           )}
         </div>

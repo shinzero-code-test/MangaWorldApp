@@ -222,6 +222,8 @@ export default function SettingsPage() {
         );
       })}
 
+      <TwoFASecurityCard />
+
       <div className="fixed bottom-0 start-0 end-0 z-20 flex items-center justify-end gap-3 px-6 py-4 border-t"
         style={{ background:"var(--card)", borderColor:"var(--border)" }}>
         {saveError && (
@@ -234,6 +236,140 @@ export default function SettingsPage() {
           {saving ? "جاري الحفظ..." : saved ? "تم الحفظ!" : "حفظ الإعدادات"}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── 2FA self-service security card (#3) ────────────────────────────────────
+// Regenerate recovery codes + disable 2FA without Firestore surgery. Disable
+// still demands fresh-auth + possession proof server-side; the UI only
+// collects the proof.
+
+function TwoFASecurityCard() {
+  const [status, setStatus] = useState<{ enabled: boolean; backupCodesRemaining: number } | null>(null);
+  const [codes, setCodes] = useState<string[]>([]);
+  const [proof, setProof] = useState("");
+  const [confirmingDisable, setConfirmingDisable] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const d = await api<{ enabled?: boolean; backupCodesRemaining?: number }>(
+          "/api/auth/2fa/status",
+          { signal: controller.signal }
+        );
+        setStatus({ enabled: d.enabled === true, backupCodesRemaining: d.backupCodesRemaining ?? 0 });
+      } catch (e) {
+        if (!isAbortError(e)) setErr("تعذر تحميل حالة المصادقة الثنائية.");
+      }
+    })();
+    return () => controller.abort();
+  }, []);
+
+  const regenerate = async () => {
+    setBusy(true);
+    setErr("");
+    setMsg("");
+    try {
+      const res = await fetch("/api/auth/2fa/backup-codes", { method: "POST" });
+      const d = await res.json();
+      if (!res.ok) throw new ApiError(res.status, d.error || "failed");
+      setCodes(d.codes);
+      setStatus((s) => (s ? { ...s, backupCodesRemaining: d.codes.length } : s));
+      setMsg("صدرت رموز جديدة — القديمة أُبطلت. احفظها الآن.");
+    } catch {
+      setErr("تعذر إصدار الرموز. قد تحتاج لتسجيل دخول حديث.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disable = async () => {
+    if (!proof.trim()) {
+      setErr("أدخل رمز التطبيق أو رمز استرداد للتأكيد.");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    setMsg("");
+    try {
+      const res = await fetch("/api/auth/2fa/disable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proof: proof.trim() }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new ApiError(res.status, d.error || "failed");
+      setStatus({ enabled: false, backupCodesRemaining: 0 });
+      setCodes([]);
+      setProof("");
+      setConfirmingDisable(false);
+      setMsg("تم إيقاف المصادقة الثنائية.");
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "تعذر الإيقاف.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl p-5 mb-24" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+      <div className="flex items-center gap-2 mb-1">
+        <Shield size={18} />
+        <h3 className="font-bold">المصادقة الثنائية</h3>
+      </div>
+      <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
+        {status === null
+          ? "جاري التحميل..."
+          : status.enabled
+            ? `مفعلة — رموز الاسترداد المتبقية: ${status.backupCodesRemaining}`
+            : "غير مفعلة — فعّلها من صفحة المصادقة الثنائية."}
+      </p>
+      {err && <p className="text-sm mb-3" style={{ color: "var(--destructive)" }}>{err}</p>}
+      {msg && <p className="text-sm mb-3" style={{ color: "var(--primary)" }}>{msg}</p>}
+      {status?.enabled && (
+        <div className="flex flex-wrap gap-2">
+          <button onClick={regenerate} disabled={busy}
+            className="px-4 py-2 rounded-xl text-sm font-semibold transition hover:opacity-90 disabled:opacity-60"
+            style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>
+            {busy ? "جاري..." : "إصدار رموز استرداد جديدة"}
+          </button>
+          {!confirmingDisable ? (
+            <button onClick={() => setConfirmingDisable(true)} disabled={busy}
+              className="px-4 py-2 rounded-xl text-sm font-semibold transition hover:opacity-90 disabled:opacity-60"
+              style={{ background: "var(--muted)", color: "var(--foreground)" }}>
+              إيقاف المصادقة الثنائية
+            </button>
+          ) : (
+            <span className="flex flex-wrap items-center gap-2">
+              <input value={proof} onChange={(e) => setProof(e.target.value)} dir="ltr"
+                placeholder="رمز التطبيق أو الاسترداد" aria-label="إثبات إيقاف المصادقة"
+                className="px-3 py-2 rounded-xl text-sm font-mono w-56" />
+              <button onClick={disable} disabled={busy}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+                style={{ background: "#dc2626" }}>
+                تأكيد الإيقاف
+              </button>
+              <button onClick={() => { setConfirmingDisable(false); setProof(""); setErr(""); }}
+                className="px-3 py-2 rounded-xl text-sm" style={{ color: "var(--muted-foreground)" }}>
+                إلغاء
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+      {codes.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 mt-4" dir="ltr">
+          {codes.map((c) => (
+            <code key={c} className="text-center text-sm font-mono tracking-widest py-2 rounded-lg"
+              style={{ background: "var(--muted)" }}>{c}</code>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
