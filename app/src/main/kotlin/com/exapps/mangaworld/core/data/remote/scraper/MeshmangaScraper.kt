@@ -168,7 +168,7 @@ class MeshmangaScraper @Inject constructor(
         return genreIdCache?.get(genre)
     }
 
-    private fun seriesItemFrom(obj: JSONObject?): MangaItem? {
+    internal fun seriesItemFrom(obj: JSONObject?): MangaItem? {
         if (obj == null) return null
         val seriesId = obj.optLong("id").takeIf { it > 0 }?.toString() ?: return null
         val title = obj.optString("title").cleanText().ifBlank { return null }
@@ -187,7 +187,7 @@ class MeshmangaScraper @Inject constructor(
         )
     }
 
-    private fun latestChapterItemFrom(obj: JSONObject?): LatestChapterItem? {
+    internal fun latestChapterItemFrom(obj: JSONObject?): LatestChapterItem? {
         if (obj == null) return null
         val series = obj.optJSONObject("serie") ?: return null
         val seriesId = series.optLong("id").takeIf { it > 0 }?.toString() ?: return null
@@ -212,7 +212,7 @@ runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() ?: Scrape
         )
     }
 
-    private fun chapterFrom(seriesId: String, obj: JSONObject?): Chapter? {
+    internal fun chapterFrom(seriesId: String, obj: JSONObject?): Chapter? {
         if (obj == null) return null
         val chapterId = obj.optLong("id").takeIf { it > 0 } ?: return null
         val chapterNumber = parseChapterNumber(obj.optString("chapter").ifBlank { obj.optString("title") })
@@ -231,7 +231,7 @@ runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() ?: Scrape
         )
     }
 
-    private fun buildChapterUrl(seriesId: String, chapterId: Long, chapterNumber: Float): String {
+    internal fun buildChapterUrl(seriesId: String, chapterId: Long, chapterNumber: Float): String {
         val displayNumber = if (chapterNumber == chapterNumber.toInt().toFloat()) {
             chapterNumber.toInt().toString()
         } else {
@@ -240,16 +240,16 @@ runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() ?: Scrape
         return "${resolvedBaseUrl}/read/$seriesId/cid-$chapterId/chapter-$displayNumber"
     }
 
-    private fun parseChapterNumber(text: String): Float? =
+    internal fun parseChapterNumber(text: String): Float? =
         Regex("(\\d+(?:\\.\\d+)?)").find(text)?.groupValues?.get(1)?.toFloatOrNull()
 
-    private fun extractPosterUrl(obj: JSONObject): String {
+    internal fun extractPosterUrl(obj: JSONObject): String {
         val poster = obj.optJSONObject("poster")
         return (poster?.optString("medium").takeUnless { it.isNullOrBlank() }
             ?: poster?.optString("thumbnail").orEmpty()).encodeForUrl()
     }
 
-    private fun extractGenres(obj: JSONObject): List<String> {
+    internal fun extractGenres(obj: JSONObject): List<String> {
         val genres = obj.optJSONArray("genres") ?: return emptyList()
         return (0 until genres.length())
             .mapNotNull { i -> genres.optJSONObject(i)?.optString("name")?.cleanText()?.ifBlank { null } }

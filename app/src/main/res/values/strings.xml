@@ -939,6 +939,8 @@
     <string name="community_error_author_delete">يمكن للكاتب فقط حذف هذا المحتوى</string>
     <string name="community_error_sign_in">سجّل الدخول أولاً لإتمام هذا الإجراء</string>
     <string name="community_error_report_reason_required">أدخل سبب الإبلاغ</string>
+    <string name="community_error_report_quota">تجاوزت الحد المسموح من البلاغات. حاول مرة أخرى لاحقاً</string>
+    <string name="community_error_report_duplicate">لقد أبلغت عن هذا المحتوى مسبقاً</string>
     <string name="community_error_self_follow">لا يمكنك متابعة نفسك</string>
     <!-- ─── Download notifications ─────────────────────────────────────────── -->
     <string name="download_notification_progress_title">جاري تنزيل %1$s</string>

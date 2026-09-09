@@ -397,7 +397,7 @@ class DownloadQueueManager @Inject constructor(
             .setAutoCancel(true)
             .build()
         (app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-            .notify(NOTIF_ID_BATCH + ((batch.id.hashCode() and Int.MAX_VALUE) % 1000), notification)
+            .notify(DownloadNotifIds.batchId(batch.id), notification)
     }
 
     // ─── Cancel / delete ─────────────────────────────────────────────────────

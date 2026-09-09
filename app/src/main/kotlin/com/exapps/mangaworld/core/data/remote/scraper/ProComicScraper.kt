@@ -310,7 +310,8 @@ class ProComicScraper @Inject constructor(
         }
     }
 
-    private fun parseApiResults(json: JSONObject?): List<MangaItem> {
+    // internal (not private) so fixture tests drive the real parser (#4).
+    internal fun parseApiResults(json: JSONObject?): List<MangaItem> {
         val data = json?.optJSONArray("data") ?: return emptyList()
         return (0 until data.length()).mapNotNull { i ->
             val obj = data.optJSONObject(i) ?: return@mapNotNull null

@@ -354,7 +354,8 @@ class ChapterDownloadWorker @AssistedInject constructor(
      * [30000..38999] fail). The old currentTimeMillis().toInt() % 10000 could
      * go negative and cross bands, letting failures replace completions.
      */
-    private fun stableNotifId(base: Int, key: String): Int =
+    internal fun stableNotifId(base: Int, key: String): Int =
+        DownloadNotifIds.stableId(base, key)
         base + ((key.hashCode() and Int.MAX_VALUE) % 9000)
 
     private fun existingPageCount(dir: File): Int =
@@ -390,13 +391,34 @@ class ChapterDownloadWorker @AssistedInject constructor(
 
         // Notification ID ranges are disjoint: progress [1001..10_000],
         // completion [20_000..29_999], failure [30_000..39_999], batch [40_000..40_999].
-        private const val NOTIF_ID_PROGRESS = 1001
-        private const val NOTIF_ID_COMPLETE = 20000
-        private const val NOTIF_ID_FAIL = 30000
+        internal const val NOTIF_ID_PROGRESS = 1001
+        internal const val NOTIF_ID_COMPLETE = 20000
+        internal const val NOTIF_ID_FAIL = 30000
         private const val PARALLEL_DOWNLOADS = 4
         private const val MAX_DOWNLOAD_ATTEMPTS = 3
         private const val MIN_PAGE_BYTES = 1024L
         private const val MAX_PAGE_BYTES = 50L * 1024L * 1024L
         private val ACTIVE_TASK_STATUSES = setOf("queued", "running")
     }
+}
+
+/**
+ * Pure-JVM notification-ID contract (#1): per-task IDs live in disjoint bands
+ * so a failure can never replace a completion. Single source of truth for the
+ * worker, the queue manager, and the unit test — no Android dependencies.
+ */
+internal object DownloadNotifIds {
+    const val PROGRESS_BASE = 1001
+    const val PROGRESS_SPAN = 9000 // [1001..10000]
+    const val COMPLETE_BASE = 20000
+    const val FAIL_BASE = 30000
+    const val TASK_SPAN = 9000 // [x0000..x8999]
+    const val BATCH_BASE = 40000
+    const val BATCH_SPAN = 1000 // [40000..40999]
+
+    fun stableId(base: Int, key: String): Int =
+        base + ((key.hashCode() and Int.MAX_VALUE) % 9000)
+
+    fun batchId(key: String): Int =
+        BATCH_BASE + ((key.hashCode() and Int.MAX_VALUE) % BATCH_SPAN)
 }

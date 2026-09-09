@@ -800,7 +800,26 @@ class FirebaseCommunityRepository @Inject constructor(
         val reporter = requireNamedProfile()
         val trimmedReason = reason.trim().take(500)
         require(trimmedReason.isNotBlank()) { context.getString(R.string.community_error_report_reason_required) }
-        val reportId = UUID.randomUUID().toString()
+        // #2 report-flood quota + dedupe. Firestore rules cannot rate-limit, so
+        // the client enforces: at most MAX_REPORTS_PER_HOUR recent reports per
+        // reporter (single-field query — no composite index needed), and one
+        // open report per reporter+target via a deterministic doc ID, so a
+        // double-tap or replay cannot stack duplicates.
+        val hourAgo = System.currentTimeMillis() - REPORT_WINDOW_MS
+        val recent = firestore.collection("moderationReports")
+            .whereEqualTo("reporterUid", reporter.uid)
+            .limit(REPORT_QUOTA_PROBE)
+            .get().await()
+        val recentCount = recent.documents.count {
+            (it.getLong("createdAt") ?: 0L) > hourAgo
+        }
+        require(recentCount < MAX_REPORTS_PER_HOUR) { context.getString(R.string.community_error_report_quota) }
+        val dedupeId = reportDedupeId(reporter.uid, targetType, targetId)
+        val existing = firestore.collection("moderationReports").document(dedupeId).get().await()
+        if (existing.exists() && existing.getString("status") == "open") {
+            error(context.getString(R.string.community_error_report_duplicate))
+        }
+        val reportId = if (existing.exists()) UUID.randomUUID().toString() else dedupeId
         firestore.collection("moderationReports").document(reportId)
             .set(
                 mapOf(
@@ -1351,4 +1370,18 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override fun getBlockedUsers(): Flow<Set<String>> = settingsRepository.getMutedUserIds()
+}
+
+/** At most this many reports per reporter per rolling hour (#2 flood quota). */
+internal const val MAX_REPORTS_PER_HOUR = 10
+internal const val REPORT_WINDOW_MS = 3_600_000L
+
+/** Probe cap: quota math only needs to know "more than 10 in the window". */
+private const val REPORT_QUOTA_PROBE = 25L
+
+/** Deterministic open-report doc ID: reporter x type x target (#2 dedupe). */
+internal fun reportDedupeId(reporterUid: String, targetType: String, targetId: String): String {
+    val digest = java.security.MessageDigest.getInstance("SHA-256")
+    val raw = "$reporterUid|$targetType|$targetId".toByteArray()
+    return "r_" + digest.digest(raw).joinToString("") { "%02x".format(it) }
 }

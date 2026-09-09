@@ -49,7 +49,8 @@ class AzoraScraper @Inject constructor(
      *  type 0 → scalar (String, Int, Boolean, null, Double …)
      *  type 1 → List<Any?> (each element also encoded)
      */
-    private fun decodeWire(v: Any?): Any? {
+    // internal (not private) so fixture tests drive the real parser (#4).
+    internal fun decodeWire(v: Any?): Any? {
         return when {
             // [type, value] wire pair
             v is JSONArray && v.length() == 2 -> when (v.getInt(0)) {
@@ -78,16 +79,16 @@ class AzoraScraper @Inject constructor(
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun decodeList(v: Any?): List<Any?> =
+    internal fun decodeList(v: Any?): List<Any?> =
         (decodeWire(v) as? List<Any?>) ?: emptyList()
 
-    private fun decodeStr(v: Any?): String = decodeWire(v)?.toString() ?: ""
-    private fun decodeBool(v: Any?): Boolean = decodeWire(v) as? Boolean ?: false
-    private fun decodeInt(v: Any?): Int =
+    internal fun decodeStr(v: Any?): String = decodeWire(v)?.toString() ?: ""
+    internal fun decodeBool(v: Any?): Boolean = decodeWire(v) as? Boolean ?: false
+    internal fun decodeInt(v: Any?): Int =
         (decodeWire(v) as? Number)?.toInt() ?: 0
-    private fun decodeFloat(v: Any?): Float =
+    internal fun decodeFloat(v: Any?): Float =
         (decodeWire(v) as? Number)?.toFloat() ?: 0f
-    private fun decodeLong(v: Any?): Long? =
+    internal fun decodeLong(v: Any?): Long? =
         (decodeWire(v) as? Number)?.toLong()
 
     // ─── Raw HTTP (Astro props must come from raw HTML, not Jsoup) ────────────
@@ -118,7 +119,7 @@ class AzoraScraper @Inject constructor(
      * Uses indexOf/substring instead of regex to avoid catastrophic backtracking
      * on the 1 MB+ detail pages that embed 300+ chapters in props.
      */
-    private fun extractIslandProps(rawHtml: String, componentName: String): JSONObject? {
+    internal fun extractIslandProps(rawHtml: String, componentName: String): JSONObject? {
         var pos = 0
         while (true) {
             val tagStart = rawHtml.indexOf("<astro-island", pos)
@@ -139,7 +140,7 @@ class AzoraScraper @Inject constructor(
     }
 
     /** Returns the index of the closing '>' of the opening tag starting at [start]. */
-    private fun findOpenTagEnd(html: String, start: Int): Int {
+    internal fun findOpenTagEnd(html: String, start: Int): Int {
         var i = start
         var inQuote = false
         var quoteChar = ' '
@@ -157,7 +158,7 @@ class AzoraScraper @Inject constructor(
     }
 
     /** Extracts the value of attribute [name] from a raw HTML tag string. */
-    private fun extractAttrValue(tagContent: String, name: String): String? {
+    internal fun extractAttrValue(tagContent: String, name: String): String? {
         val marker = "$name=\""
         val start = tagContent.indexOf(marker)
         if (start < 0) return null
