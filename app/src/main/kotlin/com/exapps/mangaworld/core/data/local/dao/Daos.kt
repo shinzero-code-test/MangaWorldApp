@@ -24,9 +24,8 @@ interface FavoriteDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(favorite: FavoriteEntity)
 
-    @Query("DELETE FROM favorites WHERE mangaId = :mangaId")
-    suspend fun delete(mangaId: String)
-
+    // NOTE: no hard-delete here by design (#21) — removal is soft
+    // (setFavorite(false)); a row delete would orphan reading progress.
     @Query("UPDATE favorites SET isFavorite = :isFav, addedAt = :updatedAt WHERE mangaId = :mangaId")
     suspend fun setFavorite(
         mangaId: String,

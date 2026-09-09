@@ -5,7 +5,7 @@ import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.SourceDomainOverrides
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,6 +15,7 @@ import kotlinx.coroutines.tasks.await
 import android.util.Log
 import org.json.JSONObject
 import javax.inject.Inject
+import com.exapps.mangaworld.core.di.IoDispatcher
 import javax.inject.Singleton
 
 private const val TAG = "RemoteConfig"
@@ -27,9 +28,11 @@ data class ScraperRuntimeConfig(
 )
 
 @Singleton
-class FirebaseRemoteConfigManager @Inject constructor() {
+class FirebaseRemoteConfigManager @Inject constructor(
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher
+) {
     private val remoteConfig: FirebaseRemoteConfig = FirebaseRemoteConfig.getInstance()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     private val _disabledSourceIds = MutableStateFlow<Set<String>>(emptySet())
     val disabledSourceIds: StateFlow<Set<String>> = _disabledSourceIds.asStateFlow()

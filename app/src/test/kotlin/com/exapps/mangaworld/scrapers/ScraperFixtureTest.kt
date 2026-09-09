@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.scrapers
 
 import com.exapps.mangaworld.domain.model.MangaStatus
+import com.exapps.mangaworld.core.data.remote.scraper.ScraperText
 import com.exapps.mangaworld.domain.model.MangaType
 import org.jsoup.Jsoup
 import org.junit.Assert.assertEquals
@@ -104,33 +105,27 @@ class ScraperFixtureTest {
     fun azoraViewsExtractionFixture() {
         val html = javaClass.getResource("/scrapers/azora_detail_sample.html")!!.readText()
         val doc = Jsoup.parse(html)
-        val viewsText = doc.body().text().let { text ->
-            Regex("(\\d[\\d,]*)\\s*(مشاهدة|view)").find(text)?.groupValues?.get(1)
-                ?.replace(",", "")
-        }
-        assertEquals("1500", viewsText)
+        // Through the production parser (#10) — never an inline regex copy.
+        val viewsText = ScraperText.extractViews(doc.body().text())
+        assertEquals(1500L, viewsText)
     }
 
     @Test
     fun olympusViewsExtractionFixture() {
         val html = javaClass.getResource("/scrapers/olympus_detail_sample.html")!!.readText()
         val doc = Jsoup.parse(html)
-        val viewsText = doc.body().text().let { text ->
-            Regex("(\\d[\\d,]*)\\s*(مشاهدة|view)").find(text)?.groupValues?.get(1)
-                ?.replace(",", "")
-        }
-        assertEquals("1200", viewsText)
+        // Through the production parser (#10) — never an inline regex copy.
+        val viewsText = ScraperText.extractViews(doc.body().text())
+        assertEquals(1200L, viewsText)
     }
 
     @Test
     fun starzViewsExtractionFixture() {
         val html = javaClass.getResource("/scrapers/starz_detail_sample.html")!!.readText()
         val doc = Jsoup.parse(html)
-        val viewsText = doc.body().text().let { text ->
-            Regex("(\\d[\\d,]*)\\s*(مشاهدة|view)").find(text)?.groupValues?.get(1)
-                ?.replace(",", "")
-        }
-        assertEquals("800", viewsText)
+        // Through the production parser (#10) — never an inline regex copy.
+        val viewsText = ScraperText.extractViews(doc.body().text())
+        assertEquals(800L, viewsText)
     }
 
     @Test
