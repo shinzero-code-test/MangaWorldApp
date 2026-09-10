@@ -170,6 +170,16 @@ class DetailReaderViewModelTest {
      * starts a `while(true){delay(30s)}` session-saver on load, and advancing
      * virtual time loops it forever (hung CI for 30+ min).
      */
+    // TEMP-DIAG (revert after hang diagnosis): file markers survive the
+    // timeout-kill when Gradle log buffering does not. java.io.tmpdir is used
+    // because the worker CWD is not guaranteed.
+    private fun probe(tag: String) {
+        runCatching {
+            java.io.File(System.getProperty("java.io.tmpdir"), "reader_probe.log")
+                .appendText("$tag @ ${System.currentTimeMillis()}\n")
+        }
+    }
+
     private fun TestScope.awaitUntil(timeoutMs: Long = 5_000, check: () -> Boolean) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (!check()) {
@@ -458,6 +468,7 @@ class DetailReaderViewModelTest {
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
+            probe("download-test: stubs-start")
             stubReaderCommon()
             coEvery { mangaRepo.getMangaDetail(any(), any()) } returns
                 Result.failure(Exception("no-meta"))
@@ -479,12 +490,19 @@ class DetailReaderViewModelTest {
                 )
             } returns true
             every { downloadQueueManager.observeTask(any()) } returns flowOf(failedTask)
+            probe("download-test: stubs-done")
             val vm = createReaderViewModel(dispatcher)
+            probe("download-test: vm-created")
             runCurrent()
+            probe("download-test: pumped-1")
             vm.loadChapter("https://example.com/ch-5", "azora_test-slug", MangaSource.AZORA)
+            probe("download-test: load-called")
             awaitUntil { !vm.state.value.isLoading && vm.state.value.pages.isNotEmpty() }
+            probe("download-test: pages-ready")
             vm.downloadCurrentChapter()
+            probe("download-test: download-called")
             awaitUntil { vm.state.value.lastDownloadFailed }
+            probe("download-test: failed-flag")
             val state = vm.state.value
             // Typed signal drives the retry affordance — never string comparison.
             assertTrue(state.lastDownloadFailed)
@@ -493,8 +511,11 @@ class DetailReaderViewModelTest {
             // Stable stored token is translated, never shown verbatim.
             assertNotEquals("cancelled", state.downloadMessage)
             vm.cancelDownload()
+            probe("download-test: cancel-called")
             runCurrent()
+            probe("download-test: pumped-2")
             coVerify { downloadQueueManager.cancelTask("task-1") }
+            probe("download-test: test-end")
         }
     }
 }

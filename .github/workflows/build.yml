@@ -97,6 +97,12 @@ jobs:
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
 
+      # TEMP-DIAG (revert with the probe markers): surfaces the in-test
+      # progress file when the worker is timeout-killed mid-suite.
+      - name: Dump reader probe log
+        if: always()
+        run: cat /tmp/reader_probe.log 2>/dev/null || echo "no probe file"
+
       - name: Upload Lint Results
         if: always()
         uses: actions/upload-artifact@v4
