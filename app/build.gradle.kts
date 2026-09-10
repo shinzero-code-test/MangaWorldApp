@@ -60,8 +60,8 @@ android {
         applicationId = "com.exapps.mangaworld"
         minSdk        = 26
         targetSdk     = 35
-        versionCode   = 208
-        versionName   = "8.3.3"
+        versionCode   = 209
+        versionName   = "8.3.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -113,7 +113,7 @@ android {
     // names the exact hanging test instead of a bare step timeout.
     testOptions {
         unitTests.all {
-            // 250+ tests incl. Robolectric sandboxes: the 512m default risks
+            // Large suite + mockk-heavy VMs: the 512m default risks
             // GC death spirals that look exactly like a hang.
             it.maxHeapSize = "2g"
             // Bound accumulation across classes (leaked scopes/sandboxes the
@@ -239,10 +239,6 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
     testImplementation(libs.json.java)
-    // Real DataStore/Preferences tests (#16) — JVM DataStore needs a Context.
-    testImplementation(libs.robolectric)
-    // ApplicationProvider for Robolectric (androidx.test:core is androidTest-only).
-    testImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.runner)

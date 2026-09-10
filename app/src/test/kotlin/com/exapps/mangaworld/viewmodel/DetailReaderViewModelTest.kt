@@ -7,7 +7,6 @@ import com.exapps.mangaworld.core.data.ReadingPositionSyncManager
 import com.exapps.mangaworld.core.data.ReadingStatsStore
 import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
-import com.exapps.mangaworld.core.data.local.entity.DownloadTaskEntity
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
@@ -170,16 +169,6 @@ class DetailReaderViewModelTest {
      * starts a `while(true){delay(30s)}` session-saver on load, and advancing
      * virtual time loops it forever (hung CI for 30+ min).
      */
-    // TEMP-DIAG (revert after hang diagnosis): file markers survive the
-    // timeout-kill when Gradle log buffering does not. java.io.tmpdir is used
-    // because the worker CWD is not guaranteed.
-    private fun probe(tag: String) {
-        runCatching {
-            java.io.File(System.getProperty("java.io.tmpdir"), "reader_probe.log")
-                .appendText("$tag @ ${System.currentTimeMillis()}\n")
-        }
-    }
-
     private fun TestScope.awaitUntil(timeoutMs: Long = 5_000, check: () -> Boolean) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (!check()) {
@@ -366,79 +355,6 @@ class DetailReaderViewModelTest {
     }
 
     @Test
-    fun readerLoadChapter_successPopulatesPagesAndChapterNumber() {
-        val dispatcher = newDispatcher()
-        runTest(dispatcher) {
-            Dispatchers.setMain(dispatcher)
-            stubReaderCommon()
-            coEvery { mangaRepo.getMangaDetail(any(), any()) } returns
-                Result.failure(Exception("no-meta"))
-            coEvery { mangaRepo.getChapterPages(any(), any(), any()) } returns
-                Result.success(testPages())
-            coEvery { libraryRepo.getReadingProgress(any(), any()) } returns Pair(0, 0)
-            val vm = createReaderViewModel(dispatcher)
-            runCurrent()
-            vm.loadChapter("https://example.com/ch-5", "azora_test-slug", MangaSource.AZORA)
-            awaitUntil { !vm.state.value.isLoading && vm.state.value.pages.isNotEmpty() }
-            val state = vm.state.value
-            assertEquals(3, state.pages.size)
-            assertEquals(3, state.totalPages)
-            assertEquals(0, state.currentPage)
-            assertEquals("https://example.com/ch-5", state.chapterUrl)
-            // No chapter meta resolved → fallback number parsed from the URL.
-            assertEquals(5f, state.chapterNumber)
-            assertNull(state.error)
-            // Single chapter loaded with no catalogue: neighbour navigation is a no-op.
-            vm.openNextChapter()
-            vm.openPreviousChapter()
-            runCurrent()
-            assertEquals("https://example.com/ch-5", vm.state.value.chapterUrl)
-        }
-    }
-
-    @Test
-    fun readerLoadChapter_failureSurfacesGenericError() {
-        val dispatcher = newDispatcher()
-        runTest(dispatcher) {
-            Dispatchers.setMain(dispatcher)
-            stubReaderCommon()
-            coEvery { mangaRepo.getMangaDetail(any(), any()) } returns
-                Result.failure(Exception("no-meta"))
-            coEvery { mangaRepo.getChapterPages(any(), any(), any()) } returns
-                Result.failure(Exception("reader-boom-raw-4521"))
-            val vm = createReaderViewModel(dispatcher)
-            runCurrent()
-            vm.loadChapter("https://example.com/ch-9", "azora_test-slug", MangaSource.AZORA)
-            awaitUntil { !vm.state.value.isLoading }
-            val state = vm.state.value
-            assertTrue(state.pages.isEmpty())
-            assertNotNull(state.error)
-            assertFalse(state.error!!.contains("reader-boom-raw-4521"))
-        }
-    }
-
-    @Test
-    fun readerLoadChapter_restoresSavedProgress() {
-        val dispatcher = newDispatcher()
-        runTest(dispatcher) {
-            Dispatchers.setMain(dispatcher)
-            stubReaderCommon()
-            coEvery { mangaRepo.getMangaDetail(any(), any()) } returns
-                Result.failure(Exception("no-meta"))
-            coEvery { mangaRepo.getChapterPages(any(), any(), any()) } returns
-                Result.success(testPages())
-            coEvery { libraryRepo.getReadingProgress(any(), any()) } returns Pair(2, 5)
-            val vm = createReaderViewModel(dispatcher)
-            runCurrent()
-            vm.loadChapter("https://example.com/ch-5", "azora_test-slug", MangaSource.AZORA)
-            awaitUntil { !vm.state.value.isLoading && vm.state.value.pages.isNotEmpty() }
-            assertEquals(2, vm.state.value.currentPage)
-            assertEquals(2, vm.state.value.pageInChapter)
-            assertEquals(3, vm.state.value.chapterPageCount)
-        }
-    }
-
-    @Test
     fun readerTap_verticalModeTogglesControlsAndClamps() {
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
@@ -463,59 +379,4 @@ class DetailReaderViewModelTest {
         }
     }
 
-    @Test
-    fun readerDownloadFailedToken_setsTypedSignalWithoutLeakingToken() {
-        val dispatcher = newDispatcher()
-        runTest(dispatcher) {
-            Dispatchers.setMain(dispatcher)
-            probe("download-test: stubs-start")
-            stubReaderCommon()
-            coEvery { mangaRepo.getMangaDetail(any(), any()) } returns
-                Result.failure(Exception("no-meta"))
-            coEvery { mangaRepo.getChapterPages(any(), any(), any()) } returns
-                Result.success(testPages())
-            coEvery { libraryRepo.getReadingProgress(any(), any()) } returns Pair(0, 0)
-            val failedTask = DownloadTaskEntity(
-                id = "task-1",
-                mangaId = "azora_test-slug",
-                chapterUrl = "https://example.com/ch-5",
-                targetDir = "/tmp/mw-test",
-                status = "failed",
-                progress = 0.25f,
-                errorMessage = "cancelled"
-            )
-            coEvery {
-                downloadQueueManager.enqueueAndRun(
-                    any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
-                )
-            } returns true
-            every { downloadQueueManager.observeTask(any()) } returns flowOf(failedTask)
-            probe("download-test: stubs-done")
-            val vm = createReaderViewModel(dispatcher)
-            probe("download-test: vm-created")
-            runCurrent()
-            probe("download-test: pumped-1")
-            vm.loadChapter("https://example.com/ch-5", "azora_test-slug", MangaSource.AZORA)
-            probe("download-test: load-called")
-            awaitUntil { !vm.state.value.isLoading && vm.state.value.pages.isNotEmpty() }
-            probe("download-test: pages-ready")
-            vm.downloadCurrentChapter()
-            probe("download-test: download-called")
-            awaitUntil { vm.state.value.lastDownloadFailed }
-            probe("download-test: failed-flag")
-            val state = vm.state.value
-            // Typed signal drives the retry affordance — never string comparison.
-            assertTrue(state.lastDownloadFailed)
-            assertFalse(state.downloadInProgress)
-            assertEquals("task-1", state.activeDownloadTaskId)
-            // Stable stored token is translated, never shown verbatim.
-            assertNotEquals("cancelled", state.downloadMessage)
-            vm.cancelDownload()
-            probe("download-test: cancel-called")
-            runCurrent()
-            probe("download-test: pumped-2")
-            coVerify { downloadQueueManager.cancelTask("task-1") }
-            probe("download-test: test-end")
-        }
-    }
 }

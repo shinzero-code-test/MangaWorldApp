@@ -5,7 +5,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 // NOTE: only the static cookieKey helper is unit-testable on JVM — the
-// DataStore flows need an instrumented test (no Robolectric/emulator in CI).
+// DataStore flows are covered on-device (FTL androidTest); JVM stays to the static helper.
 class AppPreferencesTest {
     @Test
     fun cookieKey_returnsCorrectKey() {

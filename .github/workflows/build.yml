@@ -87,21 +87,12 @@ jobs:
       - name: Run Lint
         run: ./gradlew :app:lintDebug --stacktrace
 
-      - name: ByteBuddy resolution (mockk/Robolectric clash probe)
-        run: ./gradlew :app:dependencies --configuration debugUnitTestRuntimeClasspath 2>/dev/null | grep -iE "byte-buddy|mockk|robolectric:" | head -n 12
-
       - name: Run Unit Tests
         # Bounded so a hanging test fails the step (partial XMLs still upload
         # via the always() results step) instead of burning the 6h job limit.
         timeout-minutes: 30
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
-
-      # TEMP-DIAG (revert with the probe markers): surfaces the in-test
-      # progress file when the worker is timeout-killed mid-suite.
-      - name: Dump reader probe log
-        if: always()
-        run: cat /tmp/reader_probe.log 2>/dev/null || echo "no probe file"
 
       - name: Upload Lint Results
         if: always()
