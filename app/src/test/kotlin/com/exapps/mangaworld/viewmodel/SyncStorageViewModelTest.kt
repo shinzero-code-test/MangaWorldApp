@@ -317,7 +317,10 @@ class SyncStorageViewModelTest {
         )
         coEvery { mangaRepo.getHomeData(MangaSource.AZORA) } returns azoraResult
         coEvery { mangaRepo.getHomeData(MangaSource.OLYMPUS) } returns olympusResult
-        coEvery { libraryRepo.isChapterRead(any(), any()) } answers { readMangaIds.contains(firstArg<String>()) }
+        // Plain returns overloads (no answers{} scope): isolates whether the
+        // bare failure came from mockk scope machinery.
+        coEvery { libraryRepo.isChapterRead("mA", any()) } returns true
+        coEvery { libraryRepo.isChapterRead("mB", any()) } returns false
         return LatestUpdatesViewModel(
             context = mockk(relaxed = true),
             mangaRepository = mangaRepo,
@@ -345,8 +348,6 @@ class SyncStorageViewModelTest {
             // once proved unmappable to any assert — fail() always carries text.
             fun check(cond: Boolean, msg: String) { if (!cond) fail(msg) }
             var state = vm.state.value
-            // TEMP-DIAG (revert): snapshot state unconditionally to see it.
-            fail("SNAPSHOT loading=${state.isLoading} error=${state.error} items=${state.items.map { it.chapterUrl }} all=${state.allItems.map { it.chapterUrl }}")
             check(!state.isLoading, "STILL-LOADING after refresh: $state")
             check(state.error == null, "ERROR after refresh: ${state.error}")
             // Distinct by chapterUrl, newest publishedAt first.
