@@ -341,18 +341,29 @@ class SyncStorageViewModelTest {
             )
             advanceUntilIdle()
             val state = vm.state.value
-            assertFalse(state.isLoading)
-            assertNull(state.error)
+            // Every assert carries the full state: a bare failure here once hid
+            // which invariant broke (isLoading stuck true vs wrong items).
+            assertFalse("state after refresh: $state", state.isLoading)
+            assertNull("error after refresh: ${state.error}", state.error)
             // Distinct by chapterUrl, newest publishedAt first.
-            assertEquals(listOf(itemB.chapterUrl, itemA.chapterUrl), state.items.map { it.chapterUrl })
+            assertEquals(
+                "items after refresh: ${state.items.map { it.chapterUrl }}",
+                listOf(itemB.chapterUrl, itemA.chapterUrl), state.items.map { it.chapterUrl }
+            )
             // Source filter narrows to AZORA only.
             vm.setSource(MangaSource.AZORA)
-            assertEquals(listOf(itemA.chapterUrl), vm.state.value.items.map { it.chapterUrl })
+            assertEquals(
+                "items after AZORA filter: ${vm.state.value.items.map { it.chapterUrl }}",
+                listOf(itemA.chapterUrl), vm.state.value.items.map { it.chapterUrl }
+            )
             // Unread-only drops the read itemA, keeps itemB.
             vm.setSource(null)
             vm.setUnreadOnly(true)
             advanceUntilIdle()
-            assertEquals(listOf(itemB.chapterUrl), vm.state.value.items.map { it.chapterUrl })
+            assertEquals(
+                "items after unreadOnly: ${vm.state.value.items.map { it.chapterUrl }}",
+                listOf(itemB.chapterUrl), vm.state.value.items.map { it.chapterUrl }
+            )
         }
     }
 
