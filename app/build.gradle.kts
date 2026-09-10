@@ -109,6 +109,17 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // Per-test lifecycle logging: if the suite ever stalls again, the log
+    // names the exact hanging test instead of a bare step timeout.
+    testOptions {
+        unitTests.all {
+            it.testLogging {
+                events("started", "failed", "skipped")
+                showStandardStreams = false
+            }
+        }
+    }
+
     // Replaces deprecated kotlinOptions {} — required by Gradle 9 / AGP 8+
     kotlin {
         compilerOptions {
