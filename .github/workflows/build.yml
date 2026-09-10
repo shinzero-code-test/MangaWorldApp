@@ -87,6 +87,9 @@ jobs:
       - name: Run Lint
         run: ./gradlew :app:lintDebug --stacktrace
 
+      - name: ByteBuddy resolution (mockk/Robolectric clash probe)
+        run: ./gradlew :app:dependencies --configuration debugUnitTestRuntimeClasspath 2>/dev/null | grep -iE "byte-buddy|mockk|robolectric:" | head -n 12
+
       - name: Run Unit Tests
         # Bounded so a hanging test fails the step (partial XMLs still upload
         # via the always() results step) instead of burning the 6h job limit.

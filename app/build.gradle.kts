@@ -113,6 +113,9 @@ android {
     // names the exact hanging test instead of a bare step timeout.
     testOptions {
         unitTests.all {
+            // 250+ tests incl. Robolectric sandboxes: the 512m default risks
+            // GC death spirals that look exactly like a hang.
+            it.maxHeapSize = "2g"
             it.testLogging {
                 events("started", "failed", "skipped")
                 showStandardStreams = false
