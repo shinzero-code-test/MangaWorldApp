@@ -84,6 +84,9 @@ interface SettingsRepository {
     suspend fun setDownloadOnWifiOnly(enabled: Boolean)
     suspend fun setAutoDownloadNewChapters(enabled: Boolean)
     suspend fun setNotificationsEnabled(enabled: Boolean)
+    suspend fun setNotifyCommentsEnabled(enabled: Boolean)
+    suspend fun setNotifyLikesEnabled(enabled: Boolean)
+    suspend fun setNotifyFollowersEnabled(enabled: Boolean)
     suspend fun toggleSource(sourceId: String, enabled: Boolean)
     suspend fun setEnabledSources(sourceIds: Set<String>)
     suspend fun setDynamicColors(enabled: Boolean)
@@ -149,7 +152,7 @@ interface CommunityRepository {
     fun observePublicActivity(userId: String): Flow<List<CommunityComment>>
     fun observeModerationReports(): Flow<List<ModerationReport>>
     suspend fun getCurrentProfile(): CommunityProfile?
-    suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String? = null, bannerUrl: String? = null, displayName: String = "")
+    suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String? = null, bannerUrl: String? = null, displayName: String = "", location: String = "", birthday: Long? = null)
     suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean, showLibraryPublic: Boolean = true)
     suspend fun createOrUpdateList(listId: String?, name: String, description: String, coverUrl: String, rating: Float, genres: List<String>, isPublic: Boolean): String
     suspend fun deleteList(listId: String)
@@ -185,4 +188,25 @@ interface CommunityRepository {
     suspend fun blockUser(uid: String)
     suspend fun unblockUser(uid: String)
     fun getBlockedUsers(): Flow<Set<String>>
+}
+
+/**
+ * Security centre: sign-in history, registered push devices and app sessions.
+ * Firebase has no per-session revocation primitive — [revokeSession] cuts
+ * push delivery + flags the session, while [signOutAllDevices] performs the
+ * true token invalidation server-side (revokeRefreshTokens) and signs out.
+ */
+interface SecurityRepository {
+    fun observeLoginLogs(limit: Int = 50): Flow<List<LoginLogEntry>>
+    suspend fun deleteLoginLog(id: String)
+    suspend fun clearLoginLogs()
+    fun observeDevices(): Flow<List<DeviceEntry>>
+    suspend fun removeDevice(id: String)
+    fun observeSessions(): Flow<List<SessionEntry>>
+    suspend fun revokeSession(id: String)
+    suspend fun signOutAllDevices()
+    /** Record a fresh sign-in (login log + session upsert). */
+    suspend fun recordSignIn(provider: String)
+    /** Create/refresh this device's session row (call on app start). */
+    suspend fun ensureCurrentSession()
 }

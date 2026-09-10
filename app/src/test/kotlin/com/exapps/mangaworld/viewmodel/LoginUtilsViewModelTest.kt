@@ -63,7 +63,8 @@ class LoginUtilsViewModelTest {
         val sessionManager = mockk<FirebaseSessionManager>(relaxed = true)
         every { sessionManager.authState } returns flowOf(null)
         val communityRepo = mockk<CommunityRepository>(relaxed = true)
-        val vm = LoginViewModel(context, sessionManager, communityRepo)
+        val securityRepo = mockk<com.exapps.mangaworld.domain.repository.SecurityRepository>(relaxed = true)
+        val vm = LoginViewModel(context, sessionManager, communityRepo, securityRepo)
         return Harness(context, sessionManager, communityRepo, vm)
     }
 

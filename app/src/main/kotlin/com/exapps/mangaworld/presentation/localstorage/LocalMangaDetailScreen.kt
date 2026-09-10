@@ -65,7 +65,7 @@ class LocalMangaDetailViewModel @Inject constructor(
 fun LocalMangaDetailScreen(
     mangaId: String,
     onBack: () -> Unit,
-    onReadChapter: (chapterPath: String) -> Unit = {},
+    onReadChapter: (mangaId: String, chapterUrl: String) -> Unit = { _, _ -> },
     viewModel: LocalMangaDetailViewModel = hiltViewModel()
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -170,7 +170,7 @@ fun LocalMangaDetailScreen(
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Row(
-                                Modifier.fillMaxWidth().clickable { onReadChapter(dir.absolutePath) }
+                                Modifier.fillMaxWidth().clickable { onReadChapter(mangaId, name) }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {

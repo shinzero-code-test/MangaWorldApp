@@ -277,6 +277,9 @@ abstract class RepositoryModule {
 
     @Binds @Singleton
     abstract fun bindCommunityRepository(impl: FirebaseCommunityRepository): CommunityRepository
+
+    @Binds @Singleton
+    abstract fun bindSecurityRepository(impl: FirebaseSecurityRepository): SecurityRepository
 }
 
 @Module

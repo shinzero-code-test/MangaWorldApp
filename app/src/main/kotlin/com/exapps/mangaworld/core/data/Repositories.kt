@@ -501,6 +501,9 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setDownloadOnWifiOnly(enabled: Boolean) { prefs.setDownloadWifiOnly(enabled) }
     override suspend fun setAutoDownloadNewChapters(enabled: Boolean) { prefs.setAutoDownload(enabled) }
     override suspend fun setNotificationsEnabled(enabled: Boolean) { prefs.setNotifications(enabled) }
+    override suspend fun setNotifyCommentsEnabled(enabled: Boolean) { prefs.setNotifyComments(enabled) }
+    override suspend fun setNotifyLikesEnabled(enabled: Boolean) { prefs.setNotifyLikes(enabled) }
+    override suspend fun setNotifyFollowersEnabled(enabled: Boolean) { prefs.setNotifyFollowers(enabled) }
     override suspend fun toggleSource(sourceId: String, enabled: Boolean) { prefs.toggleSource(sourceId, enabled) }
     override suspend fun setEnabledSources(sourceIds: Set<String>) { prefs.setEnabledSources(sourceIds) }
     override suspend fun setDynamicColors(enabled: Boolean) { prefs.setDynamicColors(enabled) }

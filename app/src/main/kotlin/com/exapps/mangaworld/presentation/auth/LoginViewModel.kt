@@ -33,7 +33,8 @@ data class AuthUiState(
 class LoginViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val sessionManager: FirebaseSessionManager,
-    private val communityRepository: com.exapps.mangaworld.domain.repository.CommunityRepository
+    private val communityRepository: com.exapps.mangaworld.domain.repository.CommunityRepository,
+    private val securityRepository: com.exapps.mangaworld.domain.repository.SecurityRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -75,6 +76,7 @@ class LoginViewModel @Inject constructor(
             try {
                 val uid = sessionManager.signInWithEmail(normalizedEmail, password)
                 if (uid != null) {
+                    runCatching { securityRepository.recordSignIn("password") }
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.auth_error_login_failed)) }
@@ -118,6 +120,7 @@ class LoginViewModel @Inject constructor(
                         isPublic = true,
                         displayName = displayName.trim()
                     )
+                    runCatching { securityRepository.recordSignIn("password") }
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.auth_error_signup_failed)) }
@@ -138,6 +141,7 @@ class LoginViewModel @Inject constructor(
                 if (uid != null) {
                     // Ensure profile exists with the provider's display name
                     ensureProfileExists(uid)
+                    runCatching { securityRepository.recordSignIn("google.com") }
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.str_335)) }
@@ -158,6 +162,7 @@ class LoginViewModel @Inject constructor(
                 if (uid != null) {
                     // Ensure profile exists with the provider's display name
                     ensureProfileExists(uid)
+                    runCatching { securityRepository.recordSignIn("facebook.com") }
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.str_334)) }

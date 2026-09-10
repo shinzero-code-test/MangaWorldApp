@@ -232,7 +232,7 @@ class FirebaseCommunityRepository @Inject constructor(
         return existing ?: defaultProfile(uid)
     }
 
-    override suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String?, bannerUrl: String?, displayName: String) {
+    override suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String?, bannerUrl: String?, displayName: String, location: String, birthday: Long?) {
         withContext(NonCancellable) {
         val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
         val normalized = username.trim().lowercase()
@@ -247,6 +247,8 @@ class FirebaseCommunityRepository @Inject constructor(
             username = username.trim(),
             displayName = displayName.trim().ifBlank { existing.displayName }.ifBlank { username.trim() },
             bio = bio.trim(),
+            location = location.trim(),
+            birthday = birthday,
             isPublic = isPublic,
             badgeLabel = newBadge,
             avatarUrl = avatarUrl ?: existing.avatarUrl,
@@ -1019,6 +1021,8 @@ class FirebaseCommunityRepository @Inject constructor(
         "showActivityPublic" to showActivityPublic,
         "showLibraryPublic" to showLibraryPublic,
         "bio" to bio,
+        "location" to location,
+        "birthday" to birthday,
         "updatedAt" to updatedAt
     )
 
@@ -1144,6 +1148,8 @@ class FirebaseCommunityRepository @Inject constructor(
             showActivityPublic = getBoolean("showActivityPublic") ?: true,
             showLibraryPublic = getBoolean("showLibraryPublic") ?: true,
             bio = getString("bio") ?: "",
+            location = getString("location") ?: "",
+            birthday = getLong("birthday"),
             updatedAt = getLong("updatedAt") ?: 0L
         )
     }.getOrNull()

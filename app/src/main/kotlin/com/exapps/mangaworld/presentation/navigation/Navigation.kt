@@ -271,7 +271,6 @@ fun MangaNavGraph(
             com.exapps.mangaworld.presentation.profile.ProfileSettingsScreen(
                 onBack = { navController.popBackStack() },
                 onSignedOut = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Home.route) { inclusive = true } } },
-                onOpenReadingStats = { navController.navigate(Screen.ReadingStats.route) },
                 onOpenCloudSync = { navController.navigate(Screen.CloudSync.route) },
                 onOpenSources = { navController.navigate(Screen.Sources.route) },
                 setFacebookCallbackManager = setFacebookCallbackManager
@@ -395,7 +394,10 @@ fun MangaNavGraph(
             val mangaId = back.arguments?.getString("mangaId") ?: return@composable
             LocalMangaDetailScreen(
                 mangaId = mangaId,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onReadChapter = { id, chapterUrl ->
+                    navController.navigate(Screen.Reader.createRoute("local", id, chapterUrl))
+                }
             )
         }
         composable(Screen.ImportManga.route) {

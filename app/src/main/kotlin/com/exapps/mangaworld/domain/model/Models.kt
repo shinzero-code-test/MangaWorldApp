@@ -342,6 +342,9 @@ data class AppSettings(
     val downloadOnWifiOnly: Boolean = true,
     val autoDownloadNewChapters: Boolean = false,
     val enableNotifications: Boolean = true,
+    val notifyComments: Boolean = true,
+    val notifyLikes: Boolean = true,
+    val notifyFollowers: Boolean = true,
     val enabledSources: Set<String> = MangaSource.entries.map { it.id }.toSet(),
     val onboardingCompleted: Boolean = false,
     val useDynamicColors: Boolean = true,
@@ -382,6 +385,9 @@ data class CommunityProfile(
     val showActivityPublic: Boolean = true,
     val showLibraryPublic: Boolean = true,
     val bio: String = "",
+    val location: String = "",
+    /** Birthday as epoch millis; null when unset (optional field). */
+    val birthday: Long? = null,
     val updatedAt: Long = System.currentTimeMillis()
 )
 
@@ -524,6 +530,38 @@ data class UserFollow(
     val username: String = "",
     val avatarUrl: String? = null,
     val followedAt: Long = System.currentTimeMillis()
+)
+
+// ─── Security centre ─────────────────────────────────────────────────────────
+
+/** One recorded sign-in (users/{uid}/loginLogs). */
+data class LoginLogEntry(
+    val id: String,
+    val createdAt: Long,
+    val deviceLabel: String = "",
+    val appVersion: String = "",
+    val provider: String = ""
+)
+
+/** One registered push device (users/{uid}/devices). */
+data class DeviceEntry(
+    val id: String,
+    val tokenSuffix: String = "",
+    val platform: String = "",
+    val sdkInt: Int = 0,
+    val updatedAt: Long = 0L,
+    val isCurrent: Boolean = false
+)
+
+/** One app session (users/{uid}/sessions). */
+data class SessionEntry(
+    val id: String,
+    val createdAt: Long,
+    val lastSeenAt: Long,
+    val deviceLabel: String = "",
+    val appVersion: String = "",
+    val revoked: Boolean = false,
+    val isCurrent: Boolean = false
 )
 
 enum class ReadingListStatus(val label: String, val arabicLabel: String) {

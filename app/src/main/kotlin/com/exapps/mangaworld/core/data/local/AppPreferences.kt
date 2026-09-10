@@ -29,6 +29,9 @@ class AppPreferences @Inject constructor(
         val KEY_DOWNLOAD_WIFI_ONLY = booleanPreferencesKey("download_wifi_only")
         val KEY_AUTO_DOWNLOAD = booleanPreferencesKey("auto_download")
         val KEY_NOTIFICATIONS = booleanPreferencesKey("notifications")
+        val KEY_NOTIFY_COMMENTS = booleanPreferencesKey("notifications_comments")
+        val KEY_NOTIFY_LIKES = booleanPreferencesKey("notifications_likes")
+        val KEY_NOTIFY_FOLLOWERS = booleanPreferencesKey("notifications_followers")
         val KEY_ENABLED_SOURCES = stringPreferencesKey("enabled_sources")
         val KEY_DYNAMIC_COLORS = booleanPreferencesKey("dynamic_colors")
         val KEY_BIOMETRIC_LOCK = booleanPreferencesKey("biometric_lock")
@@ -83,6 +86,9 @@ class AppPreferences @Inject constructor(
                 downloadOnWifiOnly = prefs[KEY_DOWNLOAD_WIFI_ONLY] ?: true,
                 autoDownloadNewChapters = prefs[KEY_AUTO_DOWNLOAD] ?: false,
                 enableNotifications = prefs[KEY_NOTIFICATIONS] ?: true,
+                notifyComments = prefs[KEY_NOTIFY_COMMENTS] ?: true,
+                notifyLikes = prefs[KEY_NOTIFY_LIKES] ?: true,
+                notifyFollowers = prefs[KEY_NOTIFY_FOLLOWERS] ?: true,
                 enabledSources = prefs[KEY_ENABLED_SOURCES]
                     ?.split(",")?.toSet()
                     ?: MangaSource.entries.map { it.id }.toSet(),
@@ -169,6 +175,15 @@ class AppPreferences @Inject constructor(
 
     suspend fun setNotifications(v: Boolean) =
         dataStore.edit { it[KEY_NOTIFICATIONS] = v }
+
+    suspend fun setNotifyComments(v: Boolean) =
+        dataStore.edit { it[KEY_NOTIFY_COMMENTS] = v }
+
+    suspend fun setNotifyLikes(v: Boolean) =
+        dataStore.edit { it[KEY_NOTIFY_LIKES] = v }
+
+    suspend fun setNotifyFollowers(v: Boolean) =
+        dataStore.edit { it[KEY_NOTIFY_FOLLOWERS] = v }
 
     suspend fun setDynamicColors(v: Boolean) =
         dataStore.edit { it[KEY_DYNAMIC_COLORS] = v }

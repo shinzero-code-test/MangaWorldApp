@@ -16,6 +16,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -30,6 +31,7 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
     @Inject lateinit var analyticsManager: FirebaseAnalyticsManager
     @Inject lateinit var notificationPolicyManager: NotificationPolicyManager
     @Inject lateinit var okHttpClient: OkHttpClient
+    @Inject lateinit var settingsRepository: com.exapps.mangaworld.domain.repository.SettingsRepository
 
     /** Reuse the application scope to avoid leaking coroutine scopes per token refresh. */
     private val serviceScope: CoroutineScope
@@ -57,6 +59,39 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
         if (mangaId != null && notificationPolicyManager.isMangaMuted(mangaId)) {
             return
         }
+
+        // Granular community toggles (settings screen): drop muted categories
+        // before building anything. Types come from the dashboard push routes.
+        serviceScope.launch {
+            runCatching {
+                val settings = settingsRepository.getAppSettings().first()
+                if (!isPushAllowed(type, settings)) return@launch
+                showNotification(message, title, body, type, mangaId, imageUrl)
+            }
+        }
+    }
+
+    private fun isPushAllowed(
+        type: String,
+        settings: com.exapps.mangaworld.domain.model.AppSettings
+    ): Boolean {
+        if (!settings.enableNotifications) return false
+        return when (type.uppercase()) {
+            "REPLY", "MENTION", "COMMENT_THREAD", "CHAT_MENTION" -> settings.notifyComments
+            "REVIEW_REACTION" -> settings.notifyLikes
+            "FOLLOW", "FOLLOWER" -> settings.notifyFollowers
+            else -> true
+        }
+    }
+
+    private fun showNotification(
+        message: RemoteMessage,
+        title: String,
+        body: String,
+        type: String,
+        mangaId: String?,
+        imageUrl: String?
+    ) {
 
         val intent = when {
             message.data["sourceId"] != null && message.data["slug"] != null ->

@@ -91,6 +91,7 @@ class ProfileCollectionsViewModelTest {
     private val auth = mockk<FirebaseAuth>(relaxed = true)
     private val firestore = mockk<FirebaseFirestore>(relaxed = true)
     private val context = mockk<Context>(relaxed = true)
+    private val securityRepo = mockk<com.exapps.mangaworld.domain.repository.SecurityRepository>(relaxed = true)
 
     @After
     fun tearDown() {
@@ -119,9 +120,9 @@ class ProfileCollectionsViewModelTest {
         every { sessionManager.authState } returns flowOf(null)
         every { sessionManager.currentUserId() } returns null
         every { sessionManager.linkedProviderIds() } returns emptySet()
-        every { readingStatsStore.totalReadingTimeMs } returns flowOf(0L)
-        every { readingStatsStore.totalMangaRead } returns flowOf(0)
-        every { readingStatsStore.currentStreak } returns flowOf(0)
+        every { securityRepo.observeLoginLogs() } returns flowOf(emptyList())
+        every { securityRepo.observeDevices() } returns flowOf(emptyList())
+        every { securityRepo.observeSessions() } returns flowOf(emptyList())
         coEvery { favoriteDao.getFavoritesList() } returns emptyList()
         coEvery { historyDao.getAll() } returns emptyList()
         coEvery { readChapterDao.getTotalReadCount() } returns 0
@@ -139,7 +140,7 @@ class ProfileCollectionsViewModelTest {
         communityRepository = communityRepo,
         settingsRepository = settingsRepo,
         sessionManager = sessionManager,
-        readingStatsStore = readingStatsStore,
+        securityRepository = securityRepo,
         favoriteDao = favoriteDao,
         historyDao = historyDao,
         readChapterDao = readChapterDao,

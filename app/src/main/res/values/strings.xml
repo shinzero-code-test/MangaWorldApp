@@ -123,6 +123,10 @@
     <string name="profile_role_moderator">مشرف</string>
     <string name="profile_role_admin">مدير عام</string>
     <string name="profile_save">حفظ الملف الشخصي</string>
+    <string name="profile_location">الموقع</string>
+    <string name="profile_location_hint">المدينة، البلد (اختياري)</string>
+    <string name="profile_birthday">تاريخ الميلاد</string>
+    <string name="profile_birthday_not_set">غير محدد</string>
 
     <!-- ─── Settings ───────────────────────────────────────────────────────── -->
     <string name="settings_title">الإعدادات</string>
@@ -147,8 +151,6 @@
     <string name="settings_sign_out">تسجيل الخروج</string>
     <string name="settings_sign_out_confirm">هل تريد تسجيل الخروج من حسابك؟</string>
     <string name="settings_email">البريد الإلكتروني</string>
-    <string name="settings_phone">رقم الهاتف</string>
-    <string name="settings_phone_unavailable">غير مضاف</string>
     <string name="settings_unavailable">غير متوفر</string>
     <string name="settings_show_library_public">إظهار المكتبة الشخصية</string>
     <string name="settings_show_lists_public">إظهار قائمة القراءة</string>
@@ -176,6 +178,20 @@
     <string name="settings_login_history_empty">لا يوجد سجل متاح حالياً</string>
     <string name="settings_devices">الأجهزة المتصلة</string>
     <string name="settings_sessions">الجلسات مُدارة عبر Firebase</string>
+    <string name="settings_security_action_failed">تعذر تنفيذ الإجراء. حاول مرة أخرى.</string>
+    <string name="settings_security_sign_out_all">تسجيل الخروج من كل الأجهزة</string>
+    <string name="settings_security_sign_out_all_confirm">سيتم إبطال جميع الجلسات وتسجيل خروجك من كل الأجهزة بما فيها هذا الجهاز. متابعة؟</string>
+    <string name="settings_security_current">الحالي</string>
+    <string name="settings_security_revoke">إنهاء</string>
+    <string name="settings_security_remove">إزالة</string>
+    <string name="settings_security_clear_logs">مسح السجل</string>
+    <string name="settings_security_empty">لا عناصر بعد</string>
+    <string name="settings_count_format">%1$d</string>
+    <string name="settings_export_lists">تصدير القوائم (JSON)</string>
+    <string name="settings_import_lists">استيراد القوائم (JSON)</string>
+    <string name="settings_lists_imported">تم استيراد %1$d قوائم و %2$d عناصر</string>
+    <string name="settings_lists_import_failed">تعذر استيراد الملف. تأكد من أنه ملف تصدير صالح.</string>
+    <string name="settings_lists_exported">تم تصدير القوائم بنجاح</string>
     <string name="settings_delete_account_empty">حذف التنزيلات</string>
 
     <!-- ─── Community ──────────────────────────────────────────────────────── -->
@@ -701,6 +717,7 @@
     <string name="user">مستخدم</string>
     <string name="ongoing">مستمر</string>
     <string name="clear">مسح</string>
+    <string name="app_version_label">MangaWorld v%1$s</string>
     <string name="clear_history">مسح السجل</string>
     <string name="clear_history_confirm">هل تريد مسح سجل القراءة بالكامل؟ لا يمكن التراجع عن هذا الإجراء.</string>
     <string name="clear_cookies">مسح الكوكيز</string>

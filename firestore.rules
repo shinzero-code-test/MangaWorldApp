@@ -26,6 +26,7 @@ service cloud.firestore {
       return (!request.resource.data.keys().hasAny(['username']) || (request.resource.data.username is string && request.resource.data.username.size() <= 20))
         && (!request.resource.data.keys().hasAny(['displayName']) || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 64))
         && (!request.resource.data.keys().hasAny(['bio']) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 1000))
+        && (!request.resource.data.keys().hasAny(['location']) || (request.resource.data.location is string && request.resource.data.location.size() <= 64))
         && (!request.resource.data.keys().hasAny(['avatarUrl']) || (request.resource.data.avatarUrl is string && request.resource.data.avatarUrl.size() <= 2048))
         && (!request.resource.data.keys().hasAny(['bannerUrl']) || (request.resource.data.bannerUrl is string && request.resource.data.bannerUrl.size() <= 2048))
         && (!request.resource.data.keys().hasAny(['badgeLabel']) || (request.resource.data.badgeLabel is string && request.resource.data.badgeLabel in ['Beginner', 'Page Turner', 'Chapter Hunter', 'Manga Enthusiast', 'Shonen Specialist', 'Avid Reader', 'Pirate King']));
@@ -263,6 +264,16 @@ service cloud.firestore {
         allow read, write: if owner(userId);
       }
 
+      // Security centre: sign-in history + session registry. Owner-only;
+      // createdAt pinned to number like the report docs (quota relies on it).
+      match /loginLogs/{document=**} {
+        allow read, write: if owner(userId);
+      }
+
+      match /sessions/{document=**} {
+        allow read, write: if owner(userId);
+      }
+
       match /notifications/{document=**} {
         allow read, write: if owner(userId);
       }
@@ -296,10 +307,10 @@ service cloud.firestore {
       allow read: if resource.data.isPublic == true || owner(userId);
       allow create: if owner(userId)
         && validProfileStrings()
-        && request.resource.data.keys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'badgeLabel', 'updatedAt']);
+        && request.resource.data.keys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'location', 'birthday', 'badgeLabel', 'updatedAt']);
       allow update: if owner(userId)
         && validProfileStrings()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'badgeLabel', 'updatedAt']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'location', 'birthday', 'badgeLabel', 'updatedAt']);
       allow delete: if owner(userId);
     }
 

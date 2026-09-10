@@ -13,7 +13,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,7 +36,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
-import com.exapps.mangaworld.core.data.ReadingStatsStore
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
@@ -49,6 +47,7 @@ import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.UserFollow
 import com.exapps.mangaworld.domain.repository.CommunityRepository
+import com.exapps.mangaworld.domain.repository.SecurityRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.BuildConfig
 import com.exapps.mangaworld.presentation.auth.accountMergeMessage
@@ -62,6 +61,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import com.google.firebase.firestore.AggregateSource
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -74,7 +74,7 @@ class ProfileSettingsViewModel @Inject constructor(
     private val communityRepository: CommunityRepository,
     private val settingsRepository: SettingsRepository,
     private val sessionManager: FirebaseSessionManager,
-    private val readingStatsStore: ReadingStatsStore,
+    private val securityRepository: SecurityRepository,
     private val favoriteDao: FavoriteDao,
     private val historyDao: ReadingHistoryDao,
     private val readChapterDao: ReadChapterDao,
@@ -95,9 +95,27 @@ class ProfileSettingsViewModel @Inject constructor(
     val appSettings = settingsRepository.getAppSettings()
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
-    val totalReadingTimeMs = readingStatsStore.totalReadingTimeMs.stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
-    val totalMangaRead = readingStatsStore.totalMangaRead.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
-    val currentStreak = readingStatsStore.currentStreak.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    // Social lists (real data for the following/followers dialogs).
+    private val _following = MutableStateFlow<List<UserFollow>>(emptyList())
+    val following: StateFlow<List<UserFollow>> = _following.asStateFlow()
+    private val _followers = MutableStateFlow<List<UserFollow>>(emptyList())
+    val followers: StateFlow<List<UserFollow>> = _followers.asStateFlow()
+
+    // Security centre (real data — login logs, devices, sessions).
+    val loginLogs = securityRepository.observeLoginLogs()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val devices = securityRepository.observeDevices()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val sessions = securityRepository.observeSessions()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    private val _securityBusy = MutableStateFlow(false)
+    val securityBusy: StateFlow<Boolean> = _securityBusy.asStateFlow()
+    private val _securityError = MutableStateFlow<String?>(null)
+    val securityError: StateFlow<String?> = _securityError.asStateFlow()
+
+    // Lists export/import result (surfaced as a one-shot message).
+    private val _listsMessage = MutableStateFlow<String?>(null)
+    val listsMessage: StateFlow<String?> = _listsMessage.asStateFlow()
 
     private val _favoriteCount = MutableStateFlow(0)
     val favoriteCount: StateFlow<Int> = _favoriteCount.asStateFlow()
@@ -138,7 +156,7 @@ class ProfileSettingsViewModel @Inject constructor(
             _favoriteCount.value = favoriteDao.getFavoritesList().size
             _historyCount.value = historyDao.getAll().size
             _readCount.value = readChapterDao.getTotalReadCount()
-            // Social counts
+            // Social counts + lists (real data for the section + dialogs).
             val uid = sessionManager.currentUserId()
             if (uid != null) {
                 _followingCount.value = communityRepository.getFollowingCount(uid)
@@ -146,11 +164,19 @@ class ProfileSettingsViewModel @Inject constructor(
                 // Comments & reviews counts via Firestore aggregate queries
                 try {
                     _commentsCount.value = firestore.collectionGroup("comments")
-                        .whereEqualTo("authorUid", uid).get().await().size()
+                        .whereEqualTo("authorUid", uid).count().get(AggregateSource.SERVER).await().count.toInt()
                     _reviewsCount.value = firestore.collectionGroup("reviews")
-                        .whereEqualTo("authorUid", uid).get().await().size()
+                        .whereEqualTo("authorUid", uid).count().get(AggregateSource.SERVER).await().count.toInt()
                 } catch (_: Exception) {}
             }
+        }
+        // Keep this device's session row fresh (last-seen for the sessions list).
+        viewModelScope.launch { runCatching { securityRepository.ensureCurrentSession() } }
+        // Follow lists for the dialogs.
+        viewModelScope.launch {
+            val uid = sessionManager.currentUserId() ?: return@launch
+            launch { communityRepository.observeFollowing(uid).collect { _following.value = it } }
+            launch { communityRepository.observeFollowers(uid).collect { _followers.value = it } }
         }
         // Observe blocked users
         viewModelScope.launch {
@@ -189,7 +215,17 @@ class ProfileSettingsViewModel @Inject constructor(
         }
     }
 
-    fun updateProfile(username: String, bio: String, displayName: String = "") {
+    /**
+     * Birthday is pass-through (null clears it): the edit dialog always sends
+     * the field state initialized from the profile, so bio-only saves keep it.
+     */
+    fun updateProfile(
+        username: String,
+        bio: String,
+        displayName: String = "",
+        location: String = "",
+        birthday: Long? = null
+    ) {
         viewModelScope.launch {
             val c = communityRepository.getCurrentProfile()
             communityRepository.upsertProfile(
@@ -198,7 +234,9 @@ class ProfileSettingsViewModel @Inject constructor(
                 isPublic = c?.isPublic ?: true,
                 avatarUrl = c?.avatarUrl,
                 bannerUrl = c?.bannerUrl,
-                displayName = displayName.ifBlank { c?.displayName ?: "" }
+                displayName = displayName.ifBlank { c?.displayName ?: "" },
+                location = location.ifBlank { c?.location ?: "" },
+                birthday = birthday
             )
         }
     }
@@ -219,6 +257,9 @@ class ProfileSettingsViewModel @Inject constructor(
     }
 
     fun toggleNotifications(enabled: Boolean) { viewModelScope.launch { settingsRepository.setNotificationsEnabled(enabled) } }
+    fun toggleNotifyComments(enabled: Boolean) { viewModelScope.launch { settingsRepository.setNotifyCommentsEnabled(enabled) } }
+    fun toggleNotifyLikes(enabled: Boolean) { viewModelScope.launch { settingsRepository.setNotifyLikesEnabled(enabled) } }
+    fun toggleNotifyFollowers(enabled: Boolean) { viewModelScope.launch { settingsRepository.setNotifyFollowersEnabled(enabled) } }
     fun toggleBiometric(enabled: Boolean) { viewModelScope.launch { settingsRepository.setBiometricLock(enabled) } }
     fun toggleShowLibraryPublic(enabled: Boolean) {
         viewModelScope.launch {
@@ -239,6 +280,161 @@ class ProfileSettingsViewModel @Inject constructor(
                 _userEmail.value = null
             }
         }
+    }
+
+    // ─── Security centre actions ──────────────────────────────────────────
+
+    fun deleteLoginLog(id: String) {
+        viewModelScope.launch { runCatching { securityRepository.deleteLoginLog(id) } }
+    }
+
+    fun clearLoginLogs() {
+        viewModelScope.launch { runCatching { securityRepository.clearLoginLogs() } }
+    }
+
+    fun removeDevice(id: String) {
+        viewModelScope.launch { runCatching { securityRepository.removeDevice(id) } }
+    }
+
+    fun revokeSession(id: String) {
+        viewModelScope.launch {
+            _securityBusy.value = true
+            _securityError.value = null
+            runCatching { securityRepository.revokeSession(id) }
+                .onFailure { _securityError.value = context.getString(R.string.settings_security_action_failed) }
+            _securityBusy.value = false
+        }
+    }
+
+    /** True "sign out everywhere": server revokes tokens, then we drop local state. */
+    fun signOutAllDevices(onSignedOut: () -> Unit) {
+        viewModelScope.launch {
+            _securityBusy.value = true
+            _securityError.value = null
+            val result = runCatching { securityRepository.signOutAllDevices() }
+            _securityBusy.value = false
+            result
+                .onSuccess {
+                    _userEmail.value = null
+                    onSignedOut()
+                }
+                .onFailure { _securityError.value = context.getString(R.string.settings_security_action_failed) }
+        }
+    }
+
+    fun clearSecurityError() { _securityError.value = null }
+
+    // ─── Custom lists export/import ───────────────────────────────────────
+
+    /** Serializes all user lists (+ items) to a versioned JSON document. */
+    suspend fun exportListsJson(): String {
+        val lists = communityRepository.observeUserLists().first()
+        val arr = org.json.JSONArray()
+        lists.take(MAX_EXPORT_LISTS).forEach { list ->
+            val items = communityRepository.observeListItems(list.id).first()
+            val itemsArr = org.json.JSONArray()
+            items.take(MAX_EXPORT_ITEMS).forEach { item ->
+                itemsArr.put(
+                    org.json.JSONObject()
+                        .put("mangaId", item.mangaId.take(MAX_TEXT))
+                        .put("sourceId", item.sourceId.take(MAX_TEXT_SHORT))
+                        .put("slug", item.slug.take(MAX_TEXT))
+                        .put("title", item.title.take(MAX_TEXT_TITLE))
+                        .put("coverUrl", item.coverUrl.take(MAX_URL))
+                        .put("rating", item.rating)
+                        .put("genres", org.json.JSONArray(item.genres.take(MAX_GENRES)))
+                )
+            }
+            arr.put(
+                org.json.JSONObject()
+                    .put("name", list.name.take(MAX_TEXT_TITLE))
+                    .put("description", list.description.take(MAX_TEXT_DESC))
+                    .put("coverUrl", list.coverUrl.take(MAX_URL))
+                    .put("rating", list.rating)
+                    .put("genres", org.json.JSONArray(list.genres.take(MAX_GENRES)))
+                    .put("isPublic", false)
+                    .put("items", itemsArr)
+            )
+        }
+        return org.json.JSONObject()
+            .put("version", 1)
+            .put("exportedAt", System.currentTimeMillis())
+            .put("lists", arr)
+            .toString()
+    }
+
+    /** Imports a document produced by [exportListsJson]; returns a user message. */
+    fun importListsJson(raw: String) {
+        viewModelScope.launch {
+            _listsMessage.value = try {
+                val root = org.json.JSONObject(raw)
+                require(root.optInt("version", 0) == 1) { "version" }
+                val lists = root.optJSONArray("lists") ?: org.json.JSONArray()
+                require(lists.length() <= MAX_EXPORT_LISTS) { "lists" }
+                var listCount = 0
+                var itemCount = 0
+                for (i in 0 until lists.length()) {
+                    val obj = lists.optJSONObject(i) ?: continue
+                    val name = obj.optString("name").trim().take(MAX_TEXT_TITLE)
+                    if (name.isBlank()) continue
+                    val items = obj.optJSONArray("items") ?: org.json.JSONArray()
+                    require(items.length() <= MAX_EXPORT_ITEMS) { "items" }
+                    val newId = communityRepository.createOrUpdateList(
+                        listId = null,
+                        name = name,
+                        description = obj.optString("description").trim().take(MAX_TEXT_DESC),
+                        coverUrl = obj.optString("coverUrl").take(MAX_URL),
+                        rating = obj.optDouble("rating", 0.0).toFloat().coerceIn(0f, 5f),
+                        genres = obj.optJSONArray("genres")?.let { g ->
+                            (0 until g.length()).map { g.optString(it) }.filter { it.isNotBlank() }.take(MAX_GENRES)
+                        } ?: emptyList(),
+                        isPublic = false
+                    )
+                    listCount++
+                    for (j in 0 until items.length()) {
+                        val it = items.optJSONObject(j) ?: continue
+                        val mangaId = it.optString("mangaId").trim()
+                        val slug = it.optString("slug").trim()
+                        if (mangaId.isBlank() || slug.isBlank()) continue
+                        // Custom lists are online-manga only (Phase 1, item 7a).
+                        val sourceId = it.optString("sourceId").trim()
+                        if (sourceId.isBlank() || com.exapps.mangaworld.domain.model.MangaSource.isLocalSource(sourceId)) continue
+                        communityRepository.addMangaToList(
+                            newId,
+                            com.exapps.mangaworld.domain.model.CustomUserListItem(
+                                mangaId = mangaId.take(MAX_TEXT),
+                                sourceId = sourceId.take(MAX_TEXT_SHORT),
+                                slug = slug.take(MAX_TEXT),
+                                title = it.optString("title").trim().take(MAX_TEXT_TITLE),
+                                coverUrl = it.optString("coverUrl").take(MAX_URL),
+                                rating = it.optDouble("rating", 0.0).toFloat().coerceIn(0f, 5f),
+                                genres = it.optJSONArray("genres")?.let { g ->
+                                    (0 until g.length()).map { g.optString(it) }.filter { s -> s.isNotBlank() }.take(MAX_GENRES)
+                                } ?: emptyList()
+                            )
+                        )
+                        itemCount++
+                    }
+                }
+                context.getString(R.string.settings_lists_imported, listCount, itemCount)
+            } catch (_: Exception) {
+                context.getString(R.string.settings_lists_import_failed)
+            }
+        }
+    }
+
+    fun clearListsMessage() { _listsMessage.value = null }
+    fun setListsMessage(message: String) { _listsMessage.value = message }
+
+    private companion object {
+        const val MAX_EXPORT_LISTS = 50
+        const val MAX_EXPORT_ITEMS = 500
+        const val MAX_GENRES = 20
+        const val MAX_TEXT = 256
+        const val MAX_TEXT_SHORT = 64
+        const val MAX_TEXT_TITLE = 200
+        const val MAX_TEXT_DESC = 500
+        const val MAX_URL = 2048
     }
 
     fun deleteAccount() {
@@ -325,7 +521,6 @@ private fun formatJoinDate(context: android.content.Context, timestamp: Long): S
 fun ProfileSettingsScreen(
     onBack: () -> Unit,
     onSignedOut: () -> Unit = {},
-    onOpenReadingStats: () -> Unit,
     onOpenCloudSync: () -> Unit,
     onOpenSources: () -> Unit,
     setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit,
@@ -335,30 +530,37 @@ fun ProfileSettingsScreen(
     val profile by viewModel.profile.collectAsStateWithLifecycle()
     val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
     val appSettings by viewModel.appSettings.collectAsStateWithLifecycle()
-    val totalReadingTimeMs by viewModel.totalReadingTimeMs.collectAsStateWithLifecycle()
-    val totalMangaRead by viewModel.totalMangaRead.collectAsStateWithLifecycle()
-    val currentStreak by viewModel.currentStreak.collectAsStateWithLifecycle()
     val favoriteCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
     val historyCount by viewModel.historyCount.collectAsStateWithLifecycle()
     val readCount by viewModel.readCount.collectAsStateWithLifecycle()
     val followingCount by viewModel.followingCount.collectAsStateWithLifecycle()
     val followersCount by viewModel.followersCount.collectAsStateWithLifecycle()
-    val favoriteGenres by viewModel.favoriteGenres.collectAsStateWithLifecycle()
+    val following by viewModel.following.collectAsStateWithLifecycle()
+    val followers by viewModel.followers.collectAsStateWithLifecycle()
     val blockedUsers by viewModel.blockedUsers.collectAsStateWithLifecycle()
     val commentsCount by viewModel.commentsCount.collectAsStateWithLifecycle()
     val reviewsCount by viewModel.reviewsCount.collectAsStateWithLifecycle()
     val linkedProviderIds by viewModel.linkedProviderIds.collectAsStateWithLifecycle()
     val providerLinkError by viewModel.providerLinkError.collectAsStateWithLifecycle()
+    val loginLogs by viewModel.loginLogs.collectAsStateWithLifecycle()
+    val devices by viewModel.devices.collectAsStateWithLifecycle()
+    val sessions by viewModel.sessions.collectAsStateWithLifecycle()
+    val securityBusy by viewModel.securityBusy.collectAsStateWithLifecycle()
+    val securityError by viewModel.securityError.collectAsStateWithLifecycle()
+    val listsMessage by viewModel.listsMessage.collectAsStateWithLifecycle()
     val avatarUri = viewModel.avatarUri
 
     var expandedSection by remember { mutableStateOf<String?>(null) }
     var showEditProfile by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showSignOutConfirm by remember { mutableStateOf(false) }
+    var showSignOutAllConfirm by remember { mutableStateOf(false) }
     var showBlockedUsers by remember { mutableStateOf(false) }
-    var showFavoriteGenres by remember { mutableStateOf(false) }
     var showFollowingList by remember { mutableStateOf(false) }
     var showFollowersList by remember { mutableStateOf(false) }
+    var showLoginLogs by remember { mutableStateOf(false) }
+    var showDevices by remember { mutableStateOf(false) }
+    var showSessions by remember { mutableStateOf(false) }
 
     val avatarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { viewModel.uploadAvatar(it) }
@@ -390,6 +592,38 @@ fun ProfileSettingsScreen(
         onDispose { loginManager.unregisterCallback(facebookCallbackManager) }
     }
 
+    // Lists export/import via Storage Access Framework (no storage permission).
+    val scope = rememberCoroutineScope()
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) {
+            scope.launch {
+                runCatching {
+                    val json = viewModel.exportListsJson()
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        out.write(json.toByteArray())
+                    } ?: error("no stream")
+                    viewModel.setListsMessage(context.getString(R.string.settings_lists_exported))
+                }.onFailure {
+                    viewModel.setListsMessage(context.getString(R.string.settings_lists_import_failed))
+                }
+            }
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    input.readBytes().toString(Charsets.UTF_8)
+                }
+            }.onSuccess { raw ->
+                if (raw != null) viewModel.importListsJson(raw)
+                else viewModel.setListsMessage(context.getString(R.string.settings_lists_import_failed))
+            }.onFailure {
+                viewModel.setListsMessage(context.getString(R.string.settings_lists_import_failed))
+            }
+        }
+    }
+
     Scaffold(
         containerColor = MangaColors.Background,
         topBar = {
@@ -416,7 +650,22 @@ fun ProfileSettingsScreen(
                 AccountInfoSection(userEmail, { showSignOutConfirm = true }, { showDeleteConfirm = true })
             }
             Section(stringResource(R.string.settings_security), Icons.Filled.Security, MangaColors.Green, "security", expandedSection, onToggle = { expandedSection = it }) {
-                SecuritySection(appSettings.biometricLockEnabled, viewModel::toggleBiometric)
+                SecuritySection(
+                    biometricEnabled = appSettings.biometricLockEnabled,
+                    onToggleBiometric = viewModel::toggleBiometric,
+                    loginCount = loginLogs.size,
+                    deviceCount = devices.size,
+                    sessionCount = sessions.size,
+                    busy = securityBusy,
+                    onOpenLoginLogs = { showLoginLogs = true },
+                    onOpenDevices = { showDevices = true },
+                    onOpenSessions = { showSessions = true },
+                    onSignOutAll = { showSignOutAllConfirm = true }
+                )
+                securityError?.let { message ->
+                    Text(message, color = MangaColors.Pink, style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp))
+                }
             }
             Section(stringResource(R.string.settings_privacy), Icons.Filled.Visibility, MangaColors.Yellow, "privacy", expandedSection, onToggle = { expandedSection = it }) {
                 PrivacySection(profile?.isPublic ?: true, profile?.showListsPublic ?: true, profile?.showActivityPublic ?: true, appSettings.showLibraryPublic, blockedUsers.size,
@@ -430,17 +679,27 @@ fun ProfileSettingsScreen(
                 LibrarySection(favoriteCount, historyCount, readCount)
             }
             Section(stringResource(R.string.settings_notifications), Icons.Filled.Notifications, MangaColors.Pink, "notif", expandedSection, onToggle = { expandedSection = it }) {
-                NotificationSection(appSettings.enableNotifications, viewModel::toggleNotifications)
-            }
-            Section(stringResource(R.string.achievements_stats), Icons.Filled.BarChart, MangaColors.Cyan, "stats", expandedSection, onToggle = { expandedSection = it }) {
-                StatsSection(totalReadingTimeMs, totalMangaRead, currentStreak, onOpenReadingStats)
+                NotificationSection(
+                    masterEnabled = appSettings.enableNotifications,
+                    onToggleMaster = viewModel::toggleNotifications,
+                    commentsEnabled = appSettings.notifyComments,
+                    onToggleComments = viewModel::toggleNotifyComments,
+                    likesEnabled = appSettings.notifyLikes,
+                    onToggleLikes = viewModel::toggleNotifyLikes,
+                    followersEnabled = appSettings.notifyFollowers,
+                    onToggleFollowers = viewModel::toggleNotifyFollowers
+                )
             }
             Section(stringResource(R.string.settings_sync), Icons.Filled.CloudSync, MangaColors.Cyan, "sync", expandedSection, onToggle = { expandedSection = it }) {
                 SyncSection(
                     totalItems = favoriteCount + historyCount,
                     linkedProviderIds = linkedProviderIds,
                     providerLinkError = providerLinkError,
+                    listsMessage = listsMessage,
                     onOpenCloudSync = onOpenCloudSync,
+                    onExportLists = { exportLauncher.launch("mangaworld-lists.json") },
+                    onImportLists = { importLauncher.launch(arrayOf("application/json")) },
+                    onDismissListsMessage = viewModel::clearListsMessage,
                     onLinkGoogle = { googleLinkLauncher.launch(viewModel.googleSignInIntent()) },
                     onUnlinkProvider = viewModel::unlinkProvider,
                     onLinkFacebook = {
@@ -461,23 +720,46 @@ fun ProfileSettingsScreen(
                     onShowFollowing = { showFollowingList = true },
                     onShowFollowers = { showFollowersList = true })
             }
-            Section(stringResource(R.string.personal_preferences), Icons.Filled.Favorite, MangaColors.Orange, "preferences", expandedSection, onToggle = { expandedSection = it }) {
-                PersonalPreferencesSection(favoriteGenres, appSettings.enabledSources.size,
-                    onEditGenres = { showFavoriteGenres = true },
-                    onOpenSources = onOpenSources)
-            }
             Spacer(Modifier.height(16.dp))
-            Text("MangaWorld v${BuildConfig.VERSION_NAME}", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), textAlign = TextAlign.Center)
+            Text(stringResource(R.string.app_version_label, BuildConfig.VERSION_NAME), color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), textAlign = TextAlign.Center)
         }
     }
 
-    if (showEditProfile) EditProfileDialog(profile, { showEditProfile = false }) { u, d, b -> viewModel.updateProfile(u, b, d); showEditProfile = false }
+    if (showEditProfile) EditProfileDialog(profile, { showEditProfile = false }) { u, d, b, loc, bd ->
+        viewModel.updateProfile(u, b, d, loc, bd); showEditProfile = false
+    }
     if (showDeleteConfirm) ConfirmDialog(stringResource(R.string.settings_delete_account), stringResource(R.string.settings_delete_account_confirm), stringResource(R.string.delete), { viewModel.deleteAccount(); showDeleteConfirm = false; onSignedOut() }, { showDeleteConfirm = false })
     if (showSignOutConfirm) ConfirmDialog(stringResource(R.string.settings_sign_out), stringResource(R.string.settings_sign_out_confirm), stringResource(R.string.logout), { viewModel.signOut(); showSignOutConfirm = false; onSignedOut() }, { showSignOutConfirm = false })
     if (showBlockedUsers) BlockedUsersDialog(blockedUsers, onDismiss = { showBlockedUsers = false }, onUnblock = { uid -> viewModel.unblockUser(uid) })
-    if (showFavoriteGenres) FavoriteGenresDialog(favoriteGenres, onDismiss = { showFavoriteGenres = false }, onSave = { genres -> viewModel.setFavoriteGenres(genres) })
-    if (showFollowingList) UserListDialog(stringResource(R.string.settings_following), emptyList(), onDismiss = { showFollowingList = false })
-    if (showFollowersList) UserListDialog(stringResource(R.string.settings_followers), emptyList(), onDismiss = { showFollowersList = false })
+    if (showFollowingList) UserListDialog(stringResource(R.string.settings_following), following, onDismiss = { showFollowingList = false })
+    if (showFollowersList) UserListDialog(stringResource(R.string.settings_followers), followers, onDismiss = { showFollowersList = false })
+    if (showLoginLogs) LoginLogsDialog(
+        logs = loginLogs,
+        onDelete = viewModel::deleteLoginLog,
+        onClear = viewModel::clearLoginLogs,
+        onDismiss = { showLoginLogs = false }
+    )
+    if (showDevices) DevicesDialog(
+        devices = devices,
+        busy = securityBusy,
+        onRemove = viewModel::removeDevice,
+        onSignOutAll = { showDevices = false; showSignOutAllConfirm = true },
+        onDismiss = { showDevices = false }
+    )
+    if (showSessions) SessionsDialog(
+        sessions = sessions,
+        busy = securityBusy,
+        onRevoke = viewModel::revokeSession,
+        onSignOutAll = { showSessions = false; showSignOutAllConfirm = true },
+        onDismiss = { showSessions = false }
+    )
+    if (showSignOutAllConfirm) ConfirmDialog(
+        stringResource(R.string.settings_security_sign_out_all),
+        stringResource(R.string.settings_security_sign_out_all_confirm),
+        stringResource(R.string.logout),
+        { viewModel.signOutAllDevices(onSignedOut); showSignOutAllConfirm = false },
+        { showSignOutAllConfirm = false }
+    )
 }
 
 // ─── Profile Hero ───────────────────────────────────────────────────────────
@@ -508,7 +790,7 @@ private fun ProfileHeroSection(profile: CommunityProfile?, avatarUri: Uri?, onAv
         }
         if (profile?.username?.isNotBlank() == true && displayNameText != profile.username) {
             Spacer(Modifier.height(2.dp))
-            Text("@${profile.username}", color = MangaColors.Muted, style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.profile_username_handle, profile.username), color = MangaColors.Muted, style = MaterialTheme.typography.labelMedium)
         }
         if (!profile?.bio.isNullOrBlank()) { Spacer(Modifier.height(6.dp)); Text(profile.bio, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, maxLines = 3) }
         Spacer(Modifier.height(8.dp))
@@ -539,10 +821,13 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
 @Composable private fun ProfileInfoSection(profile: CommunityProfile?, joinDateText: String, onEdit: () -> Unit) {
     val roleText = profile?.role?.let { when(it) { "super-admin" -> stringResource(R.string.profile_role_admin); "moderator" -> stringResource(R.string.profile_role_moderator); else -> stringResource(R.string.profile_role_viewer) } } ?: stringResource(R.string.profile_role_viewer)
     val displayNameText = profile?.displayName?.takeIf { it.isNotBlank() } ?: profile?.username ?: stringResource(R.string.guest)
+    val birthdayText = profile?.birthday?.takeIf { it > 0L }?.let { formatJoinDate(androidx.compose.ui.platform.LocalContext.current, it) } ?: stringResource(R.string.profile_birthday_not_set)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Badge, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_display_name), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(displayNameText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AlternateEmail, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_username), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.username ?: stringResource(R.string.unspecified), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Info, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_bio), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.bio?.ifBlank { stringResource(R.string.no_bio) } ?: stringResource(R.string.no_bio), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LocationOn, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_location), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile?.location?.ifBlank { stringResource(R.string.profile_birthday_not_set) } ?: stringResource(R.string.profile_birthday_not_set), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Cake, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_birthday), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(birthdayText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.CalendarToday, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_join_date), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(joinDateText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_role), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(roleText, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         if (!profile?.badgeLabel.isNullOrBlank()) Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Star, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.profile_badge), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(profile.badgeLabel, color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
@@ -553,18 +838,33 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
 @Composable private fun AccountInfoSection(userEmail: String?, onSignOut: () -> Unit, onDeleteAccount: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Email, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_email), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(userEmail ?: stringResource(R.string.settings_unavailable), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Phone, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_phone), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_phone_unavailable), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().clickable(onClick = onDeleteAccount).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Delete, null, tint = MangaColors.Error, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_delete_account), color = MangaColors.Error, style = MaterialTheme.typography.bodyMedium) }
         Row(Modifier.fillMaxWidth().clickable(onClick = onSignOut).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Logout, null, tint = MangaColors.Error, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_sign_out), color = MangaColors.Error, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 
-@Composable private fun SecuritySection(biometricEnabled: Boolean, onToggleBiometric: (Boolean) -> Unit) {
+@Composable private fun SecuritySection(
+    biometricEnabled: Boolean,
+    onToggleBiometric: (Boolean) -> Unit,
+    loginCount: Int,
+    deviceCount: Int,
+    sessionCount: Int,
+    busy: Boolean,
+    onOpenLoginLogs: () -> Unit,
+    onOpenDevices: () -> Unit,
+    onOpenSessions: () -> Unit,
+    onSignOutAll: () -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Fingerprint, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_biometric), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = biometricEnabled, onCheckedChange = onToggleBiometric, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.History, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_login_history), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_login_history_empty), color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Devices, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_devices), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.str_451), color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Security, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.manage_sessions), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_sessions), color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenLoginLogs).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.History, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_login_history), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_count_format, loginCount), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenDevices).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Devices, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_devices), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_count_format, deviceCount), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenSessions).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Security, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.manage_sessions), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_count_format, sessionCount), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(enabled = !busy, onClick = onSignOutAll).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Logout, null, tint = MangaColors.Error, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp))
+            Text(stringResource(R.string.settings_security_sign_out_all), color = MangaColors.Error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            if (busy) CircularProgressIndicator(color = MangaColors.Error, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        }
     }
 }
 
@@ -587,24 +887,25 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     }
 }
 
-@Composable private fun NotificationSection(enabled: Boolean, onToggle: (Boolean) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Notifications, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_notifications_new_chapters), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = enabled, onCheckedChange = onToggle, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
-        val status = if (enabled) stringResource(R.string.enabled) else stringResource(R.string.disabled)
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.ChatBubble, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_notifications_comments), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(status, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.FavoriteBorder, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_notifications_likes), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(status, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.PersonAdd, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_notifications_followers), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(status, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+@Composable private fun NotificationSection(
+    masterEnabled: Boolean,
+    onToggleMaster: (Boolean) -> Unit,
+    commentsEnabled: Boolean,
+    onToggleComments: (Boolean) -> Unit,
+    likesEnabled: Boolean,
+    onToggleLikes: (Boolean) -> Unit,
+    followersEnabled: Boolean,
+    onToggleFollowers: (Boolean) -> Unit
+) {
+    @Composable
+    fun ToggleRow(icon: ImageVector, label: String, checked: Boolean, onToggle: (Boolean) -> Unit, rowEnabled: Boolean = true) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(label, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = checked, onCheckedChange = onToggle, enabled = rowEnabled, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
     }
-}
-
-@Composable private fun StatsSection(timeMs: Long, chapters: Int, streak: Int, onOpenStats: () -> Unit) {
-    val h = (timeMs / 3_600_000).toInt(); val m = ((timeMs % 3_600_000) / 60_000).toInt()
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.MenuBook, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.read_chapters), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_017, chapters), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AccessTime, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.reading_time), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(if (h > 0) stringResource(R.string.fmt_029, h, m) else stringResource(R.string.fmt_036, m), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Whatshot, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.str_121), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_020, streak), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.user_rank), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.str_385), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenStats).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.EmojiEvents, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.more_goals), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.open), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
+        ToggleRow(Icons.Filled.Notifications, stringResource(R.string.settings_notifications_new_chapters), masterEnabled, onToggleMaster)
+        ToggleRow(Icons.Filled.ChatBubble, stringResource(R.string.settings_notifications_comments), commentsEnabled && masterEnabled, onToggleComments, masterEnabled)
+        ToggleRow(Icons.Filled.FavoriteBorder, stringResource(R.string.settings_notifications_likes), likesEnabled && masterEnabled, onToggleLikes, masterEnabled)
+        ToggleRow(Icons.Filled.PersonAdd, stringResource(R.string.settings_notifications_followers), followersEnabled && masterEnabled, onToggleFollowers, masterEnabled)
     }
 }
 
@@ -612,14 +913,27 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     totalItems: Int,
     linkedProviderIds: Set<String>,
     providerLinkError: String?,
+    listsMessage: String?,
     onOpenCloudSync: () -> Unit,
+    onExportLists: () -> Unit,
+    onImportLists: () -> Unit,
+    onDismissListsMessage: () -> Unit,
     onLinkGoogle: () -> Unit,
     onLinkFacebook: () -> Unit,
     onUnlinkProvider: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().clickable(onClick = onOpenCloudSync).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Cloud, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_cloud_sync), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.open), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.ImportExport, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_export), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.coming_soon), color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onExportLists).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Upload, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_export_lists), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_034, totalItems), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onImportLists).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Download, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_import_lists), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)) }
+        listsMessage?.let { message ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.CheckCircle, null, tint = MangaColors.Green, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(message, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = onDismissListsMessage) { Text(stringResource(R.string.close), color = MangaColors.Muted) }
+            }
+        }
         ProviderLinkRow(
             label = "Google",
             providerId = "google.com",
@@ -684,36 +998,22 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
 
 @Composable private fun SocialInteractionSection(followingCount: Int, followersCount: Int, commentsCount: Int, reviewsCount: Int, onShowFollowing: () -> Unit, onShowFollowers: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onShowFollowing).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.PersonAdd, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_following), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$followingCount", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().clickable(onClick = onShowFollowers).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.People, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_followers), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$followersCount", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Comment, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_comments_count), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$commentsCount", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.RateReview, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_reviews_count), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text("$reviewsCount", color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-    }
-}
-
-@Composable private fun PersonalPreferencesSection(favoriteGenres: List<String>, sourcesCount: Int, onEditGenres: () -> Unit, onOpenSources: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onEditGenres).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Category, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_favorite_genres), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(if (favoriteGenres.isEmpty()) stringResource(R.string.tap_to_edit) else stringResource(R.string.fmt_027, favoriteGenres.size), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        if (favoriteGenres.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth().padding(start = 30.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)) {
-                favoriteGenres.take(4).forEach { genre ->
-                    Surface(shape = RoundedCornerShape(8.dp), color = MangaColors.Cyan.copy(alpha = 0.12f), modifier = Modifier.padding(end = 6.dp)) {
-                        Text(genre, color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                    }
-                }
-                if (favoriteGenres.size > 4) Text("+${favoriteGenres.size - 4}", color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
-            }
-        }
-        Row(Modifier.fillMaxWidth().clickable(onClick = onOpenSources).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Language, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.favorite_sources), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_019, sourcesCount), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onShowFollowing).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.PersonAdd, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_following), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_count_format, followingCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onShowFollowers).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.People, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_followers), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_count_format, followersCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Comment, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_comments_count), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_count_format, commentsCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.RateReview, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_reviews_count), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_count_format, reviewsCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
 // ─── Dialogs ────────────────────────────────────────────────────────────────
 
-@Composable private fun EditProfileDialog(profile: CommunityProfile?, onDismiss: () -> Unit, onSave: (String, String, String) -> Unit) {
+@Composable private fun EditProfileDialog(profile: CommunityProfile?, onDismiss: () -> Unit, onSave: (String, String, String, String, Long?) -> Unit) {
     var username by remember { mutableStateOf(profile?.username ?: "") }
     var displayName by remember { mutableStateOf(profile?.displayName ?: "") }
     var bio by remember { mutableStateOf(profile?.bio ?: "") }
+    var location by remember { mutableStateOf(profile?.location ?: "") }
+    var birthday by remember { mutableStateOf(profile?.birthday?.takeIf { it > 0L }) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     val normalizedUsername = username.trim().lowercase()
     val usernameError = when {
@@ -722,6 +1022,23 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
         normalizedUsername.length > 20 -> stringResource(R.string.auth_error_username_long)
         !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$")) -> stringResource(R.string.str_012)
         else -> null
+    }
+
+    fun openBirthdayPicker() {
+        val cal = java.util.Calendar.getInstance()
+        birthday?.takeIf { it > 0L }?.let { cal.timeInMillis = it }
+        android.app.DatePickerDialog(
+            context,
+            { _, year, month, day ->
+                cal.set(java.util.Calendar.YEAR, year)
+                cal.set(java.util.Calendar.MONTH, month)
+                cal.set(java.util.Calendar.DAY_OF_MONTH, day)
+                birthday = cal.timeInMillis
+            },
+            cal.get(java.util.Calendar.YEAR),
+            cal.get(java.util.Calendar.MONTH),
+            cal.get(java.util.Calendar.DAY_OF_MONTH)
+        ).show()
     }
 
     AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
@@ -750,10 +1067,35 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
                 modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp), maxLines = 4,
                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
             )
+            OutlinedTextField(
+                value = location, onValueChange = { location = it.take(64) },
+                label = { Text(stringResource(R.string.profile_location)) },
+                placeholder = { Text(stringResource(R.string.profile_location_hint)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
+            )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(
+                    onClick = ::openBirthdayPicker,
+                    modifier = Modifier.weight(1f).height(56.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MangaColors.OnSurface)
+                ) {
+                    Text(
+                        birthday?.takeIf { it > 0L }?.let { formatJoinDate(context, it) }
+                            ?: stringResource(R.string.profile_birthday_not_set),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+                if (birthday != null) {
+                    TextButton(onClick = { birthday = null }) { Text(stringResource(R.string.clear), color = MangaColors.Muted) }
+                }
+            }
+            Text(stringResource(R.string.profile_birthday), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.labelSmall)
         }},
         confirmButton = {
             Button(
-                onClick = { onSave(normalizedUsername, displayName.trim(), bio.trim()) },
+                onClick = { onSave(normalizedUsername, displayName.trim(), bio.trim(), location.trim(), birthday) },
                 colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan),
                 enabled = usernameError == null && normalizedUsername.isNotBlank()
             ) { Text(stringResource(R.string.save)) }
@@ -795,47 +1137,6 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     )
 }
 
-private val AVAILABLE_GENRE_RES = listOf(
-    R.string.genre_action, R.string.genre_adventure, R.string.genre_comedy, R.string.genre_drama, R.string.genre_fantasy, R.string.genre_horror, R.string.genre_romance, R.string.genre_scifi,
-    R.string.genre_shounen, R.string.genre_shoujo, R.string.genre_seinen, R.string.genre_seinen, R.string.genre_ecchi, R.string.genre_apocalypse, R.string.my_history, R.string.genre_sports,
-    R.string.genre_mystery, R.string.str_288, R.string.genre_supernatural
-)
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable private fun FavoriteGenresDialog(currentGenres: List<String>, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
-    val selectedGenres = remember { mutableStateListOf<String>().apply { addAll(currentGenres) } }
-    AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
-        title = { Text(stringResource(R.string.settings_favorite_genres), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                Text(stringResource(R.string.choose_favorite_genres), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 12.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AVAILABLE_GENRE_RES.forEach { genreRes ->
-                        val genre = stringResource(genreRes)
-                        val isSelected = genre in selectedGenres
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = if (isSelected) MangaColors.Cyan.copy(alpha = 0.2f) else MangaColors.SurfaceContainer,
-                            modifier = Modifier.clickable {
-                                if (isSelected) selectedGenres.remove(genre) else selectedGenres.add(genre)
-                            }
-                        ) {
-                            Text(
-                                genre,
-                                color = if (isSelected) MangaColors.Cyan else MangaColors.OnSurfaceVariant,
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { Button(onClick = { onSave(selectedGenres.toList()); onDismiss() }, colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan)) { Text(stringResource(R.string.save)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) } }
-    )
-}
-
 @Composable private fun UserListDialog(title: String, users: List<UserFollow>, onDismiss: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
         title = { Text(title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
@@ -852,6 +1153,147 @@ private val AVAILABLE_GENRE_RES = listOf(
                             }
                             Spacer(Modifier.width(12.dp))
                             Text(user.username, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close), color = MangaColors.Muted) } }
+    )
+}
+
+// ─── Security centre dialogs ──────────────────────────────────────────────────
+
+@Composable private fun LoginLogsDialog(
+    logs: List<com.exapps.mangaworld.domain.model.LoginLogEntry>,
+    onDelete: (String) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
+        title = { Text(stringResource(R.string.settings_login_history), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+        text = {
+            if (logs.isEmpty()) {
+                Text(stringResource(R.string.settings_login_history_empty), color = MangaColors.OnSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    TextButton(onClick = onClear, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.settings_security_clear_logs), color = MangaColors.Pink) }
+                    logs.forEach { log ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Smartphone, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(log.deviceLabel.ifBlank { stringResource(R.string.settings_unavailable) }, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    "${formatJoinDate(context, log.createdAt)}${if (log.provider.isNotBlank()) " · ${log.provider}" else ""}${if (log.appVersion.isNotBlank()) " · v${log.appVersion}" else ""}",
+                                    color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                            IconButton(onClick = { onDelete(log.id) }, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Filled.Delete, stringResource(R.string.settings_security_remove), tint = MangaColors.Muted, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close), color = MangaColors.Muted) } }
+    )
+}
+
+@Composable private fun DevicesDialog(
+    devices: List<com.exapps.mangaworld.domain.model.DeviceEntry>,
+    busy: Boolean,
+    onRemove: (String) -> Unit,
+    onSignOutAll: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
+        title = { Text(stringResource(R.string.settings_devices), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+        text = {
+            if (devices.isEmpty()) {
+                Text(stringResource(R.string.settings_security_empty), color = MangaColors.OnSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    TextButton(onClick = onSignOutAll, enabled = !busy, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.settings_security_sign_out_all), color = MangaColors.Error) }
+                    devices.forEach { device ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Smartphone, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        device.platform.ifBlank { stringResource(R.string.settings_unavailable) },
+                                        color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    if (device.isCurrent) {
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(stringResource(R.string.settings_security_current), color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                                Text(
+                                    "••${device.tokenSuffix} · ${formatJoinDate(context, device.updatedAt)}",
+                                    color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                            if (!device.isCurrent) {
+                                IconButton(onClick = { onRemove(device.id) }, modifier = Modifier.size(28.dp)) {
+                                    Icon(Icons.Filled.Delete, stringResource(R.string.settings_security_remove), tint = MangaColors.Muted, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close), color = MangaColors.Muted) } }
+    )
+}
+
+@Composable private fun SessionsDialog(
+    sessions: List<com.exapps.mangaworld.domain.model.SessionEntry>,
+    busy: Boolean,
+    onRevoke: (String) -> Unit,
+    onSignOutAll: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
+        title = { Text(stringResource(R.string.manage_sessions), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+        text = {
+            if (sessions.isEmpty()) {
+                Text(stringResource(R.string.settings_security_empty), color = MangaColors.OnSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    TextButton(onClick = onSignOutAll, enabled = !busy, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.settings_security_sign_out_all), color = MangaColors.Error) }
+                    sessions.forEach { session ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Security, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        session.deviceLabel.ifBlank { stringResource(R.string.settings_unavailable) },
+                                        color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    if (session.isCurrent) {
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(stringResource(R.string.settings_security_current), color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                                Text(
+                                    formatJoinDate(context, session.lastSeenAt),
+                                    color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                            if (!session.revoked && !session.isCurrent) {
+                                TextButton(onClick = { onRevoke(session.id) }, enabled = !busy) { Text(stringResource(R.string.settings_security_revoke), color = MangaColors.Pink) }
+                            }
                         }
                     }
                 }
