@@ -345,6 +345,8 @@ class SyncStorageViewModelTest {
             // once proved unmappable to any assert — fail() always carries text.
             fun check(cond: Boolean, msg: String) { if (!cond) fail(msg) }
             var state = vm.state.value
+            // TEMP-DIAG (revert): snapshot state unconditionally to see it.
+            fail("SNAPSHOT loading=${state.isLoading} error=${state.error} items=${state.items.map { it.chapterUrl }} all=${state.allItems.map { it.chapterUrl }}")
             check(!state.isLoading, "STILL-LOADING after refresh: $state")
             check(state.error == null, "ERROR after refresh: ${state.error}")
             // Distinct by chapterUrl, newest publishedAt first.
