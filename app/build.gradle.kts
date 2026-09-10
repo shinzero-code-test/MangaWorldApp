@@ -116,6 +116,10 @@ android {
             // 250+ tests incl. Robolectric sandboxes: the 512m default risks
             // GC death spirals that look exactly like a hang.
             it.maxHeapSize = "2g"
+            // Bound accumulation across classes (leaked scopes/sandboxes the
+            // tests cannot clear): a fresh worker every 50 classes isolates any
+            // single-class wedge instead of wedging the whole task.
+            it.forkEvery = 50
             it.testLogging {
                 events("started", "failed", "skipped")
                 showStandardStreams = false
