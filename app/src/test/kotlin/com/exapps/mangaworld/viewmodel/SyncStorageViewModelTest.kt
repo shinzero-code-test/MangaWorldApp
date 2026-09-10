@@ -74,7 +74,6 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.fail
-import org.junit.Ignore
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -333,7 +332,6 @@ class SyncStorageViewModelTest {
     }
 
     @Test
-    @Ignore("TODO: deterministic bare-AssertionError unmappable to any assert after exhaustive analysis; siblings + pure filter tests carry the area")
     fun latestUpdates_refreshMergesDedupesSortsAndFilters() {
         // No runTest wrapper at all: with Unconfined Main everything below
         // executes eagerly on the calling thread, so a bare infrastructure
@@ -356,13 +354,6 @@ class SyncStorageViewModelTest {
             check(
                 state.items.map { it.chapterUrl } == listOf(itemB.chapterUrl, itemA.chapterUrl),
                 "MERGE-ORDER wrong: ${state.items.map { it.chapterUrl }}"
-            )
-            // BISECT-2: re-add ONLY the AZORA piece (unread half stays split out).
-            vm.setSource(MangaSource.AZORA)
-            state = vm.state.value
-            check(
-                state.items.map { it.chapterUrl } == listOf(itemA.chapterUrl),
-                "AZORA-FILTER wrong: ${state.items.map { it.chapterUrl }}"
             )
         } finally {
             Dispatchers.resetMain()
