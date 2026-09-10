@@ -54,11 +54,9 @@ import com.exapps.mangaworld.presentation.localstorage.LocalMangaDetailViewModel
 import com.exapps.mangaworld.presentation.localstorage.LocalStorageViewModel
 import com.exapps.mangaworld.presentation.notifications.NotificationCenterViewModel
 import com.exapps.mangaworld.presentation.utils.formatDiagnosticBytes
-import io.mockk.answers
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
-import io.mockk.firstArg
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi

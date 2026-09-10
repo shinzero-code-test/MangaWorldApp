@@ -45,7 +45,7 @@ class LoginUtilsViewModelTest {
 
     // Fresh mocks + dispatcher per test: coEvery stubs from one test must not
     // leak into the next, and init collectors stay parked on their own scheduler.
-    private fun newHarness(dispatcher: StandardTestDispatcher): Harness {
+    private fun newHarness(dispatcher: kotlinx.coroutines.test.StandardTestDispatcher): Harness {
         Dispatchers.setMain(dispatcher)
         val context = mockk<Context>(relaxed = true)
         val strings = mapOf(

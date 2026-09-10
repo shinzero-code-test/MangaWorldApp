@@ -285,14 +285,14 @@ class CommunityViewModelTest {
             advanceUntilIdle()
             vm.postReply("thanks", false)
             advanceUntilIdle()
-            val slot = slot<CommunityReplyTarget?>()
+            val slot = slot<CommunityReplyTarget>()
             coVerify {
                 communityRepo.postMangaComment("m1", "test-slug", "azora", "thanks", false, capture(slot))
             }
-            assertEquals("root1", slot.captured?.parentId)
-            assertNull(slot.captured?.reviewId)
-            assertEquals("uid-root", slot.captured?.replyToUid)
-            assertEquals("rootuser", slot.captured?.replyToUsername)
+            assertEquals("root1", slot.captured.parentId)
+            assertNull(slot.captured.reviewId)
+            assertEquals("uid-root", slot.captured.replyToUid)
+            assertEquals("rootuser", slot.captured.replyToUsername)
             assertNull(vm.state.value.error)
         }
     }

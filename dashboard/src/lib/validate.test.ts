@@ -74,7 +74,7 @@ describe("isValidEmail", () => {
   });
 
   it("rejects overlong and non-string input", () => {
-    expect(isValidEmail(`${"a".repeat(310)}@b.co`)).toBe(false);
+    expect(isValidEmail(`${"a".repeat(320)}@b.co`)).toBe(false);
     expect(isValidEmail(null)).toBe(false);
     expect(isValidEmail(undefined)).toBe(false);
     expect(isValidEmail(123)).toBe(false);
