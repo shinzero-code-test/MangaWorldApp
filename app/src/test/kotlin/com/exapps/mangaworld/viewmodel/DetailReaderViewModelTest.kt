@@ -32,6 +32,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
@@ -44,7 +45,6 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.*
-import org.junit.Ignore
 import org.junit.Test
 
 /**
@@ -143,7 +143,7 @@ class DetailReaderViewModelTest {
         firebaseTelemetry = firebaseTelemetry
     )
 
-    private fun createReaderViewModel() = ReaderViewModel(
+    private fun createReaderViewModel(dispatcher: CoroutineDispatcher) = ReaderViewModel(
         context = context,
         mangaRepo = mangaRepo,
         libraryRepo = libraryRepo,
@@ -159,7 +159,9 @@ class DetailReaderViewModelTest {
         analyticsManager = analyticsManager,
         remoteConfigManager = remoteConfigManager,
         positionSyncManager = positionSyncManager,
-        imageLoader = imageLoader
+        imageLoader = imageLoader,
+        ioDispatcher = dispatcher,
+        defaultDispatcher = dispatcher
     )
 
     /**
@@ -334,7 +336,7 @@ class DetailReaderViewModelTest {
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             stubReaderCommon()
-            val vm = createReaderViewModel()
+            val vm = createReaderViewModel(dispatcher)
             runCurrent()
             val state = vm.state.value
             assertTrue(state.isLoading)
@@ -364,7 +366,7 @@ class DetailReaderViewModelTest {
             coEvery { mangaRepo.getChapterPages(any(), any(), any()) } returns
                 Result.success(testPages())
             coEvery { libraryRepo.getReadingProgress(any(), any()) } returns Pair(0, 0)
-            val vm = createReaderViewModel()
+            val vm = createReaderViewModel(dispatcher)
             runCurrent()
             vm.loadChapter("https://example.com/ch-5", "azora_test-slug", MangaSource.AZORA)
             awaitUntil { !vm.state.value.isLoading && vm.state.value.pages.isNotEmpty() }
@@ -394,7 +396,7 @@ class DetailReaderViewModelTest {
                 Result.failure(Exception("no-meta"))
             coEvery { mangaRepo.getChapterPages(any(), any(), any()) } returns
                 Result.failure(Exception("reader-boom-raw-4521"))
-            val vm = createReaderViewModel()
+            val vm = createReaderViewModel(dispatcher)
             runCurrent()
             vm.loadChapter("https://example.com/ch-9", "azora_test-slug", MangaSource.AZORA)
             awaitUntil { !vm.state.value.isLoading }
@@ -416,7 +418,7 @@ class DetailReaderViewModelTest {
             coEvery { mangaRepo.getChapterPages(any(), any(), any()) } returns
                 Result.success(testPages())
             coEvery { libraryRepo.getReadingProgress(any(), any()) } returns Pair(2, 5)
-            val vm = createReaderViewModel()
+            val vm = createReaderViewModel(dispatcher)
             runCurrent()
             vm.loadChapter("https://example.com/ch-5", "azora_test-slug", MangaSource.AZORA)
             awaitUntil { !vm.state.value.isLoading && vm.state.value.pages.isNotEmpty() }
@@ -432,7 +434,7 @@ class DetailReaderViewModelTest {
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             stubReaderCommon()
-            val vm = createReaderViewModel()
+            val vm = createReaderViewModel(dispatcher)
             runCurrent()
             assertTrue(vm.state.value.showControls)
             // Vertical mode: any tap toggles controls and records the tap point.
@@ -452,7 +454,6 @@ class DetailReaderViewModelTest {
     }
 
     @Test
-    @Ignore("TODO: wedges the CI test worker (no output for 29 min); re-enable after green suite + thread-dump diagnosis")
     fun readerDownloadFailedToken_setsTypedSignalWithoutLeakingToken() {
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
@@ -478,7 +479,7 @@ class DetailReaderViewModelTest {
                 )
             } returns true
             every { downloadQueueManager.observeTask(any()) } returns flowOf(failedTask)
-            val vm = createReaderViewModel()
+            val vm = createReaderViewModel(dispatcher)
             runCurrent()
             vm.loadChapter("https://example.com/ch-5", "azora_test-slug", MangaSource.AZORA)
             awaitUntil { !vm.state.value.isLoading && vm.state.value.pages.isNotEmpty() }

@@ -120,10 +120,8 @@ android {
             // tests cannot clear): fresh workers isolate any single-class wedge
             // instead of wedging the whole task.
             it.forkEvery = 5
-            // Reader-load tests wedge the test worker (deterministic 29-min
-            // silence; 6 detail tests in the same class are healthy). Quarantined
-            // pending a rewrite with injected dispatchers (backlog #1 follow-up).
-            it.filter { excludeTestsMatching("com.exapps.mangaworld.viewmodel.DetailReaderViewModelTest.reader*") }
+            // Reader tests run fully virtual (injected dispatchers); if the
+            // worker ever wedges here again, re-add a method exclusion to bisect.
             it.testLogging {
                 events("started", "failed", "skipped")
                 showStandardStreams = false
