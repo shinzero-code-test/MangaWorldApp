@@ -4,10 +4,10 @@ import com.exapps.mangaworld.core.data.local.entity.ReadingHistoryEntity
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.ReadingHistoryItem
 import org.junit.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
-import kotlin.test.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 
 /**
  * Phase 1 (UI truth) regression tests — pure-JVM invariants behind the
