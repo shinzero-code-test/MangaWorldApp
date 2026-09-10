@@ -64,6 +64,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -332,54 +333,35 @@ class SyncStorageViewModelTest {
 
     @Test
     fun latestUpdates_refreshMergesDedupesSortsAndFilters() {
-        val dispatcher = newDispatcher()
-        runTest(dispatcher) {
-            Dispatchers.setMain(dispatcher)
-            // TEMP-DIAG: phase-labeled capture — a bare failure elsewhere in this
-            // test hid which phase throws; this surfaces the original type+message.
-            fun <T> phase(name: String, block: () -> T): T = try {
-                block()
-            } catch (e: Throwable) {
-                fail("PHASE-$name threw ${e::class.qualifiedName}: ${e.message}")
-                throw e
-            }
-            val itemA = phase("ITEMS") {
-                latestItem("mA", "https://example.com/a", MangaSource.AZORA, publishedAt = 100L)
-            }
-            val itemB = phase("ITEMS") {
-                latestItem("mB", "https://example.com/b", MangaSource.OLYMPUS, publishedAt = 200L)
-            }
-            val itemADup = phase("COPY") { itemA.copy(source = MangaSource.OLYMPUS) }
-            val vm = phase("CTOR") {
-                latestVm(
-                    azoraResult = Result.success(HomeData(latestChapters = listOf(itemA))),
-                    olympusResult = Result.success(HomeData(latestChapters = listOf(itemB, itemADup))),
-                    readMangaIds = setOf("mA")
-                )
-            }
-            phase("ADVANCE") { advanceUntilIdle() }
-            // fail()-guarded checks (not asserts): a bare AssertionError here
-            // once proved unmappable to any assert — fail() always carries text.
-            fun check(cond: Boolean, msg: String) { if (!cond) fail(msg) }
+        // Unconfined variant: eager execution, no virtual-time pumping, so a
+        // bare infrastructure failure (previously attributed to the runTest
+        // line with no message) cannot hide inside scheduler mechanics.
+        runTest(UnconfinedTestDispatcher()) {
+            Dispatchers.setMain(UnconfinedTestDispatcher())
+            val itemA = latestItem("mA", "https://example.com/a", MangaSource.AZORA, publishedAt = 100L)
+            val itemB = latestItem("mB", "https://example.com/b", MangaSource.OLYMPUS, publishedAt = 200L)
+            val itemADup = itemA.copy(source = MangaSource.OLYMPUS)
+            val vm = latestVm(
+                azoraResult = Result.success(HomeData(latestChapters = listOf(itemA))),
+                olympusResult = Result.success(HomeData(latestChapters = listOf(itemB, itemADup))),
+                readMangaIds = setOf("mA")
+            )
             var state = vm.state.value
+            fun check(cond: Boolean, msg: String) { if (!cond) fail(msg) }
             check(!state.isLoading, "STILL-LOADING after refresh: $state")
             check(state.error == null, "ERROR after refresh: ${state.error}")
-            // Distinct by chapterUrl, newest publishedAt first.
             check(
                 state.items.map { it.chapterUrl } == listOf(itemB.chapterUrl, itemA.chapterUrl),
                 "MERGE-ORDER wrong: ${state.items.map { it.chapterUrl }}"
             )
-            // Source filter narrows to AZORA only.
             vm.setSource(MangaSource.AZORA)
             state = vm.state.value
             check(
                 state.items.map { it.chapterUrl } == listOf(itemA.chapterUrl),
                 "AZORA-FILTER wrong: ${state.items.map { it.chapterUrl }}"
             )
-            // Unread-only drops the read itemA, keeps itemB.
             vm.setSource(null)
             vm.setUnreadOnly(true)
-            advanceUntilIdle()
             state = vm.state.value
             check(
                 state.items.map { it.chapterUrl } == listOf(itemB.chapterUrl),
