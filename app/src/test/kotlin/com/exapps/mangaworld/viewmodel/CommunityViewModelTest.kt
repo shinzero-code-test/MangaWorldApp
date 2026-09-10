@@ -220,12 +220,13 @@ class CommunityViewModelTest {
             vm.postComment("hi", false)
             advanceUntilIdle()
             // Raw backend text must not reach UI state (generic fallback string instead).
-            assertNotEquals("boom", vm.state.value.error)
-            assertNotNull(vm.state.value.error)
+            // DIAG messages: CI shows only the failing line; values disambiguate.
+            assertNotEquals("error must not leak raw backend text", "boom", vm.state.value.error)
+            assertNotNull("DIAG profile=${vm.state.value.profile} comments=${vm.state.value.comments.map { it.text }}", vm.state.value.error)
             // Failed optimistic echo is rolled back.
-            assertFalse(vm.state.value.comments.any { it.text == "hi" })
+            assertFalse("DIAG comments=${vm.state.value.comments.map { it.text }}", vm.state.value.comments.any { it.text == "hi" })
             vm.dismissError()
-            assertNull(vm.state.value.error)
+            assertNull("DIAG error=${vm.state.value.error}", vm.state.value.error)
         }
     }
 
