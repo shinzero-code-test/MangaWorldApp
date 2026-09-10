@@ -119,7 +119,11 @@ class ReaderViewModel @Inject constructor(
     private val analyticsManager: FirebaseAnalyticsManager,
     private val remoteConfigManager: FirebaseRemoteConfigManager,
     private val positionSyncManager: ReadingPositionSyncManager,
-    private val imageLoader: coil.ImageLoader
+    private val imageLoader: coil.ImageLoader,
+    // Injected (not hardcoded) so tests run fully virtual — no real IO/Default
+    // threads for polling helpers to race (#1 follow-up).
+    @com.exapps.mangaworld.core.di.IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    @com.exapps.mangaworld.core.di.DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReaderUiState())
@@ -129,7 +133,7 @@ class ReaderViewModel @Inject constructor(
     private var sessionCheckpointAt: Long? = null
     // Scope that outlives viewModelScope cancellation so end-of-session flushes
     // (presence-off, reading-time) actually run from onCleared.
-    private val flushScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val flushScope = CoroutineScope(SupervisorJob() + defaultDispatcher)
     private var annotationsJob: Job? = null
     private var presenceJob: Job? = null
     private var reactionsJob: Job? = null
@@ -211,7 +215,7 @@ class ReaderViewModel @Inject constructor(
         val isImported = mangaId.startsWith("imported_") || source.id == "local" || source.id == "imported"
         if (isImported) {
             viewModelScope.launch {
-                val localPages = withContext(Dispatchers.IO) {
+                val localPages = withContext(ioDispatcher) {
                     downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
                 }
                 if (localPages.isNotEmpty()) {
@@ -255,7 +259,7 @@ class ReaderViewModel @Inject constructor(
         }
         viewModelScope.launch {
             val chapterMeta = resolveChapterMeta(mangaId, chapterUrl, source)
-            val localPages = withContext(Dispatchers.IO) {
+            val localPages = withContext(ioDispatcher) {
                 downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
             }
             if (localPages.isNotEmpty()) {
@@ -494,11 +498,11 @@ class ReaderViewModel @Inject constructor(
                 val mangaId = st.mangaId
                 val isImportedManga = mangaId.startsWith("imported_")
                 val fetched: List<ChapterPage> = if (isImportedManga) {
-                    withContext(Dispatchers.IO) {
+                    withContext(ioDispatcher) {
                         downloadQueueManager.getLocalChapterPages(mangaId, next.url)
                     }
                 } else {
-                    val local = withContext(Dispatchers.IO) {
+                    val local = withContext(ioDispatcher) {
                         downloadQueueManager.getLocalChapterPages(mangaId, next.url)
                     }
                     if (local.isNotEmpty()) local
@@ -575,7 +579,7 @@ class ReaderViewModel @Inject constructor(
     /** Full ordered chapter list for imported manga (disk order = reading order). */
     private suspend fun refreshAllChaptersLocal(mangaId: String) {
         try {
-            val mangaDirPath = withContext(Dispatchers.IO) {
+            val mangaDirPath = withContext(ioDispatcher) {
                 downloadQueueManager.getMangaDirPath(mangaId)
             }
             val orderedNames = java.io.File(mangaDirPath).listFiles()
@@ -611,7 +615,7 @@ class ReaderViewModel @Inject constructor(
     private suspend fun computeAdjacentLocalChaptersFor(mangaId: String, currentUrl: String) {
         try {
             // Reuse disk scan order from detail (metadata + .completed dirs).
-            val mangaDirPath = withContext(Dispatchers.IO) {
+            val mangaDirPath = withContext(ioDispatcher) {
                 downloadQueueManager.getMangaDirPath(mangaId)
             }
             val mangaDir = java.io.File(mangaDirPath)
@@ -663,7 +667,7 @@ class ReaderViewModel @Inject constructor(
                 ?.takeIf { it.isNotBlank() }
                 ?: st.chapterUrl
             // Resolve proper manga title from cache instead of using the slug
-            val mangaTitle = withContext(Dispatchers.IO) {
+            val mangaTitle = withContext(ioDispatcher) {
                 cacheDao.get(st.mangaId)?.title
                     ?: resolveDetailForChapter(st.mangaId, currentSource)?.title
                     ?: st.mangaId.substringAfter("_").ifBlank { st.mangaId }
@@ -688,7 +692,7 @@ class ReaderViewModel @Inject constructor(
                     observeDownloadTask(existingTaskId)
                 } else {
                     // Disk scan must leave the Main thread; resolve before updating state.
-                    val alreadyOwned = withContext(Dispatchers.IO) {
+                    val alreadyOwned = withContext(ioDispatcher) {
                         downloadQueueManager.isChapterDownloaded(st.mangaId, st.chapterUrl, mangaTitle)
                     }
                     _state.update {
