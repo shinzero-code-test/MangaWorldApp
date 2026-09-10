@@ -72,6 +72,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -340,29 +341,32 @@ class SyncStorageViewModelTest {
                 readMangaIds = setOf("mA")
             )
             advanceUntilIdle()
-            val state = vm.state.value
-            // Every assert carries the full state: a bare failure here once hid
-            // which invariant broke (isLoading stuck true vs wrong items).
-            assertFalse("state after refresh: $state", state.isLoading)
-            assertNull("error after refresh: ${state.error}", state.error)
+            // fail()-guarded checks (not asserts): a bare AssertionError here
+            // once proved unmappable to any assert — fail() always carries text.
+            fun check(cond: Boolean, msg: String) { if (!cond) fail(msg) }
+            var state = vm.state.value
+            check(!state.isLoading, "STILL-LOADING after refresh: $state")
+            check(state.error == null, "ERROR after refresh: ${state.error}")
             // Distinct by chapterUrl, newest publishedAt first.
-            assertEquals(
-                "items after refresh: ${state.items.map { it.chapterUrl }}",
-                listOf(itemB.chapterUrl, itemA.chapterUrl), state.items.map { it.chapterUrl }
+            check(
+                state.items.map { it.chapterUrl } == listOf(itemB.chapterUrl, itemA.chapterUrl),
+                "MERGE-ORDER wrong: ${state.items.map { it.chapterUrl }}"
             )
             // Source filter narrows to AZORA only.
             vm.setSource(MangaSource.AZORA)
-            assertEquals(
-                "items after AZORA filter: ${vm.state.value.items.map { it.chapterUrl }}",
-                listOf(itemA.chapterUrl), vm.state.value.items.map { it.chapterUrl }
+            state = vm.state.value
+            check(
+                state.items.map { it.chapterUrl } == listOf(itemA.chapterUrl),
+                "AZORA-FILTER wrong: ${state.items.map { it.chapterUrl }}"
             )
             // Unread-only drops the read itemA, keeps itemB.
             vm.setSource(null)
             vm.setUnreadOnly(true)
             advanceUntilIdle()
-            assertEquals(
-                "items after unreadOnly: ${vm.state.value.items.map { it.chapterUrl }}",
-                listOf(itemB.chapterUrl), vm.state.value.items.map { it.chapterUrl }
+            state = vm.state.value
+            check(
+                state.items.map { it.chapterUrl } == listOf(itemB.chapterUrl),
+                "UNREAD-FILTER wrong: ${state.items.map { it.chapterUrl }}"
             )
         }
     }
