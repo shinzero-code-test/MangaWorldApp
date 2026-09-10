@@ -117,9 +117,9 @@ android {
             // GC death spirals that look exactly like a hang.
             it.maxHeapSize = "2g"
             // Bound accumulation across classes (leaked scopes/sandboxes the
-            // tests cannot clear): a fresh worker every 50 classes isolates any
-            // single-class wedge instead of wedging the whole task.
-            it.forkEvery = 50
+            // tests cannot clear): fresh workers isolate any single-class wedge
+            // instead of wedging the whole task.
+            it.forkEvery = 5
             it.testLogging {
                 events("started", "failed", "skipped")
                 showStandardStreams = false
