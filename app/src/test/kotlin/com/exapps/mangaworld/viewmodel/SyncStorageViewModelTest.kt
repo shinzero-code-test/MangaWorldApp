@@ -335,15 +335,29 @@ class SyncStorageViewModelTest {
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
-            val itemA = latestItem("mA", "https://example.com/a", MangaSource.AZORA, publishedAt = 100L)
-            val itemB = latestItem("mB", "https://example.com/b", MangaSource.OLYMPUS, publishedAt = 200L)
-            val itemADup = itemA.copy(source = MangaSource.OLYMPUS)
-            val vm = latestVm(
-                azoraResult = Result.success(HomeData(latestChapters = listOf(itemA))),
-                olympusResult = Result.success(HomeData(latestChapters = listOf(itemB, itemADup))),
-                readMangaIds = setOf("mA")
-            )
-            advanceUntilIdle()
+            // TEMP-DIAG: phase-labeled capture — a bare failure elsewhere in this
+            // test hid which phase throws; this surfaces the original type+message.
+            fun <T> phase(name: String, block: () -> T): T = try {
+                block()
+            } catch (e: Throwable) {
+                fail("PHASE-$name threw ${e::class.qualifiedName}: ${e.message}")
+                throw e
+            }
+            val itemA = phase("ITEMS") {
+                latestItem("mA", "https://example.com/a", MangaSource.AZORA, publishedAt = 100L)
+            }
+            val itemB = phase("ITEMS") {
+                latestItem("mB", "https://example.com/b", MangaSource.OLYMPUS, publishedAt = 200L)
+            }
+            val itemADup = phase("COPY") { itemA.copy(source = MangaSource.OLYMPUS) }
+            val vm = phase("CTOR") {
+                latestVm(
+                    azoraResult = Result.success(HomeData(latestChapters = listOf(itemA))),
+                    olympusResult = Result.success(HomeData(latestChapters = listOf(itemB, itemADup))),
+                    readMangaIds = setOf("mA")
+                )
+            }
+            phase("ADVANCE") { advanceUntilIdle() }
             // fail()-guarded checks (not asserts): a bare AssertionError here
             // once proved unmappable to any assert — fail() always carries text.
             fun check(cond: Boolean, msg: String) { if (!cond) fail(msg) }
