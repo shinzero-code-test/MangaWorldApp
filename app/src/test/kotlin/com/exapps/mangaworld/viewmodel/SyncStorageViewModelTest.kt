@@ -333,11 +333,12 @@ class SyncStorageViewModelTest {
 
     @Test
     fun latestUpdates_refreshMergesDedupesSortsAndFilters() {
-        // Unconfined variant: eager execution, no virtual-time pumping, so a
-        // bare infrastructure failure (previously attributed to the runTest
-        // line with no message) cannot hide inside scheduler mechanics.
-        runTest(UnconfinedTestDispatcher()) {
-            Dispatchers.setMain(UnconfinedTestDispatcher())
+        // No runTest wrapper at all: with Unconfined Main everything below
+        // executes eagerly on the calling thread, so a bare infrastructure
+        // failure (previously attributed to the runTest line with no message
+        // under both dispatchers) has nowhere left to hide.
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+        try {
             val itemA = latestItem("mA", "https://example.com/a", MangaSource.AZORA, publishedAt = 100L)
             val itemB = latestItem("mB", "https://example.com/b", MangaSource.OLYMPUS, publishedAt = 200L)
             val itemADup = itemA.copy(source = MangaSource.OLYMPUS)
@@ -367,6 +368,8 @@ class SyncStorageViewModelTest {
                 state.items.map { it.chapterUrl } == listOf(itemB.chapterUrl),
                 "UNREAD-FILTER wrong: ${state.items.map { it.chapterUrl }}"
             )
+        } finally {
+            Dispatchers.resetMain()
         }
     }
 
