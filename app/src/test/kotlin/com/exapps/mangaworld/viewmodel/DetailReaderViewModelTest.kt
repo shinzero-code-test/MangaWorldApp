@@ -39,6 +39,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -160,13 +161,18 @@ class DetailReaderViewModelTest {
         imageLoader = imageLoader
     )
 
-    /** Polls state until [check] passes; needed where the VM hops to real Dispatchers.IO. */
+    /**
+     * Polls state until [check] passes; needed where the VM hops to real
+     * Dispatchers.IO. Uses runCurrent(), NEVER advanceUntilIdle(): the reader
+     * starts a `while(true){delay(30s)}` session-saver on load, and advancing
+     * virtual time loops it forever (hung CI for 30+ min).
+     */
     private fun TestScope.awaitUntil(timeoutMs: Long = 5_000, check: () -> Boolean) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (!check()) {
             if (System.currentTimeMillis() > deadline) error("timed out waiting for VM state")
             Thread.sleep(25)
-            advanceUntilIdle()
+            runCurrent()
         }
     }
 
@@ -328,7 +334,7 @@ class DetailReaderViewModelTest {
             Dispatchers.setMain(dispatcher)
             stubReaderCommon()
             val vm = createReaderViewModel()
-            advanceUntilIdle()
+            runCurrent()
             val state = vm.state.value
             assertTrue(state.isLoading)
             assertTrue(state.pages.isEmpty())
@@ -358,7 +364,7 @@ class DetailReaderViewModelTest {
                 Result.success(testPages())
             coEvery { libraryRepo.getReadingProgress(any(), any()) } returns Pair(0, 0)
             val vm = createReaderViewModel()
-            advanceUntilIdle()
+            runCurrent()
             vm.loadChapter("https://example.com/ch-5", "azora_test-slug", MangaSource.AZORA)
             awaitUntil { !vm.state.value.isLoading && vm.state.value.pages.isNotEmpty() }
             val state = vm.state.value
@@ -372,7 +378,7 @@ class DetailReaderViewModelTest {
             // Single chapter loaded with no catalogue: neighbour navigation is a no-op.
             vm.openNextChapter()
             vm.openPreviousChapter()
-            advanceUntilIdle()
+            runCurrent()
             assertEquals("https://example.com/ch-5", vm.state.value.chapterUrl)
         }
     }
@@ -388,7 +394,7 @@ class DetailReaderViewModelTest {
             coEvery { mangaRepo.getChapterPages(any(), any(), any()) } returns
                 Result.failure(Exception("reader-boom-raw-4521"))
             val vm = createReaderViewModel()
-            advanceUntilIdle()
+            runCurrent()
             vm.loadChapter("https://example.com/ch-9", "azora_test-slug", MangaSource.AZORA)
             awaitUntil { !vm.state.value.isLoading }
             val state = vm.state.value
@@ -410,7 +416,7 @@ class DetailReaderViewModelTest {
                 Result.success(testPages())
             coEvery { libraryRepo.getReadingProgress(any(), any()) } returns Pair(2, 5)
             val vm = createReaderViewModel()
-            advanceUntilIdle()
+            runCurrent()
             vm.loadChapter("https://example.com/ch-5", "azora_test-slug", MangaSource.AZORA)
             awaitUntil { !vm.state.value.isLoading && vm.state.value.pages.isNotEmpty() }
             assertEquals(2, vm.state.value.currentPage)
@@ -426,7 +432,7 @@ class DetailReaderViewModelTest {
             Dispatchers.setMain(dispatcher)
             stubReaderCommon()
             val vm = createReaderViewModel()
-            advanceUntilIdle()
+            runCurrent()
             assertTrue(vm.state.value.showControls)
             // Vertical mode: any tap toggles controls and records the tap point.
             vm.onReaderTap(0.1f, 0.5f)
@@ -471,7 +477,7 @@ class DetailReaderViewModelTest {
             } returns true
             every { downloadQueueManager.observeTask(any()) } returns flowOf(failedTask)
             val vm = createReaderViewModel()
-            advanceUntilIdle()
+            runCurrent()
             vm.loadChapter("https://example.com/ch-5", "azora_test-slug", MangaSource.AZORA)
             awaitUntil { !vm.state.value.isLoading && vm.state.value.pages.isNotEmpty() }
             vm.downloadCurrentChapter()
@@ -484,7 +490,7 @@ class DetailReaderViewModelTest {
             // Stable stored token is translated, never shown verbatim.
             assertNotEquals("cancelled", state.downloadMessage)
             vm.cancelDownload()
-            advanceUntilIdle()
+            runCurrent()
             coVerify { downloadQueueManager.cancelTask("task-1") }
         }
     }
