@@ -152,7 +152,8 @@ class SourceBrowseViewModel @Inject constructor(
                 )
             }
             else -> {
-                _uiState.value = _uiState.value.copy(errorText = e.message ?: context.getString(R.string.unknown_error), isLoading = false)
+                _uiState.value = _uiState.value.copy(// Generic string: raw backend text must never reach UI state (matches HomeViewModel).
+                errorText = context.getString(R.string.download_error), isLoading = false)
             }
         }
     }
