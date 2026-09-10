@@ -355,7 +355,45 @@ class SyncStorageViewModelTest {
                 state.items.map { it.chapterUrl } == listOf(itemB.chapterUrl, itemA.chapterUrl),
                 "MERGE-ORDER wrong: ${state.items.map { it.chapterUrl }}"
             )
-            // TEMP-BISECT: second half commented to isolate the bare failure.
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun latestUpdates_sourceFilterNarrowsToSource() {
+        // Split from the merge test during bare-failure bisection: source
+        // filtering on its own, so any failure localizes to one statement.
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+        try {
+            val itemA = latestItem("mA", "https://example.com/a", MangaSource.AZORA, publishedAt = 100L)
+            val itemB = latestItem("mB", "https://example.com/b", MangaSource.OLYMPUS, publishedAt = 200L)
+            val vm = latestVm(
+                azoraResult = Result.success(HomeData(latestChapters = listOf(itemA))),
+                olympusResult = Result.success(HomeData(latestChapters = listOf(itemB))),
+            )
+            vm.setSource(MangaSource.AZORA)
+            val urls = vm.state.value.items.map { it.chapterUrl }
+            if (urls != listOf(itemA.chapterUrl)) fail("AZORA-FILTER wrong: $urls")
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun latestUpdates_unreadOnlyDropsReadItems() {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+        try {
+            val itemA = latestItem("mA", "https://example.com/a", MangaSource.AZORA, publishedAt = 100L)
+            val itemB = latestItem("mB", "https://example.com/b", MangaSource.OLYMPUS, publishedAt = 200L)
+            val vm = latestVm(
+                azoraResult = Result.success(HomeData(latestChapters = listOf(itemA))),
+                olympusResult = Result.success(HomeData(latestChapters = listOf(itemB))),
+                readMangaIds = setOf("mA")
+            )
+            vm.setUnreadOnly(true)
+            val urls = vm.state.value.items.map { it.chapterUrl }
+            if (urls != listOf(itemB.chapterUrl)) fail("UNREAD-FILTER wrong: $urls")
         } finally {
             Dispatchers.resetMain()
         }
