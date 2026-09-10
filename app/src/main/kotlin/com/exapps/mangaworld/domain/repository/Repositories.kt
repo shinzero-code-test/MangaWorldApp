@@ -48,7 +48,7 @@ interface LibraryRepository {
     fun getReadingHistory(): Flow<List<ReadingHistoryItem>>
     suspend fun updateReadingHistory(
         mangaId: String, slug: String, title: String, coverUrl: String,
-        source: MangaSource, chapterNumber: Float, chapterUrl: String, totalChapters: Int
+        sourceId: String, chapterNumber: Float, chapterUrl: String, totalChapters: Int
     )
     suspend fun clearHistory()
     suspend fun removeFromHistory(mangaId: String)

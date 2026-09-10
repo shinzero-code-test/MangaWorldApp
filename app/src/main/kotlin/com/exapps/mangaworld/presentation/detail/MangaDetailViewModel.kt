@@ -414,6 +414,9 @@ class MangaDetailViewModel @Inject constructor(
     fun hideAddToListDialog() = _state.update { it.copy(showAddToListDialog = false) }
 
     fun addCurrentMangaToList(listId: String) {
+        // UI hides the entry point for local/imported manga; stay silent here
+        // too so a stale dialog callback can never write a disk-only id.
+        if (MangaSource.isLocalSource(currentRawSourceId) || currentMangaId.startsWith("imported_")) return
         val manga = _state.value.manga ?: return
         viewModelScope.launch {
             val result = runCatching {

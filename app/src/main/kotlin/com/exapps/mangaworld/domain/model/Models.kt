@@ -256,6 +256,8 @@ data class ReadingHistoryItem(
     val title: String,
     val coverUrl: String,
     val source: MangaSource,
+    /** Raw stored source id — unlike [source], never falls back (keeps "imported"/"local"). */
+    val sourceId: String = "",
     val lastChapterNumber: Float,
     val lastChapterUrl: String = "",
     val lastReadAt: Long,

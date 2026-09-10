@@ -166,7 +166,10 @@ fun BrowseScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(pagingItems.itemCount, key = { i -> pagingItems.peek(i)?.let { "${it.source.id}_${it.slug}" } ?: "item_$i" }) { index ->
+            // Composite key with the positional index: the same manga (same
+            // source + slug) can legitimately appear twice in one page window
+            // while filters refresh, and duplicate keys crash Lazy grids.
+            items(pagingItems.itemCount, key = { i -> pagingItems.peek(i)?.let { "${it.source.id}_${it.slug}_$i" } ?: "item_$i" }) { index ->
                 val manga = pagingItems[index] ?: return@items
                 if (uiState.isGridView) {
                     MangaCard(

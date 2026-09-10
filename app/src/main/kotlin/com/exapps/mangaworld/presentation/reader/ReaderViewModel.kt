@@ -245,6 +245,29 @@ class ReaderViewModel @Inject constructor(
                     computeAdjacentLocalChapters(mangaId)
                     // Full ordered chapter list enables unlimited forward chaining.
                     refreshAllChaptersLocal(mangaId)
+                    // Imported opens must land in reading history like online ones.
+                    // Metadata comes from the downloads table (no manga-cache row
+                    // exists for disk-only manga); sourceId stays "imported".
+                    if (!_state.value.incognitoMode) {
+                        runCatching {
+                            val local = withContext(ioDispatcher) {
+                                downloadQueueManager.getDownloadedManga(mangaId)
+                            }
+                            if (local != null) {
+                                libraryRepo.updateReadingHistory(
+                                    mangaId = mangaId, slug = local.slug,
+                                    title = local.title,
+                                    // Coil needs a file:// scheme for disk paths.
+                                    coverUrl = local.localCoverPath?.let { "file://$it" }
+                                        ?: local.coverUrl,
+                                    sourceId = local.sourceId,
+                                    chapterNumber = chNum,
+                                    chapterUrl = chapterUrl,
+                                    totalChapters = local.totalChapters
+                                )
+                            }
+                        }
+                    }
                     beginSession(mangaId, chapterUrl)
                 } else {
                     _state.update { it.copy(isLoading = false, error = context.getString(R.string.no_pages_loaded)) }
@@ -330,7 +353,7 @@ class ReaderViewModel @Inject constructor(
                                 libraryRepo.updateReadingHistory(
                                     mangaId = mangaId, slug = cached.slug,
                                     title = cached.title, coverUrl = cached.coverUrl,
-                                    source = MangaSource.fromId(cached.sourceId),
+                                    sourceId = cached.sourceId,
                                     chapterNumber = chNum,
                                     chapterUrl = chapterUrl,
                                     totalChapters = cached.totalChapters ?: 0

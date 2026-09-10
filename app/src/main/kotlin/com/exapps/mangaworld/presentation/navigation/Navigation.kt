@@ -182,7 +182,15 @@ fun MangaNavGraph(
         }
         composable(Screen.Library.route) {
             LibraryScreen(
-                onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) },
+                // Imported history entries carry sourceId "imported"/"local" —
+                // they open the local detail screen, never an online source.
+                onMangaClick = { src, slug ->
+                    if (MangaSource.isLocalSource(src)) {
+                        navController.navigate(Screen.LocalMangaDetail.createRoute(slug))
+                    } else {
+                        navController.navigate(Screen.Detail.createRoute(src, slug))
+                    }
+                },
                 onBrowseClick = { navController.navigate(Screen.Browse.route) }
             )
         }

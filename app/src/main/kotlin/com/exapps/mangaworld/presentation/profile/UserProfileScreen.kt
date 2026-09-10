@@ -118,7 +118,10 @@ class UserProfileViewModel @Inject constructor(
 
     val totalReadingTimeMs = readingStatsStore.totalReadingTimeMs
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
-    val totalMangaRead = readingStatsStore.totalMangaRead
+    // Middle stat card ("read chapters"): true finished-chapters counter.
+    // totalMangaRead is incremented per finished chapter too, but its Firestore
+    // mirror lives in AchievementManager — use the canonical source instead.
+    val chaptersRead = achievementManager.totalChaptersRead
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
     val currentStreak = readingStatsStore.currentStreak
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
@@ -236,7 +239,7 @@ fun UserProfileScreen(
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
     val readingLists by viewModel.readingLists.collectAsStateWithLifecycle()
     val totalReadingTimeMs by viewModel.totalReadingTimeMs.collectAsStateWithLifecycle()
-    val totalMangaRead by viewModel.totalMangaRead.collectAsStateWithLifecycle()
+    val chaptersRead by viewModel.chaptersRead.collectAsStateWithLifecycle()
     val currentStreak by viewModel.currentStreak.collectAsStateWithLifecycle()
     val achievementsUnlocked by viewModel.achievementsUnlocked.collectAsStateWithLifecycle()
     val avatarUri = viewModel.avatarUri
@@ -275,7 +278,7 @@ fun UserProfileScreen(
 
         StatsRow(
             totalReadingTimeMs = totalReadingTimeMs,
-            chaptersRead = totalMangaRead,
+            chaptersRead = chaptersRead,
             streak = currentStreak
         )
 
@@ -435,7 +438,9 @@ private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, bannerUri
                                 )
                             } else {
                                 Text(
-                                    text = (profile?.username ?: "G").take(1).uppercase(),
+                                    text = (profile?.displayName?.takeIf { it.isNotBlank() }
+                                        ?: profile?.username?.takeIf { it.isNotBlank() }
+                                        ?: stringResource(R.string.guest)).take(1).uppercase(),
                                     color = MangaColors.PrimaryLight,
                                     style = MaterialTheme.typography.headlineMedium
                                 )
@@ -463,7 +468,9 @@ private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, bannerUri
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = profile?.username ?: stringResource(R.string.guest),
+                    text = profile?.displayName?.takeIf { it.isNotBlank() }
+                        ?: profile?.username?.takeIf { it.isNotBlank() }
+                        ?: stringResource(R.string.guest),
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleLarge
@@ -481,6 +488,16 @@ private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, bannerUri
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
+            }
+            if (!profile?.username.isNullOrBlank()) {
+                Text(
+                    text = stringResource(R.string.profile_username_handle, profile.username),
+                    color = MangaColors.Cyan,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 4.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
             if (!profile?.bio.isNullOrBlank()) {
                 Text(

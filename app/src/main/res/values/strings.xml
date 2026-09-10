@@ -85,7 +85,8 @@
     <!-- ─── Search / Browse ────────────────────────────────────────────────── -->
     <string name="search_hint">ابحث عن مانجا، مؤلف…</string>
     <string name="search_all_sources">كل المصادر</string>
-    <string name="search_suggested">بحث مقترح</string>
+    <string name="search_recent">عمليات البحث الأخيرة</string>
+    <string name="search_recent_empty">لا توجد عمليات بحث أخيرة</string>
     <string name="search_empty">لا توجد نتائج</string>
     <string name="search_cloudflare_required">تحقق Cloudflare مطلوب</string>
     <string name="search_cloudflare_button">تحقق الآن</string>
@@ -112,6 +113,7 @@
     <string name="profile_edit">تعديل الملف الشخصي</string>
     <string name="profile_display_name">الاسم المعروض</string>
     <string name="profile_username">اسم المستخدم</string>
+    <string name="profile_username_handle">@%1$s</string>
     <string name="profile_username_display_name_hint">اسمك كما يظهر للآخرين</string>
     <string name="profile_bio">النبذة الشخصية</string>
     <string name="profile_join_date">تاريخ الانضمام</string>

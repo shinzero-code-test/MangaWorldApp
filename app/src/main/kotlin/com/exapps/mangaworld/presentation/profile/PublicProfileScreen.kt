@@ -334,7 +334,9 @@ private fun PublicProfileHero(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = profile?.username ?: stringResource(R.string.user),
+                    text = profile?.displayName?.takeIf { it.isNotBlank() }
+                        ?: profile?.username?.takeIf { it.isNotBlank() }
+                        ?: stringResource(R.string.user),
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleLarge
@@ -343,6 +345,17 @@ private fun PublicProfileHero(
                     Spacer(Modifier.width(8.dp))
                     BadgePill(text = profile.badgeLabel, tint = MangaColors.PrimaryLight, tintBg = MangaColors.GlowPurple)
                 }
+            }
+
+            if (!profile?.username.isNullOrBlank()) {
+                Text(
+                    text = stringResource(R.string.profile_username_handle, profile.username),
+                    color = MangaColors.Cyan,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 4.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
             if (!profile?.bio.isNullOrBlank()) {
@@ -398,7 +411,9 @@ private fun ProfileAvatar(profile: CommunityProfile?) {
                     )
                 } else {
                     Text(
-                        text = (profile?.username ?: "U").take(1).uppercase(),
+                        text = (profile?.displayName?.takeIf { it.isNotBlank() }
+                            ?: profile?.username?.takeIf { it.isNotBlank() }
+                            ?: stringResource(R.string.user)).take(1).uppercase(),
                         color = MangaColors.PrimaryLight,
                         style = MaterialTheme.typography.headlineMedium
                     )

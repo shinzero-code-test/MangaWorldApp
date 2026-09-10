@@ -345,14 +345,14 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun updateReadingHistory(
         mangaId: String, slug: String, title: String, coverUrl: String,
-        source: MangaSource, chapterNumber: Float, chapterUrl: String, totalChapters: Int
+        sourceId: String, chapterNumber: Float, chapterUrl: String, totalChapters: Int
     ) {
         val existing = historyDao.getByMangaId(mangaId)
         val readCount = readChapterDao.getReadChapters(mangaId).first().size
         historyDao.insertOrUpdate(
             ReadingHistoryEntity(
                 mangaId = mangaId, slug = slug, title = title, coverUrl = coverUrl,
-                sourceId = source.id, lastChapterNumber = chapterNumber,
+                sourceId = sourceId, lastChapterNumber = chapterNumber,
                 lastChapterUrl = chapterUrl,
                 lastReadAt = System.currentTimeMillis(),
                 readChapters = readCount,

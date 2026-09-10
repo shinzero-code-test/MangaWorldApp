@@ -841,6 +841,10 @@ class DownloadQueueManager @Inject constructor(
         downloadedMangaDao.upsert(entity)
     }
 
+    /** Local/imported manga metadata for history + titles (null when unknown). */
+    suspend fun getDownloadedManga(mangaId: String): DownloadedMangaEntity? =
+        downloadedMangaDao.get(mangaId)
+
     /**
      * Scan the downloads directory for manga folders that have a metadata.json
      * but no corresponding row in the downloaded_manga table, and insert them.

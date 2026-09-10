@@ -426,7 +426,11 @@ private fun DetailContent(
                         )
                     }
                 }
-                item { DetailGlassAction(Icons.Filled.PlaylistAdd, stringResource(R.string.add_to_list), MangaColors.PrimaryLight, onShowAddToList) }
+                // Custom lists live in Firestore — imported manga (disk-only, no
+                // stable online identity) must not be added to them.
+                if (!isLocalManga) {
+                    item { DetailGlassAction(Icons.Filled.PlaylistAdd, stringResource(R.string.add_to_list), MangaColors.PrimaryLight, onShowAddToList) }
+                }
                 item { DetailGlassAction(Icons.Filled.CompareArrows, stringResource(R.string.compare_sources), MangaColors.Yellow, onShowComparison) }
             }
         }

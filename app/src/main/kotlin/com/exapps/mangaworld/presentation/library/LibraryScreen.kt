@@ -89,7 +89,12 @@ fun LibraryScreen(
             )
             LibraryTab.HISTORY -> HistoryContent(
                 history = state.history,
-                onMangaClick = { h -> onMangaClick(h.source.id, h.slug) },
+                // sourceId (not the AZORA-fallback source) so imported entries
+                // keep their "imported"/"local" identity for routing.
+                onMangaClick = { h ->
+                    val realId = h.sourceId.takeIf { it.isNotBlank() } ?: h.source.id
+                    onMangaClick(realId, h.slug)
+                },
                 onRemove = { viewModel.removeHistory(it.mangaId) },
                 onBrowse = onBrowseClick
             )
@@ -275,8 +280,10 @@ private fun HistoryItem(item: ReadingHistoryItem, onClick: () -> Unit, onRemove:
                     trackColor = MangaColors.OutlineVariant
                 )
                 Spacer(Modifier.height(2.dp))
-                Text("${item.readChapters}/${item.totalChapters}",
-                    style = MaterialTheme.typography.labelSmall, color = MangaColors.Muted)
+                Text(
+                    stringResource(R.string.library_chapters_read, item.readChapters, item.totalChapters),
+                    style = MaterialTheme.typography.labelSmall, color = MangaColors.Muted
+                )
             }
         }
         Box {

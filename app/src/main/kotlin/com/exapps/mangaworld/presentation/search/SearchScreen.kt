@@ -91,7 +91,16 @@ fun SearchScreen(
                 focusedTextColor = MangaColors.OnSurface,
                 unfocusedTextColor = MangaColors.OnSurface
             ),
-            singleLine = true
+            singleLine = true,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                imeAction = androidx.compose.ui.text.input.ImeAction.Search
+            ),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onSearch = {
+                    viewModel.addToHistory(query)
+                    keyboard?.hide()
+                }
+            )
         )
 
         // ── Source filter ────────────────────────────────────────────────────
@@ -170,7 +179,7 @@ fun SearchScreen(
 
         // ── Body ─────────────────────────────────────────────────────────────
         when {
-            query.isEmpty() -> SearchHints(onSuggestionClick = viewModel::setQuery)
+            query.isEmpty() -> SearchHints(onSuggestionClick = viewModel::setQuery, viewModel = viewModel)
             query.length < 2 -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(stringResource(R.string.finish_typing), color = MangaColors.Muted,
                     style = MaterialTheme.typography.bodyMedium)
@@ -181,22 +190,53 @@ fun SearchScreen(
 }
 
 @Composable
-private fun SearchHints(onSuggestionClick: (String) -> Unit) {
-    val suggestions = listOf(
-        "Solo Leveling", "Nano Machine", "Tower of God",
-        "One Piece", "Black Clover", "Naruto", stringResource(R.string.manhwa_action), stringResource(R.string.genre_romance)
-    )
+private fun SearchHints(
+    onSuggestionClick: (String) -> Unit,
+    viewModel: SearchViewModel
+) {
+    val recentSearches by viewModel.searchHistory.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
-        Text(stringResource(R.string.search_suggested), style = MaterialTheme.typography.titleSmall,
-            color = MangaColors.Muted, modifier = Modifier.padding(bottom = 12.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(suggestions) { s -> SuggestionChip(label = s, onClick = { onSuggestionClick(s) }) }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                stringResource(R.string.search_recent),
+                style = MaterialTheme.typography.titleSmall,
+                color = MangaColors.Muted
+            )
+            if (recentSearches.isNotEmpty()) {
+                TextButton(onClick = viewModel::clearHistory) {
+                    Text(stringResource(R.string.clear_history), color = MangaColors.Cyan)
+                }
+            }
+        }
+        if (recentSearches.isEmpty()) {
+            Text(
+                stringResource(R.string.search_recent_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MangaColors.Muted
+            )
+        } else {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(recentSearches, key = { it }) { s ->
+                    RecentSearchChip(
+                        label = s,
+                        onClick = {
+                            onSuggestionClick(s)
+                            viewModel.addToHistory(s)
+                        },
+                        onRemove = { viewModel.removeFromHistory(s) }
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun SuggestionChip(label: String, onClick: () -> Unit) {
+private fun RecentSearchChip(label: String, onClick: () -> Unit, onRemove: () -> Unit) {
     Box(
         Modifier
             .glassSurface(
@@ -207,9 +247,27 @@ private fun SuggestionChip(label: String, onClick: () -> Unit) {
                 glowIntensity = 0.35f
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 8.dp, vertical = 8.dp)
     ) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = MangaColors.MutedLight)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Filled.History,
+                contentDescription = null,
+                tint = MangaColors.Muted,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MangaColors.MutedLight)
+            Spacer(Modifier.width(4.dp))
+            IconButton(onClick = onRemove, modifier = Modifier.size(20.dp)) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.remove),
+                    tint = MangaColors.Muted,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
     }
 }
 
