@@ -120,6 +120,9 @@ android {
             // tests cannot clear): fresh workers isolate any single-class wedge
             // instead of wedging the whole task.
             it.forkEvery = 5
+            // TEMPORARY BISECT (revert once the wedge is found): exclude the
+            // class whose test wedges the worker to prove isolation.
+            it.filter { excludeTestsMatching("com.exapps.mangaworld.viewmodel.DetailReaderViewModelTest") }
             it.testLogging {
                 events("started", "failed", "skipped")
                 showStandardStreams = false
