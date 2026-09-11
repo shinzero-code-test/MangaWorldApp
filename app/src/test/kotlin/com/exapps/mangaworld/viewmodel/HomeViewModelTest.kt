@@ -121,6 +121,10 @@ class HomeViewModelTest {
         runTest(dispatcher) {
         Dispatchers.setMain(dispatcher)
         val vm = createViewModel()
+        // Settle the init load first: racing it against the direct call below
+        // leaves the winner scheduler-dependent (init's AZORA load may land
+        // last, exactly like a cold start overwritten by a later tap).
+        advanceUntilIdle()
         vm.loadHome(MangaSource.OLYMPUS)
         advanceUntilIdle()
         assertEquals(MangaSource.OLYMPUS, vm.state.value.activeSource)

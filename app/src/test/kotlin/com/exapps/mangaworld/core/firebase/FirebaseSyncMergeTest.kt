@@ -167,6 +167,7 @@ class FirebaseSyncMergeTest {
         io.mockk.every { doc.id } returns "lekmanga_m"
         io.mockk.every { doc.getString("sourceId") } returns "lekmanga"
         io.mockk.every { doc.getLong("addedAt") } returns 5_000L
+        io.mockk.every { doc.getBoolean("isFavorite") } returns true
         val entity = FirebaseSyncMerge.favorite(doc)!!
         org.junit.Assert.assertEquals("lekmanga_m", entity.mangaId)
         org.junit.Assert.assertEquals("lekmanga", entity.sourceId)
