@@ -61,6 +61,9 @@ class HomeViewModelTest {
             )
         )
         coEvery { mangaRepo.getSuggestedManga(any(), any()) } returns emptyList()
+        // Neutral cache stub: per-test cache stubs (e.g. offline snapshot) must
+        // not leak into later tests through the shared mock.
+        coEvery { homeCacheDao.get(any()) } returns null
     }
 
     @After

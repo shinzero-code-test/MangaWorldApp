@@ -111,7 +111,6 @@ class FirebaseSyncMergeTest {
         readChapters = 1,
         totalChapters = 1
     )
-}
 
     // ─── Item 6: pull-deserialization parsers ────────────────────────────────
 
@@ -187,3 +186,4 @@ class FirebaseSyncMergeTest {
         io.mockk.every { missing.getString(any()) } returns null
         org.junit.Assert.assertNull(FirebaseSyncMerge.annotation(missing))
     }
+}
