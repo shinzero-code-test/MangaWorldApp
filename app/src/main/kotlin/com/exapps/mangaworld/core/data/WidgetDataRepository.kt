@@ -251,7 +251,7 @@ class WidgetDataRepository @Inject constructor(
             slug = second.slug,
             title = second.title,
             coverUrl = second.coverUrl,
-            subtitle = first.displayName
+            subtitle = context.getString(first.nameRes)
         )
 
     private fun LatestChapterItem.toWidgetLatestUpdateEntry(): WidgetLatestUpdateEntry = WidgetLatestUpdateEntry(

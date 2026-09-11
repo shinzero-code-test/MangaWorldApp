@@ -49,6 +49,7 @@ class AppPreferences @Inject constructor(
         const val MAX_SYNC_TOMBSTONES = 500
         const val TOMBSTONE_TTL_MS = 90L * 24L * 60L * 60L * 1000L
         val KEY_SHOW_LIBRARY_PUBLIC = booleanPreferencesKey("show_library_public")
+        val KEY_LAST_SOURCE_ID = stringPreferencesKey("last_source_id")
 
         val KEY_READER_MODE = stringPreferencesKey("reader_mode")
         val KEY_BRIGHTNESS = floatPreferencesKey("brightness")
