@@ -176,40 +176,13 @@ class LoginViewModel @Inject constructor(
     }
 
     /**
-     * After social sign-in, check if the user already has a Firestore profile.
-     * If not, create one using the provider's display name as both displayName and username.
+     * After social sign-in, provision the Firestore profile (display name =
+     * provider account name, username = email local-part) or repair a blank
+     * one. Shared helper — CloudSyncViewModel uses the same call.
      */
     private suspend fun ensureProfileExists(uid: String) {
-        val existing = communityRepository.getCurrentProfile()
-        if (existing == null || existing.username.isBlank()) {
-            val firebaseUser = sessionManager.currentUser()
-            val providerName = firebaseUser?.displayName?.takeIf { it.isNotBlank() } ?: ""
-            // Generate a username from provider name: lowercase, replace spaces with underscores, keep alphanumeric + underscores
-            val generatedUsername = providerName.lowercase()
-                .replace(Regex("[^a-zA-Z0-9\\s]"), "")
-                .trim()
-                .replace(Regex("\\s+"), "_")
-                .take(20)
-                .ifBlank { "user_${uid.takeLast(6)}" }
-            try {
-                communityRepository.upsertProfile(
-                    username = generatedUsername,
-                    bio = "",
-                    isPublic = true,
-                    displayName = providerName
-                )
-            } catch (_: Exception) {
-                // Username might be taken — append random suffix
-                val fallback = "${generatedUsername}_${(1000..9999).random()}"
-                try {
-                    communityRepository.upsertProfile(
-                        username = fallback,
-                        bio = "",
-                        isPublic = true,
-                        displayName = providerName
-                    )
-                } catch (_: Exception) { /* Profile creation failed silently */ }
-            }
+        runCatching {
+            communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid)
         }
     }
 
@@ -240,6 +213,11 @@ class LoginViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    /** Social sign-in failed without an exception to map (null token, provider error). */
+    fun onSocialSignInFailed() {
+        _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.auth_error_login_failed)) }
     }
 
     private fun mapAuthError(error: Exception): String = firebaseAuthErrorMessage(context, error)

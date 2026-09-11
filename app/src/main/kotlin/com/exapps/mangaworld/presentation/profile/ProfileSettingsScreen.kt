@@ -53,12 +53,14 @@ import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.BuildConfig
 import com.exapps.mangaworld.presentation.auth.accountMergeMessage
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.auth.ensureSocialProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -91,8 +93,16 @@ class ProfileSettingsViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    val profile = kotlinx.coroutines.flow.flow { emit(communityRepository.getCurrentProfile()) }
+    private val _profileTick = MutableStateFlow(0)
+    /**
+     * Refreshable (not one-shot): [refreshProfile] re-reads Firestore, so a
+     * profile provisioned after this screen opened (social signup) appears
+     * without reopening the screen.
+     */
+    val profile = _profileTick.flatMapLatest { kotlinx.coroutines.flow.flow { emit(communityRepository.getCurrentProfile()) } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun refreshProfile() { _profileTick.value += 1 }
     val appSettings = settingsRepository.getAppSettings()
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
@@ -212,6 +222,7 @@ class ProfileSettingsViewModel @Inject constructor(
                     if (oldId != null) cloudinaryUploader.deleteImage(oldId)
                 }
                 avatarUri = null
+                refreshProfile()
             }
         }
     }
@@ -239,6 +250,24 @@ class ProfileSettingsViewModel @Inject constructor(
                 location = location.ifBlank { c?.location ?: "" },
                 birthday = birthday
             )
+            refreshProfile()
+        }
+    }
+
+    /**
+     * Self-heal (issue 2): a signed-in user with no username (social signup on
+     * an older build) gets the email-derived profile on next visit, so they
+     * stop looking like a guest.
+     */
+    fun healBlankProfile() {
+        viewModelScope.launch {
+            val user = sessionManager.currentUser() ?: return@launch
+            if (user.isAnonymous) return@launch
+            val current = runCatching { communityRepository.getCurrentProfile() }.getOrNull()
+            if (current != null && current.username.isBlank()) {
+                runCatching { communityRepository.ensureSocialProfile(user, user.uid) }
+                refreshProfile()
+            }
         }
     }
 
@@ -254,6 +283,7 @@ class ProfileSettingsViewModel @Inject constructor(
                 displayName = c?.displayName ?: ""
             )
             communityRepository.updateProfilePrivacy(showLists, showActivity)
+            refreshProfile()
         }
     }
 
@@ -527,6 +557,11 @@ fun ProfileSettingsScreen(
     setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit,
     viewModel: ProfileSettingsViewModel = hiltViewModel()
 ) {
+    // Same visit-refresh + blank-username repair as the profile screen.
+    LaunchedEffect(Unit) {
+        viewModel.refreshProfile()
+        viewModel.healBlankProfile()
+    }
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val profile by viewModel.profile.collectAsStateWithLifecycle()
     val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()

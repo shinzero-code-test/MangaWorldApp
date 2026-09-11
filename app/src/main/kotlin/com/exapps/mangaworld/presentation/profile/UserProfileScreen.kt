@@ -51,6 +51,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,7 +86,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.auth.ensureSocialProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -102,13 +105,22 @@ class UserProfileViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
     private val readingStatsStore: ReadingStatsStore,
     private val achievementManager: com.exapps.mangaworld.core.data.AchievementManager,
-    private val cloudinaryUploader: com.exapps.mangaworld.core.firebase.CloudinaryUploader
+    private val cloudinaryUploader: com.exapps.mangaworld.core.firebase.CloudinaryUploader,
+    private val sessionManager: com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 ) : ViewModel() {
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    val profile = kotlinx.coroutines.flow.flow { emit(communityRepository.getCurrentProfile()) }
+    private val _profileTick = MutableStateFlow(0)
+    /**
+     * Refreshable (not one-shot): [refreshProfile] re-reads Firestore, so a
+     * profile provisioned after this screen opened (social signup) appears
+     * without reopening the screen.
+     */
+    val profile = _profileTick.flatMapLatest { kotlinx.coroutines.flow.flow { emit(communityRepository.getCurrentProfile()) } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun refreshProfile() { _profileTick.value += 1 }
     val notifications = communityRepository.observeNotifications(20)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val lists = communityRepository.observeUserLists()
@@ -176,6 +188,7 @@ class UserProfileViewModel @Inject constructor(
                     cloudinaryUploader.extractPublicId(url)?.let { id -> launch { cloudinaryUploader.deleteImage(id) } }
                 }
                 avatarUri = null
+                refreshProfile()
             }
         }
     }
@@ -197,6 +210,7 @@ class UserProfileViewModel @Inject constructor(
                     cloudinaryUploader.extractPublicId(url)?.let { id -> launch { cloudinaryUploader.deleteImage(id) } }
                 }
                 bannerUri = null
+                refreshProfile()
             }
         }
     }
@@ -206,7 +220,27 @@ class UserProfileViewModel @Inject constructor(
     }
 
     fun updatePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean) {
-        viewModelScope.launch { runCatching { communityRepository.updateProfilePrivacy(showListsPublic, showActivityPublic) } }
+        viewModelScope.launch {
+            runCatching { communityRepository.updateProfilePrivacy(showListsPublic, showActivityPublic) }
+            refreshProfile()
+        }
+    }
+
+    /**
+     * Self-heal (issue 2): a signed-in user with no username (social signup on
+     * an older build) gets the email-derived profile on next visit, so they
+     * stop looking like a guest.
+     */
+    fun healBlankProfile() {
+        viewModelScope.launch {
+            val user = sessionManager.currentUser() ?: return@launch
+            if (user.isAnonymous) return@launch
+            val current = runCatching { communityRepository.getCurrentProfile() }.getOrNull()
+            if (current != null && current.username.isBlank()) {
+                runCatching { communityRepository.ensureSocialProfile(user, user.uid) }
+                refreshProfile()
+            }
+        }
     }
 }
 
@@ -234,6 +268,13 @@ fun UserProfileScreen(
     onMangaClick: (sourceId: String, slug: String) -> Unit = { _, _ -> },
     viewModel: UserProfileViewModel = hiltViewModel()
 ) {
+    // Re-read Firestore on every visit: a profile provisioned after sign-in
+    // (or repaired) must replace the stale blank snapshot, plus one-time
+    // repair for blank-username accounts from older builds.
+    LaunchedEffect(Unit) {
+        viewModel.refreshProfile()
+        viewModel.healBlankProfile()
+    }
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val profile by viewModel.profile.collectAsStateWithLifecycle()
     val lists by viewModel.lists.collectAsStateWithLifecycle()

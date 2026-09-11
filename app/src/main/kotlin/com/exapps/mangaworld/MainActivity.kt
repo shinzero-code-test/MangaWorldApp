@@ -232,10 +232,17 @@ private fun MangaApp(
                             if (idToken != null) {
                                 loginViewModel.signInWithGoogleIdToken(idToken)
                             } else {
-                                loginViewModel.clearError()
+                                loginViewModel.onSocialSignInFailed()
                             }
-                        } catch (_: Exception) {
-                            loginViewModel.clearError() // user cancelled or error
+                        } catch (e: Exception) {
+                            // User-cancelled sign-in stays silent; real failures surface.
+                            if (e is com.google.android.gms.common.api.ApiException &&
+                                e.statusCode == com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes.SIGN_IN_CANCELLED
+                            ) {
+                                loginViewModel.clearError()
+                            } else {
+                                loginViewModel.onSocialSignInFailed()
+                            }
                         }
                     }
 
@@ -243,7 +250,7 @@ private fun MangaApp(
                     // displayed login flow — see its KDoc before adding another.
                     com.exapps.mangaworld.presentation.auth.FacebookAuthEffect(
                         onAccessToken = loginViewModel::signInWithFacebook,
-                        onFailure = loginViewModel::clearError,
+                        onFailure = loginViewModel::onSocialSignInFailed,
                         setFacebookCallbackManager = setFacebookCallbackManager
                     )
 

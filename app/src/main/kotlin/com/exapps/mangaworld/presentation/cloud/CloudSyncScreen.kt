@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.presentation.cloud
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
+import com.exapps.mangaworld.presentation.auth.ensureSocialProfile
 
 import android.app.Activity
 import android.content.Intent
@@ -47,6 +48,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -70,8 +72,16 @@ class CloudSyncViewModel @Inject constructor(
     private val _state = MutableStateFlow(CloudSyncUiState())
     val state: StateFlow<CloudSyncUiState> = _state.asStateFlow()
     val currentUser = sessionManager.authState.stateIn(viewModelScope, SharingStarted.Eagerly, sessionManager.currentUser())
-    val profile = flow { emit(communityRepository.getCurrentProfile()) }
+    private val _profileTick = MutableStateFlow(0)
+    /**
+     * Refreshable (not one-shot): [refreshProfile] re-reads Firestore, so a
+     * profile provisioned after this screen opened (social signup) appears
+     * without reopening the screen.
+     */
+    val profile = _profileTick.flatMapLatest { flow { emit(communityRepository.getCurrentProfile()) } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun refreshProfile() { _profileTick.value += 1 }
     val notifications = communityRepository.observeNotifications()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -82,7 +92,13 @@ class CloudSyncViewModel @Inject constructor(
         if (idToken.isNullOrBlank()) { _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_no_token)); return }
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_signing_in))
-            runCatching { sessionManager.signInWithGoogleIdToken(idToken); syncManager.pushLocalSnapshot(); remoteConfigManager.refresh() }
+            runCatching {
+                val uid = sessionManager.signInWithGoogleIdToken(idToken)
+                if (uid != null) {
+                    runCatching { communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid) }
+                }
+                syncManager.pushLocalSnapshot(); remoteConfigManager.refresh()
+            }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_signed_in_synced)) }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_google_failed)) }
         }
@@ -91,7 +107,13 @@ class CloudSyncViewModel @Inject constructor(
     fun signInWithEmail(email: String, password: String) {
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_signing_in))
-            runCatching { sessionManager.signInWithEmail(email, password); syncManager.pushLocalSnapshot() }
+            runCatching {
+                val uid = sessionManager.signInWithEmail(email, password)
+                if (uid != null) {
+                    runCatching { communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid) }
+                }
+                syncManager.pushLocalSnapshot()
+            }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_signed_in)) }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_sign_in_failed)) }
         }
@@ -100,7 +122,13 @@ class CloudSyncViewModel @Inject constructor(
     fun signUpWithEmail(email: String, password: String) {
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_creating))
-            runCatching { sessionManager.signUpWithEmail(email, password, displayName = "", username = ""); syncManager.pushLocalSnapshot() }
+            runCatching {
+                val uid = sessionManager.signUpWithEmail(email, password, displayName = "", username = "")
+                if (uid != null) {
+                    runCatching { communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid) }
+                }
+                syncManager.pushLocalSnapshot()
+            }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_created_synced)) }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_create_failed)) }
         }
@@ -183,7 +211,7 @@ fun CloudSyncScreen(
         }
     }
 
-    LaunchedEffect(Unit) { viewModel.onScreenViewed() }
+    LaunchedEffect(Unit) { viewModel.onScreenViewed(); viewModel.refreshProfile() }
 
     Scaffold(
         containerColor = MangaColors.Background,

@@ -677,10 +677,17 @@ private fun SocialAuthEffects(
             if (idToken != null) {
                 viewModel.signInWithGoogleIdToken(idToken)
             } else {
-                viewModel.clearError()
+                viewModel.onSocialSignInFailed()
             }
-        } catch (_: Exception) {
-            viewModel.clearError() // user cancelled or error
+        } catch (e: Exception) {
+            // User-cancelled sign-in stays silent; real failures surface.
+            if (e is com.google.android.gms.common.api.ApiException &&
+                e.statusCode == com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes.SIGN_IN_CANCELLED
+            ) {
+                viewModel.clearError()
+            } else {
+                viewModel.onSocialSignInFailed()
+            }
         }
     }
 
@@ -693,7 +700,7 @@ private fun SocialAuthEffects(
     // destination — see its KDoc before adding another.
     com.exapps.mangaworld.presentation.auth.FacebookAuthEffect(
         onAccessToken = viewModel::signInWithFacebook,
-        onFailure = viewModel::clearError,
+        onFailure = viewModel::onSocialSignInFailed,
         setFacebookCallbackManager = setFacebookCallbackManager
     )
 

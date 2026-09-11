@@ -133,7 +133,8 @@ class ProfileCollectionsViewModelTest {
         libraryRepository = libraryRepo,
         readingStatsStore = readingStatsStore,
         achievementManager = achievementManager,
-        cloudinaryUploader = cloudinaryUploader
+        cloudinaryUploader = cloudinaryUploader,
+        sessionManager = sessionManager
     )
 
     private fun createProfileSettingsVm() = ProfileSettingsViewModel(
