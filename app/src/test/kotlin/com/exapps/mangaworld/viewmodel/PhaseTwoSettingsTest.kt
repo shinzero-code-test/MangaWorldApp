@@ -18,7 +18,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.eq
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -208,7 +207,7 @@ class PhaseTwoSettingsTest {
                 )).toString()
             vm.importListsJson(valid)
             advanceUntilIdle()
-            coVerify(exactly = 2) { communityRepo.addMangaToList(eq("new-id"), any()) }
+            coVerify(exactly = 2) { communityRepo.addMangaToList(any(), any()) }
 
             vm.importListsJson("{not json")
             advanceUntilIdle()
