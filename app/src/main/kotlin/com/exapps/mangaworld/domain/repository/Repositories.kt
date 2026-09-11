@@ -101,6 +101,7 @@ interface SettingsRepository {
     suspend fun setMutedUserIds(values: Set<String>)
     suspend fun setReadingListStatus(status: String?)
     suspend fun setShowLibraryPublic(enabled: Boolean)
+    suspend fun setLastSourceId(sourceId: String)
 
     fun getReaderSettings(): Flow<ReaderSettings>
     suspend fun updateReaderMode(mode: ReaderMode)

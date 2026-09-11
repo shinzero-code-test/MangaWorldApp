@@ -114,6 +114,17 @@ data class MangaCacheEntity(
     val chaptersJson: String = "[]"
 )
 
+/**
+ * Offline snapshot of one source's home feed (item 9). One row per sourceId;
+ * [payloadJson] is a [HomeCacheCodec] document.
+ */
+@Entity(tableName = "home_cache")
+data class HomeCacheEntity(
+    @PrimaryKey val sourceId: String,
+    val payloadJson: String,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 @Entity(tableName = "download_tasks",
     indices = [Index("mangaId"), Index("chapterUrl"), Index("batchId"), Index("status"), Index("updatedAt")])
 data class DownloadTaskEntity(

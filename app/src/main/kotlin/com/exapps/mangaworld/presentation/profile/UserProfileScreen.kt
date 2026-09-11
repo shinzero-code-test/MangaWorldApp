@@ -65,6 +65,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -473,7 +474,7 @@ private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, bannerUri
                         ?: stringResource(R.string.guest),
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleLarge
+                    style = MaterialTheme.typography.titleLarge.copy(textDirection = TextDirection.Content)
                 )
                 if (!profile?.badgeLabel.isNullOrBlank()) {
                     Spacer(Modifier.width(8.dp))
@@ -493,7 +494,7 @@ private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, bannerUri
                 Text(
                     text = stringResource(R.string.profile_username_handle, profile.username),
                     color = MangaColors.Cyan,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Content),
                     modifier = Modifier.padding(top = 4.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -503,7 +504,7 @@ private fun ProfileHeader(profile: CommunityProfile?, avatarUri: Uri?, bannerUri
                 Text(
                     text = profile.bio,
                     color = MangaColors.OnSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Content),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.padding(top = 8.dp, start = 20.dp, end = 20.dp),
                     maxLines = 3,
@@ -915,7 +916,7 @@ private fun LibraryMangaCard(manga: FavoriteManga, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    manga.source.displayName,
+                    stringResource(manga.source.nameRes),
                     color = MangaColors.Muted,
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,

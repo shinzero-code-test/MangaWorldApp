@@ -36,6 +36,7 @@ import com.exapps.mangaworld.domain.model.effectiveBaseUrl
 import com.exapps.mangaworld.domain.model.effectiveHost
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.theme.LocalizedText
 import com.exapps.mangaworld.presentation.webview.WebViewSolverActivity
 
 @Composable
@@ -111,7 +112,7 @@ fun SearchScreen(
         ) {
             var expanded by remember { mutableStateOf(false) }
             TextButton(onClick = { expanded = true }) {
-                Text(source?.displayName ?: stringResource(R.string.search_all_sources), color = MangaColors.Cyan)
+                Text(source?.let { stringResource(it.nameRes) } ?: stringResource(R.string.search_all_sources), color = MangaColors.Cyan)
                 Icon(Icons.Filled.ArrowDropDown, null, tint = MangaColors.Cyan)
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -124,7 +125,7 @@ fun SearchScreen(
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(src.displayName)
+                                Text(stringResource(src.nameRes))
                                 if (src.requiresVerification) {
                                     Icon(
                                         Icons.Filled.Shield, null,
@@ -357,7 +358,7 @@ private fun SearchResultItem(
         MangaCover(url = coverUrl, contentDescription = title,
             modifier = Modifier.size(64.dp, 90.dp).clip(RoundedCornerShape(8.dp)))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium,
+            LocalizedText(title, style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold, color = MangaColors.OnSurface,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(4.dp))

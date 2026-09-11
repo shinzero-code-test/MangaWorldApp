@@ -187,6 +187,18 @@ interface MangaCacheDao {
 }
 
 @Dao
+interface HomeCacheDao {
+    @Query("SELECT * FROM home_cache WHERE sourceId = :sourceId")
+    suspend fun get(sourceId: String): HomeCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: HomeCacheEntity)
+
+    @Query("DELETE FROM home_cache WHERE updatedAt < :before")
+    suspend fun evictOlderThan(before: Long)
+}
+
+@Dao
 interface DownloadTaskDao {
     @Query("SELECT * FROM download_tasks ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<DownloadTaskEntity>>

@@ -149,7 +149,7 @@ class DiagnosticsViewModel @Inject constructor(
                 appSettings = settings,
                 imageCacheSizeBytes = cacheSize,
                 widgetSnapshotUpdatedAt = widgetUpdated,
-                sources = statuses.sortedBy { it.source.displayName }
+                sources = statuses.sortedBy { it.source.id }
             )
         }
     }
@@ -463,7 +463,7 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
             // Label column
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    status.source.displayName,
+                    stringResource(status.source.nameRes),
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleSmall,
@@ -490,7 +490,7 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
                 if (status.source.logoRes != 0) {
                     androidx.compose.foundation.Image(
                         painter = painterResource(status.source.logoRes),
-                        contentDescription = status.source.displayName,
+                        contentDescription = stringResource(status.source.nameRes),
                         modifier = Modifier
                             .size(32.dp)
                             .clip(RoundedCornerShape(8.dp)),
@@ -498,7 +498,7 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
                     )
                 } else {
                     Text(
-                        status.source.displayName.take(1).uppercase(),
+                        stringResource(status.source.nameRes).take(1).uppercase(),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium

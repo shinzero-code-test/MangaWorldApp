@@ -6,37 +6,38 @@ import com.exapps.mangaworld.R
 
 enum class MangaSource(
     val id: String,
-    val displayName: String,
+    /** String resource for the localized source name — never hardcode (item 8). */
+    val nameRes: Int,
     val baseUrl: String,
     val requiresVerification: Boolean = false,
     val themeType: ThemeType = ThemeType.OTHER,
     val logoRes: Int = 0
 ) {
     // ─── Original Sources ─────────────────────────────────────────────────────
-    OLYMPUS("olympus", "تيم اكس", "https://olympustaff.com", true, ThemeType.OTHER, R.drawable.olympustaff_com_logo),
-    AZORA("azora", "ازورا مانجا", "https://azorafly.com", false, ThemeType.ASTRO, R.drawable.azoramoon_com_logo),
-    STARZ("starz", "مانجا ستارز", "https://starzmanga.com", true, ThemeType.MADARA, R.drawable.manga_starz_net_logo),
-    MANGASID("mangasid", "مانجا سيد", "https://mangasid.com", false, ThemeType.ASTRO, R.drawable.mangasid_com_logo),
-    MESHMANGA("meshmanga", "مانجا سوات", "https://meshmanga.com", false, ThemeType.API, R.drawable.meshmanga_com_logo),
+    OLYMPUS("olympus", R.string.source_olympus, "https://olympustaff.com", true, ThemeType.OTHER, R.drawable.olympustaff_com_logo),
+    AZORA("azora", R.string.source_azora, "https://azorafly.com", false, ThemeType.ASTRO, R.drawable.azoramoon_com_logo),
+    STARZ("starz", R.string.source_starz, "https://starzmanga.com", true, ThemeType.MADARA, R.drawable.manga_starz_net_logo),
+    MANGASID("mangasid", R.string.source_mangasid, "https://mangasid.com", false, ThemeType.ASTRO, R.drawable.mangasid_com_logo),
+    MESHMANGA("meshmanga", R.string.source_meshmanga, "https://meshmanga.com", false, ThemeType.API, R.drawable.meshmanga_com_logo),
 
     // ─── New Arabic Sources (Madara Theme) ────────────────────────────────────
-    ASQ3("asq3", "مانجا العاشق", "https://3asq.online", true, ThemeType.MADARA, R.drawable.asq3_org_logo),
-    LEKMANGA("lekmanga", "مانجا ليك", "https://mangalik.net", false, ThemeType.MADARA, R.drawable.lek_manga_net_logo),
-    LEKMANGAONLINE("lekmangaonline", "مانجا ليك اونلاين", "https://lekmanga.online", false, ThemeType.MADARA, R.drawable.lekmanga_online_logo),
-    LIKEMANGA("likemanga", "مانجا لايك", "https://like-manga.net", false, ThemeType.MADARA, R.drawable.like_manga_net_logo),
-    LINKMANGA("linkmanga", "مانجا لينك", "https://link-manga.net", false, ThemeType.MADARA, R.drawable.link_manga_net_logo),
-    MANGALEKO("mangaleko", "مانجا ليكو", "https://manga-leko.site", false, ThemeType.MADARA, R.drawable.manga_leko_site_logo),
-    MANGALIONZ("mangalionz", "مانجا ليونز", "https://manga-lionz.org", false, ThemeType.MADARA, R.drawable.manga_lionz_org_logo),
+    ASQ3("asq3", R.string.source_asq3, "https://3asq.online", true, ThemeType.MADARA, R.drawable.asq3_org_logo),
+    LEKMANGA("lekmanga", R.string.source_lekmanga, "https://mangalik.net", false, ThemeType.MADARA, R.drawable.lek_manga_net_logo),
+    LEKMANGAONLINE("lekmangaonline", R.string.source_lekmangaonline, "https://lekmanga.online", false, ThemeType.MADARA, R.drawable.lekmanga_online_logo),
+    LIKEMANGA("likemanga", R.string.source_likemanga, "https://like-manga.net", false, ThemeType.MADARA, R.drawable.like_manga_net_logo),
+    LINKMANGA("linkmanga", R.string.source_linkmanga, "https://link-manga.net", false, ThemeType.MADARA, R.drawable.link_manga_net_logo),
+    MANGALEKO("mangaleko", R.string.source_mangaleko, "https://manga-leko.site", false, ThemeType.MADARA, R.drawable.manga_leko_site_logo),
+    MANGALIONZ("mangalionz", R.string.source_mangalionz, "https://manga-lionz.org", false, ThemeType.MADARA, R.drawable.manga_lionz_org_logo),
 
     // ─── New Arabic Sources (MangaReader Theme) ───────────────────────────────
-    AREASCANS("areascans", "آريا مانجا", "https://ar.kenmanga.com", false, ThemeType.CUSTOM, R.drawable.ar_kenmanga_com_logo),
-    HIJALA("hijala", "حجالة مانجا", "https://hijala.com", true, ThemeType.MANGAREADER, R.drawable.hijala_com_logo),
-    LAVASCANS("lavascans", "لاڤا سكانز", "https://lavascans.com", true, ThemeType.MANGAREADER, R.drawable.lavascans_com_logo),
-    STELLARSABER("stellarsaber", "StellarSaber", "https://stellarsaber.pro", true, ThemeType.MANGAREADER, R.drawable.stellarsaber_pro_logo),
+    AREASCANS("areascans", R.string.source_areascans, "https://ar.kenmanga.com", false, ThemeType.CUSTOM, R.drawable.ar_kenmanga_com_logo),
+    HIJALA("hijala", R.string.source_hijala, "https://hijala.com", true, ThemeType.MANGAREADER, R.drawable.hijala_com_logo),
+    LAVASCANS("lavascans", R.string.source_lavascans, "https://lavascans.com", true, ThemeType.MANGAREADER, R.drawable.lavascans_com_logo),
+    STELLARSABER("stellarsaber", R.string.source_stellarsaber, "https://stellarsaber.pro", true, ThemeType.MANGAREADER, R.drawable.stellarsaber_pro_logo),
 
     // ─── New Arabic Sources (Custom) ──────────────────────────────────────────
-    PROCOMIC("procomic", "ProChan", "https://procomic.pro", true, ThemeType.CUSTOM, R.drawable.procomic_pro_logo),
-    ROCKMANGA("rockmanga", "روكس مانجا", "https://rocksmanga.com", false, ThemeType.MADARA_CUSTOM, R.drawable.rocksmanga_com_logo);
+    PROCOMIC("procomic", R.string.source_procomic, "https://procomic.pro", true, ThemeType.CUSTOM, R.drawable.procomic_pro_logo),
+    ROCKMANGA("rockmanga", R.string.source_rockmanga, "https://rocksmanga.com", false, ThemeType.MADARA_CUSTOM, R.drawable.rocksmanga_com_logo);
 
     /** Drawable resource ID for the site logo. Used in SourcesScreen grid. */
     val logoDrawableRes: Int get() = logoRes
@@ -59,11 +60,11 @@ enum class MangaSource(
         fun isLocalSource(id: String): Boolean = id == "imported" || id == "local"
 
         /**
-         * Safe display name for any stored sourceId without falling back to AZORA.
+         * Safe name resource for any stored sourceId without falling back to AZORA.
          * Returns null for local/imported/unknown ids so callers can show the
          * dedicated imported label (R.string.source_imported) instead.
          */
-        fun displayNameOrNull(id: String): String? = entries.find { it.id == id }?.displayName
+        fun nameResOrNull(id: String): Int? = entries.find { it.id == id }?.nameRes
 
         /** All sources added in v4.0.0 — these appear on the Sources screen grid */
         val NEW_SOURCES = setOf(
@@ -360,7 +361,9 @@ data class AppSettings(
     val readingListStatus: String? = null,
     val favoriteGenres: List<String> = emptyList(),
     val showLibraryPublic: Boolean = true,
-    val appLanguage: String = "ar"
+    val appLanguage: String = "ar",
+    /** Last source opened on Home — restored on launch instead of AZORA (item 10). */
+    val lastSourceId: String = "azora"
 ) { val isRtl get() = appLanguage == "ar" }
 
 enum class CommunityNotificationType {

@@ -265,6 +265,7 @@ class ReaderViewModel @Inject constructor(
                                     chapterUrl = chapterUrl,
                                     totalChapters = local.totalChapters
                                 )
+                                viewModelScope.launch { runCatching { firebaseSyncManager.pushLocalSnapshot() } }
                             }
                         }
                     }

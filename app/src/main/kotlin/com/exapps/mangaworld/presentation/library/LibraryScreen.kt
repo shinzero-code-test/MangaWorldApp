@@ -25,6 +25,7 @@ import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.components.glassSurface
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.theme.LocalizedText
 
 @Composable
 fun LibraryScreen(
@@ -191,7 +192,7 @@ private fun FavoriteCard(fav: FavoriteManga, onClick: () -> Unit, onRemove: () -
             }
         }
         Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
-            Text(fav.title, style = MaterialTheme.typography.bodySmall,
+            LocalizedText(fav.title, style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold, color = MangaColors.OnSurface,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (fav.totalChapters > 0) {
@@ -263,7 +264,7 @@ private fun HistoryItem(item: ReadingHistoryItem, onClick: () -> Unit, onRemove:
         MangaCover(url = item.coverUrl, contentDescription = item.title,
             modifier = Modifier.size(60.dp, 84.dp).clip(RoundedCornerShape(8.dp)))
         Column(Modifier.weight(1f)) {
-            Text(item.title, style = MaterialTheme.typography.bodyMedium,
+            LocalizedText(item.title, style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold, color = MangaColors.OnSurface,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(4.dp))

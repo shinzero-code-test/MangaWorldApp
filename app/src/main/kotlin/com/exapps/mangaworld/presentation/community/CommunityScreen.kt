@@ -84,6 +84,7 @@ import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.components.GlassCard
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.theme.LocalizedText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -826,7 +827,7 @@ internal fun CommunityCommentCard(
                     Text(stringResource(R.string.community_show_spoiler))
                 }
             } else {
-                Text(comment.text, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                LocalizedText(comment.text, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
             CommunityReactionRow(
                 likes = comment.likes,
@@ -883,10 +884,10 @@ internal fun CommunityReviewCard(
                 Text(stringResource(R.string.community_deleted_content), color = MangaColors.Muted, style = MaterialTheme.typography.bodyMedium)
             } else {
                 if (review.title.isNotBlank()) {
-                    Text(review.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
+                    LocalizedText(review.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
                 }
                 if (review.body.isNotBlank()) {
-                    Text(review.body, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    LocalizedText(review.body, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 }
             }
             CommunityReactionRow(

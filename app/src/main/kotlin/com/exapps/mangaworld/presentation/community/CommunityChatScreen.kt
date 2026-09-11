@@ -46,6 +46,7 @@ import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.exapps.mangaworld.domain.model.CommunityChatMessage
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.theme.LocalizedText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -155,9 +156,9 @@ fun CommunityChatScreen(
 private fun ChatBubble(message: CommunityChatMessage) {
     Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(message.authorName, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
+            LocalizedText(message.authorName, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
             Text(message.authorBadge, color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
-            Text(message.text, color = MangaColors.OnSurfaceVariant)
+            LocalizedText(message.text, color = MangaColors.OnSurfaceVariant)
         }
     }
 }

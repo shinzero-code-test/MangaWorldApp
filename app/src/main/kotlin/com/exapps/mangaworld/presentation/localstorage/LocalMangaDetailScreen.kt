@@ -26,6 +26,7 @@ import coil.compose.AsyncImage
 import com.exapps.mangaworld.core.data.local.dao.DownloadedMangaDao
 import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.theme.LocalizedText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import java.io.File
@@ -116,7 +117,7 @@ fun LocalMangaDetailScreen(
                             }
                         }
                         Column(Modifier.weight(1f)) {
-                            Text(
+                            LocalizedText(
                                 manga.title,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MangaColors.OnSurface,
@@ -130,7 +131,7 @@ fun LocalMangaDetailScreen(
                             )
                             if (manga.description.isNotBlank()) {
                                 Spacer(Modifier.height(8.dp))
-                                Text(
+                                LocalizedText(
                                     manga.description,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MangaColors.OnSurfaceVariant
@@ -177,7 +178,7 @@ fun LocalMangaDetailScreen(
                                 Icon(Icons.Filled.Article, null, tint = MangaColors.Primary)
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(
+                                    LocalizedText(
                                         name,
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MangaColors.OnSurface

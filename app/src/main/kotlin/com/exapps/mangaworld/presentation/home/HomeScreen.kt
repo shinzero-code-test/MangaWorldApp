@@ -298,7 +298,7 @@ private fun SourceSelectorRow(
                 glowColors = if (selected) MangaColors.GradientPurpleCyan else listOf(MangaColors.OutlineVariant, MangaColors.OutlineVariant)
             ) {
                 Text(
-                    source.displayName,
+                    stringResource(source.nameRes),
                     color = if (selected) Color.White else MangaColors.MutedLight,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)

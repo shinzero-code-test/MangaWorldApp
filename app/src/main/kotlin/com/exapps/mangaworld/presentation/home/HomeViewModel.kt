@@ -8,6 +8,8 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.isBlockedBy
+import com.exapps.mangaworld.core.data.local.HomeCacheCodec
+import com.exapps.mangaworld.core.data.local.entity.HomeCacheEntity
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
@@ -28,6 +30,8 @@ data class HomeUiState(
     val suggested: List<MangaItem> = emptyList(),
     val availableSources: List<MangaSource> = MangaSource.entries.toList(),
     val activeSource: MangaSource = MangaSource.AZORA,
+    /** True when showing a cached snapshot because the network failed (item 9). */
+    val isOffline: Boolean = false,
     /** Library membership by mangaId — drives the bookmark state on chapter cards (#12). */
     val favoriteIds: Set<String> = emptySet(),
     val remoteAlertMessage: String = "",
@@ -50,11 +54,15 @@ class HomeViewModel @Inject constructor(
     private val analyticsManager: FirebaseAnalyticsManager,
     private val firebaseTelemetry: FirebaseTelemetry,
     private val sessionManager: com.exapps.mangaworld.core.firebase.FirebaseSessionManager,
-    private val communityRepo: com.exapps.mangaworld.domain.repository.CommunityRepository
+    private val communityRepo: com.exapps.mangaworld.domain.repository.CommunityRepository,
+    private val homeCacheDao: com.exapps.mangaworld.core.data.local.dao.HomeCacheDao
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
+
+    /** First settings emission restores the last source; later ones keep the live choice. */
+    private var restoredLastSource = false
 
     init {
         viewModelScope.launch {
@@ -64,9 +72,18 @@ class HomeViewModel @Inject constructor(
                 .collectLatest { (settings, enabledSources) ->
                     val current = _state.value.activeSource
                     _state.update { it.copy(availableSources = enabledSources) }
+                    val lastOpened = MangaSource.fromIdOrNull(settings.lastSourceId)
                     val nextSource = when {
                         enabledSources.isEmpty() -> null
+                        !restoredLastSource -> {
+                            restoredLastSource = true
+                            lastOpened?.takeIf { it in enabledSources }
+                                ?: if (current in enabledSources) current else enabledSources.first()
+                        }
                         current in enabledSources -> current
+                        // Item 10: restore the last opened source instead of
+                        // always falling back to the first enabled source.
+                        lastOpened != null && lastOpened in enabledSources -> lastOpened
                         else -> enabledSources.first()
                     }
                     if (nextSource == null) {
@@ -170,34 +187,76 @@ class HomeViewModel @Inject constructor(
     fun loadHome(source: MangaSource = _state.value.activeSource, blockedKeywords: Set<String> = emptySet()) {
         viewModelScope.launch {
             if (source !in _state.value.availableSources) return@launch
-            _state.update { it.copy(isLoading = true, error = null) }
+            runCatching { settingsRepo.setLastSourceId(source.id) }
+            // Show the cached snapshot instantly (if any) so offline launches
+            // still render content; the network refresh replaces it below.
+            val cached = runCatching { homeCacheDao.get(source.id) }.getOrNull()
+            val cachedData = cached?.payloadJson?.let { HomeCacheCodec.decode(it) }
+            if (cachedData != null && _state.value.featured.isEmpty()) {
+                applyHomeData(source, cachedData, blockedKeywords, offline = true)
+            }
+            // Silent refresh when content is already visible (no shimmer flash).
+            if (_state.value.featured.isEmpty()) {
+                _state.update { it.copy(isLoading = true, error = null) }
+            } else {
+                _state.update { it.copy(error = null) }
+            }
             repo.getHomeData(source)
                 .onSuccess { data ->
                     firebaseTelemetry.setActiveSource(source.id)
-                    val filteredFeatured = data.featured.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.id }
-                    val filteredLatest = data.latestChapters.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.chapterUrl }
-                    val filteredTrending = data.trending.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.id }
-                    // Candidates must be id-distinct BEFORE scoring: a manga that
-                    // appears in both featured and trending otherwise comes back
-                    // twice and crashes the LazyRow with duplicate keys.
-                    val suggested = repo.getSuggestedManga(
-                        (filteredFeatured + filteredTrending).distinctBy { it.id }
-                    ).distinctBy { it.id }
-                    _state.update {
-                        it.copy(
-                            isLoading = false,
-                            featured = filteredFeatured,
-                            latestChapters = filteredLatest,
-                            trending = filteredTrending,
-                            suggested = suggested,
-                            activeSource = source
+                    runCatching {
+                        homeCacheDao.upsert(
+                            HomeCacheEntity(
+                                sourceId = source.id,
+                                payloadJson = HomeCacheCodec.encode(data)
+                            )
                         )
                     }
+                    applyHomeData(source, data, blockedKeywords, offline = false)
                     analyticsManager.logHomeLayoutExposure(_state.value.homeLayoutVariant, source.id)
                 }
-                .onFailure { e ->
-                    _state.update { it.copy(isLoading = false, error = context.getString(R.string.download_error)) }
+                .onFailure {
+                    if (_state.value.featured.isEmpty() && cachedData == null) {
+                        _state.update { it.copy(isLoading = false, isOffline = false, error = context.getString(R.string.download_error)) }
+                    } else {
+                        // Keep the cached content visible with an offline notice.
+                        _state.update { it.copy(isLoading = false, isOffline = true, error = context.getString(R.string.home_offline_cached)) }
+                    }
                 }
+        }
+    }
+
+    /** Shared filter + state write for fresh and cached payloads. */
+    private suspend fun applyHomeData(
+        source: MangaSource,
+        data: HomeData,
+        blockedKeywords: Set<String>,
+        offline: Boolean
+    ) {
+        val filteredFeatured = data.featured.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.id }
+        val filteredLatest = data.latestChapters.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.chapterUrl }
+        val filteredTrending = data.trending.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.id }
+        // Candidates must be id-distinct BEFORE scoring: a manga that
+        // appears in both featured and trending otherwise comes back
+        // twice and crashes the LazyRow with duplicate keys.
+        val suggested = if (offline) {
+            emptyList()
+        } else {
+            repo.getSuggestedManga(
+                (filteredFeatured + filteredTrending).distinctBy { it.id }
+            ).distinctBy { it.id }
+        }
+        _state.update {
+            it.copy(
+                isLoading = false,
+                isOffline = offline,
+                error = if (offline) context.getString(R.string.home_offline_cached) else null,
+                featured = filteredFeatured,
+                latestChapters = filteredLatest,
+                trending = filteredTrending,
+                suggested = suggested,
+                activeSource = source
+            )
         }
     }
 

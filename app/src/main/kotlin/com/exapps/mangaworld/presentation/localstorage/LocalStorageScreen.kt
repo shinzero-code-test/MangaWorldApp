@@ -78,7 +78,7 @@ class LocalStorageViewModel @Inject constructor(
                     val sourceName = if (MangaSource.isLocalSource(manga.sourceId)) {
                         context.getString(com.exapps.mangaworld.R.string.source_imported)
                     } else {
-                        MangaSource.displayNameOrNull(manga.sourceId)
+                        MangaSource.nameResOrNull(manga.sourceId)?.let { context.getString(it) }
                             ?: context.getString(com.exapps.mangaworld.R.string.unknown)
                     }
                     if (sourceName.isNotBlank()) tagsList.add(sourceName)
@@ -265,7 +265,7 @@ private fun LocalMangaCard(
                     val sourceLabel = if (MangaSource.isLocalSource(manga.sourceId)) {
                         stringResource(R.string.source_imported)
                     } else {
-                        MangaSource.displayNameOrNull(manga.sourceId)
+                        MangaSource.nameResOrNull(manga.sourceId)?.let { stringResource(it) }
                             ?: stringResource(R.string.unknown)
                     }
                     TagChip(sourceLabel, highlighted = true)

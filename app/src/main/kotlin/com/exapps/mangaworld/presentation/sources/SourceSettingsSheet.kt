@@ -53,13 +53,13 @@ fun SourceSettingsSheet(
                 if (source.logoDrawableRes != 0) {
                     androidx.compose.foundation.Image(
                         painter = androidx.compose.ui.res.painterResource(id = source.logoDrawableRes),
-                        contentDescription = source.displayName,
+                        contentDescription = stringResource(source.nameRes),
                         modifier = Modifier.size(36.dp).padding(end = 12.dp)
                     )
                 }
                 Column {
                     Text(
-                        text = source.displayName,
+                        text = stringResource(source.nameRes),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MangaColors.OnSurface
@@ -138,7 +138,7 @@ fun SourceSettingsSheet(
             title = { Text(LocalContext.current.getString(R.string.clear_cookies), color = MangaColors.OnSurface) },
             text = {
                 Text(
-                    stringResource(R.string.str_296, source.displayName) + LocalContext.current.getString(R.string.str_006),
+                    stringResource(R.string.str_296, stringResource(source.nameRes)) + LocalContext.current.getString(R.string.str_006),
                     color = MangaColors.OnSurfaceVariant
                 )
             },
@@ -232,8 +232,8 @@ private fun createSourceShortcut(context: Context, source: MangaSource) {
         }
 
         val shortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(context, "source_${source.id}")
-            .setShortLabel(source.displayName)
-            .setLongLabel(source.displayName)
+            .setShortLabel(context.getString(source.nameRes))
+            .setLongLabel(context.getString(source.nameRes))
             .setIcon(icon)
             .setIntent(shortcutIntent)
             .build()

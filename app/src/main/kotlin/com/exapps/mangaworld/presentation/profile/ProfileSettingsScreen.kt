@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -785,14 +786,14 @@ private fun ProfileHeroSection(profile: CommunityProfile?, avatarUri: Uri?, onAv
         }
         Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(displayNameText, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+            Text(displayNameText, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge.copy(textDirection = TextDirection.Content))
             if (!profile?.badgeLabel.isNullOrBlank()) { Spacer(Modifier.width(8.dp)); Text(profile.badgeLabel, color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MangaColors.GlowCyan).padding(horizontal = 10.dp, vertical = 4.dp)) }
         }
         if (profile?.username?.isNotBlank() == true && displayNameText != profile.username) {
             Spacer(Modifier.height(2.dp))
-            Text(stringResource(R.string.profile_username_handle, profile.username), color = MangaColors.Muted, style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.profile_username_handle, profile.username), color = MangaColors.Muted, style = MaterialTheme.typography.labelMedium.copy(textDirection = TextDirection.Content))
         }
-        if (!profile?.bio.isNullOrBlank()) { Spacer(Modifier.height(6.dp)); Text(profile.bio, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, maxLines = 3) }
+        if (!profile?.bio.isNullOrBlank()) { Spacer(Modifier.height(6.dp)); Text(profile.bio, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Content), textAlign = TextAlign.Center, maxLines = 3) }
         Spacer(Modifier.height(8.dp))
         Text(roleText, color = MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
     }

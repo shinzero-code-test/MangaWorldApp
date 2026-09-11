@@ -112,3 +112,78 @@ class FirebaseSyncMergeTest {
         totalChapters = 1
     )
 }
+
+    // ─── Item 6: pull-deserialization parsers ────────────────────────────────
+
+    private fun historyDoc(
+        id: String = "azora_x",
+        fields: Map<String, Any?> = mapOf(
+            "mangaId" to "azora_x",
+            "slug" to "x",
+            "title" to "Imported T",
+            "coverUrl" to "file:///c.jpg",
+            "sourceId" to "imported",
+            "lastChapterNumber" to 2.0,
+            "lastChapterUrl" to "ch-2",
+            "lastReadAt" to 9_000L,
+            "readChapters" to 2L,
+            "totalChapters" to 10L,
+            "durationMs" to 60_000L
+        )
+    ): com.google.firebase.firestore.DocumentSnapshot {
+        val doc = io.mockk.mockk<com.google.firebase.firestore.DocumentSnapshot>(relaxed = true)
+        io.mockk.every { doc.id } returns id
+        fields.forEach { (k, v) ->
+            when (v) {
+                is String -> io.mockk.every { doc.getString(k) } returns v
+                is Long -> io.mockk.every { doc.getLong(k) } returns v
+                is Double -> io.mockk.every { doc.getDouble(k) } returns v
+                is Boolean -> io.mockk.every { doc.getBoolean(k) } returns v
+            }
+        }
+        return doc
+    }
+
+    @org.junit.Test
+    fun pullHistoryParser_readsImportedEntry() {
+        val entity = FirebaseSyncMerge.history(historyDoc())!!
+        org.junit.Assert.assertEquals("azora_x", entity.mangaId)
+        org.junit.Assert.assertEquals("imported", entity.sourceId)
+        org.junit.Assert.assertEquals(2f, entity.lastChapterNumber)
+        org.junit.Assert.assertEquals(9_000L, entity.lastReadAt)
+        org.junit.Assert.assertEquals("file:///c.jpg", entity.coverUrl)
+    }
+
+    @org.junit.Test
+    fun pullHistoryParser_fallsBackToDocIdAndRejectsBlank() {
+        val blank = historyDoc(id = "azora_y", fields = mapOf("title" to "T"))
+        org.junit.Assert.assertEquals("azora_y", FirebaseSyncMerge.history(blank)!!.mangaId)
+        val noId = historyDoc(id = "", fields = emptyMap())
+        org.junit.Assert.assertNull(FirebaseSyncMerge.history(noId))
+    }
+
+    @org.junit.Test
+    fun pullFavoriteParser_readsEntryWithDefaults() {
+        val doc = io.mockk.mockk<com.google.firebase.firestore.DocumentSnapshot>(relaxed = true)
+        io.mockk.every { doc.id } returns "lekmanga_m"
+        io.mockk.every { doc.getString("sourceId") } returns "lekmanga"
+        io.mockk.every { doc.getLong("addedAt") } returns 5_000L
+        val entity = FirebaseSyncMerge.favorite(doc)!!
+        org.junit.Assert.assertEquals("lekmanga_m", entity.mangaId)
+        org.junit.Assert.assertEquals("lekmanga", entity.sourceId)
+        org.junit.Assert.assertEquals(5_000L, entity.addedAt)
+        org.junit.Assert.assertTrue(entity.isFavorite)
+    }
+
+    @org.junit.Test
+    fun pullAnnotationParser_requiresIdentity() {
+        val doc = io.mockk.mockk<com.google.firebase.firestore.DocumentSnapshot>(relaxed = true)
+        io.mockk.every { doc.getString("mangaId") } returns "m1"
+        io.mockk.every { doc.getString("chapterUrl") } returns "ch"
+        io.mockk.every { doc.getLong("pageIndex") } returns 3L
+        val entity = FirebaseSyncMerge.annotation(doc)!!
+        org.junit.Assert.assertEquals(3, entity.pageIndex)
+        val missing = io.mockk.mockk<com.google.firebase.firestore.DocumentSnapshot>(relaxed = true)
+        io.mockk.every { missing.getString(any()) } returns null
+        org.junit.Assert.assertNull(FirebaseSyncMerge.annotation(missing))
+    }

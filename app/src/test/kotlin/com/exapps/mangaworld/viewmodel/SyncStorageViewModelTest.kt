@@ -193,6 +193,7 @@ class SyncStorageViewModelTest {
     private fun storageVm(
         mangas: List<DownloadedMangaEntity> = listOf(storageEntity()),
         chapterCount: Int = 7,
+        context: Context = mockk(relaxed = true)
     ): Pair<LocalStorageViewModel, DownloadQueueManager> {
         val manager = mockk<DownloadQueueManager>(relaxed = true)
         every { manager.observeDownloadedMangas() } returns flowOf(mangas)
@@ -202,7 +203,7 @@ class SyncStorageViewModelTest {
             manager = manager,
             remoteConfigManager = mockk(relaxed = true),
             analyticsManager = mockk(relaxed = true),
-            context = mockk(relaxed = true)
+            context = context
         )
         return vm to manager
     }
@@ -232,13 +233,15 @@ class SyncStorageViewModelTest {
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
-            val (vm, _) = storageVm()
+            val context = mockk<Context>(relaxed = true)
+            every { context.getString(MangaSource.AZORA.nameRes) } returns "Azora"
+            val (vm, _) = storageVm(context = context)
             advanceUntilIdle()
             val entity = storageEntity()
             assertEquals(7, vm.chapterCount(entity))
             val tags = vm.tagsFor(entity)
             assertTrue(tags.contains("ONGOING"))
-            assertTrue(tags.contains(MangaSource.AZORA.displayName))
+            assertTrue(tags.contains("Azora"))
         }
     }
 

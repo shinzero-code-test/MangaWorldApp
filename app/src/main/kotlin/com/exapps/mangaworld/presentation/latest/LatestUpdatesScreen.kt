@@ -209,7 +209,7 @@ fun LatestUpdatesScreen(
                 FilterChip(
                     selected = state.selectedSource == src,
                     onClick = { viewModel.setSource(src) },
-                    label = { Text(src.displayName) }
+                    label = { Text(stringResource(src.nameRes)) }
                 )
             }
             FilterChip(

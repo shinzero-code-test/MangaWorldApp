@@ -518,6 +518,7 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setMutedUserIds(values: Set<String>) { prefs.setMutedUsers(values) }
     override suspend fun setReadingListStatus(status: String?) { prefs.setReadingListStatus(status) }
     override suspend fun setShowLibraryPublic(enabled: Boolean) { prefs.setShowLibraryPublic(enabled) }
+    override suspend fun setLastSourceId(sourceId: String) { prefs.setLastSourceId(sourceId) }
     override fun getReaderSettings() = prefs.readerSettings
     override suspend fun updateReaderMode(mode: ReaderMode) { prefs.setReaderMode(mode) }
     override suspend fun updateBrightness(brightness: Float) { prefs.setBrightness(brightness) }

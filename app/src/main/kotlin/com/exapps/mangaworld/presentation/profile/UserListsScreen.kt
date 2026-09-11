@@ -62,6 +62,7 @@ import com.exapps.mangaworld.domain.model.CustomUserList
 import com.exapps.mangaworld.domain.model.CustomUserListItem
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.theme.LocalizedText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -353,9 +354,9 @@ private fun ListCard(
                     }
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(list.name, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                    LocalizedText(list.name, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                     if (list.description.isNotBlank()) {
-                        Text(
+                        LocalizedText(
                             list.description,
                             color = MangaColors.OnSurfaceVariant,
                             maxLines = 1,
@@ -486,7 +487,7 @@ private fun ListItemCard(item: CustomUserListItem, onItemClick: () -> Unit, onRe
             }
         }
         Column(Modifier.padding(8.dp)) {
-            Text(
+            LocalizedText(
                 item.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold,
                 maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall
             )

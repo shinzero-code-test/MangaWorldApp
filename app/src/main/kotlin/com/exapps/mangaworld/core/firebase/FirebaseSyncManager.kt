@@ -152,13 +152,13 @@ class FirebaseSyncManager @Inject constructor(
             remoteTombstones.forEach { prefs.markSyncTombstone(it.collection, it.documentId, it.deletedAt) }
             val tombstones = newestTombstones(prefs.getSyncTombstones())
             applyTombstones(tombstones)
-            favorites.mapNotNull { it.toObject(FavoriteEntity::class.java) }
+            favorites.mapNotNull { FirebaseSyncMerge.favorite(it) }
                 .filterNot { isTombstoned("favorites", it.mangaId, it.addedAt, tombstones) }
                 .forEach { favoriteDao.insert(it) }
-            history.mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
+            history.mapNotNull { FirebaseSyncMerge.history(it) }
                 .filterNot { isTombstoned("readingHistory", it.mangaId, it.lastReadAt, tombstones) }
                 .forEach { historyDao.insertOrUpdate(it) }
-            annotations.mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
+            annotations.mapNotNull { FirebaseSyncMerge.annotation(it) }
                 .filterNot { isTombstoned("readerAnnotations", annotationDocId(it), it.updatedAt, tombstones) }
                 .forEach { readerAnnotationDao.upsert(it) }
 
@@ -232,9 +232,9 @@ class FirebaseSyncManager @Inject constructor(
         val uid = sessionManager.ensureFirebaseSession() ?: error("No user")
         val userRef = firestore.collection("users").document(uid)
         val profile = userRef.get().await()
-        val remoteFavorites = fetchAllCollection(userRef.collection("favorites")).mapNotNull { it.toObject(FavoriteEntity::class.java) }
-        val remoteHistory = fetchAllCollection(userRef.collection("readingHistory")).mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
-        val remoteAnnotations = fetchAllCollection(userRef.collection("readerAnnotations")).mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
+        val remoteFavorites = fetchAllCollection(userRef.collection("favorites")).mapNotNull { FirebaseSyncMerge.favorite(it) }
+        val remoteHistory = fetchAllCollection(userRef.collection("readingHistory")).mapNotNull { FirebaseSyncMerge.history(it) }
+        val remoteAnnotations = fetchAllCollection(userRef.collection("readerAnnotations")).mapNotNull { FirebaseSyncMerge.annotation(it) }
 
         val localFavorites = favoriteDao.getAllLibraryEntries()
         val localHistory = historyDao.getAll()
@@ -279,13 +279,14 @@ class FirebaseSyncManager @Inject constructor(
         }
     }
 
-    private suspend fun mergeRemoteSnapshot() = syncMutex.withLock {
+    /** Merge remote state into local (safe both directions — last-write-wins + tombstones). */
+    suspend fun mergeRemoteSnapshot() = syncMutex.withLock {
         val uid = sessionManager.ensureFirebaseSession() ?: return@withLock
         firebaseTelemetry.traceDatabaseSync(operation = "merge") {
             val userRef = firestore.collection("users").document(uid)
-            val remoteFavorites = fetchAllCollection(userRef.collection("favorites")).mapNotNull { it.toObject(FavoriteEntity::class.java) }
-            val remoteHistory = fetchAllCollection(userRef.collection("readingHistory")).mapNotNull { it.toObject(ReadingHistoryEntity::class.java) }
-            val remoteAnnotations = fetchAllCollection(userRef.collection("readerAnnotations")).mapNotNull { it.toObject(ReaderAnnotationEntity::class.java) }
+            val remoteFavorites = fetchAllCollection(userRef.collection("favorites")).mapNotNull { FirebaseSyncMerge.favorite(it) }
+            val remoteHistory = fetchAllCollection(userRef.collection("readingHistory")).mapNotNull { FirebaseSyncMerge.history(it) }
+            val remoteAnnotations = fetchAllCollection(userRef.collection("readerAnnotations")).mapNotNull { FirebaseSyncMerge.annotation(it) }
             val remoteTombstones = fetchAllCollection(userRef.collection("syncTombstones"))
                 .mapNotNull { it.toObject(SyncTombstone::class.java) }
             remoteTombstones.forEach { prefs.markSyncTombstone(it.collection, it.documentId, it.deletedAt) }

@@ -107,7 +107,7 @@ class WidgetDataRepository @Inject constructor(
                 slug = cache.slug,
                 title = cache.title,
                 coverUrl = cache.coverUrl,
-                subtitle = source.displayName
+                subtitle = context.getString(source.nameRes)
             )
         }
 
@@ -119,7 +119,7 @@ class WidgetDataRepository @Inject constructor(
                 slug = favorite.slug,
                 title = favorite.title,
                 coverUrl = favorite.coverUrl,
-                subtitle = MangaSource.fromId(favorite.sourceId).displayName
+                subtitle = context.getString(MangaSource.fromId(favorite.sourceId).nameRes)
             )
         }
 
@@ -130,7 +130,7 @@ class WidgetDataRepository @Inject constructor(
             slug = history.slug,
             title = history.title,
             coverUrl = history.coverUrl,
-            subtitle = MangaSource.fromId(history.sourceId).displayName
+            subtitle = context.getString(MangaSource.fromId(history.sourceId).nameRes)
         )
     }
 

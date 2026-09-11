@@ -520,7 +520,7 @@ private fun DetailContent(
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    Text(item.source.displayName, color = MangaColors.OnSurfaceVariant)
+                                    Text(stringResource(item.source.nameRes), color = MangaColors.OnSurfaceVariant)
                                 }
                                 OutlinedButton(onClick = { onOpenOtherSource(item.source.id, item.slug) }) {
                                     Text(stringResource(R.string.open))

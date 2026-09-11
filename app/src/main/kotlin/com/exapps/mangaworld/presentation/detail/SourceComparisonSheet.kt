@@ -138,7 +138,7 @@ private fun SourceCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        source.displayName,
+                        stringResource(source.nameRes),
                         style = MaterialTheme.typography.titleSmall,
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.Bold

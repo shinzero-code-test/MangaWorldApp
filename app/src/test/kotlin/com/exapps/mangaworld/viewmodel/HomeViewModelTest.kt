@@ -40,6 +40,7 @@ class HomeViewModelTest {
     private val firebaseTelemetry = mockk<FirebaseTelemetry>(relaxed = true)
     private val sessionManager = mockk<FirebaseSessionManager>(relaxed = true)
     private val communityRepo = mockk<CommunityRepository>(relaxed = true)
+    private val homeCacheDao = mockk<com.exapps.mangaworld.core.data.local.dao.HomeCacheDao>(relaxed = true)
 
     @Before
     fun setup() {
@@ -76,7 +77,8 @@ class HomeViewModelTest {
         analyticsManager = analyticsManager,
         firebaseTelemetry = firebaseTelemetry,
         sessionManager = sessionManager,
-        communityRepo = communityRepo
+        communityRepo = communityRepo,
+        homeCacheDao = homeCacheDao
     )
 
     @Test
@@ -196,6 +198,60 @@ class HomeViewModelTest {
         val suggestedIds = vm.state.value.suggested.map { it.id }
         assertEquals(suggestedIds.distinct(), suggestedIds)
         assertEquals(1, suggestedIds.size)
+    }
+    }
+
+    @Test
+    fun loadHome_persistsSnapshotToCache() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        val vm = createViewModel()
+        advanceUntilIdle()
+        vm.loadHome(MangaSource.AZORA)
+        advanceUntilIdle()
+        coVerify { homeCacheDao.upsert(match { it.sourceId == "azora" && it.payloadJson.contains("f1") }) }
+    }
+    }
+
+    @Test
+    fun loadHome_offlineShowsCachedSnapshot() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        val cached = com.exapps.mangaworld.domain.model.HomeData(
+            featured = listOf(testManga("cached-1")),
+            latestChapters = emptyList(),
+            trending = emptyList()
+        )
+        coEvery { homeCacheDao.get("azora") } returns
+            com.exapps.mangaworld.core.data.local.entity.HomeCacheEntity(
+                sourceId = "azora",
+                payloadJson = com.exapps.mangaworld.core.data.local.HomeCacheCodec.encode(cached)
+            )
+        coEvery { mangaRepo.getHomeData(any()) } returns Result.failure(Exception("offline"))
+        val vm = createViewModel()
+        advanceUntilIdle()
+        val state = vm.state.value
+        assertFalse(state.isLoading)
+        assertTrue(state.isOffline)
+        assertEquals(listOf("cached-1"), state.featured.map { it.id })
+        assertNotNull(state.error)
+    }
+    }
+
+    @Test
+    fun init_restoresLastOpenedSource() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        every { settingsRepo.getAppSettings() } returns flowOf(
+            AppSettings(enabledSources = setOf("azora", "olympus"), lastSourceId = "olympus")
+        )
+        val vm = createViewModel()
+        advanceUntilIdle()
+        assertEquals(MangaSource.OLYMPUS, vm.state.value.activeSource)
+        coVerify { settingsRepo.setLastSourceId("olympus") }
     }
     }
 

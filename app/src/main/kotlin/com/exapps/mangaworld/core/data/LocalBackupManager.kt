@@ -186,6 +186,10 @@ class LocalBackupManager @Inject constructor(
         settingsRepository.setReadingListStatus(settings.readingListStatus)
         settingsRepository.setFavoriteGenres(settings.favoriteGenres)
         settingsRepository.setShowLibraryPublic(settings.showLibraryPublic)
+        settingsRepository.setNotifyCommentsEnabled(settings.notifyComments)
+        settingsRepository.setNotifyLikesEnabled(settings.notifyLikes)
+        settingsRepository.setNotifyFollowersEnabled(settings.notifyFollowers)
+        settingsRepository.setLastSourceId(settings.lastSourceId)
     }
 
     private suspend fun applyReaderSettings(settings: ReaderSettings) {
@@ -268,6 +272,8 @@ class LocalBackupManager @Inject constructor(
         put("imageCacheLimitMb", imageCacheLimitMb); put("contentBlacklist", JSONArray(contentBlacklist.toList())); put("spoilerCollapseDefault", spoilerCollapseDefault); put("mutedUserIds", JSONArray(mutedUserIds.toList()))
         put("readingListStatus", readingListStatus); put("favoriteGenres", JSONArray(favoriteGenres))
         put("showLibraryPublic", showLibraryPublic)
+        put("notifyComments", notifyComments); put("notifyLikes", notifyLikes); put("notifyFollowers", notifyFollowers)
+        put("lastSourceId", lastSourceId)
     }
     private fun ReaderSettings.toJson() = JSONObject().apply {
         put("mode", mode.name); put("brightness", brightness.toDouble()); put("pageSpacing", pageSpacing); put("keepScreenOn", keepScreenOn)
@@ -298,7 +304,11 @@ class LocalBackupManager @Inject constructor(
         mutedUserIds = optJSONArray("mutedUserIds")?.toStringSet() ?: emptySet(),
         readingListStatus = optString("readingListStatus").takeIf { it.isNotBlank() },
         favoriteGenres = optJSONArray("favoriteGenres")?.toStringList() ?: emptyList(),
-        showLibraryPublic = optBoolean("showLibraryPublic", true)
+        showLibraryPublic = optBoolean("showLibraryPublic", true),
+        notifyComments = optBoolean("notifyComments", true),
+        notifyLikes = optBoolean("notifyLikes", true),
+        notifyFollowers = optBoolean("notifyFollowers", true),
+        lastSourceId = optString("lastSourceId").takeIf { it.isNotBlank() } ?: "azora"
     )
 
     private fun JSONObject.toReaderSettings(): ReaderSettings = ReaderSettings(

@@ -90,12 +90,12 @@ fun SourceBrowseScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AsyncImage(
                             model = uiState.source.logoDrawableRes,
-                            contentDescription = uiState.source.displayName,
+                            contentDescription = stringResource(uiState.source.nameRes),
                             modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)),
                             contentScale = ContentScale.Crop
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text(uiState.source.displayName, color = MangaColors.OnSurface)
+                        Text(stringResource(uiState.source.nameRes), color = MangaColors.OnSurface)
                     }
                 },
                 navigationIcon = {
@@ -131,7 +131,7 @@ fun SourceBrowseScreen(
                 onValueChange = viewModel::setQuery,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                 placeholder = {
-                    Text(stringResource(R.string.fmt_047, uiState.source.displayName), color = MangaColors.Muted,
+                    Text(stringResource(R.string.fmt_047, stringResource(uiState.source.nameRes)), color = MangaColors.Muted,
                         style = MaterialTheme.typography.bodyMedium)
                 },
                 leadingIcon = { Icon(Icons.Filled.Search, null, tint = MangaColors.Primary) },

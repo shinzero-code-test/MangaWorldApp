@@ -24,6 +24,7 @@ import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.SortBy
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
+import com.exapps.mangaworld.presentation.theme.LocalizedText
 
 @Composable
 fun BrowseScreen(
@@ -106,7 +107,7 @@ fun BrowseScreen(
                     FilterChip(
                         selected = uiState.selectedSource == src,
                         onClick = { viewModel.setSource(src) },
-                        label = { Text(src.displayName) }
+                        label = { Text(stringResource(src.nameRes)) }
                     )
                 }
             }
@@ -247,7 +248,7 @@ private fun BrowseListItem(
         )
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(manga.title, style = MaterialTheme.typography.bodyMedium,
+            LocalizedText(manga.title, style = MaterialTheme.typography.bodyMedium,
                 color = MangaColors.OnSurface, maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)

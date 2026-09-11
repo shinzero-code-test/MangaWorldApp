@@ -215,7 +215,7 @@ fun StatusBadge(status: MangaStatus, modifier: Modifier = Modifier) {
 fun SourceBadge(source: MangaSource, modifier: Modifier = Modifier) {
     // Glass pill (v8): translucent fill + hairline border instead of opaque chip.
     Text(
-        source.displayName,
+        stringResource(source.nameRes),
         style = MaterialTheme.typography.labelSmall,
         color = MangaColors.MutedLight,
         modifier = modifier

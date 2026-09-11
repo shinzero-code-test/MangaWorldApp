@@ -51,6 +51,15 @@ class FirebaseStartupCoordinator @Inject constructor(
             }
         }
 
+        // Item 6: first launch with a session pulls remote state once, so
+        // history/favorites appear on a second device without a manual restore.
+        // Merge (never overwrite) + tombstones make this safe in both directions.
+        if (!prefs.getBoolean("initial_merge_done", false)) {
+            if (runCatching { syncManager.mergeRemoteSnapshot() }.isSuccess) {
+                prefs.edit().putBoolean("initial_merge_done", true).apply()
+            }
+        }
+
         runCatching {
             // Bounded concurrency: N serial subscribeToTopic round-trips stall
             // cold start with 100+ favorites. Failures stay logged in the manager.

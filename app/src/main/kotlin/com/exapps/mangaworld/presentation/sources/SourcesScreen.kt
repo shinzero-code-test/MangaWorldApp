@@ -162,7 +162,7 @@ private fun SourceGridCard(
                 if (source.logoDrawableRes != 0) {
                     Image(
                         painter = painterResource(id = source.logoDrawableRes),
-                        contentDescription = source.displayName,
+                        contentDescription = stringResource(source.nameRes),
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(8.dp))
@@ -171,7 +171,7 @@ private fun SourceGridCard(
                     )
                 } else {
                     Text(
-                        text = source.displayName.take(2),
+                        text = stringResource(source.nameRes).take(2),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = sourceColor
@@ -181,7 +181,7 @@ private fun SourceGridCard(
 
             // Source name
             Text(
-                text = source.displayName,
+                text = stringResource(source.nameRes),
                 style = MaterialTheme.typography.labelSmall,
                 color = if (isEnabled) MangaColors.OnSurface else MangaColors.Muted,
                 fontWeight = FontWeight.Medium,

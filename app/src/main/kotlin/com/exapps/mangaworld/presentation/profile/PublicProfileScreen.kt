@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -339,7 +340,7 @@ private fun PublicProfileHero(
                         ?: stringResource(R.string.user),
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleLarge
+                    style = MaterialTheme.typography.titleLarge.copy(textDirection = TextDirection.Content)
                 )
                 if (!profile?.badgeLabel.isNullOrBlank()) {
                     Spacer(Modifier.width(8.dp))
@@ -351,7 +352,7 @@ private fun PublicProfileHero(
                 Text(
                     text = stringResource(R.string.profile_username_handle, profile.username),
                     color = MangaColors.Cyan,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Content),
                     modifier = Modifier.padding(top = 4.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -362,7 +363,7 @@ private fun PublicProfileHero(
                 Text(
                     text = profile.bio,
                     color = MangaColors.OnSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Content),
                     modifier = Modifier.padding(top = 8.dp, end = 24.dp),
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
@@ -776,7 +777,7 @@ private fun PublicLibraryMangaCard(manga: FavoriteManga, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    manga.source.displayName,
+                    stringResource(manga.source.nameRes),
                     color = MangaColors.Muted,
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,

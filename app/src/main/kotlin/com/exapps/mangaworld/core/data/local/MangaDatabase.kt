@@ -18,8 +18,9 @@ import com.exapps.mangaworld.core.data.local.entity.*
         DownloadTaskEntity::class,
         DownloadBatchEntity::class,
         DownloadedMangaEntity::class,
+        HomeCacheEntity::class,
     ],
-    version = 14,         // v14: download batches/retry metadata and favourite/list consistency
+    version = 15,         // v15: home_cache offline snapshots (one row per source)
     exportSchema = true   // Schemas exported to app/schemas via KSP arg — enables MigrationTestHelper coverage
 )
 abstract class MangaDatabase : RoomDatabase() {
@@ -32,6 +33,7 @@ abstract class MangaDatabase : RoomDatabase() {
     abstract fun downloadTaskDao(): DownloadTaskDao
     abstract fun downloadBatchDao(): DownloadBatchDao
     abstract fun downloadedMangaDao(): DownloadedMangaDao
+    abstract fun homeCacheDao(): HomeCacheDao
 
     companion object {
         val MIGRATION_8_9 = object : Migration(8, 9) {
@@ -104,6 +106,18 @@ abstract class MangaDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_download_tasks_batchId ON download_tasks(batchId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_download_batches_mangaId ON download_batches(mangaId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_download_batches_updatedAt ON download_batches(updatedAt)")
+            }
+        }
+
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS home_cache (
+                        sourceId TEXT NOT NULL PRIMARY KEY,
+                        payloadJson TEXT NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )
+                """.trimIndent())
             }
         }
 

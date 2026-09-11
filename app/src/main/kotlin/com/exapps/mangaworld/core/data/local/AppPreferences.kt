@@ -121,7 +121,8 @@ class AppPreferences @Inject constructor(
                     ?.map { it.trim() }
                     ?.filter { it.isNotBlank() }
                     ?: emptyList(),
-                showLibraryPublic = prefs[KEY_SHOW_LIBRARY_PUBLIC] ?: true
+                showLibraryPublic = prefs[KEY_SHOW_LIBRARY_PUBLIC] ?: true,
+                lastSourceId = prefs[KEY_LAST_SOURCE_ID] ?: "azora"
             )
         }
 
@@ -238,6 +239,9 @@ class AppPreferences @Inject constructor(
 
     suspend fun setShowLibraryPublic(enabled: Boolean) =
         dataStore.edit { it[KEY_SHOW_LIBRARY_PUBLIC] = enabled }
+
+    suspend fun setLastSourceId(sourceId: String) =
+        dataStore.edit { it[KEY_LAST_SOURCE_ID] = sourceId.take(64) }
 
     suspend fun getSyncTombstones(): List<SyncTombstone> =
         decodeSyncTombstones(dataStore.data.first()[KEY_SYNC_TOMBSTONES])

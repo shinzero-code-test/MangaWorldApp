@@ -264,7 +264,7 @@ fun SettingsScreen(
                 val enabled = app.enabledSources.contains(source.id)
                 SwitchItem(
                     icon = Icons.Filled.Language,
-                    title = source.displayName,
+                    title = stringResource(source.nameRes),
                     subtitle = source.effectiveBaseUrl(),
                     checked = enabled,
                     onCheckedChange = { viewModel.toggleSource(source.id, it) }

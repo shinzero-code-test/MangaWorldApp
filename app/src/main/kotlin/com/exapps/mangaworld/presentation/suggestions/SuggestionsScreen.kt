@@ -277,7 +277,7 @@ private fun SuggestionCard(manga: MangaItem, onClick: () -> Unit) {
                     )
                 }
                 Text(
-                    manga.source.displayName,
+                    stringResource(manga.source.nameRes),
                     style = MaterialTheme.typography.labelSmall,
                     color = MangaColors.Muted
                 )

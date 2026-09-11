@@ -87,6 +87,7 @@
     <string name="search_all_sources">كل المصادر</string>
     <string name="search_recent">عمليات البحث الأخيرة</string>
     <string name="search_recent_empty">لا توجد عمليات بحث أخيرة</string>
+    <string name="home_offline_cached">لا يوجد اتصال بالإنترنت — يتم عرض نسخة محفوظة</string>
     <string name="search_empty">لا توجد نتائج</string>
     <string name="search_cloudflare_required">تحقق Cloudflare مطلوب</string>
     <string name="search_cloudflare_button">تحقق الآن</string>
@@ -695,6 +696,25 @@
     <string name="local_manga">مانجا محلية</string>
     <string name="source_imported">مستورد</string>
     <string name="source_local">محلي</string>
+    <!-- ─── Source names (MangaSource.nameRes; never hardcode — item 8) ─────── -->
+    <string name="source_olympus">تيم اكس</string>
+    <string name="source_azora">ازورا مانجا</string>
+    <string name="source_starz">مانجا ستارز</string>
+    <string name="source_mangasid">مانجا سيد</string>
+    <string name="source_meshmanga">مانجا سوات</string>
+    <string name="source_asq3">مانجا العاشق</string>
+    <string name="source_lekmanga">مانجا ليك</string>
+    <string name="source_lekmangaonline">مانجا ليك اونلاين</string>
+    <string name="source_likemanga">مانجا لايك</string>
+    <string name="source_linkmanga">مانجا لينك</string>
+    <string name="source_mangaleko">مانجا ليكو</string>
+    <string name="source_mangalionz">مانجا ليونز</string>
+    <string name="source_areascans">آريا مانجا</string>
+    <string name="source_hijala">حجالة مانجا</string>
+    <string name="source_lavascans">لاڤا سكانز</string>
+    <string name="source_stellarsaber">StellarSaber</string>
+    <string name="source_procomic">ProChan</string>
+    <string name="source_rockmanga">روكس مانجا</string>
     <string name="read_manga">مانجا مقروءة</string>
     <string name="manhwa">مانهوا</string>
     <string name="manhwa_action">مانهوا أكشن</string>
