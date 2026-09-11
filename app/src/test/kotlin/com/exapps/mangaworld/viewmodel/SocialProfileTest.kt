@@ -48,7 +48,7 @@ class SocialProfileTest {
         assertEquals("user_yz1234", usernameFromEmail(null, "AAAbBBxYz1234"))
         assertEquals("user_yz1234", usernameFromEmail("@@@ab@example.com", "AAAbBBxYz1234"))
         // Exactly 3 chars after sanitizing stays as-is.
-        assertEquals("loh", usernameFromEmail("@@@loh@example.com", "AAAbBBxYz1234"))
+        assertEquals("loh", usernameFromEmail("___loh@example.com", "AAAbBBxYz1234"))
     }
 
     @Test
