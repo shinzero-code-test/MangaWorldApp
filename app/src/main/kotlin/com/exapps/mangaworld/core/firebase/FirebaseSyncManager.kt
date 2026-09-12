@@ -328,50 +328,54 @@ class FirebaseSyncManager @Inject constructor(
      * guarded push uploads the rest. Legacy-keyed annotation dups are
      * collected as migration cleanup.
      */
-    private suspend fun pushKeepLocal() = syncMutex.withLock {
-        val uid = namedUid() ?: return@withLock
-        val userRef = firestore.collection("users").document(uid)
-        val now = System.currentTimeMillis()
-        val localFavIds = favoriteDao.getAllLibraryEntries().map { it.mangaId }.toSet()
-        val localHistIds = historyDao.getAll().map { it.mangaId }.toSet()
-        val localAnnoIds = readerAnnotationDao.getAll().map { annotationDocId(it) }.toSet()
-        val localMarkIds = readChapterDao.getAll()
-            .map { FirebaseSyncMerge.readMarkDocId(it.mangaId, it.chapterNumber) }.toSet()
+    private suspend fun pushKeepLocal() {
+        val sweepDone = syncMutex.withLock {
+            val uid = namedUid() ?: return@withLock false
+            val userRef = firestore.collection("users").document(uid)
+            val now = System.currentTimeMillis()
+            val localFavIds = favoriteDao.getAllLibraryEntries().map { it.mangaId }.toSet()
+            val localHistIds = historyDao.getAll().map { it.mangaId }.toSet()
+            val localAnnoIds = readerAnnotationDao.getAll().map { annotationDocId(it) }.toSet()
+            val localMarkIds = readChapterDao.getAll()
+                .map { FirebaseSyncMerge.readMarkDocId(it.mangaId, it.chapterNumber) }.toSet()
 
-        val staleCloud = mutableListOf<Pair<String, String>>()
-        fun sweep(collection: String, localIds: Set<String>) {
-            runCatching {
-                fetchAllCollection(userRef.collection(collection)).docs.forEach { doc ->
-                    val key = when (collection) {
-                        "favorites" -> FirebaseSyncMerge.favorite(doc)?.mangaId
-                        "readingHistory" -> FirebaseSyncMerge.history(doc)?.mangaId
-                        "readerAnnotations" -> FirebaseSyncMerge.annotation(doc)?.let { annotationDocId(it) }
-                        "readMarks" -> parseReadMark(doc)?.first
-                        else -> null
-                    } ?: doc.id
-                    // Legacy annotation dup: same content, old key — collect
-                    // without tombstoning (the new-keyed twin is the truth).
-                    if (collection == "readerAnnotations" && key in localIds && doc.id != key) {
-                        staleCloud += collection to doc.id
-                    } else if (key !in localIds) {
-                        staleCloud += collection to key
-                        runCatching { prefs.markSyncTombstone(collection, key, now) }
+            val staleCloud = mutableListOf<Pair<String, String>>()
+            fun sweep(collection: String, localIds: Set<String>) {
+                runCatching {
+                    fetchAllCollection(userRef.collection(collection)).docs.forEach { doc ->
+                        val key = when (collection) {
+                            "favorites" -> FirebaseSyncMerge.favorite(doc)?.mangaId
+                            "readingHistory" -> FirebaseSyncMerge.history(doc)?.mangaId
+                            "readerAnnotations" -> FirebaseSyncMerge.annotation(doc)?.let { annotationDocId(it) }
+                            "readMarks" -> parseReadMark(doc)?.first
+                            else -> null
+                        } ?: doc.id
+                        // Legacy annotation dup: same content, old key — collect
+                        // without tombstoning (the new-keyed twin is the truth).
+                        if (collection == "readerAnnotations" && key in localIds && doc.id != key) {
+                            staleCloud += collection to doc.id
+                        } else if (key !in localIds) {
+                            staleCloud += collection to key
+                            runCatching { prefs.markSyncTombstone(collection, key, now) }
+                        }
                     }
                 }
             }
+            sweep("favorites", localFavIds)
+            sweep("readingHistory", localHistIds)
+            sweep("readerAnnotations", localAnnoIds)
+            sweep("readMarks", localMarkIds)
+            if (staleCloud.isNotEmpty()) {
+                commitChunkedDeletes(staleCloud.map { (collection, id) -> userRef.collection(collection).document(id) })
+            }
+            // Positions are fully rewritten from local (+ stale chunks removed).
+            runCatching { positionSyncManager.pushLocalPositions() }
+            true
         }
-        sweep("favorites", localFavIds)
-        sweep("readingHistory", localHistIds)
-        sweep("readerAnnotations", localAnnoIds)
-        sweep("readMarks", localMarkIds)
-        if (staleCloud.isNotEmpty()) {
-            commitChunkedDeletes(staleCloud.map { (collection, id) -> userRef.collection(collection).document(id) })
+        if (sweepDone) {
+            // Forced guarded push uploads local truth + the new tombstone docs.
+            pushLocalSnapshot(force = true)
         }
-        // Positions are fully rewritten from local (+ stale chunks removed).
-        runCatching { positionSyncManager.pushLocalPositions() }
-    }.also {
-        // Forced guarded push uploads local truth + the new tombstone docs.
-        pushLocalSnapshot(force = true)
     }
 
     /**
@@ -379,59 +383,63 @@ class FirebaseSyncManager @Inject constructor(
      * (with tombstones so the next push propagates the deletion cloud-wide),
      * then the pull inserts the remote snapshot. Positions are replaced.
      */
-    private suspend fun pullRemoteOverwrite() = syncMutex.withLock {
-        val uid = namedUid() ?: return@withLock
-        val userRef = firestore.collection("users").document(uid)
-        val now = System.currentTimeMillis()
-        val remoteFavIds = fetchAllCollection(userRef.collection("favorites")).docs
-            .mapNotNull { FirebaseSyncMerge.favorite(it) }.map { it.mangaId }.toSet()
-        val remoteHistIds = fetchAllCollection(userRef.collection("readingHistory")).docs
-            .mapNotNull { FirebaseSyncMerge.history(it) }.map { it.mangaId }.toSet()
-        val remoteAnnoDocs = fetchAllCollection(userRef.collection("readerAnnotations")).docs
-        val remoteAnnoIds = remoteAnnoDocs
-            .mapNotNull { FirebaseSyncMerge.annotation(it) }.map { annotationDocId(it) }.toSet()
-        val remoteAnnoRawIds = remoteAnnoDocs.map { it.id }.toSet()
-        val remoteMarkIds = fetchAllCollection(userRef.collection("readMarks")).docs
-            .mapNotNull { parseReadMark(it) }.map { it.first }.toSet()
+    private suspend fun pullRemoteOverwrite() {
+        val pulled = syncMutex.withLock {
+            val uid = namedUid() ?: return@withLock false
+            val userRef = firestore.collection("users").document(uid)
+            val now = System.currentTimeMillis()
+            val remoteFavIds = fetchAllCollection(userRef.collection("favorites")).docs
+                .mapNotNull { FirebaseSyncMerge.favorite(it) }.map { it.mangaId }.toSet()
+            val remoteHistIds = fetchAllCollection(userRef.collection("readingHistory")).docs
+                .mapNotNull { FirebaseSyncMerge.history(it) }.map { it.mangaId }.toSet()
+            val remoteAnnoDocs = fetchAllCollection(userRef.collection("readerAnnotations")).docs
+            val remoteAnnoIds = remoteAnnoDocs
+                .mapNotNull { FirebaseSyncMerge.annotation(it) }.map { annotationDocId(it) }.toSet()
+            val remoteAnnoRawIds = remoteAnnoDocs.map { it.id }.toSet()
+            val remoteMarkIds = fetchAllCollection(userRef.collection("readMarks")).docs
+                .mapNotNull { parseReadMark(it) }.map { it.first }.toSet()
 
-        favoriteDao.getAllLibraryEntries()
-            .filterNot { it.mangaId in remoteFavIds }
-            .forEach {
-                favoriteDao.deleteIfOlder(it.mangaId, Long.MAX_VALUE)
-                runCatching { prefs.markSyncTombstone("favorites", it.mangaId, now) }
-            }
-        historyDao.getAll()
-            .filterNot { it.mangaId in remoteHistIds }
-            .forEach {
-                historyDao.delete(it.mangaId)
-                runCatching { prefs.markSyncTombstone("readingHistory", it.mangaId, now) }
-            }
-        readerAnnotationDao.getAll()
-            .filterNot {
-                annotationDocId(it) in remoteAnnoIds ||
-                    FirebaseSyncMerge.legacyAnnotationDocId(it) in remoteAnnoRawIds
-            }
-            .forEach {
-                readerAnnotationDao.delete(it.mangaId, it.chapterUrl, it.pageIndex)
-                runCatching { prefs.markSyncTombstone("readerAnnotations", annotationDocId(it), now) }
-            }
-        readChapterDao.getAll()
-            .filterNot { FirebaseSyncMerge.readMarkDocId(it.mangaId, it.chapterNumber) in remoteMarkIds }
-            .forEach {
-                readChapterDao.markUnread(it.mangaId, it.chapterNumber)
-                runCatching {
-                    prefs.markSyncTombstone(
-                        "readMarks",
-                        FirebaseSyncMerge.readMarkDocId(it.mangaId, it.chapterNumber),
-                        now
-                    )
+            favoriteDao.getAllLibraryEntries()
+                .filterNot { it.mangaId in remoteFavIds }
+                .forEach {
+                    favoriteDao.deleteIfOlder(it.mangaId, Long.MAX_VALUE)
+                    runCatching { prefs.markSyncTombstone("favorites", it.mangaId, now) }
                 }
-            }
-        progressDao.clearAll()
-    }.also {
-        pullRemoteSnapshot()
-        // Positions have no tombstones (write-only locally) — replace outright.
-        runCatching { positionSyncManager.pullRemotePositions() }
+            historyDao.getAll()
+                .filterNot { it.mangaId in remoteHistIds }
+                .forEach {
+                    historyDao.delete(it.mangaId)
+                    runCatching { prefs.markSyncTombstone("readingHistory", it.mangaId, now) }
+                }
+            readerAnnotationDao.getAll()
+                .filterNot {
+                    annotationDocId(it) in remoteAnnoIds ||
+                        FirebaseSyncMerge.legacyAnnotationDocId(it) in remoteAnnoRawIds
+                }
+                .forEach {
+                    readerAnnotationDao.delete(it.mangaId, it.chapterUrl, it.pageIndex)
+                    runCatching { prefs.markSyncTombstone("readerAnnotations", annotationDocId(it), now) }
+                }
+            readChapterDao.getAll()
+                .filterNot { FirebaseSyncMerge.readMarkDocId(it.mangaId, it.chapterNumber) in remoteMarkIds }
+                .forEach {
+                    readChapterDao.markUnread(it.mangaId, it.chapterNumber)
+                    runCatching {
+                        prefs.markSyncTombstone(
+                            "readMarks",
+                            FirebaseSyncMerge.readMarkDocId(it.mangaId, it.chapterNumber),
+                            now
+                        )
+                    }
+                }
+            progressDao.clearAll()
+            true
+        }
+        if (pulled) {
+            pullRemoteSnapshot()
+            // Positions have no tombstones (write-only locally) — replace outright.
+            runCatching { positionSyncManager.pullRemotePositions() }
+        }
     }
 
     /** Merge remote state into local (safe both directions — last-write-wins + tombstones). */
@@ -623,8 +631,21 @@ class FirebaseSyncManager @Inject constructor(
         }
     }
 
-    /** Fail-loud batched deletes (tombstone application, restore sweeps). */
-    private suspend fun commitChunkedDeletes(refs: List<DocumentReference>) {
+    /**
+     * FS-10: reap expired cloud tombstone docs (best-effort — never fails the
+     * push). Local copies prune at TTL; without this the 10k fetch cap would
+     * eventually drop live tombstones in favor of dead ones.
+     */
+    private suspend fun pruneExpiredCloudTombstones(userRef: DocumentReference) {
+        runCatching {
+            val cutoff = System.currentTimeMillis() - AppPreferences.TOMBSTONE_TTL_MS
+            userRef.collection("syncTombstones")
+                .whereLessThan("deletedAt", cutoff).limit(100).get().await()
+                .documents.forEach { runCatching { it.reference.delete().await() } }
+        }
+    }
+
+    /** Fail-loud batched deletes (tombstone application, restore sweeps). */    private suspend fun commitChunkedDeletes(refs: List<DocumentReference>) {
         if (refs.isEmpty()) return
         val chunks = refs.chunked(400)
         var failedChunks = 0

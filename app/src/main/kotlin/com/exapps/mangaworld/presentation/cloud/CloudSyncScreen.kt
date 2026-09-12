@@ -326,7 +326,8 @@ fun CloudSyncScreen(
                 isSyncing = state.busy,
                 // FS-13: guests are not signed in — the old `user != null`
                 // check enabled Upload/Restore next to the "Local guest" label.
-                isSignedIn = user != null && !user.isAnonymous,
+                // (Local val: smart cast is impossible on delegated properties.)
+                isSignedIn = (user?.isAnonymous == false),
                 onPush = viewModel::syncNow,
                 onPull = viewModel::restoreFromCloud,
                 restorePreview = state.restorePreview,
