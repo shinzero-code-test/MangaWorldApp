@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Shield, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Shield, CheckCircle2, XCircle, Clock, Trash2 } from "lucide-react";
 import { PageHeader, StatusBadge, EmptyState, ConfirmDialog } from "@/components/ui";
 import { formatRelative } from "@/lib/utils";
 import type { ModerationReport } from "@/types/community";
@@ -22,7 +22,7 @@ export default function ModerationPage() {
   const [forbidden,  setForbidden]  = useState(false);
   const [canAct,     setCanAct]     = useState(false);
   const [actionId,   setActionId]   = useState<string|null>(null);
-  const [actionType, setActionType] = useState<"resolve"|"dismiss"|null>(null);
+  const [actionType, setActionType] = useState<"resolve"|"dismiss"|"remove"|null>(null);
   const [actionLoad, setActionLoad] = useState(false);
 
   useEffect(() => {
@@ -58,18 +58,21 @@ export default function ModerationPage() {
     if (!actionId || !actionType) return;
     setActionLoad(true);
     try {
+      const isRemove = actionType === "remove";
       const res = await fetch("/api/moderation/reports", {
         method:"PATCH",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           reportId: actionId,
-          status:   actionType === "resolve" ? "resolved" : "dismissed",
+          status:   actionType === "dismiss" ? "dismissed" : "resolved",
+          ...(isRemove ? { removeContent: true } : {}),
         }),
       });
       // Only mutate local state when the server actually accepted the change.
       if (res.ok) {
+        const next = actionType === "dismiss" ? "dismissed" : "resolved";
         setAllReports(prev =>
-          prev.map(r => r.id === actionId ? { ...r, status: actionType==="resolve"?"resolved":"dismissed" } : r)
+          prev.map(r => r.id === actionId ? { ...r, status: next } : r)
         );
       }
     } finally {
@@ -182,11 +185,16 @@ export default function ModerationPage() {
                     </code>
                   </div>
                   {report.status === "open" && canAct && (
-                    <div className="flex gap-2 mt-3">
+                    <div className="flex gap-2 mt-3 flex-wrap">
                       <button onClick={() => { setActionId(report.id); setActionType("resolve"); }}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition hover:opacity-80"
                         style={{ background:"rgba(16,185,129,0.12)", color:"var(--success)" }}>
                         <CheckCircle2 size={14} /> حل
+                      </button>
+                      <button onClick={() => { setActionId(report.id); setActionType("remove"); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition hover:opacity-80"
+                        style={{ background:"rgba(239,68,68,0.12)", color:"var(--destructive)" }}>
+                        <Trash2 size={14} /> إزالة المحتوى
                       </button>
                       <button onClick={() => { setActionId(report.id); setActionType("dismiss"); }}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition hover:bg-[var(--accent)]"
@@ -204,10 +212,10 @@ export default function ModerationPage() {
 
       <ConfirmDialog
         open={!!actionId}
-        title={actionType==="resolve" ? "حل التقرير" : "تجاهل التقرير"}
-        description={actionType==="resolve" ? "هل تريد وضع علامة 'تم الحل' على هذا التقرير؟" : "هل تريد تجاهل هذا التقرير وإغلاقه؟"}
-        confirmLabel={actionType==="resolve" ? "حل" : "تجاهل"}
-        variant="warning"
+        title={actionType==="remove" ? "إزالة المحتوى" : actionType==="resolve" ? "حل التقرير" : "تجاهل التقرير"}
+        description={actionType==="remove" ? "سيتم إخفاء المحتوى المُبلغ عنه نهائياً وحل التقرير. متابعة؟" : actionType==="resolve" ? "هل تريد وضع علامة 'تم الحل' على هذا التقرير؟" : "هل تريد تجاهل هذا التقرير وإغلاقه؟"}
+        confirmLabel={actionType==="remove" ? "إزالة" : actionType==="resolve" ? "حل" : "تجاهل"}
+        variant={actionType==="remove" ? "danger" : "warning"}
         onConfirm={handleAction}
         onCancel={() => { setActionId(null); setActionType(null); }}
         loading={actionLoad}

@@ -154,7 +154,10 @@ interface CommunityRepository {
     fun observeModerationReports(): Flow<List<ModerationReport>>
     suspend fun getCurrentProfile(): CommunityProfile?
     suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String? = null, bannerUrl: String? = null, displayName: String = "", location: String = "", birthday: Long? = null)
-    suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean, showLibraryPublic: Boolean = true)
+    // A-12: NO default for showLibraryPublic — every caller must pass the
+    // current value explicitly, so toggling one switch can never silently
+    // re-enable another.
+    suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean, showLibraryPublic: Boolean)
     suspend fun createOrUpdateList(listId: String?, name: String, description: String, coverUrl: String, rating: Float, genres: List<String>, isPublic: Boolean): String
     suspend fun deleteList(listId: String)
     suspend fun addMangaToList(listId: String, item: CustomUserListItem)
@@ -189,6 +192,12 @@ interface CommunityRepository {
     suspend fun blockUser(uid: String)
     suspend fun unblockUser(uid: String)
     fun getBlockedUsers(): Flow<Set<String>>
+    /**
+     * Resolve display names for blocked uids (A-17) so the unblock dialog
+     * shows who is who. Private profiles stay unresolved (absent from the
+     * map) — callers fall back to a uid prefix.
+     */
+    suspend fun getPublicUsernames(uids: Set<String>): Map<String, String>
 }
 
 /**

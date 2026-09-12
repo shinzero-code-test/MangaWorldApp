@@ -391,6 +391,11 @@ data class CommunityProfile(
     val location: String = "",
     /** Birthday as epoch millis; null when unset (optional field). */
     val birthday: Long? = null,
+    /**
+     * Account creation time (A-14). 0 for profiles written before v8.4.5 —
+     * callers fall back to updatedAt and upserts backfill it.
+     */
+    val createdAt: Long = 0L,
     val updatedAt: Long = System.currentTimeMillis()
 )
 

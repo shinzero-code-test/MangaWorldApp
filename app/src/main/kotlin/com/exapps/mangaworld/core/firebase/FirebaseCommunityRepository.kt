@@ -243,9 +243,13 @@ class FirebaseCommunityRepository @Inject constructor(
         val existing = getCurrentProfile() ?: defaultProfile(uid)
         // Recalculate badge based on current achievements
         val newBadge = try { achievementManager.calculateBadge() } catch (_: Exception) { existing.badgeLabel }
+        // A-13: displayName/location are pass-through (blank clears them) —
+        // the old ifBlank-keep-old fallback made them impossible to clear.
+        // A-14: backfill createdAt for pre-v8.4.5 profiles that lack it.
+        val now = System.currentTimeMillis()
         val profile = existing.copy(
             username = username.trim(),
-            displayName = displayName.trim().ifBlank { existing.displayName }.ifBlank { username.trim() },
+            displayName = displayName.trim(),
             bio = bio.trim(),
             location = location.trim(),
             birthday = birthday,
@@ -253,7 +257,8 @@ class FirebaseCommunityRepository @Inject constructor(
             badgeLabel = newBadge,
             avatarUrl = avatarUrl ?: existing.avatarUrl,
             bannerUrl = bannerUrl ?: existing.bannerUrl,
-            updatedAt = System.currentTimeMillis()
+            createdAt = existing.createdAt.takeIf { it > 0L } ?: now,
+            updatedAt = now
         )
 
         val usernameRef = firestore.collection("usernames").document(normalized)
@@ -880,6 +885,7 @@ class FirebaseCommunityRepository @Inject constructor(
             }
         }
         val displayName = firebaseUser?.displayName?.takeIf { it.isNotBlank() } ?: ""
+        val now = System.currentTimeMillis()
         return CommunityProfile(
             uid = uid,
             username = "",  // Must be set via upsertProfile during signup
@@ -891,7 +897,8 @@ class FirebaseCommunityRepository @Inject constructor(
             showListsPublic = true,
             showActivityPublic = true,
             showLibraryPublic = true,
-            bio = ""
+            bio = "",
+            createdAt = now
         )
     }
 
@@ -1023,6 +1030,7 @@ class FirebaseCommunityRepository @Inject constructor(
         "bio" to bio,
         "location" to location,
         "birthday" to birthday,
+        "createdAt" to createdAt,
         "updatedAt" to updatedAt
     )
 
@@ -1150,6 +1158,7 @@ class FirebaseCommunityRepository @Inject constructor(
             bio = getString("bio") ?: "",
             location = getString("location") ?: "",
             birthday = getLong("birthday"),
+            createdAt = getLong("createdAt") ?: 0L,
             updatedAt = getLong("updatedAt") ?: 0L
         )
     }.getOrNull()
@@ -1376,6 +1385,26 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override fun getBlockedUsers(): Flow<Set<String>> = settingsRepository.getMutedUserIds()
+
+    override suspend fun getPublicUsernames(uids: Set<String>): Map<String, String> {
+        if (uids.isEmpty()) return emptyMap()
+        val result = mutableMapOf<String, String>()
+        // Small set (blocked users are few); per-doc reads with per-doc
+        // guards so one private/denied profile can't fail the whole lookup.
+        for (uid in uids.take(MAX_USERNAME_LOOKUP)) {
+            val name = runCatching {
+                val doc = firestore.collection("publicProfiles").document(uid).get().await()
+                doc.getString("displayName")?.takeIf { it.isNotBlank() }
+                    ?: doc.getString("username")?.takeIf { it.isNotBlank() }
+            }.getOrNull()
+            if (!name.isNullOrBlank()) result[uid] = name
+        }
+        return result
+    }
+
+    private companion object {
+        const val MAX_USERNAME_LOOKUP = 100
+    }
 }
 
 /** At most this many reports per reporter per rolling hour (#2 flood quota). */

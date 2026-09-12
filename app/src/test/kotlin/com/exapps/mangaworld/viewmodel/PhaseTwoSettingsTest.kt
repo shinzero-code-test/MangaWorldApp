@@ -79,6 +79,7 @@ class PhaseTwoSettingsTest {
         every { settingsRepo.getFavoriteGenres() } returns flowOf(emptyList())
         every { communityRepo.getBlockedUsers() } returns flowOf(emptySet())
         every { sessionManager.authState } returns flowOf(null)
+        every { sessionManager.currentUser() } returns null
         every { sessionManager.currentUserId() } returns null
         every { sessionManager.linkedProviderIds() } returns emptySet()
         every { securityRepo.observeLoginLogs() } returns flowOf(emptyList())
@@ -411,6 +412,149 @@ class PhaseTwoSettingsTest {
             advanceUntilIdle()
             assertEquals("E-reauth", vm.securityError.value)
             assertNull(vm.passwordMessage.value)
+        }
+    }
+
+    // ─── C-cluster: profile & accounts ────────────────────────────────────
+
+    @Test
+    fun updatePrivacy_preservesLibraryFlag() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            // User previously hid their library: toggling other switches must
+            // not silently re-enable it (A-12 regression test).
+            coEvery { communityRepo.getCurrentProfile() } returns
+                CommunityProfile(uid = "u1", username = "old", showLibraryPublic = false)
+            val vm = createVm()
+            advanceUntilIdle()
+            vm.updatePrivacy(showLists = true, showActivity = true, isPublic = true)
+            advanceUntilIdle()
+            coVerify { communityRepo.updateProfilePrivacy(true, true, false) }
+        }
+    }
+
+    @Test
+    fun updateProfile_blankDisplayNameAndLocation_clearsThem() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            // A-13: blank fields clear instead of restoring the old value.
+            coEvery { communityRepo.getCurrentProfile() } returns
+                CommunityProfile(uid = "u1", username = "old", displayName = "Old Name", location = "Cairo")
+            val vm = createVm()
+            advanceUntilIdle()
+            vm.updateProfile("old", "bio", "", "")
+            advanceUntilIdle()
+            coVerify {
+                communityRepo.upsertProfile(
+                    username = "old",
+                    bio = "bio",
+                    isPublic = true,
+                    avatarUrl = null,
+                    bannerUrl = null,
+                    displayName = "",
+                    location = ""
+                )
+            }
+        }
+    }
+
+    @Test
+    fun updateProfile_guestBlockedWithSignInPrompt() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            val anon = mockk<FirebaseUser>(relaxed = true)
+            every { anon.isAnonymous } returns true
+            every { sessionManager.currentUser() } returns anon
+            // A-16: guests never reach the backend save.
+            every { context.getString(R.string.settings_provider_guest_error) } returns "E-guest"
+            val vm = createVm()
+            advanceUntilIdle()
+            vm.updateProfile("x", "bio", "D", "L")
+            advanceUntilIdle()
+            coVerify(exactly = 0) {
+                communityRepo.upsertProfile(any(), any(), any(), any(), any(), any(), any(), any())
+            }
+            assertEquals("E-guest", vm.saveError.value)
+        }
+    }
+
+    @Test
+    fun readingCount_comesFromReadingStatus() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            // A-15: 10 favorites but only 3 currently reading.
+            coEvery { favoriteDao.getFavoritesList() } returns (1..10).map {
+                com.exapps.mangaworld.core.data.local.entity.FavoriteEntity(
+                    mangaId = "m$it", slug = "s$it", title = "T$it",
+                    coverUrl = "", sourceId = "asq3"
+                )
+            }
+            coEvery { favoriteDao.getByStatus("reading") } returns (1..3).map {
+                com.exapps.mangaworld.core.data.local.entity.FavoriteEntity(
+                    mangaId = "m$it", slug = "s$it", title = "T$it",
+                    coverUrl = "", sourceId = "asq3", readingStatus = "reading"
+                )
+            }
+            val vm = createVm()
+            advanceUntilIdle()
+            assertEquals(10, vm.favoriteCount.value)
+            assertEquals(3, vm.readingCount.value)
+        }
+    }
+
+    @Test
+    fun addPassword_shortPassword_setsWeakErrorWithoutBackendCall() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            val vm = createVm()
+            advanceUntilIdle()
+            // M-1: client-side gates mirror the login cluster.
+            vm.addPasswordProvider("user@example.com", "123")
+            advanceUntilIdle()
+            assertEquals("E-weak", vm.providerLinkError.value)
+            coVerify(exactly = 0) { sessionManager.linkEmailPassword(any(), any()) }
+        }
+    }
+
+    @Test
+    fun addPassword_success_refreshesLinkedProviders() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            coEvery { sessionManager.linkEmailPassword(any(), any()) } returns "u1"
+            every { sessionManager.linkedProviderIds() } returns setOf("google.com", "password")
+            val vm = createVm()
+            advanceUntilIdle()
+            vm.addPasswordProvider("user@example.com", "newpass123")
+            advanceUntilIdle()
+            assertNull(vm.providerLinkError.value)
+            assertTrue(vm.linkedProviderIds.value.contains("password"))
+        }
+    }
+
+    @Test
+    fun blockedUsers_resolvesDisplayNames() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            every { communityRepo.getBlockedUsers() } returns flowOf(setOf("u9"))
+            coEvery { communityRepo.getPublicUsernames(setOf("u9")) } returns mapOf("u9" to "Spammer")
+            val vm = createVm()
+            advanceUntilIdle()
+            // A-17: the dialog can show a name instead of a raw uid prefix.
+            assertEquals("Spammer", vm.blockedUserNames.value["u9"])
         }
     }
 }

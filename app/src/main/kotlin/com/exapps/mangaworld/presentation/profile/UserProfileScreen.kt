@@ -232,7 +232,15 @@ class UserProfileViewModel @Inject constructor(
 
     fun updatePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean) {
         viewModelScope.launch {
-            runCatching { communityRepository.updateProfilePrivacy(showListsPublic, showActivityPublic) }
+            runCatching {
+                // A-12: preserve the current library flag (no 2-arg default).
+                val current = communityRepository.getCurrentProfile()
+                communityRepository.updateProfilePrivacy(
+                    showListsPublic,
+                    showActivityPublic,
+                    current?.showLibraryPublic ?: true
+                )
+            }
             refreshProfile()
         }
     }

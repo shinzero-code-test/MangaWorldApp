@@ -118,12 +118,14 @@ class ProfileCollectionsViewModelTest {
         every { settingsRepo.getFavoriteGenres() } returns flowOf(emptyList())
         every { communityRepo.getBlockedUsers() } returns flowOf(emptySet())
         every { sessionManager.authState } returns flowOf(null)
+        every { sessionManager.currentUser() } returns null
         every { sessionManager.currentUserId() } returns null
         every { sessionManager.linkedProviderIds() } returns emptySet()
         every { securityRepo.observeLoginLogs() } returns flowOf(emptyList())
         every { securityRepo.observeDevices() } returns flowOf(emptyList())
         every { securityRepo.observeSessions() } returns flowOf(emptyList())
         coEvery { favoriteDao.getFavoritesList() } returns emptyList()
+        coEvery { favoriteDao.getByStatus("reading") } returns emptyList()
         coEvery { historyDao.getAll() } returns emptyList()
         coEvery { readChapterDao.getTotalReadCount() } returns 0
     }
@@ -183,7 +185,8 @@ class ProfileCollectionsViewModelTest {
         vm.updatePrivacy(showListsPublic = true, showActivityPublic = false)
         advanceUntilIdle()
         coVerify { communityRepo.markNotificationRead("n1") }
-        coVerify { communityRepo.updateProfilePrivacy(true, false) }
+        // A-12: the library flag travels explicitly (testProfile defaults true).
+        coVerify { communityRepo.updateProfilePrivacy(true, false, true) }
         }
     }
 

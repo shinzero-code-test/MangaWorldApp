@@ -307,10 +307,10 @@ service cloud.firestore {
       allow read: if resource.data.isPublic == true || owner(userId);
       allow create: if owner(userId)
         && validProfileStrings()
-        && request.resource.data.keys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'location', 'birthday', 'badgeLabel', 'updatedAt']);
+        && request.resource.data.keys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'location', 'birthday', 'badgeLabel', 'createdAt', 'updatedAt']);
       allow update: if owner(userId)
         && validProfileStrings()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'location', 'birthday', 'badgeLabel', 'updatedAt']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'location', 'birthday', 'badgeLabel', 'createdAt', 'updatedAt']);
       allow delete: if owner(userId);
     }
 
@@ -335,7 +335,7 @@ service cloud.firestore {
         allow update: if authorOnlyCommentEdit();
         // v8 (#5): authors may PERMANENTLY remove their own content when no
         // replies reference it; anchored (replyCount > 0) docs stay soft-only.
-        allow delete: if canWriteCommunity(resource.data.authorUid)
+        allow delete: if (canWriteCommunity(resource.data.authorUid) || canModerate())
           // get(..., 0): legacy docs predate the replyCount field — absent must
           // count as "unreferenced", otherwise their delete is PERMISSION_DENIED.
           && resource.data.get('replyCount', 0) == 0;
@@ -351,7 +351,7 @@ service cloud.firestore {
         allow update: if authorOnlyReviewEdit();
         // v8 (#5): permanent delete for unreferenced reviews — also frees the
         // one-review-per-user document slot.
-        allow delete: if canWriteCommunity(resource.data.authorUid)
+        allow delete: if (canWriteCommunity(resource.data.authorUid) || canModerate())
           // get(..., 0): legacy docs predate the replyCount field — absent must
           // count as "unreferenced", otherwise their delete is PERMISSION_DENIED.
           && resource.data.get('replyCount', 0) == 0;
@@ -368,7 +368,7 @@ service cloud.firestore {
           && validChapterCommentStructure(mangaId, chapterKey);
         allow update: if authorOnlyCommentEdit();
         // v8 (#5): same permanent-delete rule as manga comments.
-        allow delete: if canWriteCommunity(resource.data.authorUid)
+        allow delete: if (canWriteCommunity(resource.data.authorUid) || canModerate())
           // get(..., 0): legacy docs predate the replyCount field — absent must
           // count as "unreferenced", otherwise their delete is PERMISSION_DENIED.
           && resource.data.get('replyCount', 0) == 0;
@@ -398,7 +398,7 @@ service cloud.firestore {
           && request.resource.data.emoji.size() <= 16;
         allow update: if canWriteCommunity(resource.data.authorUid)
           && request.resource.data.authorUid == resource.data.authorUid;
-        allow delete: if canWriteCommunity(resource.data.authorUid);
+        allow delete: if canWriteCommunity(resource.data.authorUid) || canModerate();
       }
     }
 

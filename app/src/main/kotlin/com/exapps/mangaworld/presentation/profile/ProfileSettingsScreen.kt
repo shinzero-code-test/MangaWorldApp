@@ -139,6 +139,10 @@ class ProfileSettingsViewModel @Inject constructor(
 
     private val _favoriteCount = MutableStateFlow(0)
     val favoriteCount: StateFlow<Int> = _favoriteCount.asStateFlow()
+    // A-15: distinct "currently reading" count (readingStatus == "reading"),
+    // not a second copy of the favorites total.
+    private val _readingCount = MutableStateFlow(0)
+    val readingCount: StateFlow<Int> = _readingCount.asStateFlow()
     private val _historyCount = MutableStateFlow(0)
     val historyCount: StateFlow<Int> = _historyCount.asStateFlow()
     private val _readCount = MutableStateFlow(0)
@@ -166,6 +170,19 @@ class ProfileSettingsViewModel @Inject constructor(
 
     private val _linkedProviderIds = MutableStateFlow(sessionManager.linkedProviderIds())
     val linkedProviderIds: StateFlow<Set<String>> = _linkedProviderIds.asStateFlow()
+    // A-16: guests have no editable profile — screens gate the editor and
+    // avatar actions on this instead of failing at the Firestore rules.
+    private val _isGuest = MutableStateFlow(sessionManager.currentUser()?.isAnonymous != false)
+    val isGuest: StateFlow<Boolean> = _isGuest.asStateFlow()
+
+    /** Guest tapped a profile action: prompt for a permanent account. */
+    fun promptGuestSignIn() {
+        _saveError.value = context.getString(R.string.settings_provider_guest_error)
+    }
+
+    // A-17: resolved display names for blocked uids (uid prefix fallback).
+    private val _blockedUserNames = MutableStateFlow<Map<String, String>>(emptyMap())
+    val blockedUserNames: StateFlow<Map<String, String>> = _blockedUserNames.asStateFlow()
     private val _providerLinkError = MutableStateFlow<String?>(null)
     val providerLinkError: StateFlow<String?> = _providerLinkError.asStateFlow()
 
@@ -176,6 +193,9 @@ class ProfileSettingsViewModel @Inject constructor(
             _favoriteCount.value = favoriteDao.getFavoritesList().size
             _historyCount.value = historyDao.getAll().size
             _readCount.value = readChapterDao.getTotalReadCount()
+            // A-15: currently-reading count comes from readingStatus, not the
+            // favorites total (any failure degrades to 0, never crashes init).
+            _readingCount.value = runCatching { favoriteDao.getByStatus("reading").size }.getOrDefault(0)
             // Social counts + lists (real data for the section + dialogs).
             val uid = sessionManager.currentUserId()
             if (uid != null) {
@@ -198,15 +218,22 @@ class ProfileSettingsViewModel @Inject constructor(
             launch { communityRepository.observeFollowing(uid).collect { _following.value = it } }
             launch { communityRepository.observeFollowers(uid).collect { _followers.value = it } }
         }
-        // Observe blocked users
+        // Observe blocked users (+ resolve display names for the dialog).
         viewModelScope.launch {
-            communityRepository.getBlockedUsers().collect { _blockedUsers.value = it }
+            communityRepository.getBlockedUsers().collect { ids ->
+                _blockedUsers.value = ids
+                _blockedUserNames.value =
+                    runCatching { communityRepository.getPublicUsernames(ids) }.getOrDefault(emptyMap())
+            }
         }
         viewModelScope.launch {
             settingsRepository.getFavoriteGenres().collect { _favoriteGenres.value = it }
         }
         viewModelScope.launch {
-            sessionManager.authState.collect { _linkedProviderIds.value = sessionManager.linkedProviderIds() }
+            sessionManager.authState.collect {
+                _linkedProviderIds.value = sessionManager.linkedProviderIds()
+                _isGuest.value = it?.isAnonymous != false
+            }
         }
     }
 
@@ -214,22 +241,34 @@ class ProfileSettingsViewModel @Inject constructor(
 
     fun uploadAvatar(uri: Uri) {
         viewModelScope.launch {
+            // A-16: guests can't own a profile — prompt instead of failing at
+            // the Firestore rules with a bare generic error. (Explicitly
+            // anonymous only: a null session keeps the old backend-guarded
+            // path so signed-out edge cases never lose the save attempt.)
+            if (sessionManager.currentUser()?.isAnonymous == true) {
+                _saveError.value = context.getString(R.string.settings_provider_guest_error)
+                return@launch
+            }
             val current = runCatching { communityRepository.getCurrentProfile() }.getOrNull()
             val result = cloudinaryUploader.uploadImage(uri, assetType = "avatar")
-            if (result != null) {
-                runCatching {
-                    communityRepository.upsertProfile(
-                        username = current?.username ?: "",
-                        bio = current?.bio ?: "",
-                        isPublic = current?.isPublic ?: true,
-                        avatarUrl = result.url,
-                        bannerUrl = current?.bannerUrl,
-                        displayName = current?.displayName ?: ""
-                    )
-                }.onFailure {
-                    _saveError.value = context.getString(R.string.profile_save_failed)
-                    return@launch
-                }
+            // A-17: a failed upload previously did nothing at all — surface it.
+            if (result == null) {
+                _saveError.value = context.getString(R.string.profile_save_failed)
+                return@launch
+            }
+            runCatching {
+                communityRepository.upsertProfile(
+                    username = current?.username ?: "",
+                    bio = current?.bio ?: "",
+                    isPublic = current?.isPublic ?: true,
+                    avatarUrl = result.url,
+                    bannerUrl = current?.bannerUrl,
+                    displayName = current?.displayName ?: ""
+                )
+            }.onFailure {
+                _saveError.value = context.getString(R.string.profile_save_failed)
+                return@launch
+            }
                 val oldUrl = current?.avatarUrl
                 if (oldUrl != null) {
                     val oldId = cloudinaryUploader.extractPublicId(oldUrl)
@@ -237,13 +276,14 @@ class ProfileSettingsViewModel @Inject constructor(
                 }
                 avatarUri = null
                 refreshProfile()
-            }
         }
     }
 
     /**
      * Birthday is pass-through (null clears it): the edit dialog always sends
      * the field state initialized from the profile, so bio-only saves keep it.
+     * Display name and location are pass-through too (A-13): blank clears
+     * them — the repo no longer restores the old value behind the user's back.
      */
     fun updateProfile(
         username: String,
@@ -253,6 +293,11 @@ class ProfileSettingsViewModel @Inject constructor(
         birthday: Long? = null
     ) {
         viewModelScope.launch {
+            // A-16: same guest gate as avatar upload (anonymous-only; see above).
+            if (sessionManager.currentUser()?.isAnonymous == true) {
+                _saveError.value = context.getString(R.string.settings_provider_guest_error)
+                return@launch
+            }
             val result = runCatching {
                 val c = communityRepository.getCurrentProfile()
                 communityRepository.upsertProfile(
@@ -261,8 +306,8 @@ class ProfileSettingsViewModel @Inject constructor(
                     isPublic = c?.isPublic ?: true,
                     avatarUrl = c?.avatarUrl,
                     bannerUrl = c?.bannerUrl,
-                    displayName = displayName.ifBlank { c?.displayName ?: "" },
-                    location = location.ifBlank { c?.location ?: "" },
+                    displayName = displayName,
+                    location = location,
                     birthday = birthday
                 )
             }
@@ -300,7 +345,13 @@ class ProfileSettingsViewModel @Inject constructor(
                     bannerUrl = c?.bannerUrl,
                     displayName = c?.displayName ?: ""
                 )
-                communityRepository.updateProfilePrivacy(showLists, showActivity)
+                // A-12: pass the CURRENT library flag — the old 2-arg call
+                // silently reset showLibraryPublic to true on every toggle.
+                communityRepository.updateProfilePrivacy(
+                    showLists,
+                    showActivity,
+                    c?.showLibraryPublic ?: true
+                )
             }
             result.onSuccess { refreshProfile() }
                 .onFailure { _saveError.value = context.getString(R.string.profile_save_failed) }
@@ -496,6 +547,8 @@ class ProfileSettingsViewModel @Inject constructor(
         const val DELETE_PAGE_SIZE = 200L
         const val MAX_DELETE_PAGES = 25
         const val MIN_PASSWORD_LENGTH = 6
+        // Client-side email gate (mirrors LoginViewModel; server is truth).
+        val EMAIL_REGEX = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
     }
 
     /**
@@ -665,6 +718,28 @@ class ProfileSettingsViewModel @Inject constructor(
         viewModelScope.launch { linkProvider { sessionManager.unlinkProvider(providerId) } }
     }
 
+    /**
+     * Attach email/password login to a social-only account (M-1). The email
+     * defaults to the Auth account email; linkEmailPassword was previously
+     * implemented but unreachable from any screen.
+     */
+    fun addPasswordProvider(email: String, password: String) {
+        val normalizedEmail = email.trim()
+        if (normalizedEmail.isBlank() || password.isBlank()) {
+            _providerLinkError.value = context.getString(R.string.auth_error_empty_fields)
+            return
+        }
+        if (!EMAIL_REGEX.matches(normalizedEmail)) {
+            _providerLinkError.value = context.getString(R.string.invalid_email)
+            return
+        }
+        if (password.length < MIN_PASSWORD_LENGTH) {
+            _providerLinkError.value = context.getString(R.string.auth_error_password_weak)
+            return
+        }
+        viewModelScope.launch { linkProvider { sessionManager.linkEmailPassword(normalizedEmail, password) } }
+    }
+
     fun onProviderLinkError(message: String) {
         _providerLinkError.value = message
     }
@@ -673,6 +748,9 @@ class ProfileSettingsViewModel @Inject constructor(
         _providerLinkError.value = null
         try {
             action()
+            // M-1: providerData changes don't always re-emit authState (same
+            // uid), so refresh explicitly after every successful link/unlink.
+            _linkedProviderIds.value = sessionManager.linkedProviderIds()
         } catch (error: AccountMergeRequiredException) {
             _providerLinkError.value = accountMergeMessage(context, error.reason)
         } catch (error: ProviderManagementRequiresSignInException) {
@@ -721,8 +799,11 @@ fun ProfileSettingsScreen(
     val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
     val appSettings by viewModel.appSettings.collectAsStateWithLifecycle()
     val favoriteCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
+    val readingCount by viewModel.readingCount.collectAsStateWithLifecycle()
     val historyCount by viewModel.historyCount.collectAsStateWithLifecycle()
     val readCount by viewModel.readCount.collectAsStateWithLifecycle()
+    val isGuest by viewModel.isGuest.collectAsStateWithLifecycle()
+    val blockedUserNames by viewModel.blockedUserNames.collectAsStateWithLifecycle()
     val followingCount by viewModel.followingCount.collectAsStateWithLifecycle()
     val followersCount by viewModel.followersCount.collectAsStateWithLifecycle()
     val following by viewModel.following.collectAsStateWithLifecycle()
@@ -749,6 +830,7 @@ fun ProfileSettingsScreen(
     var showSignOutAllConfirm by remember { mutableStateOf(false) }
     var showBlockedUsers by remember { mutableStateOf(false) }
     var showChangePassword by remember { mutableStateOf(false) }
+    var showAddPassword by remember { mutableStateOf(false) }
     var showFollowingList by remember { mutableStateOf(false) }
     var showFollowersList by remember { mutableStateOf(false) }
     var showLoginLogs by remember { mutableStateOf(false) }
@@ -833,11 +915,19 @@ fun ProfileSettingsScreen(
         }
 
         Column(modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(bottom = 32.dp)) {
-            ProfileHeroSection(profile, avatarUri) { avatarLauncher.launch("image/*") }
+            ProfileHeroSection(profile, avatarUri) {
+                // A-16: guests get a sign-in prompt, not a doomed upload.
+                if (isGuest) viewModel.promptGuestSignIn() else avatarLauncher.launch("image/*")
+            }
             Spacer(Modifier.height(20.dp))
 
             Section(stringResource(R.string.more_profile), Icons.Filled.Person, MangaColors.Cyan, "profile", expandedSection, onToggle = { expandedSection = it }) {
-                ProfileInfoSection(profile, formatJoinDate(context, profile?.updatedAt ?: 0L)) { showEditProfile = true }
+                // A-14: join date is the true creation time (updatedAt fallback
+                // for pre-v8.4.5 profiles that predate createdAt).
+                ProfileInfoSection(profile, formatJoinDate(context, profile?.createdAt?.takeIf { it > 0L } ?: profile?.updatedAt ?: 0L)) {
+                    // A-16: guests get a sign-in prompt, not a doomed editor.
+                    if (isGuest) viewModel.promptGuestSignIn() else showEditProfile = true
+                }
             }
             Section(stringResource(R.string.settings_account), Icons.Filled.AccountCircle, MangaColors.PrimaryLight, "account", expandedSection, onToggle = { expandedSection = it }) {
                 AccountInfoSection(userEmail, { showSignOutConfirm = true }, { showDeleteConfirm = true })
@@ -875,7 +965,7 @@ fun ProfileSettingsScreen(
                     onShowBlockedUsers = { showBlockedUsers = true })
             }
             Section(stringResource(R.string.settings_library), Icons.Filled.LibraryBooks, MangaColors.Orange, "library", expandedSection, onToggle = { expandedSection = it }) {
-                LibrarySection(favoriteCount, historyCount, readCount)
+                LibrarySection(favoriteCount, readingCount, historyCount, readCount)
             }
             Section(stringResource(R.string.settings_notifications), Icons.Filled.Notifications, MangaColors.Pink, "notif", expandedSection, onToggle = { expandedSection = it }) {
                 NotificationSection(
@@ -901,6 +991,7 @@ fun ProfileSettingsScreen(
                     onDismissListsMessage = viewModel::clearListsMessage,
                     onLinkGoogle = { googleLinkLauncher.launch(viewModel.googleSignInIntent()) },
                     onUnlinkProvider = viewModel::unlinkProvider,
+                    onAddPassword = { showAddPassword = true },
                     onLinkFacebook = {
                         (context as? android.app.Activity)?.let { activity ->
                             com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
@@ -936,7 +1027,7 @@ fun ProfileSettingsScreen(
         confirmButton = { TextButton(onClick = viewModel::clearSaveError) { Text(stringResource(R.string.close), color = MangaColors.Cyan) } }
     )
     if (showSignOutConfirm) ConfirmDialog(stringResource(R.string.settings_sign_out), stringResource(R.string.settings_sign_out_confirm), stringResource(R.string.logout), { viewModel.signOut(); showSignOutConfirm = false; onSignedOut() }, { showSignOutConfirm = false })
-    if (showBlockedUsers) BlockedUsersDialog(blockedUsers, onDismiss = { showBlockedUsers = false }, onUnblock = { uid -> viewModel.unblockUser(uid) })
+    if (showBlockedUsers) BlockedUsersDialog(blockedUsers, blockedUserNames, onDismiss = { showBlockedUsers = false }, onUnblock = { uid -> viewModel.unblockUser(uid) })
     if (showFollowingList) UserListDialog(stringResource(R.string.settings_following), following, onDismiss = { showFollowingList = false })
     if (showFollowersList) UserListDialog(stringResource(R.string.settings_followers), followers, onDismiss = { showFollowersList = false })
     if (showLoginLogs) LoginLogsDialog(
@@ -970,6 +1061,12 @@ fun ProfileSettingsScreen(
         busy = securityBusy,
         onDismiss = { showChangePassword = false },
         onSave = { viewModel.changePassword(it); showChangePassword = false }
+    )
+    if (showAddPassword) AddPasswordDialog(
+        initialEmail = userEmail ?: "",
+        linkError = providerLinkError,
+        onDismiss = { showAddPassword = false },
+        onSave = { email, password -> viewModel.addPasswordProvider(email, password); showAddPassword = false }
     )
 }
 
@@ -1096,10 +1193,12 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     }
 }
 
-@Composable private fun LibrarySection(favCount: Int, histCount: Int, readCount: Int) {
+@Composable private fun LibrarySection(favCount: Int, readingCount: Int, histCount: Int, readCount: Int) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Favorite, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.favorite_manga), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_034, favCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AutoStories, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.library_reading), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_034, favCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        // A-15: this row shows the currently-reading count (readingStatus),
+        // not a duplicate of the favorites total.
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.AutoStories, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.library_reading), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_034, readingCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.History, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.reading_history), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_034, histCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.MenuBook, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.read_chapters), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_017, readCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
     }
@@ -1138,6 +1237,7 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     onDismissListsMessage: () -> Unit,
     onLinkGoogle: () -> Unit,
     onLinkFacebook: () -> Unit,
+    onAddPassword: () -> Unit,
     onUnlinkProvider: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1174,6 +1274,14 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
                 Spacer(Modifier.width(12.dp))
                 Text(stringResource(R.string.settings_email), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 Text(stringResource(R.string.settings_provider_linked), color = MangaColors.Green, style = MaterialTheme.typography.bodySmall)
+            }
+        } else {
+            // M-1: social-only accounts can attach email/password login here.
+            Row(Modifier.fillMaxWidth().clickable(onClick = onAddPassword).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Password, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(12.dp))
+                Text(stringResource(R.string.settings_provider_add_password), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.link), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall)
             }
         }
         providerLinkError?.let { message ->
@@ -1238,7 +1346,7 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
         normalizedUsername.isEmpty() -> stringResource(R.string.auth_error_username_required)
         normalizedUsername.length < 3 -> stringResource(R.string.auth_error_username_short)
         normalizedUsername.length > 20 -> stringResource(R.string.auth_error_username_long)
-        !normalizedUsername.matches(Regex("^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$")) -> stringResource(R.string.str_012)
+        !normalizedUsername.matches(com.exapps.mangaworld.domain.UsernameRules.REGEX) -> stringResource(R.string.str_012)
         else -> null
     }
 
@@ -1369,6 +1477,59 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     )
 }
 
+@Composable private fun AddPasswordDialog(initialEmail: String, linkError: String?, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
+    var email by remember { mutableStateOf(initialEmail) }
+    var password by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    val mismatch = password.isNotBlank() && confirm.isNotBlank() && password != confirm
+    val canSave = email.isNotBlank() && password.length >= 6 && !mismatch
+    AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
+        title = { Text(stringResource(R.string.settings_provider_add_password), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = email, onValueChange = { email = it },
+                label = { Text(stringResource(R.string.settings_email)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
+            )
+            OutlinedTextField(
+                value = password, onValueChange = { password = it },
+                label = { Text(stringResource(R.string.settings_password_new_hint)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    TextButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Text(stringResource(if (passwordVisible) R.string.hide else R.string.show), color = MangaColors.Cyan)
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
+            )
+            OutlinedTextField(
+                value = confirm, onValueChange = { confirm = it },
+                label = { Text(stringResource(R.string.auth_confirm_password)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
+            )
+            if (mismatch) {
+                Text(stringResource(R.string.auth_error_passwords_mismatch), color = MangaColors.Yellow, style = MaterialTheme.typography.bodySmall)
+            }
+            linkError?.let { message ->
+                Text(message, color = MangaColors.Pink, style = MaterialTheme.typography.bodySmall)
+            }
+        }},
+        confirmButton = {
+            Button(
+                onClick = { onSave(email.trim(), password) },
+                colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan),
+                enabled = canSave
+            ) { Text(stringResource(R.string.save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) } }
+    )
+}
+
 @Composable private fun ConfirmDialog(title: String, message: String, confirmText: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
         title = { Text(title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
@@ -1378,7 +1539,7 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     )
 }
 
-@Composable private fun BlockedUsersDialog(blockedUsers: Set<String>, onDismiss: () -> Unit, onUnblock: (String) -> Unit) {
+@Composable private fun BlockedUsersDialog(blockedUsers: Set<String>, displayNames: Map<String, String>, onDismiss: () -> Unit, onUnblock: (String) -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
         title = { Text(stringResource(R.string.settings_blocked_users_title), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
         text = {
@@ -1387,10 +1548,13 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
                     blockedUsers.forEach { uid ->
+                        // A-17: resolved name when available, uid prefix only
+                        // as a last resort for private/denied profiles.
+                        val label = displayNames[uid] ?: (uid.take(16) + "...")
                         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Person, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(12.dp))
-                            Text(uid.take(16) + "...", color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            Text(label, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                             TextButton(onClick = { onUnblock(uid) }) { Text(stringResource(R.string.settings_unblock), color = MangaColors.Cyan) }
                         }
                     }

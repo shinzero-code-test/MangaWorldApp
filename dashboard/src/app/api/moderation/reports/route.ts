@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
 import { genericErrorResponse } from "@/lib/security";
@@ -25,11 +26,63 @@ export async function PATCH(request: NextRequest) {
     if (!isRecord(body) || !isDocumentId(body.reportId) || !isReportStatus(body.status)) {
       return NextResponse.json({ error: "Invalid params" }, { status: 400 });
     }
+    const removeContent = body.removeContent === true;
+    if (removeContent && body.status !== "resolved") {
+      return NextResponse.json({ error: "Invalid params" }, { status: 400 });
+    }
+    if (removeContent) {
+      // M-3: moderator take-down — soft-delete the reported content
+      // server-side (Admin SDK bypasses author-only rules), then resolve.
+      const reportSnap = await getAdminDb().collection("moderationReports").doc(body.reportId).get();
+      if (!reportSnap.exists) {
+        return NextResponse.json({ error: "Invalid params" }, { status: 404 });
+      }
+      const report = toReport(body.reportId, toRecord(reportSnap.data()));
+      await softDeleteTarget(report);
+    }
     await getAdminDb().collection("moderationReports").doc(body.reportId).update({ status: body.status });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     return errorResponse(error);
   }
+}
+
+/**
+ * Soft-delete reported content so it disappears for readers while keeping
+ * the thread anchor (mirrors the client soft-delete invariant: cleared text,
+ * empty mentions, isDeleted flag).
+ */
+async function softDeleteTarget(report: ModerationReport): Promise<void> {
+  const db = getAdminDb();
+  if (report.targetType === "review") {
+    if (!report.mangaId || !report.targetId) return;
+    await db.collection("community_manga").doc(report.mangaId)
+      .collection("reviews").doc(report.targetId)
+      .set({ isDeleted: true, body: "", title: "" }, { merge: true });
+    return;
+  }
+  if (!report.mangaId || !report.targetId) return;
+  const payload = { isDeleted: true, text: "", mentions: [] as string[] };
+  if (report.chapterUrl) {
+    const chapterKey = stableChapterKey(report.chapterUrl);
+    await db.collection("community_manga").doc(report.mangaId)
+      .collection("chapters").doc(chapterKey)
+      .collection("comments").doc(report.targetId)
+      .set(payload, { merge: true });
+  } else {
+    await db.collection("community_manga").doc(report.mangaId)
+      .collection("comments").doc(report.targetId)
+      .set(payload, { merge: true });
+  }
+}
+
+/** 24 hex chars (96 bits) — must match the app's stableChapterKey (Kotlin). */
+function stableChapterKey(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex").slice(0, 24);
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
 }
 
 function toReport(id: string, data: Record<string, unknown>): ModerationReport {
