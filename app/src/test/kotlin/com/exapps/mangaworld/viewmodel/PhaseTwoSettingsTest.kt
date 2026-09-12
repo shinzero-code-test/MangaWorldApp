@@ -15,6 +15,10 @@ import com.exapps.mangaworld.domain.repository.SecurityRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.profile.ProfileSettingsViewModel
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
+import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.firestore.CollectionReference
+import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FirebaseFirestore
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -31,6 +35,8 @@ import kotlinx.coroutines.test.setMain
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -215,6 +221,76 @@ class PhaseTwoSettingsTest {
                 communityRepo.createOrUpdateList(null, "Summer", "", "", 0f, emptyList(), false)
             }
             assertTrue(vm.listsMessage.value != null)
+        }
+    }
+
+    // ─── Profile-save hardening (denial must surface, never crash) ────────
+
+    @Test
+    fun updateProfile_repoThrow_setsSaveErrorAndSurvives() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            coEvery { communityRepo.upsertProfile(any(), any(), any(), any(), any(), any(), any(), any()) } throws
+                com.google.firebase.firestore.FirebaseFirestoreException(
+                    "denied",
+                    com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED
+                )
+            val vm = createVm()
+            advanceUntilIdle()
+            // Must not throw out of the launch (used to crash the app).
+            vm.updateProfile("newname", "bio", "Disp")
+            advanceUntilIdle()
+            assertNotNull(vm.saveError.value)
+        }
+    }
+
+    @Test
+    fun deleteAccount_recentLoginRequired_keepsSessionAndReports() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            val user = mockk<FirebaseUser>(relaxed = true)
+            every { auth.currentUser } returns user
+            every { user.delete() } returns com.google.android.gms.tasks.Tasks.forException(
+                mockk<FirebaseAuthRecentLoginRequiredException>()
+            )
+            val vm = createVm()
+            advanceUntilIdle()
+            var deleted = false
+            vm.deleteAccount(onDeleted = { deleted = true })
+            advanceUntilIdle()
+            assertFalse(deleted)
+            assertNotNull(vm.saveError.value)
+            coVerify(exactly = 0) { sessionManager.signOut() }
+        }
+    }
+
+    @Test
+    fun deleteAccount_success_cleansIdentitySignsOutAndCallbacks() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            val user = mockk<FirebaseUser>(relaxed = true)
+            every { auth.currentUser } returns user
+            every { user.uid } returns "u1"
+            every { user.delete() } returns com.google.android.gms.tasks.Tasks.forResult(null)
+            val docRef = mockk<DocumentReference>(relaxed = true)
+            val colRef = mockk<CollectionReference>()
+            every { firestore.collection(any()) } returns colRef
+            every { colRef.document(any()) } returns docRef
+            every { docRef.delete() } returns com.google.android.gms.tasks.Tasks.forResult(null)
+            val vm = createVm()
+            advanceUntilIdle()
+            var deleted = false
+            vm.deleteAccount(onDeleted = { deleted = true })
+            advanceUntilIdle()
+            assertTrue(deleted)
+            coVerify { sessionManager.signOut() }
+            coVerify { docRef.delete() }
         }
     }
 }

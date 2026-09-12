@@ -27,8 +27,8 @@ service cloud.firestore {
         && (!request.resource.data.keys().hasAny(['displayName']) || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 64))
         && (!request.resource.data.keys().hasAny(['bio']) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 1000))
         && (!request.resource.data.keys().hasAny(['location']) || (request.resource.data.location is string && request.resource.data.location.size() <= 64))
-        && (!request.resource.data.keys().hasAny(['avatarUrl']) || (request.resource.data.avatarUrl is string && request.resource.data.avatarUrl.size() <= 2048))
-        && (!request.resource.data.keys().hasAny(['bannerUrl']) || (request.resource.data.bannerUrl is string && request.resource.data.bannerUrl.size() <= 2048))
+        && (!request.resource.data.keys().hasAny(['avatarUrl']) || (request.resource.data.avatarUrl == null || (request.resource.data.avatarUrl is string && request.resource.data.avatarUrl.size() <= 2048)))
+        && (!request.resource.data.keys().hasAny(['bannerUrl']) || (request.resource.data.bannerUrl == null || (request.resource.data.bannerUrl is string && request.resource.data.bannerUrl.size() <= 2048)))
         && (!request.resource.data.keys().hasAny(['badgeLabel']) || (request.resource.data.badgeLabel is string && request.resource.data.badgeLabel in ['Beginner', 'Page Turner', 'Chapter Hunter', 'Manga Enthusiast', 'Shonen Specialist', 'Avid Reader', 'Pirate King']));
     }
 

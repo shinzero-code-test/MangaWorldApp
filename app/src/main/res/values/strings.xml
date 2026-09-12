@@ -124,6 +124,7 @@
     <string name="profile_role_moderator">مشرف</string>
     <string name="profile_role_admin">مدير عام</string>
     <string name="profile_save">حفظ الملف الشخصي</string>
+    <string name="profile_save_failed">تعذر حفظ الملف الشخصي. تحقق من الاتصال وحاول مرة أخرى.</string>
     <string name="profile_location">الموقع</string>
     <string name="profile_location_hint">المدينة، البلد (اختياري)</string>
     <string name="profile_birthday">تاريخ الميلاد</string>
@@ -149,6 +150,7 @@
     <string name="settings_notifications_followers">إشعارات المتابعين</string>
     <string name="settings_delete_account">حذف الحساب</string>
     <string name="settings_delete_account_confirm">هل أنت متأكد من حذف حسابك؟ هذا الإجراء لا يمكن التراجع عنه.</string>
+    <string name="settings_delete_account_reauth">لأسباب أمنية، سجّل الخروج ثم سجّل الدخول مرة أخرى قبل حذف الحساب.</string>
     <string name="settings_sign_out">تسجيل الخروج</string>
     <string name="settings_sign_out_confirm">هل تريد تسجيل الخروج من حسابك؟</string>
     <string name="settings_email">البريد الإلكتروني</string>

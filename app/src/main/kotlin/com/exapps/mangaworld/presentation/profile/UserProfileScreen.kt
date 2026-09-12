@@ -155,8 +155,9 @@ class UserProfileViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            // Wait for profile to load
-            profile.first { it != null }
+            // Wait for profile to load (never crash the scope: a read failure
+            // must degrade to empty state, not an instant app crash).
+            runCatching { profile.first { it != null } }
             _isLoading.value = false
             // Load favourites by status
             val statuses = listOf("reading", "completed", "plan_to_read", "on_hold", "dropped")
@@ -173,17 +174,22 @@ class UserProfileViewModel @Inject constructor(
 
     fun uploadAvatar(uri: Uri) {
         viewModelScope.launch {
-            val current = communityRepository.getCurrentProfile()
+            val current = runCatching { communityRepository.getCurrentProfile() }.getOrNull()
             val result = cloudinaryUploader.uploadImage(uri, assetType = "avatar")
             if (result != null) {
-                communityRepository.upsertProfile(
-                    username = current?.username ?: "",
-                    bio = current?.bio ?: "",
-                    isPublic = current?.isPublic ?: true,
-                    avatarUrl = result.url,
-                    bannerUrl = current?.bannerUrl,
-                    displayName = current?.displayName ?: ""
-                )
+                runCatching {
+                    communityRepository.upsertProfile(
+                        username = current?.username ?: "",
+                        bio = current?.bio ?: "",
+                        isPublic = current?.isPublic ?: true,
+                        avatarUrl = result.url,
+                        bannerUrl = current?.bannerUrl,
+                        displayName = current?.displayName ?: ""
+                    )
+                }.onFailure {
+                    android.util.Log.w("UserProfile", "avatar save failed", it)
+                    return@launch
+                }
                 current?.avatarUrl?.let { url ->
                     cloudinaryUploader.extractPublicId(url)?.let { id -> launch { cloudinaryUploader.deleteImage(id) } }
                 }
@@ -195,17 +201,22 @@ class UserProfileViewModel @Inject constructor(
 
     fun uploadBanner(uri: Uri) {
         viewModelScope.launch {
-            val current = communityRepository.getCurrentProfile()
+            val current = runCatching { communityRepository.getCurrentProfile() }.getOrNull()
             val result = cloudinaryUploader.uploadImage(uri, assetType = "banner")
             if (result != null) {
-                communityRepository.upsertProfile(
-                    username = current?.username ?: "",
-                    bio = current?.bio ?: "",
-                    isPublic = current?.isPublic ?: true,
-                    avatarUrl = current?.avatarUrl,
-                    bannerUrl = result.url,
-                    displayName = current?.displayName ?: ""
-                )
+                runCatching {
+                    communityRepository.upsertProfile(
+                        username = current?.username ?: "",
+                        bio = current?.bio ?: "",
+                        isPublic = current?.isPublic ?: true,
+                        avatarUrl = current?.avatarUrl,
+                        bannerUrl = result.url,
+                        displayName = current?.displayName ?: ""
+                    )
+                }.onFailure {
+                    android.util.Log.w("UserProfile", "banner save failed", it)
+                    return@launch
+                }
                 current?.bannerUrl?.let { url ->
                     cloudinaryUploader.extractPublicId(url)?.let { id -> launch { cloudinaryUploader.deleteImage(id) } }
                 }

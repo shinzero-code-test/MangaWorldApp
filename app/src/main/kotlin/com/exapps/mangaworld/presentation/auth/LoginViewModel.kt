@@ -113,13 +113,17 @@ class LoginViewModel @Inject constructor(
             try {
                 val uid = sessionManager.signUpWithEmail(normalizedEmail, password, displayName.trim(), normalizedUsername)
                 if (uid != null) {
-                    // Create the Firestore profile with the username
-                    communityRepository.upsertProfile(
-                        username = normalizedUsername,
-                        bio = "",
-                        isPublic = true,
-                        displayName = displayName.trim()
-                    )
+                    // Create the Firestore profile with the username. A save
+                    // failure here must NOT fail the signup: Auth already
+                    // succeeded, and profile screens self-heal on next visit.
+                    runCatching {
+                        communityRepository.upsertProfile(
+                            username = normalizedUsername,
+                            bio = "",
+                            isPublic = true,
+                            displayName = displayName.trim()
+                        )
+                    }
                     runCatching { securityRepository.recordSignIn("password") }
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {

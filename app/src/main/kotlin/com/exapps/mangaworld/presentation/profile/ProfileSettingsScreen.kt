@@ -123,6 +123,10 @@ class ProfileSettingsViewModel @Inject constructor(
     val securityBusy: StateFlow<Boolean> = _securityBusy.asStateFlow()
     private val _securityError = MutableStateFlow<String?>(null)
     val securityError: StateFlow<String?> = _securityError.asStateFlow()
+    // Profile/account write failures (a denial here must surface, never crash).
+    private val _saveError = MutableStateFlow<String?>(null)
+    val saveError: StateFlow<String?> = _saveError.asStateFlow()
+    fun clearSaveError() { _saveError.value = null }
 
     // Lists export/import result (surfaced as a one-shot message).
     private val _listsMessage = MutableStateFlow<String?>(null)
@@ -162,7 +166,7 @@ class ProfileSettingsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            profile.first { it != null }
+            runCatching { profile.first { it != null } }
             _isLoading.value = false
             _favoriteCount.value = favoriteDao.getFavoritesList().size
             _historyCount.value = historyDao.getAll().size
@@ -205,17 +209,22 @@ class ProfileSettingsViewModel @Inject constructor(
 
     fun uploadAvatar(uri: Uri) {
         viewModelScope.launch {
-            val current = communityRepository.getCurrentProfile()
+            val current = runCatching { communityRepository.getCurrentProfile() }.getOrNull()
             val result = cloudinaryUploader.uploadImage(uri, assetType = "avatar")
             if (result != null) {
-                communityRepository.upsertProfile(
-                    username = current?.username ?: "",
-                    bio = current?.bio ?: "",
-                    isPublic = current?.isPublic ?: true,
-                    avatarUrl = result.url,
-                    bannerUrl = current?.bannerUrl,
-                    displayName = current?.displayName ?: ""
-                )
+                runCatching {
+                    communityRepository.upsertProfile(
+                        username = current?.username ?: "",
+                        bio = current?.bio ?: "",
+                        isPublic = current?.isPublic ?: true,
+                        avatarUrl = result.url,
+                        bannerUrl = current?.bannerUrl,
+                        displayName = current?.displayName ?: ""
+                    )
+                }.onFailure {
+                    _saveError.value = context.getString(R.string.profile_save_failed)
+                    return@launch
+                }
                 val oldUrl = current?.avatarUrl
                 if (oldUrl != null) {
                     val oldId = cloudinaryUploader.extractPublicId(oldUrl)
@@ -239,18 +248,21 @@ class ProfileSettingsViewModel @Inject constructor(
         birthday: Long? = null
     ) {
         viewModelScope.launch {
-            val c = communityRepository.getCurrentProfile()
-            communityRepository.upsertProfile(
-                username = username.ifBlank { c?.username ?: "" },
-                bio = bio,
-                isPublic = c?.isPublic ?: true,
-                avatarUrl = c?.avatarUrl,
-                bannerUrl = c?.bannerUrl,
-                displayName = displayName.ifBlank { c?.displayName ?: "" },
-                location = location.ifBlank { c?.location ?: "" },
-                birthday = birthday
-            )
-            refreshProfile()
+            val result = runCatching {
+                val c = communityRepository.getCurrentProfile()
+                communityRepository.upsertProfile(
+                    username = username.ifBlank { c?.username ?: "" },
+                    bio = bio,
+                    isPublic = c?.isPublic ?: true,
+                    avatarUrl = c?.avatarUrl,
+                    bannerUrl = c?.bannerUrl,
+                    displayName = displayName.ifBlank { c?.displayName ?: "" },
+                    location = location.ifBlank { c?.location ?: "" },
+                    birthday = birthday
+                )
+            }
+            result.onSuccess { refreshProfile() }
+                .onFailure { _saveError.value = context.getString(R.string.profile_save_failed) }
         }
     }
 
@@ -273,17 +285,20 @@ class ProfileSettingsViewModel @Inject constructor(
 
     fun updatePrivacy(showLists: Boolean, showActivity: Boolean, isPublic: Boolean) {
         viewModelScope.launch {
-            val c = communityRepository.getCurrentProfile()
-            communityRepository.upsertProfile(
-                username = c?.username ?: "",
-                bio = c?.bio ?: "",
-                isPublic = isPublic,
-                avatarUrl = c?.avatarUrl,
-                bannerUrl = c?.bannerUrl,
-                displayName = c?.displayName ?: ""
-            )
-            communityRepository.updateProfilePrivacy(showLists, showActivity)
-            refreshProfile()
+            val result = runCatching {
+                val c = communityRepository.getCurrentProfile()
+                communityRepository.upsertProfile(
+                    username = c?.username ?: "",
+                    bio = c?.bio ?: "",
+                    isPublic = isPublic,
+                    avatarUrl = c?.avatarUrl,
+                    bannerUrl = c?.bannerUrl,
+                    displayName = c?.displayName ?: ""
+                )
+                communityRepository.updateProfilePrivacy(showLists, showActivity)
+            }
+            result.onSuccess { refreshProfile() }
+                .onFailure { _saveError.value = context.getString(R.string.profile_save_failed) }
         }
     }
 
@@ -468,19 +483,41 @@ class ProfileSettingsViewModel @Inject constructor(
         const val MAX_URL = 2048
     }
 
-    fun deleteAccount() {
+    /**
+     * Deletes the Firebase Auth account. Firebase requires a recent sign-in:
+     * on [FirebaseAuthRecentLoginRequiredException] nothing is signed out and
+     * the caller shows [saveError] (re-login message) instead of pretending.
+     * On success the Firestore profile + username docs are removed best-effort
+     * so no orphan identity survives, then [onDeleted] fires.
+     */
+    fun deleteAccount(onDeleted: () -> Unit = {}) {
         viewModelScope.launch {
-            try {
-                val user = auth.currentUser
-                if (user != null) {
-                    user.delete().await()
-                }
-            } catch (_: Exception) {
-                // Account deletion may require recent authentication
-            } finally {
-                try { sessionManager.signOut() } catch (_: Exception) {}
-                _userEmail.value = null
+            val user = auth.currentUser
+            if (user == null) {
+                _saveError.value = context.getString(R.string.settings_provider_sign_in_error)
+                return@launch
             }
+            // Capture identity BEFORE Auth deletion (afterwards the session is
+            // gone and the username doc can no longer be resolved).
+            val uid = user.uid
+            val oldUsername = runCatching { communityRepository.getCurrentProfile() }
+                .getOrNull()?.username?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+            val deleteResult = runCatching { user.delete().await() }
+            if (deleteResult.isFailure) {
+                _saveError.value = context.getString(R.string.settings_delete_account_reauth)
+                return@launch
+            }
+            // Best-effort identity cleanup (the ID token outlives deletion
+            // briefly, so these owner-only deletes still evaluate).
+            runCatching {
+                firestore.collection("publicProfiles").document(uid).delete().await()
+                if (oldUsername != null) {
+                    firestore.collection("usernames").document(oldUsername).delete().await()
+                }
+            }
+            try { sessionManager.signOut() } catch (_: Exception) {}
+            _userEmail.value = null
+            onDeleted()
         }
     }
 
@@ -583,6 +620,7 @@ fun ProfileSettingsScreen(
     val sessions by viewModel.sessions.collectAsStateWithLifecycle()
     val securityBusy by viewModel.securityBusy.collectAsStateWithLifecycle()
     val securityError by viewModel.securityError.collectAsStateWithLifecycle()
+    val saveError by viewModel.saveError.collectAsStateWithLifecycle()
     val listsMessage by viewModel.listsMessage.collectAsStateWithLifecycle()
     val avatarUri = viewModel.avatarUri
 
@@ -764,7 +802,14 @@ fun ProfileSettingsScreen(
     if (showEditProfile) EditProfileDialog(profile, { showEditProfile = false }) { u, d, b, loc, bd ->
         viewModel.updateProfile(u, b, d, loc, bd); showEditProfile = false
     }
-    if (showDeleteConfirm) ConfirmDialog(stringResource(R.string.settings_delete_account), stringResource(R.string.settings_delete_account_confirm), stringResource(R.string.delete), { viewModel.deleteAccount(); showDeleteConfirm = false; onSignedOut() }, { showDeleteConfirm = false })
+    if (showDeleteConfirm) ConfirmDialog(stringResource(R.string.settings_delete_account), stringResource(R.string.settings_delete_account_confirm), stringResource(R.string.delete), { viewModel.deleteAccount(onDeleted = { showDeleteConfirm = false; onSignedOut() }) }, { showDeleteConfirm = false })
+    if (saveError != null) AlertDialog(
+        onDismissRequest = viewModel::clearSaveError,
+        containerColor = MangaColors.Background,
+        title = { Text(stringResource(R.string.error_generic), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+        text = { Text(saveError ?: "", color = MangaColors.OnSurfaceVariant) },
+        confirmButton = { TextButton(onClick = viewModel::clearSaveError) { Text(stringResource(R.string.close), color = MangaColors.Cyan) } }
+    )
     if (showSignOutConfirm) ConfirmDialog(stringResource(R.string.settings_sign_out), stringResource(R.string.settings_sign_out_confirm), stringResource(R.string.logout), { viewModel.signOut(); showSignOutConfirm = false; onSignedOut() }, { showSignOutConfirm = false })
     if (showBlockedUsers) BlockedUsersDialog(blockedUsers, onDismiss = { showBlockedUsers = false }, onUnblock = { uid -> viewModel.unblockUser(uid) })
     if (showFollowingList) UserListDialog(stringResource(R.string.settings_following), following, onDismiss = { showFollowingList = false })
