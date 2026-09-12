@@ -217,7 +217,7 @@ class LoginViewModel @Inject constructor(
             _uiState.update { it.copy(error = context.getString(R.string.enter_email)) }
             return
         }
-        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()) {
+        if (!isValidEmail(normalizedEmail)) {
             _uiState.update { it.copy(error = context.getString(R.string.invalid_email)) }
             return
         }
@@ -261,7 +261,7 @@ class LoginViewModel @Inject constructor(
         if (email.isBlank() || password.isBlank()) {
             return context.getString(R.string.auth_error_empty_fields)
         }
-        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+        if (!isValidEmail(email)) {
             return context.getString(R.string.invalid_email)
         }
         if (password.length < MIN_PASSWORD_LENGTH) {
@@ -281,5 +281,11 @@ class LoginViewModel @Inject constructor(
 
     private companion object {
         const val MIN_PASSWORD_LENGTH = 6
+        // Pure-Kotlin email gate (A-4): android.util.Patterns is null on JVM
+        // unit tests and varies by OS version — the server remains the source
+        // of truth, this only catches obvious typos client-side.
+        val EMAIL_REGEX = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
     }
+
+    private fun isValidEmail(email: String): Boolean = EMAIL_REGEX.matches(email)
 }
