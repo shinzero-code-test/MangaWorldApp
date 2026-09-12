@@ -25,6 +25,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -35,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -360,18 +363,24 @@ fun CommunityRepliesScreen(
     var reportTarget by remember { mutableStateOf<CommunityTarget?>(null) }
     var deleteTarget by remember { mutableStateOf<CommunityTarget?>(null) }
 
-    // Guest gating: rules would reject these writes; keep guests silent (H6).
-    val gatedLike: (String) -> Unit = { id -> if (isSignedIn) viewModel.likeComment(id) }
-    val gatedDislike: (String) -> Unit = { id -> if (isSignedIn) viewModel.dislikeComment(id) }
-    val gatedMute: (String) -> Unit = { uid -> if (isSignedIn) viewModel.muteUser(uid) }
+    // Guest gating: rules would reject these writes — guests get a sign-in
+    // prompt snackbar instead of silent no-ops (A-18).
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val guestPrompt = stringResource(R.string.community_error_sign_in)
+    fun promptGuest() { scope.launch { snackbar.showSnackbar(guestPrompt) } }
+    val gatedLike: (String) -> Unit = { id -> if (isSignedIn) viewModel.likeComment(id) else promptGuest() }
+    val gatedDislike: (String) -> Unit = { id -> if (isSignedIn) viewModel.dislikeComment(id) else promptGuest() }
+    val gatedMute: (String) -> Unit = { uid -> if (isSignedIn) viewModel.muteUser(uid) else promptGuest() }
     val gatedReport: (CommunityTarget) -> Unit = { target ->
-        if (isSignedIn) reportTarget = target
+        if (isSignedIn) reportTarget = target else promptGuest()
     }
-    val gatedLikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.likeReview(review) }
-    val gatedDislikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.dislikeReview(review) }
+    val gatedLikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.likeReview(review) else promptGuest() }
+    val gatedDislikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.dislikeReview(review) else promptGuest() }
 
     Scaffold(
         containerColor = MangaColors.Background,
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.community_replies), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
@@ -403,7 +412,7 @@ fun CommunityRepliesScreen(
                                 onEdit = { commentEditor = root.value },
                                 onDelete = { deleteTarget = root },
                                 onReport = { gatedReport(root) },
-                                onMute = { if (isSignedIn) viewModel.muteUser(root.value.authorUid) },
+                                onMute = { gatedMute(root.value.authorUid) },
                                 onProfileClick = { onOpenProfile(root.value.authorUid) },
                                 onLike = { gatedLike(root.value.id) },
                                 onDislike = { gatedDislike(root.value.id) }
@@ -417,7 +426,7 @@ fun CommunityRepliesScreen(
                                 onEdit = { reviewEditor = root.value },
                                 onDelete = { deleteTarget = root },
                                 onReport = { gatedReport(root) },
-                                onMute = { if (isSignedIn) viewModel.muteUser(root.value.authorUid) },
+                                onMute = { gatedMute(root.value.authorUid) },
                                 onLike = { gatedLikeReview(root.value) },
                                 onDislike = { gatedDislikeReview(root.value) }
                             )
@@ -452,7 +461,7 @@ fun CommunityRepliesScreen(
                         onEdit = { commentEditor = reply },
                         onDelete = { deleteTarget = CommunityTarget.Comment(reply) },
                         onReport = { gatedReport(CommunityTarget.Comment(reply)) },
-                        onMute = { if (isSignedIn) viewModel.muteUser(reply.authorUid) },
+                        onMute = { gatedMute(reply.authorUid) },
                         onProfileClick = { onOpenProfile(reply.authorUid) },
                         onLike = { gatedLike(reply.id) },
                         onDislike = { gatedDislike(reply.id) }
@@ -496,6 +505,15 @@ fun CommunityRepliesScreen(
                         spoiler = false
                     }
                 )
+            } else {
+                // A-18: guests see why there is no composer (chat parity).
+                Text(
+                    stringResource(R.string.reader_sign_in_to_participate),
+                    color = MangaColors.Muted,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
+                )
+            }
             }
             state.error?.let { message ->
                 // Prominent action banner (v8 #6) — replaces the invisible bottom caption.

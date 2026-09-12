@@ -225,7 +225,7 @@ class FirebaseSessionManager @Inject constructor(
         if (!collision.allowsSignInFallback()) {
             throw AccountMergeRequiredException(collision)
         }
-        signInAfterLinkCollision(credential, collision)
+        signInAfterLinkCollision(user, credential, collision)
     }
 
     private suspend fun linkedUserId(
@@ -236,14 +236,48 @@ class FirebaseSessionManager @Inject constructor(
     }.uid
 
     private suspend fun signInAfterLinkCollision(
+        anonUser: com.google.firebase.auth.FirebaseUser,
         credential: com.google.firebase.auth.AuthCredential,
         initialCollision: FirebaseAuthUserCollisionException
-    ): String? = try {
-        auth.signInWithCredential(credential).await().user?.uid
-    } catch (retryCollision: FirebaseAuthUserCollisionException) {
-        throw AccountMergeRequiredException(retryCollision).also {
-            it.addSuppressed(initialCollision)
+    ): String? {
+        // A-20: the fallback abandons the anonymous UID — its cloud subtree
+        // would orphan forever (unreachable under the new UID, flooding admin
+        // lists). Wipe it while still authenticated as anon. The anon Auth
+        // row itself is deliberately KEPT: deleting it first would sign out
+        // the device, turning a sign-in failure into a signed-out trap. Local
+        // Room data stays on device and migrates via the next push.
+        runCatching { wipeAnonymousData(anonUser.uid) }
+        return try {
+            auth.signInWithCredential(credential).await().user?.uid
+        } catch (retryCollision: FirebaseAuthUserCollisionException) {
+            throw AccountMergeRequiredException(retryCollision).also {
+                it.addSuppressed(initialCollision)
+            }
         }
+    }
+
+    /**
+     * Best-effort wipe of an abandoned anonymous uid's cloud subtree.
+     * Every collection is individually guarded — one failure can't abort
+     * the fallback sign-in this runs inside of.
+     */
+    private suspend fun wipeAnonymousData(anonUid: String) {
+        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val userRef = db.collection("users").document(anonUid)
+        for (subcol in ANON_WIPE_SUBCOLLECTIONS) {
+            runCatching {
+                repeat(ANON_WIPE_MAX_PAGES) {
+                    val snap = userRef.collection(subcol).limit(ANON_WIPE_PAGE_SIZE).get().await()
+                    if (snap.isEmpty) return@runCatching
+                    snap.documents.forEach { runCatching { it.reference.delete().await() } }
+                    if (snap.size() < ANON_WIPE_PAGE_SIZE) return@runCatching
+                }
+            }
+        }
+        runCatching { userRef.delete().await() }
+        // Anonymous sessions can't author community content (rules reject),
+        // but an older flow may have left a profile doc behind.
+        runCatching { db.collection("publicProfiles").document(anonUid).delete().await() }
     }
 }
 
@@ -301,3 +335,13 @@ private const val ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL =
     "ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL"
 private const val ERROR_CREDENTIAL_ALREADY_IN_USE = "ERROR_CREDENTIAL_ALREADY_IN_USE"
 private const val ERROR_EMAIL_ALREADY_IN_USE = "ERROR_EMAIL_ALREADY_IN_USE"
+
+// A-20 fallback-wipe scope (anonymous cloud subtree only — named-user data
+// is never touched here).
+private val ANON_WIPE_SUBCOLLECTIONS = listOf(
+    "favorites", "readingHistory", "readerAnnotations", "devices",
+    "lists", "notifications", "loginLogs", "sessions",
+    "preferences", "syncTombstones"
+)
+private const val ANON_WIPE_PAGE_SIZE = 200L
+private const val ANON_WIPE_MAX_PAGES = 25

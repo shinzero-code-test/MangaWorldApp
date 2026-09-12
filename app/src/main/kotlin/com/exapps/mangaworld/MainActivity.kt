@@ -170,8 +170,10 @@ private fun MangaApp(
     val userIsLoggedIn = firebaseUser?.isAnonymous == false
     val googleSignInClient = remember(sessionManager) { sessionManager.googleSignInClient() }
 
-    // Show login screen on first launch if not logged in
-    LaunchedEffect(settings.onboardingCompleted) {
+    // Show login screen on first launch if not logged in — and again after an
+    // in-app sign-out (A-19): the old key (onboardingCompleted only) never
+    // re-fired when userIsLoggedIn flipped false, stranding users as guests.
+    LaunchedEffect(settings.onboardingCompleted, userIsLoggedIn) {
         if (settings.onboardingCompleted && !userIsLoggedIn) {
             showPostOnboardingLogin = true
         }

@@ -48,6 +48,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -58,6 +60,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -441,14 +444,18 @@ fun CommunityScreen(
     var deleteTarget by remember { mutableStateOf<CommunityTarget?>(null) }
 
     // Gate interaction callbacks for guests: rules would reject the writes, so
-    // guests get silent no-ops instead of error snackbars (H6).
-    val gatedLike: (String) -> Unit = { id -> if (isSignedIn) viewModel.likeComment(id) }
-    val gatedDislike: (String) -> Unit = { id -> if (isSignedIn) viewModel.dislikeComment(id) }
-    val gatedMute: (String) -> Unit = { uid -> if (isSignedIn) viewModel.muteUser(uid) }
-    val gatedLikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.likeReview(review) }
-    val gatedDislikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.dislikeReview(review) }
+    // guests get a sign-in prompt snackbar instead of silent no-ops (A-18).
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val guestPrompt = stringResource(R.string.community_error_sign_in)
+    fun promptGuest() { scope.launch { snackbar.showSnackbar(guestPrompt) } }
+    val gatedLike: (String) -> Unit = { id -> if (isSignedIn) viewModel.likeComment(id) else promptGuest() }
+    val gatedDislike: (String) -> Unit = { id -> if (isSignedIn) viewModel.dislikeComment(id) else promptGuest() }
+    val gatedMute: (String) -> Unit = { uid -> if (isSignedIn) viewModel.muteUser(uid) else promptGuest() }
+    val gatedLikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.likeReview(review) else promptGuest() }
+    val gatedDislikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.dislikeReview(review) else promptGuest() }
     val gatedReport: (CommunityTarget) -> Unit = { target ->
-        if (isSignedIn) reportTarget = target
+        if (isSignedIn) reportTarget = target else promptGuest()
     }
 
     // Scroll once to the focused comment; later like/vote mutations must not
@@ -466,6 +473,7 @@ fun CommunityScreen(
 
     Scaffold(
         containerColor = MangaColors.Background,
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text(state.title, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
@@ -514,7 +522,9 @@ fun CommunityScreen(
                         showReviewEditor = true
                         }
                     } else {
-                        null
+                        // A-18: guests get the sign-in prompt instead of a
+                        // missing affordance.
+                        { promptGuest() }
                     },
                     onProfileClick = onOpenProfile,
                     onOpenReplies = { review -> onOpenReplies(review.id, review.id, null) },
@@ -541,6 +551,14 @@ fun CommunityScreen(
                         commentText = ""
                         spoiler = false
                     }
+                )
+            } else if (state.tab == CommunityTab.COMMENTS) {
+                // A-18: guests see why there is no composer (chat parity).
+                Text(
+                    stringResource(R.string.reader_sign_in_to_participate),
+                    color = MangaColors.Muted,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
                 )
             }
             state.error?.let { message ->

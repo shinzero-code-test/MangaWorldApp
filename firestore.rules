@@ -384,7 +384,11 @@ service cloud.firestore {
 
       match /members/{memberId} {
         allow read: if true;
+        // A-21: named users only — the old signedIn() check let anonymous
+        // sessions write any username into presence lists (spoofing).
+        // Client gates via requireNamedProfile; this is the server backstop.
         allow write: if signedIn() && request.auth.uid == memberId
+          && request.auth.token.firebase.sign_in_provider != 'anonymous'
           && request.resource.data.keys().hasOnly(['uid', 'username', 'updatedAt'])
           && request.resource.data.uid is string
           && request.resource.data.username is string
