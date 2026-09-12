@@ -232,11 +232,11 @@ class PhaseTwoSettingsTest {
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             stubBase()
+            // Any repo throw (e.g. Firestore PERMISSION_DENIED) must surface,
+            // never escape the launch (plain RuntimeException: the Firestore
+            // SDK exception class cannot initialize on JVM unit tests).
             coEvery { communityRepo.upsertProfile(any(), any(), any(), any(), any(), any(), any(), any()) } throws
-                com.google.firebase.firestore.FirebaseFirestoreException(
-                    "denied",
-                    com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED
-                )
+                RuntimeException("denied")
             val vm = createVm()
             advanceUntilIdle()
             // Must not throw out of the launch (used to crash the app).
