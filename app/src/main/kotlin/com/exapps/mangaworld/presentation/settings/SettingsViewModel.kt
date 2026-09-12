@@ -94,7 +94,7 @@ class SettingsViewModel @Inject constructor(
         runCatching {
             when (val result = localBackupManager.importFrom(uri)) {
                 is com.exapps.mangaworld.core.data.LocalBackupManager.ImportResult.Success -> {
-                    firebaseSyncManager.pushLocalSnapshot()
+                    firebaseSyncManager.pushLocalSnapshot(force = true)
                     context.getString(R.string.str_238)
                 }
                 // Sync push only runs on success: pushing after an aborted import

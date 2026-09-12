@@ -2,6 +2,8 @@ package com.exapps.mangaworld.core.data
 
 import androidx.paging.*
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
+import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
+import com.exapps.mangaworld.core.firebase.FirebaseSyncMerge
 import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
 import com.exapps.mangaworld.core.data.local.AppPreferences
 import com.exapps.mangaworld.core.data.local.dao.*
@@ -14,6 +16,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
@@ -299,7 +302,8 @@ class LibraryRepositoryImpl @Inject constructor(
     private val readChapterDao: ReadChapterDao,
     private val progressDao: ReadingProgressDao,
     private val readerAnnotationDao: ReaderAnnotationDao,
-    private val prefs: AppPreferences
+    private val prefs: AppPreferences,
+    private val sessionManager: FirebaseSessionManager
 ) : LibraryRepository {
 
     override fun getFavorites(): Flow<List<FavoriteManga>> =
@@ -372,6 +376,9 @@ class LibraryRepositoryImpl @Inject constructor(
     override suspend fun clearHistory() {
         historyDao.getAllMangaIds().forEach { mangaId -> prefs.markSyncTombstone("readingHistory", mangaId) }
         historyDao.clearAll()
+        // FS-4: cloud copies must die now — the local tombstone cap cannot
+        // cover mass deletions, and without this the rows resurrect on pull.
+        deleteCloudCollection("readingHistory")
     }
     override suspend fun removeFromHistory(mangaId: String) {
         historyDao.delete(mangaId)
@@ -380,24 +387,49 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun markChapterRead(mangaId: String, chapterNumber: Float) {
         readChapterDao.markRead(ReadChapterEntity(mangaId, chapterNumber))
+        // FS-7: a re-read clears any earlier unmark tombstone for this chapter.
+        prefs.clearSyncTombstone("readMarks", FirebaseSyncMerge.readMarkDocId(mangaId, chapterNumber))
         syncFavoriteProgress(mangaId)
     }
 
     override suspend fun markChapterUnread(mangaId: String, chapterNumber: Float) {
         readChapterDao.markUnread(mangaId, chapterNumber)
+        // FS-7: unmarks propagate as tombstones or the next pull resurrects them.
+        prefs.markSyncTombstone("readMarks", FirebaseSyncMerge.readMarkDocId(mangaId, chapterNumber))
         syncFavoriteProgress(mangaId)
     }
 
     override suspend fun markAllChaptersRead(mangaId: String, chapterNumbers: Collection<Float>) {
         val now = System.currentTimeMillis()
         readChapterDao.markAllRead(chapterNumbers.map { ReadChapterEntity(mangaId, it, now) })
+        chapterNumbers.forEach { prefs.clearSyncTombstone("readMarks", FirebaseSyncMerge.readMarkDocId(mangaId, it)) }
         syncFavoriteProgress(mangaId)
     }
 
     override suspend fun markAllChaptersUnread(mangaId: String, chapterNumbers: Collection<Float>) {
         // Room IN () on an empty list is a runtime crash — guard first.
         if (chapterNumbers.isNotEmpty()) readChapterDao.markUnreadAll(mangaId, chapterNumbers.toList())
+        chapterNumbers.forEach { prefs.markSyncTombstone("readMarks", FirebaseSyncMerge.readMarkDocId(mangaId, it)) }
         syncFavoriteProgress(mangaId)
+    }
+
+    /**
+     * Best-effort cloud wipe of one users/{uid} subcollection (FS-4). Never
+     * throws: sync correctness must not depend on it (tombstones + push-time
+     * application are the reliable path).
+     */
+    private suspend fun deleteCloudCollection(collection: String) {
+        val uid = sessionManager.currentUserId() ?: return
+        runCatching {
+            val col = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                .collection("users").document(uid).collection(collection)
+            repeat(25) {
+                val snap = col.limit(200).get().await()
+                if (snap.isEmpty) return@runCatching
+                snap.documents.forEach { runCatching { it.reference.delete().await() } }
+                if (snap.size() < 200) return@runCatching
+            }
+        }
     }
 
     override suspend fun isChapterRead(mangaId: String, chapterNumber: Float): Boolean =

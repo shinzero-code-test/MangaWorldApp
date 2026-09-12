@@ -39,6 +39,10 @@ interface FavoriteDao {
     @Query("DELETE FROM favorites WHERE mangaId = :mangaId AND addedAt <= :olderThan")
     suspend fun deleteIfOlder(mangaId: String, olderThan: Long)
 
+    /** Full-library wipe for account-switch isolation (FS-3) and cloud restore. */
+    @Query("DELETE FROM favorites")
+    suspend fun clearAll()
+
     @Query("UPDATE favorites SET readChapters = :read, totalChapters = :total WHERE mangaId = :mangaId")
     suspend fun updateProgress(mangaId: String, read: Int, total: Int)
 
@@ -112,6 +116,10 @@ interface ReadChapterDao {
     @Query("DELETE FROM read_chapters WHERE mangaId = :mangaId AND chapterNumber IN (:chapterNumbers)")
     suspend fun markUnreadAll(mangaId: String, chapterNumbers: List<Float>)
 
+    /** Full-table wipe for account-switch isolation (FS-3) and cloud restore. */
+    @Query("DELETE FROM read_chapters")
+    suspend fun clearAll()
+
     @Query("SELECT EXISTS(SELECT 1 FROM read_chapters WHERE mangaId = :mangaId AND chapterNumber = :chapterNumber)")
     suspend fun isRead(mangaId: String, chapterNumber: Float): Boolean
 
@@ -138,6 +146,13 @@ interface ReadingProgressDao {
 
     @Query("SELECT * FROM reading_progress ORDER BY updatedAt DESC")
     suspend fun getAll(): List<ReadingProgressEntity>
+
+    /** Full-table wipe for account-switch isolation (FS-3) and cloud restore. */
+    @Query("DELETE FROM reading_progress")
+    suspend fun clearAll()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<ReadingProgressEntity>)
 }
 
 @Dao
@@ -163,6 +178,10 @@ interface ReaderAnnotationDao {
     /** Atomically delete annotation only if its updatedAt is older than the given timestamp. */
     @Query("DELETE FROM reader_annotations WHERE mangaId = :mangaId AND chapterUrl = :chapterUrl AND pageIndex = :pageIndex AND updatedAt <= :olderThan")
     suspend fun deleteIfOlder(mangaId: String, chapterUrl: String, pageIndex: Int, olderThan: Long)
+
+    /** Full-table wipe for account-switch isolation (FS-3) and cloud restore. */
+    @Query("DELETE FROM reader_annotations")
+    suspend fun clearAll()
 }
 
 @Dao

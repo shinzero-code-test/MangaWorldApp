@@ -187,4 +187,25 @@ class FirebaseSyncMergeTest {
         io.mockk.every { missing.getString(any()) } returns null
         org.junit.Assert.assertNull(FirebaseSyncMerge.annotation(missing))
     }
+
+    // ─── FS-7 read-mark keys ──────────────────────────────────────────────
+
+    @org.junit.Test
+    fun readMarkDocId_roundTrips() {
+        val id = FirebaseSyncMerge.readMarkDocId("lekmanga_solo", 12.5f)
+        val parsed = FirebaseSyncMerge.parseReadMarkDocId(id)!!
+        org.junit.Assert.assertEquals("lekmanga_solo", parsed.first)
+        org.junit.Assert.assertEquals(12.5f, parsed.second)
+    }
+
+    @org.junit.Test
+    fun parseReadMarkDocId_rejectsMalformed() {
+        // Underscore-heavy mangaIds stay intact (only "|" splits)…
+        org.junit.Assert.assertNotNull(FirebaseSyncMerge.parseReadMarkDocId("a_b_c|1.0"))
+        // …while missing/extra separators and blanks fail closed.
+        org.junit.Assert.assertNull(FirebaseSyncMerge.parseReadMarkDocId("no-separator"))
+        org.junit.Assert.assertNull(FirebaseSyncMerge.parseReadMarkDocId("a|b|c"))
+        org.junit.Assert.assertNull(FirebaseSyncMerge.parseReadMarkDocId("m|abc"))
+        org.junit.Assert.assertNull(FirebaseSyncMerge.parseReadMarkDocId("|1.0"))
+    }
 }

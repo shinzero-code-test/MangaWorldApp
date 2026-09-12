@@ -51,6 +51,22 @@ internal object FirebaseSyncMerge {
         listOf(entity.mangaId, entity.chapterUrl.hashCode().toString(), entity.pageIndex.toString())
             .joinToString("_")
 
+    /**
+     * Cloud doc id for a read-chapter mark (FS-7). "|" separates the parts:
+     * mangaIds never contain it and Firestore permits it in document ids.
+     */
+    fun readMarkDocId(mangaId: String, chapterNumber: Float): String =
+        "$mangaId|$chapterNumber"
+
+    /** Inverse of [readMarkDocId]; null when the id is malformed. */
+    fun parseReadMarkDocId(documentId: String): Pair<String, Float>? {
+        val parts = documentId.split("|")
+        if (parts.size != 2) return null
+        val chapter = parts[1].toFloatOrNull() ?: return null
+        if (parts[0].isBlank()) return null
+        return parts[0] to chapter
+    }
+
     // ─── Pull deserialization ─────────────────────────────────────────────
     //
     // Firestore's toObject() requires a public no-arg constructor, which none

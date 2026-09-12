@@ -888,6 +888,7 @@
     <string name="cloud_sync_fetching">Fetching cloud data…</string>
     <string name="cloud_sync_review_conflicts">Review conflicts before restoring</string>
     <string name="cloud_sync_preview_failed">Restore preview failed</string>
+    <string name="cloud_sync_preview_truncated">Preview truncated: the cloud library exceeds 10,000 items per collection</string>
     <string name="cloud_sync_applying">Applying restore…</string>
     <string name="cloud_sync_applied">Restore applied successfully</string>
     <string name="cloud_sync_restore_failed">Restore failed</string>

@@ -97,7 +97,10 @@ class CloudSyncViewModel @Inject constructor(
                 if (uid != null) {
                     runCatching { communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid) }
                 }
-                syncManager.pushLocalSnapshot(); remoteConfigManager.refresh()
+                // FS-3: converge before uploading — a blind push would copy the
+                // previous (guest) library into this account's cloud tree.
+                runCatching { syncManager.mergeRemoteSnapshot() }
+                syncManager.pushLocalSnapshot(force = true); remoteConfigManager.refresh()
             }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_signed_in_synced)) }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_google_failed)) }
@@ -112,7 +115,9 @@ class CloudSyncViewModel @Inject constructor(
                 if (uid != null) {
                     runCatching { communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid) }
                 }
-                syncManager.pushLocalSnapshot()
+                // FS-3: converge before uploading (see above).
+                runCatching { syncManager.mergeRemoteSnapshot() }
+                syncManager.pushLocalSnapshot(force = true)
             }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_signed_in)) }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_sign_in_failed)) }
@@ -127,7 +132,9 @@ class CloudSyncViewModel @Inject constructor(
                 if (uid != null) {
                     runCatching { communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid) }
                 }
-                syncManager.pushLocalSnapshot()
+                // FS-3: converge before uploading (see above).
+                runCatching { syncManager.mergeRemoteSnapshot() }
+                syncManager.pushLocalSnapshot(force = true)
             }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_created_synced)) }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_create_failed)) }
@@ -137,7 +144,7 @@ class CloudSyncViewModel @Inject constructor(
     fun syncNow() {
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_uploading))
-            runCatching { syncManager.pushLocalSnapshot() }
+            runCatching { syncManager.pushLocalSnapshot(force = true) }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_uploaded)) }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_upload_failed)) }
         }
@@ -317,7 +324,9 @@ fun CloudSyncScreen(
             // Sync actions
             SyncActionsCard(
                 isSyncing = state.busy,
-                isSignedIn = user != null,
+                // FS-13: guests are not signed in — the old `user != null`
+                // check enabled Upload/Restore next to the "Local guest" label.
+                isSignedIn = user != null && !user.isAnonymous,
                 onPush = viewModel::syncNow,
                 onPull = viewModel::restoreFromCloud,
                 restorePreview = state.restorePreview,
@@ -556,6 +565,10 @@ private fun SyncActionsCard(
             restorePreview?.let { preview ->
                 HorizontalDivider(color = MangaColors.Muted.copy(alpha = 0.15f))
                 Text(stringResource(R.string.restore_preview), fontWeight = FontWeight.SemiBold, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium)
+                // FS-11: truncated previews must say so — counts are partial.
+                if (preview.truncated) {
+                    Text(stringResource(R.string.cloud_sync_preview_truncated), color = MangaColors.Yellow, style = MaterialTheme.typography.bodySmall)
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SyncStat(stringResource(R.string.local), preview.localFavorites, MangaColors.Cyan)
                     SyncStat(stringResource(R.string.cloud_alt), preview.remoteFavorites, MangaColors.Primary)

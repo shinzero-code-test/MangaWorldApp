@@ -16,7 +16,7 @@ class FirebaseSyncWorker @AssistedInject constructor(
     private val syncManager: FirebaseSyncManager
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result = runCatching {
-        syncManager.pushLocalSnapshot()
+        syncManager.pushLocalSnapshot(force = true)
         Result.success()
     }.getOrElse { e ->
         // Permanent failures must not retry forever on the 30-min backoff.

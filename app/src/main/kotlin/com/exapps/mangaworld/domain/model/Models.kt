@@ -587,12 +587,16 @@ data class CloudRestorePreview(
     val remoteHistory: Int,
     val localAnnotations: Int,
     val remoteAnnotations: Int,
+    val localReadMarks: Int = 0,
+    val remoteReadMarks: Int = 0,
     val localLatestHistoryAt: Long,
     val remoteLatestHistoryAt: Long,
     val localLatestAnnotationAt: Long,
     val remoteLatestAnnotationAt: Long,
     val remoteTheme: AppTheme? = null,
     val localTheme: AppTheme,
+    /** True when any cloud collection hit the 10k fetch cap (FS-11). */
+    val truncated: Boolean = false,
     val suggestedStrategy: CloudRestoreStrategy
 )
 

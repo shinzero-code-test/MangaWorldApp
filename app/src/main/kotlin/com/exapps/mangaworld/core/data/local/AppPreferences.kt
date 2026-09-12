@@ -46,8 +46,12 @@ class AppPreferences @Inject constructor(
         val KEY_READING_LIST_STATUS = stringPreferencesKey("reading_list_status")
         val KEY_FAVORITE_GENRES = stringPreferencesKey("favorite_genres")
         val KEY_SYNC_TOMBSTONES = stringPreferencesKey("sync_tombstones")
-        const val MAX_SYNC_TOMBSTONES = 500
+        // FS-4: 500 silently dropped mass deletions (clear-history on 500+
+        // rows). 2000 entries ≈ 120KB worst case — bounded, and clearHistory
+        // additionally deletes cloud copies directly.
+        const val MAX_SYNC_TOMBSTONES = 2000
         const val TOMBSTONE_TTL_MS = 90L * 24L * 60L * 60L * 1000L
+        val KEY_LAST_POSITIONS_PUSH = longPreferencesKey("last_positions_push_ms")
         val KEY_SHOW_LIBRARY_PUBLIC = booleanPreferencesKey("show_library_public")
         val KEY_LAST_SOURCE_ID = stringPreferencesKey("last_source_id")
 
@@ -271,6 +275,19 @@ class AppPreferences @Inject constructor(
             if (remaining.isEmpty()) prefs.remove(KEY_SYNC_TOMBSTONES)
             else prefs[KEY_SYNC_TOMBSTONES] = encodeSyncTombstones(remaining)
         }
+    }
+
+    /** FS-3: drop all tombstones on account switch (they belong to the old uid). */
+    suspend fun clearSyncTombstones() {
+        dataStore.edit { prefs -> prefs.remove(KEY_SYNC_TOMBSTONES) }
+    }
+
+    /** FS-5: watermark so position pushes only upload rows changed since last push. */
+    suspend fun getLastPositionsPush(): Long =
+        dataStore.data.first()[KEY_LAST_POSITIONS_PUSH] ?: 0L
+
+    suspend fun setLastPositionsPush(timestampMs: Long) {
+        dataStore.edit { prefs -> prefs[KEY_LAST_POSITIONS_PUSH] = timestampMs }
     }
 
     suspend fun toggleSource(sourceId: String, enabled: Boolean) = dataStore.edit { prefs ->

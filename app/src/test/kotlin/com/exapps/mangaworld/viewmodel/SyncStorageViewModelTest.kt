@@ -91,10 +91,25 @@ class SyncStorageViewModelTest {
 
     // ─── CloudSyncViewModel ───────────────────────────────────────────────
 
+    private data class CloudHarness(
+        val vm: CloudSyncViewModel,
+        val sync: FirebaseSyncManager,
+        val session: FirebaseSessionManager,
+        val context: Context
+    )
+
     private fun cloudVm(
         pushResult: Result<Unit> = Result.success(Unit),
         preview: CloudRestorePreview? = null,
     ): Triple<CloudSyncViewModel, FirebaseSyncManager, Context> {
+        val h = cloudHarness(pushResult, preview)
+        return Triple(h.vm, h.sync, h.context)
+    }
+
+    private fun cloudHarness(
+        pushResult: Result<Unit> = Result.success(Unit),
+        preview: CloudRestorePreview? = null,
+    ): CloudHarness {
         val context = mockk<Context>(relaxed = true)
         val session = mockk<FirebaseSessionManager>(relaxed = true)
         val sync = mockk<FirebaseSyncManager>(relaxed = true)
@@ -103,10 +118,10 @@ class SyncStorageViewModelTest {
         val community = mockk<CommunityRepository>(relaxed = true)
         every { community.observeNotifications(any()) } returns flowOf(emptyList())
         coEvery { community.getCurrentProfile() } returns null
-        pushResult.onSuccess { coEvery { sync.pushLocalSnapshot() } returns Unit }
-            .onFailure { e -> coEvery { sync.pushLocalSnapshot() } throws (e as? Exception ?: RuntimeException("sync failed")) }
+        pushResult.onSuccess { coEvery { sync.pushLocalSnapshot(any()) } returns Unit }
+            .onFailure { e -> coEvery { sync.pushLocalSnapshot(any()) } throws (e as? Exception ?: RuntimeException("sync failed")) }
         if (preview != null) coEvery { sync.previewRemoteSnapshot() } returns preview
-        return Triple(
+        return CloudHarness(
             CloudSyncViewModel(
                 context = context,
                 sessionManager = session,
@@ -116,6 +131,7 @@ class SyncStorageViewModelTest {
                 analyticsManager = mockk<FirebaseAnalyticsManager>(relaxed = true)
             ),
             sync,
+            session,
             context
         )
     }
@@ -155,11 +171,32 @@ class SyncStorageViewModelTest {
             advanceUntilIdle()
             vm.syncNow()
             advanceUntilIdle()
-            coVerify { sync.pushLocalSnapshot() }
+            // Manual sync bypasses the UI-burst debounce.
+            coVerify { sync.pushLocalSnapshot(force = true) }
             val state = vm.state.value
             assertFalse(state.busy)
             assertNotNull(state.statusMessage)
             assertNull(state.errorMessage)
+        }
+    }
+
+    @Test
+    fun cloudSync_signInMergesBeforePush() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            val h = cloudHarness()
+            coEvery { h.session.signInWithEmail(any(), any()) } returns "u1"
+            advanceUntilIdle()
+            h.vm.signInWithEmail("user@example.com", "password123")
+            advanceUntilIdle()
+            // FS-3: converge before uploading — never push a stranger's
+            // library into the account being signed into.
+            io.mockk.coVerifyOrder {
+                h.sync.mergeRemoteSnapshot()
+                h.sync.pushLocalSnapshot(force = true)
+            }
+            assertFalse(h.vm.state.value.busy)
         }
     }
 
