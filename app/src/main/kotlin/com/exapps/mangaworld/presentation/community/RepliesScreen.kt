@@ -514,7 +514,6 @@ fun CommunityRepliesScreen(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
                 )
             }
-            }
             state.error?.let { message ->
                 // Prominent action banner (v8 #6) — replaces the invisible bottom caption.
                 GlassCard(
