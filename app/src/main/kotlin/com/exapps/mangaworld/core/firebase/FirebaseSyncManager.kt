@@ -340,7 +340,7 @@ class FirebaseSyncManager @Inject constructor(
                 .map { FirebaseSyncMerge.readMarkDocId(it.mangaId, it.chapterNumber) }.toSet()
 
             val staleCloud = mutableListOf<Pair<String, String>>()
-            fun sweep(collection: String, localIds: Set<String>) {
+            suspend fun sweep(collection: String, localIds: Set<String>) {
                 runCatching {
                     fetchAllCollection(userRef.collection(collection)).docs.forEach { doc ->
                         val key = when (collection) {
