@@ -106,7 +106,9 @@ class PhaseTwoSettingsTest {
         every { userDoc.collection(any()) } returns subCol
         every { subCol.whereEqualTo(any<String>(), any()) } returns subQuery
         every { subCol.limit(any()) } returns subQuery
+        every { subQuery.limit(any()) } returns subQuery
         every { subQuery.get() } returns com.google.android.gms.tasks.Tasks.forResult(emptySnap)
+        every { userDoc.delete() } returns com.google.android.gms.tasks.Tasks.forResult(null)
         every { firestore.collectionGroup(any()) } returns subCol
     }
 
@@ -342,6 +344,7 @@ class PhaseTwoSettingsTest {
             every { docRef.collection(any()) } returns wipeCol
             every { wipeCol.whereEqualTo(any<String>(), any()) } returns wipeQuery
             every { wipeCol.limit(any()) } returns wipeQuery
+            every { wipeQuery.limit(any()) } returns wipeQuery
             every { wipeQuery.get() } returns com.google.android.gms.tasks.Tasks.forResult(emptySnap)
             val vm = createVm()
             advanceUntilIdle()
