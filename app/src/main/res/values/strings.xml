@@ -175,6 +175,10 @@
     <string name="settings_provider_link_error">تعذر تحديث مزود تسجيل الدخول. حاول مرة أخرى.</string>
     <string name="settings_provider_guest_error">أنشئ حساباً دائماً قبل إدارة مزوّدي تسجيل الدخول.</string>
     <string name="settings_provider_sign_in_error">سجّل الدخول أولاً قبل إدارة مزوّدي تسجيل الدخول.</string>
+    <string name="settings_provider_keep_one">احتفظ بطريقة تسجيل دخول واحدة على الأقل.</string>
+    <string name="settings_password_change">تغيير كلمة المرور</string>
+    <string name="settings_password_new_hint">كلمة المرور الجديدة (6 أحرف على الأقل)</string>
+    <string name="settings_password_changed">تم تغيير كلمة المرور بنجاح.</string>
     <string name="settings_sources_moderation">إدارة البلاغات والمحتوى</string>
     <string name="settings_version">الإصدار</string>
     <string name="settings_login_history">سجل تسجيل الدخول</string>

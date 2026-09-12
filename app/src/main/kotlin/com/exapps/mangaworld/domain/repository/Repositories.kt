@@ -210,4 +210,10 @@ interface SecurityRepository {
     suspend fun recordSignIn(provider: String)
     /** Create/refresh this device's session row (call on app start). */
     suspend fun ensureCurrentSession()
+    /**
+     * True when this device's session row is flagged revoked (A-6/A-7).
+     * Fail-open (false) when offline or signed out — callers skip
+     * re-registration work only on a positive signal, never on errors.
+     */
+    suspend fun isCurrentSessionRevoked(): Boolean
 }

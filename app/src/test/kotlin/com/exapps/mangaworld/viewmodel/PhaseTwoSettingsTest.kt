@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.viewmodel
 
 import android.content.Context
+import com.exapps.mangaworld.R
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
@@ -20,10 +21,13 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.QuerySnapshot
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
@@ -37,6 +41,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -82,6 +87,26 @@ class PhaseTwoSettingsTest {
         coEvery { favoriteDao.getFavoritesList() } returns emptyList()
         coEvery { historyDao.getAll() } returns emptyList()
         coEvery { readChapterDao.getTotalReadCount() } returns 0
+        // Delete-account wipe chain (A-9): every collection reads back one
+        // empty page so wipeUserData completes instead of suspending on mock
+        // Tasks. Shared mock — stubbed here so results never depend on order.
+        every { context.getString(R.string.settings_delete_account_reauth) } returns "E-reauth"
+        every { context.getString(R.string.str_215) } returns "E-net"
+        every { context.getString(R.string.settings_security_action_failed) } returns "E-action-failed"
+        every { context.getString(R.string.auth_error_password_weak) } returns "E-weak"
+        every { context.getString(R.string.settings_password_changed) } returns "E-pw-changed"
+        val userDoc = mockk<DocumentReference>(relaxed = true)
+        val topCol = mockk<CollectionReference>(relaxed = true)
+        val subCol = mockk<CollectionReference>(relaxed = true)
+        val subQuery = mockk<Query>(relaxed = true)
+        val emptySnap = mockk<QuerySnapshot>()
+        every { emptySnap.isEmpty } returns true
+        every { firestore.collection(any()) } returns topCol
+        every { topCol.document(any()) } returns userDoc
+        every { userDoc.collection(any()) } returns subCol
+        every { subCol.limit(any()) } returns subQuery
+        every { subQuery.get() } returns com.google.android.gms.tasks.Tasks.forResult(emptySnap)
+        every { firestore.collectionGroup(any()) } returns subCol
     }
 
     private fun createVm() = ProfileSettingsViewModel(
@@ -263,13 +288,38 @@ class PhaseTwoSettingsTest {
             vm.deleteAccount(onDeleted = { deleted = true })
             advanceUntilIdle()
             assertFalse(deleted)
-            assertNotNull(vm.saveError.value)
+            // A-9: stale auth reports re-login (not a generic/network error).
+            assertEquals("E-reauth", vm.saveError.value)
             coVerify(exactly = 0) { sessionManager.signOut() }
         }
     }
 
     @Test
-    fun deleteAccount_success_cleansIdentitySignsOutAndCallbacks() {
+    fun deleteAccount_networkFailure_reportsConnectivityNotReauth() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            val user = mockk<FirebaseUser>(relaxed = true)
+            every { auth.currentUser } returns user
+            every { user.uid } returns "u1"
+            every { user.delete() } returns com.google.android.gms.tasks.Tasks.forException(
+                mockk<com.google.firebase.FirebaseNetworkException>()
+            )
+            val vm = createVm()
+            advanceUntilIdle()
+            var deleted = false
+            vm.deleteAccount(onDeleted = { deleted = true })
+            advanceUntilIdle()
+            assertFalse(deleted)
+            // A-9: a network failure must never masquerade as a re-login demand.
+            assertEquals("E-net", vm.saveError.value)
+            coVerify(exactly = 0) { sessionManager.signOut() }
+        }
+    }
+
+    @Test
+    fun deleteAccount_success_wipesFullScopeSignsOutAndCallbacks() {
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
@@ -283,6 +333,14 @@ class PhaseTwoSettingsTest {
             every { firestore.collection(any()) } returns colRef
             every { colRef.document(any()) } returns docRef
             every { docRef.delete() } returns com.google.android.gms.tasks.Tasks.forResult(null)
+            // A-9 wipe chain on this test's own doc mocks (empty pages).
+            val wipeCol = mockk<CollectionReference>(relaxed = true)
+            val wipeQuery = mockk<Query>(relaxed = true)
+            val emptySnap = mockk<QuerySnapshot>()
+            every { emptySnap.isEmpty } returns true
+            every { docRef.collection(any()) } returns wipeCol
+            every { wipeCol.limit(any()) } returns wipeQuery
+            every { wipeQuery.get() } returns com.google.android.gms.tasks.Tasks.forResult(emptySnap)
             val vm = createVm()
             advanceUntilIdle()
             var deleted = false
@@ -291,6 +349,63 @@ class PhaseTwoSettingsTest {
             assertTrue(deleted)
             coVerify { sessionManager.signOut() }
             coVerify { docRef.delete() }
+            // A-9: the whole users/{uid} subtree is wiped, not just identity.
+            verify { docRef.collection("favorites") }
+            verify { docRef.collection("readingHistory") }
+            verify { docRef.collection("loginLogs") }
+            verify { docRef.collection("sessions") }
+            verify { docRef.collection("syncTombstones") }
+        }
+    }
+
+    // ─── A-11 password change ─────────────────────────────────────────────
+
+    @Test
+    fun changePassword_shortPassword_setsWeakErrorWithoutBackendCall() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            val vm = createVm()
+            advanceUntilIdle()
+            vm.changePassword("12345")
+            advanceUntilIdle()
+            assertEquals("E-weak", vm.securityError.value)
+            coVerify(exactly = 0) { sessionManager.updatePassword(any()) }
+        }
+    }
+
+    @Test
+    fun changePassword_success_setsConfirmation() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            coEvery { sessionManager.updatePassword(any()) } returns Unit
+            val vm = createVm()
+            advanceUntilIdle()
+            vm.changePassword("newpass123")
+            advanceUntilIdle()
+            assertEquals("E-pw-changed", vm.passwordMessage.value)
+            assertNull(vm.securityError.value)
+            coVerify(exactly = 1) { sessionManager.updatePassword("newpass123") }
+        }
+    }
+
+    @Test
+    fun changePassword_recentLoginRequired_setsReauthError() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubBase()
+            coEvery { sessionManager.updatePassword(any()) } throws
+                mockk<FirebaseAuthRecentLoginRequiredException>()
+            val vm = createVm()
+            advanceUntilIdle()
+            vm.changePassword("newpass123")
+            advanceUntilIdle()
+            assertEquals("E-reauth", vm.securityError.value)
+            assertNull(vm.passwordMessage.value)
         }
     }
 }

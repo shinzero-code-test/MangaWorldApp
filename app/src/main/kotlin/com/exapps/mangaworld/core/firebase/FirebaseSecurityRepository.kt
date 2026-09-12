@@ -209,12 +209,25 @@ class FirebaseSecurityRepository @Inject constructor(
                     "provider" to provider.take(32)
                 )
             ).await()
-        // Cap history at 50 entries (oldest pruned).
+        // Cap history at 50 entries (oldest pruned). Each sign-in adds exactly
+        // one doc (A-11), so reading 51 suffices to enforce the cap — the old
+        // limit(200) re-read 4x the data on every single sign-in.
         val overflow = firestore.collection("users").document(uid).collection("loginLogs")
-            .orderBy("createdAt", Query.Direction.DESCENDING).limit(200)
+            .orderBy("createdAt", Query.Direction.DESCENDING).limit((MAX_LOGIN_LOGS + 1).toLong())
             .get().await().documents.drop(MAX_LOGIN_LOGS)
         overflow.forEach { runCatching { it.reference.delete().await() } }
         ensureCurrentSession()
+    }
+
+    override suspend fun isCurrentSessionRevoked(): Boolean {
+        val uid = uid() ?: return false
+        val sessionId = securityPrefs.getString("session_id", null)
+        if (sessionId.isNullOrBlank()) return false
+        return runCatching {
+            firestore.collection("users").document(uid)
+                .collection("sessions").document(sessionId)
+                .get().await().getBoolean("revoked") == true
+        }.getOrDefault(false)
     }
 
     override suspend fun ensureCurrentSession() {
@@ -226,23 +239,32 @@ class FirebaseSecurityRepository @Inject constructor(
         }
         val now = System.currentTimeMillis()
         val ref = firestore.collection("users").document(uid).collection("sessions").document(sessionId)
-        val existing = runCatching { ref.get().await() }.getOrNull()
+        val existingResult = runCatching { ref.get().await() }
+        val existing = existingResult.getOrNull()
+        // A-6: a revoked flag is authoritative — refreshing last-seen must
+        // never flip it back to false (that silently undid every revocation
+        // each time this ran from sign-in or Profile Settings). A missing doc
+        // (successful read, nothing stored) is the only brand-new case that
+        // writes revoked:false; a failed read omits the key so merge can't
+        // clobber a server-side revocation while offline.
         val createdAt = existing?.getLong("createdAt") ?: now
         // Device linkage mirrors FirebaseMessagingRegistrar's doc-id scheme
         // (sha256(token).take(32)) so revoking a session can cut its pushes.
         val deviceId = runCatching { messaging.token.await() }
             .getOrNull()?.sha256()?.take(32)
-        ref.set(
-            mapOf(
-                "createdAt" to createdAt,
-                "lastSeenAt" to now,
-                "deviceLabel" to deviceLabel(),
-                "appVersion" to BuildConfig.VERSION_NAME,
-                "deviceId" to deviceId,
-                "revoked" to false
-            ),
-            SetOptions.merge()
-        ).await()
+        val payload = mutableMapOf<String, Any?>(
+            "createdAt" to createdAt,
+            "lastSeenAt" to now,
+            "deviceLabel" to deviceLabel(),
+            "appVersion" to BuildConfig.VERSION_NAME,
+            "deviceId" to deviceId
+        )
+        if (existing != null) {
+            payload["revoked"] = existing.getBoolean("revoked") == true
+        } else if (existingResult.isSuccess) {
+            payload["revoked"] = false
+        }
+        ref.set(payload, SetOptions.merge()).await()
     }
 
     private companion object {

@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.messaging.FirebaseMessaging
+import com.exapps.mangaworld.domain.repository.SecurityRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.tasks.await
 import java.security.MessageDigest
@@ -20,7 +21,8 @@ private const val TAG = "MessagingRegistrar"
 @Singleton
 class FirebaseMessagingRegistrar @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val sessionManager: FirebaseSessionManager
+    private val sessionManager: FirebaseSessionManager,
+    private val securityRepository: SecurityRepository
 ) {
     private val firestore = FirebaseFirestore.getInstance()
     private val messaging = FirebaseMessaging.getInstance()
@@ -53,6 +55,13 @@ class FirebaseMessagingRegistrar @Inject constructor(
 
     private suspend fun persistToken(token: String) {
         val uid = sessionManager.ensureFirebaseSession() ?: return
+        // A-7: a revoked session's device doc was deliberately deleted — token
+        // rotation must not resurrect it. Fail-open: only a positive revoked
+        // signal skips the write, never a read error.
+        if (runCatching { securityRepository.isCurrentSessionRevoked() }.getOrDefault(false)) {
+            Log.i(TAG, "Skipping device registration: session revoked")
+            return
+        }
         val deviceDocId = token.sha256().take(32)
         val previousDocId = messagingPrefs.getString("device_doc_id", null)
 

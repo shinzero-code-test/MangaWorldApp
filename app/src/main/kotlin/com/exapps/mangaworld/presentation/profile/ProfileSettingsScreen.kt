@@ -29,6 +29,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -123,6 +125,9 @@ class ProfileSettingsViewModel @Inject constructor(
     val securityBusy: StateFlow<Boolean> = _securityBusy.asStateFlow()
     private val _securityError = MutableStateFlow<String?>(null)
     val securityError: StateFlow<String?> = _securityError.asStateFlow()
+    // Password-change confirmation (one-shot success message).
+    private val _passwordMessage = MutableStateFlow<String?>(null)
+    val passwordMessage: StateFlow<String?> = _passwordMessage.asStateFlow()
     // Profile/account write failures (a denial here must surface, never crash).
     private val _saveError = MutableStateFlow<String?>(null)
     val saveError: StateFlow<String?> = _saveError.asStateFlow()
@@ -481,14 +486,68 @@ class ProfileSettingsViewModel @Inject constructor(
         const val MAX_TEXT_TITLE = 200
         const val MAX_TEXT_DESC = 500
         const val MAX_URL = 2048
+        // A-9 full-account wipe scope.
+        val ACCOUNT_SUBCOLLECTIONS = listOf(
+            "favorites", "readingHistory", "readerAnnotations", "devices",
+            "lists", "notifications", "loginLogs", "sessions",
+            "preferences", "syncTombstones"
+        )
+        val OWN_CONTENT_GROUPS = listOf("comments", "reviews")
+        const val DELETE_PAGE_SIZE = 200L
+        const val MAX_DELETE_PAGES = 25
+        const val MIN_PASSWORD_LENGTH = 6
     }
 
     /**
-     * Deletes the Firebase Auth account. Firebase requires a recent sign-in:
-     * on [FirebaseAuthRecentLoginRequiredException] nothing is signed out and
-     * the caller shows [saveError] (re-login message) instead of pretending.
-     * On success the Firestore profile + username docs are removed best-effort
-     * so no orphan identity survives, then [onDeleted] fires.
+     * Change the account password (A-11: password users previously had no
+     * in-app credential management). Failures surface in the security section;
+     * success shows a one-shot confirmation. Stale auth maps to re-login.
+     */
+    fun changePassword(newPassword: String) {
+        if (newPassword.length < MIN_PASSWORD_LENGTH) {
+            _securityError.value = context.getString(R.string.auth_error_password_weak)
+            return
+        }
+        viewModelScope.launch {
+            _securityBusy.value = true
+            _securityError.value = null
+            val result = runCatching { sessionManager.updatePassword(newPassword) }
+            _securityBusy.value = false
+            result
+                .onSuccess { _passwordMessage.value = context.getString(R.string.settings_password_changed) }
+                .onFailure { failure ->
+                    val cause = generateSequence<Throwable>(failure) { it.cause }.lastOrNull() ?: failure
+                    _securityError.value = when (cause) {
+                        is com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException ->
+                            context.getString(R.string.settings_delete_account_reauth)
+                        is com.google.firebase.FirebaseNetworkException ->
+                            context.getString(R.string.str_215)
+                        is com.google.firebase.auth.FirebaseAuthWeakPasswordException,
+                        is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException ->
+                            context.getString(R.string.auth_error_password_weak)
+                        else -> context.getString(R.string.settings_security_action_failed)
+                    }
+                }
+        }
+    }
+
+    fun clearPasswordMessage() { _passwordMessage.value = null }
+
+    /**
+     * Deletes the Firebase Auth account.
+     *
+     * Order matters (A-9): Firestore cleanup runs FIRST while the session is
+     * still authenticated (owner rules evaluate). Auth deletion then retires
+     * the account server-side (tokens die with it). If Auth deletion fails,
+     * nothing is signed out and a precise error is reported — a network error
+     * is never misreported as a re-login demand, and the user can retry to a
+     * consistent end state.
+     *
+     * Cleanup covers the whole users/{uid} subtree (favorites, history,
+     * annotations, devices, lists, notifications, login logs, sessions,
+     * preferences, tombstones), the public profile + username claim, and the
+     * author's own community comments/reviews (author-delete is rule-allowed),
+     * so a deleted account leaves no orphan identity or undeletable content.
      */
     fun deleteAccount(onDeleted: () -> Unit = {}) {
         viewModelScope.launch {
@@ -497,27 +556,75 @@ class ProfileSettingsViewModel @Inject constructor(
                 _saveError.value = context.getString(R.string.settings_provider_sign_in_error)
                 return@launch
             }
-            // Capture identity BEFORE Auth deletion (afterwards the session is
-            // gone and the username doc can no longer be resolved).
             val uid = user.uid
             val oldUsername = runCatching { communityRepository.getCurrentProfile() }
                 .getOrNull()?.username?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+            // Best-effort Firestore wipe while still authenticated.
+            runCatching { wipeUserData(uid, oldUsername) }
             val deleteResult = runCatching { user.delete().await() }
             if (deleteResult.isFailure) {
-                _saveError.value = context.getString(R.string.settings_delete_account_reauth)
+                _saveError.value = deleteAccountErrorMessage(deleteResult.exceptionOrNull())
                 return@launch
-            }
-            // Best-effort identity cleanup (the ID token outlives deletion
-            // briefly, so these owner-only deletes still evaluate).
-            runCatching {
-                firestore.collection("publicProfiles").document(uid).delete().await()
-                if (oldUsername != null) {
-                    firestore.collection("usernames").document(oldUsername).delete().await()
-                }
             }
             try { sessionManager.signOut() } catch (_: Exception) {}
             _userEmail.value = null
             onDeleted()
+        }
+    }
+
+    /**
+     * A-9: network trouble reports a connectivity message, stale auth reports
+     * re-login — never the reverse.
+     */
+    private fun deleteAccountErrorMessage(failure: Throwable?): String {
+        val cause = generateSequence<Throwable>(failure) { it.cause }.lastOrNull() ?: failure
+        return when (cause) {
+            is com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException ->
+                context.getString(R.string.settings_delete_account_reauth)
+            is com.google.firebase.FirebaseNetworkException ->
+                context.getString(R.string.str_215)
+            else -> context.getString(R.string.settings_security_action_failed)
+        }
+    }
+
+    /**
+     * Best-effort wipe of everything owned by [uid]. Every step is individually
+     * guarded: one denied/failed collection must not abort the rest.
+     */
+    private suspend fun wipeUserData(uid: String, oldUsername: String?) {
+        val userRef = firestore.collection("users").document(uid)
+        // users/{uid} subtree (mirrors the dashboard admin DELETE scope, plus
+        // the loginLogs/sessions/preferences/syncTombstones it misses — D-5).
+        for (subcol in ACCOUNT_SUBCOLLECTIONS) {
+            runCatching {
+                repeat(MAX_DELETE_PAGES) {
+                    val snap = userRef.collection(subcol).limit(DELETE_PAGE_SIZE).get().await()
+                    if (snap.isEmpty) return@runCatching
+                    snap.documents.forEach { runCatching { it.reference.delete().await() } }
+                    if (snap.size() < DELETE_PAGE_SIZE) return@runCatching
+                }
+            }
+        }
+        runCatching { userRef.delete().await() }
+        // Public identity.
+        runCatching {
+            firestore.collection("publicProfiles").document(uid).delete().await()
+            if (oldUsername != null) {
+                firestore.collection("usernames").document(oldUsername).delete().await()
+            }
+        }
+        // Own community content (author-delete is rule-allowed). Without this,
+        // a deleted account's comments/reviews could never be removed by anyone.
+        for (group in OWN_CONTENT_GROUPS) {
+            runCatching {
+                repeat(MAX_DELETE_PAGES) {
+                    val snap = firestore.collectionGroup(group)
+                        .whereEqualTo("authorUid", uid).limit(DELETE_PAGE_SIZE).get().await()
+                    if (snap.isEmpty) return@runCatching
+                    snap.documents.forEach { runCatching { it.reference.delete().await() } }
+                    if (snap.size() < DELETE_PAGE_SIZE) return@runCatching
+                }
+            }
         }
     }
 
@@ -620,6 +727,7 @@ fun ProfileSettingsScreen(
     val sessions by viewModel.sessions.collectAsStateWithLifecycle()
     val securityBusy by viewModel.securityBusy.collectAsStateWithLifecycle()
     val securityError by viewModel.securityError.collectAsStateWithLifecycle()
+    val passwordMessage by viewModel.passwordMessage.collectAsStateWithLifecycle()
     val saveError by viewModel.saveError.collectAsStateWithLifecycle()
     val listsMessage by viewModel.listsMessage.collectAsStateWithLifecycle()
     val avatarUri = viewModel.avatarUri
@@ -630,6 +738,7 @@ fun ProfileSettingsScreen(
     var showSignOutConfirm by remember { mutableStateOf(false) }
     var showSignOutAllConfirm by remember { mutableStateOf(false) }
     var showBlockedUsers by remember { mutableStateOf(false) }
+    var showChangePassword by remember { mutableStateOf(false) }
     var showFollowingList by remember { mutableStateOf(false) }
     var showFollowersList by remember { mutableStateOf(false) }
     var showLoginLogs by remember { mutableStateOf(false) }
@@ -731,13 +840,19 @@ fun ProfileSettingsScreen(
                     deviceCount = devices.size,
                     sessionCount = sessions.size,
                     busy = securityBusy,
+                    hasPasswordProvider = linkedProviderIds.contains("password"),
                     onOpenLoginLogs = { showLoginLogs = true },
                     onOpenDevices = { showDevices = true },
                     onOpenSessions = { showSessions = true },
+                    onChangePassword = { showChangePassword = true },
                     onSignOutAll = { showSignOutAllConfirm = true }
                 )
                 securityError?.let { message ->
                     Text(message, color = MangaColors.Pink, style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp))
+                }
+                passwordMessage?.let { message ->
+                    Text(message, color = MangaColors.Green, style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 8.dp))
                 }
             }
@@ -841,6 +956,11 @@ fun ProfileSettingsScreen(
         { viewModel.signOutAllDevices(onSignedOut); showSignOutAllConfirm = false },
         { showSignOutAllConfirm = false }
     )
+    if (showChangePassword) ChangePasswordDialog(
+        busy = securityBusy,
+        onDismiss = { showChangePassword = false },
+        onSave = { viewModel.changePassword(it); showChangePassword = false }
+    )
 }
 
 // ─── Profile Hero ───────────────────────────────────────────────────────────
@@ -931,9 +1051,11 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     deviceCount: Int,
     sessionCount: Int,
     busy: Boolean,
+    hasPasswordProvider: Boolean,
     onOpenLoginLogs: () -> Unit,
     onOpenDevices: () -> Unit,
     onOpenSessions: () -> Unit,
+    onChangePassword: () -> Unit,
     onSignOutAll: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -941,6 +1063,11 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
         Row(Modifier.fillMaxWidth().clickable(onClick = onOpenLoginLogs).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.History, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_login_history), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_count_format, loginCount), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().clickable(onClick = onOpenDevices).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Devices, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_devices), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_count_format, deviceCount), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth().clickable(onClick = onOpenSessions).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Security, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.manage_sessions), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.settings_count_format, sessionCount), color = MangaColors.Cyan, style = MaterialTheme.typography.bodySmall) }
+        // A-11: password users get in-app credential management (social-only
+        // accounts have no password provider, so the row stays hidden).
+        if (hasPasswordProvider) {
+            Row(Modifier.fillMaxWidth().clickable(onClick = onChangePassword).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Lock, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_password_change), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)) }
+        }
         Row(Modifier.fillMaxWidth().clickable(enabled = !busy, onClick = onSignOutAll).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Logout, null, tint = MangaColors.Error, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp))
             Text(stringResource(R.string.settings_security_sign_out_all), color = MangaColors.Error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
@@ -1179,6 +1306,53 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
                 onClick = { onSave(normalizedUsername, displayName.trim(), bio.trim(), location.trim(), birthday) },
                 colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan),
                 enabled = usernameError == null && normalizedUsername.isNotBlank()
+            ) { Text(stringResource(R.string.save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) } }
+    )
+}
+
+@Composable private fun ChangePasswordDialog(busy: Boolean, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var password by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    val mismatch = password.isNotBlank() && confirm.isNotBlank() && password != confirm
+    val tooShort = password.isNotBlank() && password.length < 6
+    val canSave = !busy && password.length >= 6 && !mismatch
+    AlertDialog(onDismissRequest = onDismiss, containerColor = MangaColors.Background,
+        title = { Text(stringResource(R.string.settings_password_change), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = password, onValueChange = { password = it },
+                label = { Text(stringResource(R.string.settings_password_new_hint)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    TextButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Text(stringResource(if (passwordVisible) R.string.hide else R.string.show), color = MangaColors.Cyan)
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
+            )
+            OutlinedTextField(
+                value = confirm, onValueChange = { confirm = it },
+                label = { Text(stringResource(R.string.auth_confirm_password)) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MangaColors.OnSurface, unfocusedTextColor = MangaColors.OnSurface)
+            )
+            if (tooShort) {
+                Text(stringResource(R.string.auth_error_password_weak), color = MangaColors.Yellow, style = MaterialTheme.typography.bodySmall)
+            }
+            if (mismatch) {
+                Text(stringResource(R.string.auth_error_passwords_mismatch), color = MangaColors.Yellow, style = MaterialTheme.typography.bodySmall)
+            }
+        }},
+        confirmButton = {
+            Button(
+                onClick = { onSave(password) },
+                colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Cyan),
+                enabled = canSave
             ) { Text(stringResource(R.string.save)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), color = MangaColors.Muted) } }

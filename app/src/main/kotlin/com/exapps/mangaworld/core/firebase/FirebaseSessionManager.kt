@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.core.firebase
 
 import android.content.Context
+import com.exapps.mangaworld.R
 import com.facebook.login.LoginManager
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -141,8 +142,20 @@ class FirebaseSessionManager @Inject constructor(
 
     suspend fun unlinkProvider(providerId: String) {
         val user = requireNamedUserForProviderManagement()
-        require(linkedProviderIds().size > 1) { "Keep at least one sign-in provider" }
+        // A-10: localized via resources — the message surfaces verbatim in the
+        // provider-link error row, so raw English is a user-facing leak.
+        require(linkedProviderIds().size > 1) { context.getString(R.string.settings_provider_keep_one) }
         user.unlink(providerId).await()
+    }
+
+    /**
+     * Change the password on the Firebase Auth account (A-11: password users
+     * previously had no in-app credential management at all). Callers map
+     * FirebaseAuthRecentLoginRequiredException to a re-login prompt.
+     */
+    suspend fun updatePassword(newPassword: String) {
+        val user = requireNamedUserForProviderManagement()
+        user.updatePassword(newPassword).await()
     }
 
     // ─── Sign Out ────────────────────────────────────────────────────────────
@@ -154,6 +167,13 @@ class FirebaseSessionManager @Inject constructor(
             try {
                 LoginManager.getInstance().logOut()
             } finally {
+                // A-8: the session id is per-login state. Leaving it behind let
+                // the next account on this device reuse the previous account's
+                // session row (and throttle its first push/merge in FS-3).
+                runCatching {
+                    context.getSharedPreferences("security_prefs", Context.MODE_PRIVATE)
+                        .edit().remove("session_id").apply()
+                }
                 auth.signOut()
             }
         }
