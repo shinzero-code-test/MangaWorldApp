@@ -516,8 +516,7 @@ class ProfileSettingsViewModel @Inject constructor(
             result
                 .onSuccess { _passwordMessage.value = context.getString(R.string.settings_password_changed) }
                 .onFailure { failure ->
-                    val cause = generateSequence<Throwable>(failure) { it.cause }.lastOrNull() ?: failure
-                    _securityError.value = when (cause) {
+                    _securityError.value = when (rootCause(failure)) {
                         is com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException ->
                             context.getString(R.string.settings_delete_account_reauth)
                         is com.google.firebase.FirebaseNetworkException ->
@@ -574,17 +573,28 @@ class ProfileSettingsViewModel @Inject constructor(
 
     /**
      * A-9: network trouble reports a connectivity message, stale auth reports
-     * re-login — never the reverse.
+     * re-login — never the reverse. The cause walk is defensive (runCatching
+     * per step): exotic throwables must not crash the mapping itself.
      */
     private fun deleteAccountErrorMessage(failure: Throwable?): String {
-        val cause = generateSequence<Throwable>(failure) { it.cause }.lastOrNull() ?: failure
-        return when (cause) {
+        return when (rootCause(failure)) {
             is com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException ->
                 context.getString(R.string.settings_delete_account_reauth)
             is com.google.firebase.FirebaseNetworkException ->
                 context.getString(R.string.str_215)
             else -> context.getString(R.string.settings_security_action_failed)
         }
+    }
+
+    private fun rootCause(failure: Throwable?): Throwable? {
+        var current = failure
+        val seen = HashSet<Throwable>()
+        while (current != null && seen.add(current)) {
+            val next = runCatching { current.cause }.getOrNull()
+            if (next == null || next === current) break
+            current = next
+        }
+        return current
     }
 
     /**

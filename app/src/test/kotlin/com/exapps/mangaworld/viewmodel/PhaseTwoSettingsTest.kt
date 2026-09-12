@@ -104,6 +104,7 @@ class PhaseTwoSettingsTest {
         every { firestore.collection(any()) } returns topCol
         every { topCol.document(any()) } returns userDoc
         every { userDoc.collection(any()) } returns subCol
+        every { subCol.whereEqualTo(any<String>(), any()) } returns subQuery
         every { subCol.limit(any()) } returns subQuery
         every { subQuery.get() } returns com.google.android.gms.tasks.Tasks.forResult(emptySnap)
         every { firestore.collectionGroup(any()) } returns subCol
@@ -339,6 +340,7 @@ class PhaseTwoSettingsTest {
             val emptySnap = mockk<QuerySnapshot>()
             every { emptySnap.isEmpty } returns true
             every { docRef.collection(any()) } returns wipeCol
+            every { wipeCol.whereEqualTo(any<String>(), any()) } returns wipeQuery
             every { wipeCol.limit(any()) } returns wipeQuery
             every { wipeQuery.get() } returns com.google.android.gms.tasks.Tasks.forResult(emptySnap)
             val vm = createVm()
