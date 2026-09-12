@@ -31,8 +31,11 @@ internal fun firebaseAuthErrorMessageForCode(context: Context, errorCode: String
     when (errorCode) {
         ERROR_INVALID_LOGIN_CREDENTIALS,
         ERROR_WRONG_PASSWORD,
-        ERROR_INVALID_CREDENTIAL -> context.getString(R.string.invalid_credentials)
-        ERROR_USER_NOT_FOUND -> context.getString(R.string.no_account_email)
+        ERROR_INVALID_CREDENTIAL,
+        // A-2: never confirm or deny account existence. Unknown-email maps to the
+        // same generic message as wrong-password; the reset flow additionally
+        // reports success for unknown emails (see LoginViewModel.sendPasswordReset).
+        ERROR_USER_NOT_FOUND -> context.getString(R.string.invalid_credentials)
         ERROR_USER_DISABLED -> context.getString(R.string.str_241)
         ERROR_EMAIL_ALREADY_IN_USE -> context.getString(R.string.str_432)
         ERROR_WEAK_PASSWORD -> context.getString(R.string.str_354)
@@ -54,3 +57,11 @@ private const val ERROR_INVALID_EMAIL = "ERROR_INVALID_EMAIL"
 private const val ERROR_NETWORK_REQUEST_FAILED = "ERROR_NETWORK_REQUEST_FAILED"
 private const val ERROR_TOO_MANY_REQUESTS = "ERROR_TOO_MANY_REQUESTS"
 private const val ERROR_OPERATION_NOT_ALLOWED = "ERROR_OPERATION_NOT_ALLOWED"
+
+/**
+ * True when the failure only reveals that no account uses the email (A-2).
+ * Callers that must not leak account existence (password reset) use this to
+ * report success instead of an error.
+ */
+internal fun isUserNotFound(error: Exception): Boolean =
+    (error as? FirebaseAuthException)?.errorCode == ERROR_USER_NOT_FOUND

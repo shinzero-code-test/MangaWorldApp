@@ -89,11 +89,16 @@ class FirebaseSessionManager @Inject constructor(
 
     // ─── Email ───────────────────────────────────────────────────────────────
 
+    /**
+     * Login must NEVER link onto the anonymous session (A-1): [linkWithCredential]
+     * with an unregistered email *succeeds* and silently converts the guest into
+     * a brand-new empty account, so a mistyped email at login "succeeds" into the
+     * wrong account. Login always signs in directly; the replaced guest session's
+     * local data orphaning is tracked separately (A-20/FS-3). Signup keeps the
+     * link path in [signUpWithEmail] so a new user's guest library is preserved.
+     */
     suspend fun signInWithEmail(email: String, password: String): String? {
-        val current = auth.currentUser
-        val credential = EmailAuthProvider.getCredential(email, password)
-        return if (current != null && current.isAnonymous) linkOrSignIn(current, credential)
-        else auth.signInWithEmailAndPassword(email, password).await().user?.uid
+        return auth.signInWithEmailAndPassword(email, password).await().user?.uid
     }
 
     suspend fun signUpWithEmail(email: String, password: String, displayName: String = "", username: String = ""): String? {

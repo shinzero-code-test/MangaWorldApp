@@ -56,6 +56,9 @@ class LoginUtilsViewModelTest {
             R.string.enter_username to "E-username-required",
             R.string.str_108 to "E-username-rules",
             R.string.enter_email to "E-enter-email",
+            R.string.invalid_email to "E-invalid-email",
+            R.string.auth_error_password_weak to "E-weak-password",
+            R.string.auth_error_username_taken to "E-username-taken",
             R.string.error_retry to "E-retry",
             R.string.str_433 to "S-merge-email"
         )
@@ -224,6 +227,126 @@ class LoginUtilsViewModelTest {
             assertEquals("E-enter-email", h.vm.uiState.value.error)
             assertFalse(h.vm.uiState.value.passwordResetSent)
             coVerify(exactly = 0) { h.sessionManager.sendPasswordResetEmail(any()) }
+        }
+    }
+
+    // ─── A-4 client-side validation ───────────────────────────────────────
+
+    @Test
+    fun signIn_malformedEmail_setsInvalidEmailError() {
+        val dispatcher = StandardTestDispatcher()
+        runTest(dispatcher) {
+            val h = newHarness(dispatcher)
+            h.vm.signInWithEmail("not-an-email", "pw123456")
+            advanceUntilIdle()
+            assertEquals("E-invalid-email", h.vm.uiState.value.error)
+            coVerify(exactly = 0) { h.sessionManager.signInWithEmail(any(), any()) }
+        }
+    }
+
+    @Test
+    fun signIn_shortPassword_setsWeakPasswordError() {
+        val dispatcher = StandardTestDispatcher()
+        runTest(dispatcher) {
+            val h = newHarness(dispatcher)
+            h.vm.signInWithEmail("user@example.com", "12345")
+            advanceUntilIdle()
+            assertEquals("E-weak-password", h.vm.uiState.value.error)
+            coVerify(exactly = 0) { h.sessionManager.signInWithEmail(any(), any()) }
+        }
+    }
+
+    @Test
+    fun signUp_malformedEmailAndShortPassword_blockedBeforeBackend() {
+        val dispatcher = StandardTestDispatcher()
+        runTest(dispatcher) {
+            val h = newHarness(dispatcher)
+            h.vm.signUpWithEmail("bad-email", "12345", "Display", "valid_name")
+            advanceUntilIdle()
+            assertEquals("E-invalid-email", h.vm.uiState.value.error)
+            coVerify(exactly = 0) { h.sessionManager.signUpWithEmail(any(), any(), any(), any()) }
+        }
+    }
+
+    // ─── A-5 password never retained ──────────────────────────────────────
+
+    @Test
+    fun signIn_success_clearsPasswordFromState() {
+        val dispatcher = StandardTestDispatcher()
+        runTest(dispatcher) {
+            val h = newHarness(dispatcher)
+            coEvery { h.sessionManager.signInWithEmail(any(), any()) } returns "uid1"
+            h.vm.onPasswordChanged("pw123456")
+            h.vm.signInWithEmail("user@example.com", "pw123456")
+            advanceUntilIdle()
+            assertTrue(h.vm.uiState.value.isSignedIn)
+            assertEquals("", h.vm.uiState.value.password)
+        }
+    }
+
+    @Test
+    fun signIn_failure_clearsPasswordFromState() {
+        val dispatcher = StandardTestDispatcher()
+        runTest(dispatcher) {
+            val h = newHarness(dispatcher)
+            coEvery { h.sessionManager.signInWithEmail(any(), any()) } returns null
+            h.vm.signInWithEmail("user@example.com", "pw123456")
+            advanceUntilIdle()
+            assertEquals("", h.vm.uiState.value.password)
+        }
+    }
+
+    // ─── A-3 username collision surfaces ──────────────────────────────────
+
+    @Test
+    fun signUp_usernameTaken_staysSignedInWithTakenError() {
+        val dispatcher = StandardTestDispatcher()
+        runTest(dispatcher) {
+            val h = newHarness(dispatcher)
+            coEvery { h.sessionManager.signUpWithEmail(any(), any(), any(), any()) } returns "uid1"
+            coEvery {
+                h.communityRepo.upsertProfile(any(), any(), any(), any(), any(), any(), any(), any())
+            } throws IllegalArgumentException("E-username-taken")
+            h.vm.signUpWithEmail("user@example.com", "pw123456", "Display", "taken_name")
+            advanceUntilIdle()
+            val state = h.vm.uiState.value
+            assertTrue(state.isSignedIn)
+            assertEquals("E-username-taken", state.error)
+            assertEquals("", state.password)
+        }
+    }
+
+    @Test
+    fun signUp_profileNetworkFailure_staysSilentSuccess() {
+        val dispatcher = StandardTestDispatcher()
+        runTest(dispatcher) {
+            val h = newHarness(dispatcher)
+            coEvery { h.sessionManager.signUpWithEmail(any(), any(), any(), any()) } returns "uid1"
+            coEvery {
+                h.communityRepo.upsertProfile(any(), any(), any(), any(), any(), any(), any(), any())
+            } throws RuntimeException("backend-boom")
+            h.vm.signUpWithEmail("user@example.com", "pw123456", "Display", "fresh_name")
+            advanceUntilIdle()
+            val state = h.vm.uiState.value
+            assertTrue(state.isSignedIn)
+            assertNull(state.error)
+        }
+    }
+
+    // ─── A-2 reset never leaks existence ──────────────────────────────────
+
+    @Test
+    fun sendPasswordReset_unknownEmail_reportsSuccess() {
+        val dispatcher = StandardTestDispatcher()
+        runTest(dispatcher) {
+            val h = newHarness(dispatcher)
+            val notFound = mockk<com.google.firebase.auth.FirebaseAuthException>()
+            every { notFound.errorCode } returns "ERROR_USER_NOT_FOUND"
+            coEvery { h.sessionManager.sendPasswordResetEmail(any()) } throws notFound
+            h.vm.sendPasswordReset("ghost@example.com")
+            advanceUntilIdle()
+            assertTrue(h.vm.uiState.value.passwordResetSent)
+            assertNull(h.vm.uiState.value.error)
         }
     }
 

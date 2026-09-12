@@ -131,7 +131,7 @@ fun LoginScreen(
 
             if (errorMessage != null) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(errorMessage, color = MangaColors.Primary, fontSize = 12.sp, textAlign = TextAlign.Center)
+                Text(errorMessage, color = MangaColors.Error, fontSize = 12.sp, textAlign = TextAlign.Center)
             }
 
             Spacer(modifier = Modifier.height(8.dp))

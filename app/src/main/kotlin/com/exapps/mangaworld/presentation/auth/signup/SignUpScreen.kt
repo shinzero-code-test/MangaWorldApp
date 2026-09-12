@@ -194,7 +194,7 @@ fun SignUpScreen(
 
             if (error != null) {
                 Spacer(Modifier.height(8.dp))
-                Text(error, color = MangaColors.Primary, fontSize = 13.sp)
+                Text(error, color = MangaColors.Error, fontSize = 13.sp)
             }
 
             if (password.isNotBlank() && confirmPassword.isNotBlank() && password != confirmPassword) {

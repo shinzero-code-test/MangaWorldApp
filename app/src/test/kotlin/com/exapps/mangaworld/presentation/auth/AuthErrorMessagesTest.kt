@@ -16,7 +16,6 @@ class AuthErrorMessagesTest {
         // Map R.string IDs to their Arabic values for testing
         val testStrings = mapOf(
             com.exapps.mangaworld.R.string.invalid_credentials to "بيانات الدخول غير صحيحة",
-            com.exapps.mangaworld.R.string.no_account_email to "S-no-account",
             com.exapps.mangaworld.R.string.str_241 to "S-disabled",
             com.exapps.mangaworld.R.string.str_432 to "S-in-use",
             com.exapps.mangaworld.R.string.str_354 to "كلمة المرور لا تفي بمتطلبات الأمان. استخدم كلمة مرور أقوى.",
@@ -41,7 +40,9 @@ class AuthErrorMessagesTest {
         listOf(
             "ERROR_INVALID_LOGIN_CREDENTIALS",
             "ERROR_WRONG_PASSWORD",
-            "ERROR_INVALID_CREDENTIAL"
+            "ERROR_INVALID_CREDENTIAL",
+            // A-2: unknown email is indistinguishable from wrong password.
+            "ERROR_USER_NOT_FOUND"
         ).forEach { errorCode ->
             assertEquals("بيانات الدخول غير صحيحة", firebaseAuthErrorMessageForCode(context, errorCode))
         }
@@ -66,7 +67,6 @@ class AuthErrorMessagesTest {
         // Forces each resId to be stubbed above: the relaxed mock returns ""
         // for anything unstubbed, so a missing stub fails here, not silently.
         val codes = mapOf(
-            "ERROR_USER_NOT_FOUND" to "S-no-account",
             "ERROR_USER_DISABLED" to "S-disabled",
             "ERROR_EMAIL_ALREADY_IN_USE" to "S-in-use",
             "ERROR_INVALID_EMAIL" to "S-bad-email",

@@ -67,8 +67,10 @@ class LoginViewModel @Inject constructor(
     fun signInWithEmail(email: String, password: String) {
         val normalizedEmail = email.trim()
         _uiState.update { it.copy(email = normalizedEmail) }
-        if (normalizedEmail.isBlank() || password.isBlank()) {
-            _uiState.update { it.copy(error = context.getString(R.string.auth_error_empty_fields)) }
+        // A-4: validate format + Firebase's 6-char minimum client-side so
+        // obvious typos never reach the backend.
+        validateEmailPassword(normalizedEmail, password)?.let { error ->
+            _uiState.update { it.copy(error = error) }
             return
         }
         viewModelScope.launch {
@@ -77,22 +79,24 @@ class LoginViewModel @Inject constructor(
                 val uid = sessionManager.signInWithEmail(normalizedEmail, password)
                 if (uid != null) {
                     runCatching { securityRepository.recordSignIn("password") }
-                    _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
+                    // A-5: never retain the raw password in state after submit.
+                    _uiState.update { it.copy(isLoading = false, isSignedIn = true, password = "") }
                 } else {
-                    _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.auth_error_login_failed)) }
+                    _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.auth_error_login_failed), password = "") }
                 }
             } catch (error: AccountMergeRequiredException) {
-                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(context, error.reason)) }
+                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(context, error.reason), password = "") }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
+                _uiState.update { it.copy(isLoading = false, error = mapAuthError(e), password = "") }
             }
         }
     }
 
     fun signUpWithEmail(email: String, password: String, displayName: String = "", username: String = "") {
         val normalizedEmail = email.trim()
-        if (normalizedEmail.isBlank() || password.isBlank()) {
-            _uiState.update { it.copy(error = context.getString(R.string.auth_error_empty_fields)) }
+        // A-4: same client-side gates as login.
+        validateEmailPassword(normalizedEmail, password)?.let { error ->
+            _uiState.update { it.copy(error = error) }
             return
         }
         if (displayName.isBlank()) {
@@ -113,10 +117,13 @@ class LoginViewModel @Inject constructor(
             try {
                 val uid = sessionManager.signUpWithEmail(normalizedEmail, password, displayName.trim(), normalizedUsername)
                 if (uid != null) {
-                    // Create the Firestore profile with the username. A save
-                    // failure here must NOT fail the signup: Auth already
-                    // succeeded, and profile screens self-heal on next visit.
-                    runCatching {
+                    // Create the Firestore profile with the username. A-3: a
+                    // username collision must surface (the account already
+                    // exists at this point, so the user stays signed in but is
+                    // told to pick another name). Any other save failure keeps
+                    // the v8.4.2 behavior: silent success, profile screens
+                    // self-heal on next visit.
+                    val profileResult = runCatching {
                         communityRepository.upsertProfile(
                             username = normalizedUsername,
                             bio = "",
@@ -124,15 +131,29 @@ class LoginViewModel @Inject constructor(
                             displayName = displayName.trim()
                         )
                     }
+                    profileResult.exceptionOrNull()?.let { failure ->
+                        if (isUsernameClaimFailure(failure)) {
+                            runCatching { securityRepository.recordSignIn("password") }
+                            _uiState.update {
+                                it.copy(
+                                    isLoading = false,
+                                    isSignedIn = true,
+                                    password = "",
+                                    error = context.getString(R.string.auth_error_username_taken)
+                                )
+                            }
+                            return@launch
+                        }
+                    }
                     runCatching { securityRepository.recordSignIn("password") }
-                    _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
+                    _uiState.update { it.copy(isLoading = false, isSignedIn = true, password = "") }
                 } else {
-                    _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.auth_error_signup_failed)) }
+                    _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.auth_error_signup_failed), password = "") }
                 }
             } catch (error: AccountMergeRequiredException) {
-                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(context, error.reason)) }
+                _uiState.update { it.copy(isLoading = false, error = accountMergeMessage(context, error.reason), password = "") }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = mapAuthError(e)) }
+                _uiState.update { it.copy(isLoading = false, error = mapAuthError(e), password = "") }
             }
         }
     }
@@ -206,7 +227,13 @@ class LoginViewModel @Inject constructor(
                 sessionManager.sendPasswordResetEmail(normalizedEmail)
                 _uiState.update { it.copy(isLoading = false, passwordResetSent = true, error = null) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = mapAuthError(e), passwordResetSent = false) }
+                // A-2: never reveal whether the email is registered. An unknown
+                // email reports the same success the user sees for a real one.
+                if (isUserNotFound(e)) {
+                    _uiState.update { it.copy(isLoading = false, passwordResetSent = true, error = null) }
+                } else {
+                    _uiState.update { it.copy(isLoading = false, error = mapAuthError(e), passwordResetSent = false) }
+                }
             }
         }
     }
@@ -225,4 +252,34 @@ class LoginViewModel @Inject constructor(
     }
 
     private fun mapAuthError(error: Exception): String = firebaseAuthErrorMessage(context, error)
+
+    /**
+     * A-4: blank → format → Firebase 6-char minimum, using existing strings.
+     * Returns the error message, or null when the pair is submittable.
+     */
+    private fun validateEmailPassword(email: String, password: String): String? {
+        if (email.isBlank() || password.isBlank()) {
+            return context.getString(R.string.auth_error_empty_fields)
+        }
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            return context.getString(R.string.invalid_email)
+        }
+        if (password.length < MIN_PASSWORD_LENGTH) {
+            return context.getString(R.string.auth_error_password_weak)
+        }
+        return null
+    }
+
+    /**
+     * A-3: upsertProfile reports a taken username via require() with the
+     * auth_error_username_taken message. Only that case surfaces — every other
+     * save failure stays silent-success with self-heal.
+     */
+    private fun isUsernameClaimFailure(failure: Throwable): Boolean =
+        failure is IllegalArgumentException &&
+            failure.message == context.getString(R.string.auth_error_username_taken)
+
+    private companion object {
+        const val MIN_PASSWORD_LENGTH = 6
+    }
 }
