@@ -101,6 +101,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -131,7 +132,11 @@ data class CommunityUiState(
     val tab: CommunityTab = CommunityTab.COMMENTS,
     val chapterMode: Boolean = false,
     val focusCommentId: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    /** A comment send is in flight — composer locks + shows progress. */
+    val isSending: Boolean = false,
+    /** Last successful comment send (ms epoch) — composer clears on change. */
+    val lastCommentSentAt: Long? = null
 )
 
 /** Local overlay of a mutation until the authoritative Firestore snapshot lands (v8 #6). */
@@ -146,7 +151,9 @@ private data class PendingUi(
     val commentEchoes: List<CommunityComment> = emptyList(),
     val reviewEchoes: List<MangaReview> = emptyList(),
     val edits: Map<String, PendingEdit> = emptyMap(),
-    val reviewEdits: Map<String, PendingReviewEdit> = emptyMap()
+    val reviewEdits: Map<String, PendingReviewEdit> = emptyMap(),
+    val sendingComments: Int = 0,
+    val lastCommentSentAt: Long? = null
 )
 
 @Immutable
@@ -248,7 +255,9 @@ class CommunityViewModel @Inject constructor(
             tab = bits.tab,
             chapterMode = chapterUrl != null,
             focusCommentId = focusCommentId,
-            error = bits.error
+            error = bits.error,
+            isSending = bits.pending.sendingComments > 0,
+            lastCommentSentAt = bits.pending.lastCommentSentAt
         )
     }.stateIn(
         viewModelScope,
@@ -265,31 +274,39 @@ class CommunityViewModel @Inject constructor(
 
     fun postComment(text: String, spoiler: Boolean) {
         val profile = state.value.profile
+        // No silent skip: a missing profile (session still resolving) used to
+        // swallow the tap while the composer cleared itself — the "vanished
+        // comment" report. Surface it instead.
+        if (profile == null || text.isBlank()) {
+            if (profile == null) error.value = context.getString(R.string.community_error_sign_in)
+            return
+        }
         var echo: CommunityComment? = null
-        launchCommunityAction(R.string.community_error_post) {
-            if (profile != null && text.isNotBlank()) {
-                echo = CommunityComment(
-                    id = "pending_${java.util.UUID.randomUUID()}",
-                    mangaId = mangaId,
-                    chapterUrl = chapterUrl,
-                    slug = slug,
-                    sourceId = sourceId,
-                    authorUid = profile.uid,
-                    authorName = profile.displayName.ifBlank { profile.username },
-                    authorUsername = profile.username,
-                    authorAvatarUrl = profile.avatarUrl,
-                    text = text.trim(),
-                    spoiler = spoiler,
-                    createdAt = System.currentTimeMillis()
-                )
-                pending.update { it.copy(commentEchoes = it.commentEchoes + echo!!) }
-            }
+        launchCommunityAction(R.string.community_error_post, trackSending = true) {
+            echo = CommunityComment(
+                id = "pending_${java.util.UUID.randomUUID()}",
+                mangaId = mangaId,
+                chapterUrl = chapterUrl,
+                slug = slug,
+                sourceId = sourceId,
+                authorUid = profile.uid,
+                authorName = profile.displayName.ifBlank { profile.username },
+                authorUsername = profile.username,
+                authorAvatarUrl = profile.avatarUrl,
+                text = text.trim(),
+                spoiler = spoiler,
+                createdAt = System.currentTimeMillis()
+            )
+            pending.update { it.copy(commentEchoes = it.commentEchoes + echo!!) }
             try {
                 if (chapterUrl == null) {
                     communityRepository.postMangaComment(mangaId, slug, sourceId, text, spoiler)
                 } else {
                     communityRepository.postChapterComment(mangaId, slug, sourceId, chapterUrl, text, spoiler)
                 }
+                // Clear-on-success signal — the composer wipes its draft only
+                // once the write actually landed (see LaunchedEffect below).
+                pending.update { it.copy(lastCommentSentAt = System.currentTimeMillis()) }
             } catch (t: Throwable) {
                 echo?.let { e -> pending.update { it.copy(commentEchoes = it.commentEchoes - e) } }
                 throw t
@@ -416,8 +433,13 @@ class CommunityViewModel @Inject constructor(
         const val EDIT_LANDED_TOLERANCE_MS = 2_000L
     }
 
-    private fun launchCommunityAction(fallbackRes: Int, block: suspend () -> Unit) {
-        viewModelScope.launch {
+    private fun launchCommunityAction(fallbackRes: Int, trackSending: Boolean = false, block: suspend () -> Unit) {
+        // NonCancellable: navigation away (or process-lifecycle churn) must
+        // not abort an in-flight community write the UI already confirmed.
+        // The repository layer is NonCancellable too — this covers the VM
+        // overlay bookkeeping around it.
+        viewModelScope.launch(NonCancellable) {
+            if (trackSending) pending.update { it.copy(sendingComments = it.sendingComments + 1) }
             try {
                 block()
                 error.value = null
@@ -425,6 +447,8 @@ class CommunityViewModel @Inject constructor(
                 throw throwable
             } catch (throwable: Throwable) {
                 error.value = context.getString(fallbackRes)
+            } finally {
+                if (trackSending) pending.update { it.copy(sendingComments = (it.sendingComments - 1).coerceAtLeast(0)) }
             }
         }
     }
@@ -555,17 +579,22 @@ fun CommunityScreen(
                 )
             }
             if (state.tab == CommunityTab.COMMENTS && isSignedIn) {
+                // Clear-on-success: the draft survives until the write lands,
+                // so a failure keeps the text for retry instead of eating it.
+                androidx.compose.runtime.LaunchedEffect(state.lastCommentSentAt) {
+                    if (state.lastCommentSentAt != null) {
+                        commentText = ""
+                        spoiler = false
+                    }
+                }
                 CommunityComposer(
                     value = commentText,
                     spoiler = spoiler,
                     placeholder = stringResource(R.string.community_add_comment),
                     onValueChange = { commentText = it },
                     onSpoilerChange = { spoiler = it },
-                    onSend = {
-                        viewModel.postComment(commentText.trim(), spoiler)
-                        commentText = ""
-                        spoiler = false
-                    }
+                    onSend = { viewModel.postComment(commentText.trim(), spoiler) },
+                    sending = state.isSending
                 )
             } else if (state.tab == CommunityTab.COMMENTS) {
                 // A-18: guests see why there is no composer (chat parity).
@@ -1065,7 +1094,8 @@ internal fun CommunityComposer(
     placeholder: String,
     onValueChange: (String) -> Unit,
     onSpoilerChange: (Boolean) -> Unit,
-    onSend: () -> Unit
+    onSend: () -> Unit,
+    sending: Boolean = false
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -1079,17 +1109,26 @@ internal fun CommunityComposer(
                 modifier = Modifier.weight(1f),
                 placeholder = { Text(placeholder) },
                 shape = RoundedCornerShape(10.dp),
-                maxLines = 4
+                maxLines = 4,
+                enabled = !sending
             )
-            IconButton(onClick = { onSpoilerChange(!spoiler) }, modifier = Modifier.size(48.dp)) {
+            IconButton(onClick = { onSpoilerChange(!spoiler) }, modifier = Modifier.size(48.dp), enabled = !sending) {
                 Icon(
                     if (spoiler) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
                     stringResource(R.string.community_spoiler),
                     tint = if (spoiler) MangaColors.Yellow else MangaColors.Muted
                 )
             }
-            IconButton(onClick = onSend, enabled = value.isNotBlank(), modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Filled.Send, stringResource(R.string.community_send), tint = MangaColors.Cyan)
+            if (sending) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(48.dp).padding(12.dp),
+                    color = MangaColors.Cyan,
+                    strokeWidth = 3.dp
+                )
+            } else {
+                IconButton(onClick = onSend, enabled = value.isNotBlank(), modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Filled.Send, stringResource(R.string.community_send), tint = MangaColors.Cyan)
+                }
             }
         }
     }

@@ -66,6 +66,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -73,6 +74,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -91,7 +93,11 @@ data class RepliesUiState(
     val replyTo: ReplyRecipient? = null,
     val profile: CommunityProfile? = null,
     val appSettings: AppSettings = AppSettings(),
-    val error: String? = null
+    val error: String? = null,
+    /** A reply send is in flight — composer locks + shows progress. */
+    val isSending: Boolean = false,
+    /** Last successful reply send (ms epoch) — composer clears on change. */
+    val lastReplySentAt: Long? = null
 )
 
 /** Local overlay of a reply/edit until the authoritative snapshot lands (v8 #6). */
@@ -106,7 +112,9 @@ data class PendingRootReviewEdit(val title: String, val body: String, val rating
 private data class ReplyPending(
     val echoes: List<CommunityComment> = emptyList(),
     val edits: Map<String, PendingReplyEdit> = emptyMap(),
-    val reviewEdits: Map<String, PendingRootReviewEdit> = emptyMap()
+    val reviewEdits: Map<String, PendingRootReviewEdit> = emptyMap(),
+    val sendingReplies: Int = 0,
+    val lastReplySentAt: Long? = null
 )
 
 @HiltViewModel
@@ -126,13 +134,23 @@ class RepliesViewModel @Inject constructor(
     private val error = MutableStateFlow<String?>(null)
     private val pending = MutableStateFlow(ReplyPending())
 
-    private val commentsFlow = if (chapterUrl == null) {
+    private val commentsFlow: Flow<List<CommunityComment>> = (if (chapterUrl == null) {
         communityRepository.observeMangaComments(mangaId)
     } else {
         communityRepository.observeChapterComments(mangaId, chapterUrl)
+    }).catch {
+        error.value = context.getString(R.string.community_error_generic_action)
+        emit(emptyList())
     }
-    private val reviewsFlow = if (reviewId == null) flowOf(emptyList()) else communityRepository.observeReviews(mangaId)
-    private val profileFlow: Flow<CommunityProfile?> = flow { emit(communityRepository.getCurrentProfile()) }
+    private val reviewsFlow: Flow<List<MangaReview>> =
+        (if (reviewId == null) flowOf(emptyList()) else communityRepository.observeReviews(mangaId))
+            .catch {
+                error.value = context.getString(R.string.community_error_generic_action)
+                emit(emptyList())
+            }
+    private val profileFlow: Flow<CommunityProfile?> = flow {
+        emit(runCatching { communityRepository.getCurrentProfile() }.getOrNull())
+    }
 
     val state: StateFlow<RepliesUiState> = combine(
         combine(commentsFlow, reviewsFlow, profileFlow, settingsRepository.getAppSettings()) { comments, reviews, profile, settings ->
@@ -182,7 +200,9 @@ class RepliesViewModel @Inject constructor(
             replyTo = recipients.firstOrNull { it.id == bits.selectedId } ?: rootRecipient,
             profile = data.profile,
             appSettings = data.settings,
-            error = bits.currentError
+            error = bits.currentError,
+            isSending = bits.pending.sendingReplies > 0,
+            lastReplySentAt = bits.pending.lastReplySentAt
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, RepliesUiState())
 
@@ -193,8 +213,14 @@ class RepliesViewModel @Inject constructor(
     }
 
     fun postReply(text: String, spoiler: Boolean) {
-        val rootRecipient = state.value.root?.toRecipient() ?: return
+        val rootRecipient = state.value.root?.toRecipient()
         val profile = state.value.profile
+        // No silent skip: report exactly why nothing was sent.
+        if (rootRecipient == null || profile == null || text.isBlank()) {
+            if (profile == null) error.value = context.getString(R.string.community_error_sign_in)
+            else if (rootRecipient == null) error.value = context.getString(R.string.community_error_generic_action)
+            return
+        }
         val mentionsUser = USER_MENTION.containsMatchIn(text)
         val replyTarget = CommunityReplyTarget(
             parentId = rootId.takeIf { reviewId == null },
@@ -203,29 +229,27 @@ class RepliesViewModel @Inject constructor(
             replyToUsername = rootRecipient.username.takeIf { !mentionsUser && it.isNotBlank() }
         )
         var echo: CommunityComment? = null
-        launchAction(R.string.community_error_post) {
-            if (profile != null && text.isNotBlank()) {
-                echo = CommunityComment(
-                    id = "pending_${java.util.UUID.randomUUID()}",
-                    mangaId = mangaId,
-                    chapterUrl = chapterUrl,
-                    slug = slug,
-                    sourceId = sourceId,
-                    parentId = replyTarget.parentId,
-                    threadRootId = replyTarget.parentId,
-                    reviewId = reviewId,
-                    replyToUid = replyTarget.replyToUid,
-                    replyToUsername = replyTarget.replyToUsername,
-                    authorUid = profile.uid,
-                    authorName = profile.displayName.ifBlank { profile.username },
-                    authorUsername = profile.username,
-                    authorAvatarUrl = profile.avatarUrl,
-                    text = text.trim(),
-                    spoiler = spoiler,
-                    createdAt = System.currentTimeMillis()
-                )
-                pending.update { it.copy(echoes = it.echoes + echo!!) }
-            }
+        launchAction(R.string.community_error_post, trackSending = true) {
+            echo = CommunityComment(
+                id = "pending_${java.util.UUID.randomUUID()}",
+                mangaId = mangaId,
+                chapterUrl = chapterUrl,
+                slug = slug,
+                sourceId = sourceId,
+                parentId = replyTarget.parentId,
+                threadRootId = replyTarget.parentId,
+                reviewId = reviewId,
+                replyToUid = replyTarget.replyToUid,
+                replyToUsername = replyTarget.replyToUsername,
+                authorUid = profile.uid,
+                authorName = profile.displayName.ifBlank { profile.username },
+                authorUsername = profile.username,
+                authorAvatarUrl = profile.avatarUrl,
+                text = text.trim(),
+                spoiler = spoiler,
+                createdAt = System.currentTimeMillis()
+            )
+            pending.update { it.copy(echoes = it.echoes + echo!!) }
             try {
                 if (chapterUrl == null) {
                     communityRepository.postMangaComment(mangaId, slug, sourceId, text, spoiler, replyTarget)
@@ -233,6 +257,7 @@ class RepliesViewModel @Inject constructor(
                     communityRepository.postChapterComment(mangaId, slug, sourceId, chapterUrl, text, spoiler, replyTarget)
                 }
                 selectedRecipientId.value = null
+                pending.update { it.copy(lastReplySentAt = System.currentTimeMillis()) }
             } catch (t: Throwable) {
                 echo?.let { e -> pending.update { it.copy(echoes = it.echoes - e) } }
                 throw t
@@ -314,8 +339,11 @@ class RepliesViewModel @Inject constructor(
         communityRepository.dislikeReview(review.mangaId, review.id)
     }
 
-    private fun launchAction(fallbackRes: Int, block: suspend () -> Unit) {
-        viewModelScope.launch {
+    private fun launchAction(fallbackRes: Int, trackSending: Boolean = false, block: suspend () -> Unit) {
+        // NonCancellable: navigation away must not abort an in-flight write
+        // the UI already confirmed.
+        viewModelScope.launch(NonCancellable) {
+            if (trackSending) pending.update { it.copy(sendingReplies = it.sendingReplies + 1) }
             try {
                 block()
                 error.value = null
@@ -323,6 +351,8 @@ class RepliesViewModel @Inject constructor(
                 throw throwable
             } catch (throwable: Throwable) {
                 error.value = throwable.message ?: context.getString(fallbackRes)
+            } finally {
+                if (trackSending) pending.update { it.copy(sendingReplies = (it.sendingReplies - 1).coerceAtLeast(0)) }
             }
         }
     }
@@ -358,6 +388,13 @@ fun CommunityRepliesScreen(
     val expandedSpoilers = remember { mutableStateListOf<String>() }
     var replyText by rememberSaveable { mutableStateOf("") }
     var spoiler by rememberSaveable { mutableStateOf(false) }
+    // Clear-on-success: the draft survives until the write lands.
+    androidx.compose.runtime.LaunchedEffect(state.lastReplySentAt) {
+        if (state.lastReplySentAt != null) {
+            replyText = ""
+            spoiler = false
+        }
+    }
     var commentEditor by remember { mutableStateOf<CommunityComment?>(null) }
     var reviewEditor by remember { mutableStateOf<MangaReview?>(null) }
     var reportTarget by remember { mutableStateOf<CommunityTarget?>(null) }
@@ -499,11 +536,8 @@ fun CommunityRepliesScreen(
                     placeholder = stringResource(R.string.community_reply_hint),
                     onValueChange = { replyText = it },
                     onSpoilerChange = { spoiler = it },
-                    onSend = {
-                        viewModel.postReply(replyText.trim(), spoiler)
-                        replyText = ""
-                        spoiler = false
-                    }
+                    onSend = { viewModel.postReply(replyText.trim(), spoiler) },
+                    sending = state.isSending
                 )
             } else {
                 // A-18: guests see why there is no composer (chat parity).

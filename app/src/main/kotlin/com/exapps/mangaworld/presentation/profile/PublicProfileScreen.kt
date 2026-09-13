@@ -75,6 +75,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
@@ -119,11 +120,14 @@ class PublicProfileViewModel @Inject constructor(
 
     private val _readingLists = MutableStateFlow<Map<String, List<FavoriteManga>>>(emptyMap())
 
+    // Freeze guard (same class as CommunityScreen): a throwing source must
+    // fall back instead of starving the combine and pinning the screen on a
+    // blank fallback profile.
     val state = combine(
         combine(
-            communityRepository.observePublicProfile(userId),
-            communityRepository.observePublicLists(userId),
-            communityRepository.observePublicActivity(userId)
+            communityRepository.observePublicProfile(userId).catch { emit(null) },
+            communityRepository.observePublicLists(userId).catch { emit(emptyList()) },
+            communityRepository.observePublicActivity(userId).catch { emit(emptyList()) }
         ) { profile, lists, activity -> Triple(profile, lists, activity) },
         combine(
             _selectedListId,

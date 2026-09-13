@@ -311,15 +311,18 @@ service cloud.firestore {
       }
 
       match /lists/{listId} {
+        // Same legacy-default rule as publicProfiles above: a missing
+        // showListsPublic flag reads as public (app default). A list doc's
+        // OWN isPublic stays fail-closed — a missing flag there denies.
         allow read: if owner(userId) || (
-          get(/databases/$(database)/documents/publicProfiles/$(userId)).data.showListsPublic == true
+          get(/databases/$(database)/documents/publicProfiles/$(userId)).data.get('showListsPublic', true) == true
           && resource.data.isPublic == true
         );
         allow write: if owner(userId);
 
         match /items/{document=**} {
           allow read: if owner(userId) || (
-            get(/databases/$(database)/documents/publicProfiles/$(userId)).data.showListsPublic == true
+            get(/databases/$(database)/documents/publicProfiles/$(userId)).data.get('showListsPublic', true) == true
             && get(/databases/$(database)/documents/users/$(userId)/lists/$(listId)).data.isPublic == true
           );
           allow write: if owner(userId);
@@ -328,7 +331,11 @@ service cloud.firestore {
     }
 
     match /publicProfiles/{userId} {
-      allow read: if resource.data.isPublic == true || owner(userId);
+      // DA-profile: legacy docs predate the isPublic flag — fail OPEN for
+      // reads (the app itself defaults a missing flag to public) so old
+      // profiles don't render blank to other users. Writes always persist
+      // the flag explicitly via upsertProfile.
+      allow read: if owner(userId) || resource.data.get('isPublic', true) == true;
       allow create: if owner(userId)
         && validProfileStrings()
         && request.resource.data.keys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'location', 'birthday', 'badgeLabel', 'createdAt', 'updatedAt']);

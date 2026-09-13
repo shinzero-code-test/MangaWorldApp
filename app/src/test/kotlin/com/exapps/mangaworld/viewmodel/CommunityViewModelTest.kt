@@ -275,6 +275,42 @@ class CommunityViewModelTest {
     }
 
     @Test
+    fun community_postWithoutProfile_setsErrorAndSkipsRepo() {
+        // The old silent skip cleared the composer with zero feedback while
+        // sending nothing — the "vanished comment" report.
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            val vm = newCommunityVm()
+            advanceUntilIdle()
+            vm.postComment("hi", false)
+            advanceUntilIdle()
+            assertNotNull("missing profile must surface, not silently skip", vm.state.value.error)
+            coVerify(exactly = 0) {
+                communityRepo.postMangaComment(any(), any(), any(), any(), any(), any())
+            }
+        }
+    }
+
+    @Test
+    fun community_postSuccess_signalsClearAndResetsSending() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            coEvery { communityRepo.getCurrentProfile() } returns testProfile()
+            val vm = newCommunityVm()
+            advanceUntilIdle()
+            assertNull(vm.state.value.lastCommentSentAt)
+            vm.postComment("hi", false)
+            advanceUntilIdle()
+            val s = vm.state.value
+            assertFalse("sending flag must reset after the write lands", s.isSending)
+            assertNotNull("success must signal the composer to clear", s.lastCommentSentAt)
+            assertNull(s.error)
+        }
+    }
+
+    @Test
     fun community_likeAndReport_forwardToRepository() {
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
@@ -315,6 +351,25 @@ class CommunityViewModelTest {
             assertEquals(listOf("child1", "grand1"), state.replies.map { it.id })
             // New replies default to the root author.
             assertEquals("root1", state.replyTo?.id)
+        }
+    }
+
+    @Test
+    fun replies_postWithoutProfile_setsErrorAndSkipsRepo() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            every { communityRepo.observeMangaComments("m1") } returns flowOf(
+                listOf(testComment("root1", authorUid = "uid-root", createdAt = 1000L))
+            )
+            val vm = newRepliesVm()
+            advanceUntilIdle()
+            vm.postReply("thanks", false)
+            advanceUntilIdle()
+            assertNotNull("missing profile must surface, not silently skip", vm.state.value.error)
+            coVerify(exactly = 0) {
+                communityRepo.postMangaComment(any(), any(), any(), any(), any(), any())
+            }
         }
     }
 
@@ -365,17 +420,34 @@ class CommunityViewModelTest {
     }
 
     @Test
-    fun chat_sendFailure_doesNotCrash() {
+    fun chat_sendFailure_surfacesErrorInsteadOfSilentLoss() {
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             coEvery { communityRepo.sendChatMessage(any(), any()) } throws RuntimeException("offline")
             val vm = newChatVm()
             advanceUntilIdle()
-            // send() wraps in runCatching: the failure must not escape.
+            // send() must not crash AND must not swallow the failure: the
+            // input only clears on success, so an error has to be visible.
             vm.send("hi")
             advanceUntilIdle()
             coVerify { communityRepo.sendChatMessage("global", "hi") }
+            assertNotNull(vm.error.value)
+            assertNull("input must not clear on failure", vm.lastSentAt.value)
+        }
+    }
+
+    @Test
+    fun chat_sendSuccess_signalsClear() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            val vm = newChatVm()
+            advanceUntilIdle()
+            vm.send("hello")
+            advanceUntilIdle()
+            assertNotNull(vm.lastSentAt.value)
+            assertNull(vm.error.value)
         }
     }
 

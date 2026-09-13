@@ -1157,7 +1157,10 @@ class FirebaseCommunityRepository @Inject constructor(
     private fun DocumentSnapshot.toProfile(): CommunityProfile? = runCatching {
         CommunityProfile(
             uid = getString("uid") ?: id,
-            username = getString("username") ?: return null,
+            // Never null the whole profile over a missing username (legacy /
+            // dashboard-provisioned docs): the screen falls back to
+            // displayName / generic label and still shows lists + activity.
+            username = getString("username") ?: "",
             displayName = getString("displayName") ?: "",
             avatarUrl = getString("avatarUrl"),
             bannerUrl = getString("bannerUrl"),

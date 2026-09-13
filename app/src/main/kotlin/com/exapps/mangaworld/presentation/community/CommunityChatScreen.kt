@@ -5,6 +5,7 @@ import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,13 +25,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +60,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -74,6 +81,12 @@ class CommunityChatViewModel @Inject constructor(
     private val _suggestions = MutableStateFlow<List<String>>(emptyList())
     val suggestions = _suggestions.asStateFlow()
 
+    private val _error = MutableStateFlow<String?>(null)
+    val error = _error.asStateFlow()
+
+    private val _lastSentAt = MutableStateFlow<Long?>(null)
+    val lastSentAt = _lastSentAt.asStateFlow()
+
     init {
         viewModelScope.launch {
             messages.collectLatest { latestMessages ->
@@ -83,7 +96,26 @@ class CommunityChatViewModel @Inject constructor(
     }
 
     fun send(text: String) {
-        viewModelScope.launch { runCatching { communityRepository.sendChatMessage(roomId, text) } }
+        if (text.isBlank()) return
+        // NonCancellable + surfaced errors: the old runCatching swallowed
+        // every failure (offline, denied, signed-out) with zero feedback
+        // while the input had already been cleared — a silent message loss.
+        viewModelScope.launch(NonCancellable) {
+            try {
+                communityRepository.sendChatMessage(roomId, text.trim())
+                _error.value = null
+                _lastSentAt.value = System.currentTimeMillis()
+            } catch (throwable: kotlinx.coroutines.CancellationException) {
+                throw throwable
+            } catch (throwable: Throwable) {
+                _error.value = throwable.message
+                    ?: context.getString(R.string.community_error_generic_action)
+            }
+        }
+    }
+
+    fun dismissError() {
+        _error.value = null
     }
 
     fun onSuggestionSelected(reply: String) {
@@ -100,9 +132,27 @@ fun CommunityChatScreen(
     val context = LocalContext.current
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
+    val error by viewModel.error.collectAsStateWithLifecycle()
+    val lastSentAt by viewModel.lastSentAt.collectAsStateWithLifecycle()
     var message by rememberSaveable { mutableStateOf("") }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    Column(Modifier.fillMaxSize().background(MangaColors.Background)) {
+    // Clear-on-success: the draft survives until the write lands.
+    LaunchedEffect(lastSentAt) {
+        if (lastSentAt != null) message = ""
+    }
+    LaunchedEffect(error) {
+        if (error != null) {
+            scope.launch {
+                snackbar.showSnackbar(error!!)
+                viewModel.dismissError()
+            }
+        }
+    }
+
+    Box(Modifier.fillMaxSize().background(MangaColors.Background)) {
+        Column(Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -136,7 +186,7 @@ fun CommunityChatScreen(
             if (isSignedIn) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = message, onValueChange = { message = it }, modifier = Modifier.weight(1f), label = { Text(stringResource(R.string.type_message)) })
-                    IconButton(onClick = { if (message.isNotBlank()) { viewModel.send(message); message = "" } }) {
+                    IconButton(onClick = { if (message.isNotBlank()) viewModel.send(message) }) {
                         Icon(Icons.Filled.Send, contentDescription = stringResource(R.string.accessibility_send), tint = MangaColors.Cyan)
                     }
                 }
@@ -149,6 +199,10 @@ fun CommunityChatScreen(
                 )
             }
         }
+        SnackbarHost(
+            hostState = snackbar,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 
