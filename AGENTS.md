@@ -63,7 +63,7 @@ Dashboard: `dashboard/src/` (Next.js App Router) with `dashboard/vercel.json`, `
 
 - **DI**: Hilt multibindings for scrapers (`@IntoMap @StringKey("sourceId")`) — 18 sources, all match enum ↔ DI ↔ logo drawables
 - **Base scrapers**: `BaseScraperImpl`, `MadaraBaseScraper` (Madara WordPress), `MangaReaderBaseScraper` (MangaReader theme), plus custom scrapers. Shared parsing: `ScraperText.firstChapterNumber()` / `.slugFromHref()` / `.extractViews()`
-- **Room v14**: schemas exported to `app/schemas/` via KSP `room.schemaLocation`. Migrations 8→14 hand-written in `MangaDatabase.kt`. `exportSchema = true`
+- **Room v15**: schemas exported to `app/schemas/` via KSP `room.schemaLocation`. Migrations 8→15 hand-written in `MangaDatabase.kt`. `exportSchema = true`
 - **Favourites vs Reading List**: `FavoriteEntity.isFavorite` boolean separate from `readingStatus` string. `removeFavorite` sets `isFavorite=false` — does NOT delete entity row
 - **No FirebaseFunctions dependency**: External API calls use raw HttpURLConnection or OkHttp
 - **Cloudinary is the ONLY image upload mechanism**: Firebase Storage forbidden. App uploads proxy through dashboard's `POST /api/cloudinary/app-upload`
@@ -138,7 +138,7 @@ Each scraper must:
 - **`combine` max 5 flows**: Use nested combine for 6+
 - **Room migrations**: ALTER TABLE ADD COLUMN works for nullable/defaulted columns. Register in MangaDatabase companion + bump version. Schema JSON auto-exported
 - **Room DB < v8**: no upgrade path by decision (pre-8 DDL unrecoverable, negligible cohort) — missing migration must crash loudly, never wipe (no `fallbackToDestructiveMigration` on upgrade)
-- **Room schemas**: `app/schemas/` is not committed — schemas publish as CI `room-schemas` artifacts; commit the v14 JSONs from there when present
+- **Room schemas**: `app/schemas/` is not committed — schemas publish as CI `room-schemas` artifacts; commit the v15 JSONs from there when present
 - **DropdownMenuItem Material3 BOM 2025.01.00**: Use Text + Modifier.clickable inside DropdownMenu
 - **LazyColumn keys**: Composite unique keys (source_id + url/id) — never bare url or id alone
 - **Cloudflare**: `requiresVerification` triggers WebView solver; cookies expire
