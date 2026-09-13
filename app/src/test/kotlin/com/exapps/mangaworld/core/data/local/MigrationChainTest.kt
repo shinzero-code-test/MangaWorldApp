@@ -1,6 +1,5 @@
 package com.exapps.mangaworld.core.data.local
 
-import androidx.room.Database
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -14,8 +13,9 @@ import org.junit.Test
  * That contract only holds while the 8→current chain has no gaps: a version
  * bump without its Migration turns every older install into a startup crash.
  *
- * Pure JVM — only reads Migration endpoints + the @Database version, never
- * opens a database.
+ * Pure JVM — only reads Migration endpoints plus a mirrored version
+ * constant (Room annotations are CLASS-retained, invisible to reflection),
+ * never opens a database.
  */
 class MigrationChainTest {
 
@@ -29,8 +29,19 @@ class MigrationChainTest {
         MangaDatabase.MIGRATION_14_15
     )
 
-    private val dbVersion: Int =
-        MangaDatabase::class.java.getAnnotation(Database::class.java)!!.version
+    private val dbVersion: Int = CURRENT_VERSION
+
+    companion object {
+        /**
+         * Mirror of `@Database version` in [MangaDatabase] — kept as a plain
+         * constant because Room annotations use CLASS retention and are
+         * invisible to runtime reflection on JVM unit tests
+         * (`getAnnotation(Database::class.java)` returns null). Bump this
+         * alongside `@Database version` AND add the matching Migration above;
+         * the tests below fail loudly if the three drift apart.
+         */
+        const val CURRENT_VERSION = 15
+    }
 
     @Test
     fun chainStartsAtV8WithNoGaps() {

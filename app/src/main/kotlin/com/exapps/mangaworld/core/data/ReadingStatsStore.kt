@@ -230,7 +230,9 @@ class ReadingStatsStore @Inject constructor(
             val obj = JSONObject(json)
             obj.keys().asSequence().associateWith { key -> obj.getInt(key) }.toMutableMap()
         } catch (e: Exception) {
-            Log.w("ReadingStatsStore", "Failed to parse page stats JSON: ${e.message}")
+            // runCatching: android.util.Log is a stub that throws on plain JVM
+            // unit tests — logging must never break the garbage-tolerant path.
+            runCatching { Log.w("ReadingStatsStore", "Failed to parse page stats JSON: ${e.message}") }
             mutableMapOf()
         }
     }
@@ -244,7 +246,7 @@ class ReadingStatsStore @Inject constructor(
             try {
                 parseMap(json).mapValues { it.value.toLong() }.toMutableMap()
             } catch (e2: Exception) {
-                Log.w("ReadingStatsStore", "Failed to parse reading time JSON: ${e2.message}")
+                runCatching { Log.w("ReadingStatsStore", "Failed to parse reading time JSON: ${e2.message}") }
                 mutableMapOf()
             }
         }
