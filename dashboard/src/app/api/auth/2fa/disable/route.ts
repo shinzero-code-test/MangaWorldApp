@@ -10,6 +10,7 @@ import {
   matchBackupCodeHash,
   recordOtpFailure,
   resolveTotpSecret,
+  tryConsumeBackupCode,
   verifyTotpConstantTime,
 } from "@/lib/security";
 
@@ -70,6 +71,16 @@ export async function POST(request: NextRequest) {
     }
     if (totpOk && !(await consumeUsedToken(user.uid, proof))) {
       return NextResponse.json({ error: "رمز التحقق مستخدم مسبقاً" }, { status: 400 });
+    }
+    if (provedByBackupHash) {
+      // D-6: same atomic consume as the validate route — proving with a
+      // backup code must single-use it even though disable clears the whole
+      // list anyway. A concurrent disable/validate with the same code loses.
+      const consumed = await tryConsumeBackupCode(user.uid, provedByBackupHash);
+      if (!consumed) {
+        await recordOtpFailure(user.uid);
+        return NextResponse.json({ error: "رمز التحقق غير صحيح" }, { status: 400 });
+      }
     }
 
     await ref.set(

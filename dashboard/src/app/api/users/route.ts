@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { DASHBOARD_ROLES, requireRole, wouldStrandLastSuperAdmin } from "@/lib/auth";
 import { genericErrorResponse, logSecurityEvent, consumeRateLimit} from "@/lib/security";
+import {
+  isValidUsername,
+  normalizeUsername,
+  releaseUsernameIfOwned,
+  tryClaimUsername,
+} from "@/lib/username";
 
 export const dynamic = 'force-dynamic';
 
@@ -128,10 +134,30 @@ export async function PATCH(request: NextRequest) {
       await logSecurityEvent("role_change", { by: admin.uid, target: uid, role });
     }
     if (username !== undefined) {
-      if (typeof username !== "string" || username.trim().length < 1 || username.length > 64) {
+      // D-4: same UsernameRules + claim enforcement as the [uid] route.
+      if (!isValidUsername(username.trim())) {
         return NextResponse.json({ error: "اسم المستخدم غير صالح" }, { status: 400 });
       }
-      updates.username = username.trim();
+      const nextUsername = username.trim();
+      const profileSnap = await getAdminDb().collection("publicProfiles").doc(uid).get();
+      const prevUsername =
+        typeof profileSnap.data()?.username === "string"
+          ? (profileSnap.data()?.username as string)
+          : "";
+      if (normalizeUsername(prevUsername) !== normalizeUsername(nextUsername)) {
+        const claimed = await tryClaimUsername(uid, nextUsername);
+        if (!claimed) {
+          return NextResponse.json({ error: "اسم المستخدم مستخدم بالفعل" }, { status: 409 });
+        }
+        await releaseUsernameIfOwned(uid, prevUsername);
+        await logSecurityEvent("admin_username_change", {
+          by: admin.uid,
+          target: uid,
+          from: prevUsername || null,
+          to: nextUsername,
+        });
+      }
+      updates.username = nextUsername;
     }
     if (bio !== undefined) {
       if (typeof bio !== "string" || bio.length > 1000) {
@@ -150,6 +176,10 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: "لا يمكن تعطيل آخر مدير عام" }, { status: 400 });
       }
       await getAdminAuth().updateUser(uid, { disabled });
+      if (disabled === true) {
+        // A disabled account must not keep usable sessions.
+        await getAdminAuth().revokeRefreshTokens(uid).catch(() => {});
+      }
       if (disabled !== undefined) {
         await logSecurityEvent("account_disable_toggle", { by: admin.uid, target: uid, disabled });
       }
@@ -164,22 +194,51 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    await requireRole("super-admin");
+    const admin = await requireRole("super-admin");
     const { uid } = await request.json();
     if (typeof uid !== "string" || uid.length < 1 || uid.length > 128) {
       return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+    }
+    if (await wouldStrandLastSuperAdmin(uid, "viewer", undefined)) {
+      return NextResponse.json({ error: "لا يمكن حذف آخر مدير عام" }, { status: 400 });
+    }
+
+    // D-5: capture the username BEFORE deleting the profile so the
+    // usernames/{name} claim can be released — otherwise the name stays
+    // permanently reserved against a dead uid.
+    let claimedUsername: string | null = null;
+    try {
+      const profileSnap = await getAdminDb().collection("publicProfiles").doc(uid).get();
+      const raw = profileSnap.data()?.username;
+      if (typeof raw === "string" && raw) claimedUsername = raw;
+    } catch {
+      /* best-effort */
     }
 
     // Delete user from Auth
     await getAdminAuth().deleteUser(uid);
 
     // Delete profile
-    await getAdminDb().collection("publicProfiles").doc(uid).delete();
+    await getAdminDb().collection("publicProfiles").doc(uid).delete().catch(() => {});
 
     // Delete user subcollections — paginate to completion so residual PII
     // doesn't survive when a subcollection exceeds the first page.
     // devices/lists/notifications leave push tokens + PII behind otherwise.
-    const subcols = ["favorites", "readingHistory", "readerAnnotations", "devices", "lists", "notifications"];
+    // D-5: loginLogs/sessions/preferences/syncTombstones were missing —
+    // without them a "deleted" account's sign-in history, session registry,
+    // settings, and deletion markers survive.
+    const subcols = [
+      "favorites",
+      "readingHistory",
+      "readerAnnotations",
+      "devices",
+      "lists",
+      "notifications",
+      "loginLogs",
+      "sessions",
+      "preferences",
+      "syncTombstones",
+    ];
     for (const subcol of subcols) {
       for (;;) {
         const snap = await getAdminDb().collection("users").doc(uid).collection(subcol).limit(500).get();
@@ -193,9 +252,32 @@ export async function DELETE(request: NextRequest) {
     // 2FA/OTP rows are keyed by uid outside users/ — remove them too.
     await getAdminDb().collection("admin2fa").doc(uid).delete().catch(() => {});
     await getAdminDb().collection("adminOtpAttempts").doc(uid).delete().catch(() => {});
+    // Stale MFA grants for this uid must not stay replayable after delete.
+    try {
+      const grants = await getAdminDb()
+        .collection("adminMfaSessions")
+        .where("uid", "==", uid)
+        .limit(50)
+        .get();
+      if (!grants.empty) {
+        const batch = getAdminDb().batch();
+        grants.docs.forEach((doc: any) => batch.delete(doc.ref));
+        await batch.commit();
+      }
+    } catch {
+      /* best-effort */
+    }
+
+    // D-5: release the username claim iff owned by this uid.
+    if (claimedUsername) {
+      const { releaseUsernameIfOwned } = await import("@/lib/username");
+      await releaseUsernameIfOwned(uid, claimedUsername);
+    }
 
     // Delete user doc
-    await getAdminDb().collection("users").doc(uid).delete();
+    await getAdminDb().collection("users").doc(uid).delete().catch(() => {});
+
+    await logSecurityEvent("admin_user_delete", { by: admin.uid, target: uid });
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

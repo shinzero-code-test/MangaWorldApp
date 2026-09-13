@@ -210,6 +210,36 @@ export function matchBackupCodeHash(candidate: string, hashes: unknown): string 
   return null;
 }
 
+/**
+ * D-6: atomic single-use consumption for TOTP backup codes.
+ *
+ * The old validate/disable routes did read-then-`set()` in two separate
+ * steps with no transaction — two concurrent requests presenting the same
+ * recovery code could both observe it as unused and both succeed (TOCTOU).
+ * This runs the check-and-remove inside one Firestore transaction so the
+ * second contender sees the hash already gone and fails closed.
+ * Returns true when this caller consumed the code, false when it was
+ * already used/missing.
+ */
+export async function tryConsumeBackupCode(uid: string, hash: string): Promise<boolean> {
+  try {
+    return await getAdminDb().runTransaction(async (tx) => {
+      const ref = getAdminDb().collection("admin2fa").doc(uid);
+      const snap = await tx.get(ref);
+      const hashes = snap.data()?.backupCodeHashes;
+      if (!Array.isArray(hashes) || !hashes.includes(hash)) return false;
+      tx.set(
+        ref,
+        { backupCodeHashes: hashes.filter((h: unknown) => h !== hash) },
+        { merge: true }
+      );
+      return true;
+    });
+  } catch {
+    return false;
+  }
+}
+
 // ─── Firestore-backed fixed-window rate limiting ─────────────────────────────
 
 type LimitResult = { allowed: boolean };

@@ -10,6 +10,7 @@ import {
   matchBackupCodeHash,
   recordOtpFailure,
   resolveTotpSecret,
+  tryConsumeBackupCode,
   verifyTotpConstantTime,
 } from "@/lib/security";
 
@@ -68,12 +69,21 @@ export async function POST(request: NextRequest) {
       );
     }
     if (consumedBackupHash) {
+      // D-6: atomic consume — a concurrent request presenting the same code
+      // must fail closed instead of double-spending it.
+      const consumed = await tryConsumeBackupCode(user.uid, consumedBackupHash);
+      if (!consumed) {
+        await recordOtpFailure(user.uid);
+        return NextResponse.json(
+          { error: "رمز التحقق غير صحيح. تأكد من الرمز وحاول مرة أخرى" },
+          { status: 400 }
+        );
+      }
       const remaining = ((doc.data()?.backupCodeHashes as unknown[]) ?? [])
         .filter((h) => h !== consumedBackupHash);
-      await ref.set({ backupCodeHashes: remaining }, { merge: true });
       await logSecurityEvent("2fa_backup_used", {
         uid: user.uid,
-        remaining: remaining.length,
+        remaining: Math.max(0, remaining.length - 1),
       });
     }
 

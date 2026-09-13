@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { clearMfaGrantCookie, deleteCurrentMfaGrant } from "@/lib/auth";
-import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
-import { consumeRateLimit } from "@/lib/security";
+import { getAdminAuth } from "@/lib/firebase-admin";
+import { consumeRateLimit, logSecurityEvent } from "@/lib/security";
+import { ensureDashboardProfile } from "@/lib/username";
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +22,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "بيانات غير صالحة" }, { status: 400 });
     }
 
+    // D-1 note: this server-side password entry point shares the
+    // login-ip/login-email buckets enforced for password-provider tokens in
+    // POST /api/auth/google — the dashboard form currently uses the client
+    // SDK + /api/auth/google instead, so both paths land under one throttle.
     // Credential-stuffing throttle: keyed per IP and per email before we ever
     // hit Identity Toolkit (M-1).
     const ipAttempt = await consumeRateLimit("login-ip", clientIp(request), 20, 15 * 60 * 1000);
@@ -63,18 +69,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const profileDoc = await getAdminDb().collection("publicProfiles").doc(decoded.uid).get();
-    if (!profileDoc.exists) {
-      await getAdminDb().collection("publicProfiles").doc(decoded.uid).set({
-        username: email.split("@")[0],
-        isPublic: false,
-        bio: "",
-        updatedAt: Date.now(),
-      });
-    }
+    // D-3: same claimed-username provisioning as /api/auth/google —
+    // never write a raw email prefix (may be invalid/colliding per app rules).
+    await ensureDashboardProfile(decoded.uid, email.split("@")[0]);
 
-    // 24h TTL (was 7d): session cookies cannot be server-revoked on logout
-    // (Firebase limitation), so a shorter window bounds exfiltrated-cookie use.
+    // 24h TTL (was 7d): bounds exfiltrated-cookie use. Revocation on logout
+    // is handled in DELETE below via revokeRefreshTokens + checkRevoked.
     const expiresIn = 60 * 60 * 24 * 1000;
     const sessionCookie = await getAdminAuth().createSessionCookie(idToken, { expiresIn });
 
@@ -97,7 +97,25 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE() {
-  // Revoke the server-side grant too, so a captured cookie value cannot be
+  // D-2: revoke refresh tokens so verifySessionCookie(..., checkRevoked=true)
+  // fails for the logged-out session afterwards. A copied cookie value can
+  // no longer be replayed for the remainder of its 24h TTL. Best-effort:
+  // an already-expired cookie still logs out (clears browser state).
+  try {
+    const session = (await cookies()).get("session")?.value;
+    if (session) {
+      try {
+        const decoded = await getAdminAuth().verifySessionCookie(session, false);
+        await getAdminAuth().revokeRefreshTokens(decoded.uid);
+        await logSecurityEvent("dashboard_logout_revoke", { uid: decoded.uid });
+      } catch {
+        /* expired/forged cookie — nothing to revoke, still clear locally */
+      }
+    }
+  } catch {
+    /* cookie read must never block logout */
+  }
+  // Revoke the server-side MFA grant too, so a captured grant value cannot be
   // replayed for the remainder of its TTL after logout.
   await deleteCurrentMfaGrant();
   const response = NextResponse.json({ success: true });

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clearMfaGrantCookie, DASHBOARD_ROLES, type DashboardRole } from "@/lib/auth";
-import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
+import { getAdminAuth } from "@/lib/firebase-admin";
 import { consumeRateLimit, logSecurityEvent } from "@/lib/security";
+import { ensureDashboardProfile } from "@/lib/username";
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,35 @@ export async function POST(request: NextRequest) {
     }
 
     const decoded = await getAdminAuth().verifyIdToken(idToken, true);
+    // D-1: the dashboard's email/password form signs in with the client SDK
+    // (signInWithEmailAndPassword) and exchanges the token HERE — the
+    // dedicated login-ip/login-email throttle on POST /api/auth/login never
+    // runs for real logins. Apply those same strict buckets to any token
+    // whose provider is password, so credential-stuffing gets the intended
+    // 20-IP / 10-email budget instead of the looser google buckets above.
+    // Google-OAuth logins keep only the google buckets (phishing-resistant).
+    const signInProvider =
+      (decoded as unknown as { firebase?: { sign_in_provider?: unknown } }).firebase
+        ?.sign_in_provider;
+    if (signInProvider === "password" && decoded.email) {
+      const emailKey = decoded.email
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-zA-Z0-9@._\-]/g, "_");
+      const [strictIp, strictEmail] = await Promise.all([
+        consumeRateLimit("login-ip", clientIp(request), 20, 15 * 60 * 1000),
+        consumeRateLimit("login-email", emailKey, 10, 15 * 60 * 1000),
+      ]);
+      if (!strictIp.allowed || !strictEmail.allowed) {
+        await logSecurityEvent("auth_password_throttled", {
+          email: decoded.email,
+        });
+        return NextResponse.json(
+          { error: "تم إرسال عدد كبير من المحاولات. حاول مرة أخرى لاحقاً." },
+          { status: 429 }
+        );
+      }
+    }
     // Second bucket keyed on the verified address: XFF rotation must not buy
     // a fresh throttle for the same account (IP-only gate stays above).
     if (decoded.email) {
@@ -78,19 +108,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const profileDoc = await getAdminDb().collection("publicProfiles").doc(decoded.uid).get();
-
-    if (!profileDoc.exists) {
-      await getAdminDb().collection("publicProfiles").doc(decoded.uid).set({
-        username: decoded.name || decoded.email?.split("@")[0] || "user",
+    // D-3: auto-provisioned profiles must satisfy the app's UsernameRules
+    // and claim usernames/{username} — the old `decoded.name || prefix`
+    // write bypassed both and could plant invalid/colliding names.
+    await ensureDashboardProfile(
+      decoded.uid,
+      decoded.name || decoded.email?.split("@")[0] || "user",
+      {
         avatarUrl: decoded.picture || "",
-        isPublic: false,
         showListsPublic: false,
         showActivityPublic: false,
-        bio: "",
-        updatedAt: Date.now(),
-      });
-    }
+      }
+    );
 
     // 24h TTL (was 7d): session cookies cannot be server-revoked on logout
     // (Firebase limitation), so a shorter window bounds exfiltrated-cookie use.

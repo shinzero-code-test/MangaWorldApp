@@ -4,6 +4,7 @@
 
 - every push & version bump, create a release tag.
 - For every fix do a patch; for every new feature, do a minor; for important high-impact features, do a major version update.
+- no version bumps for dashboard changes only.
 - Always use string resources. No hardcoded strings.
 - Never build the app locally. Always use CI/CD.
 - git, gh, vercel, Firebase, gcloud CLIs are already installed and authenticated — use them directly.
