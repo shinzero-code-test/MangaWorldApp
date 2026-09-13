@@ -199,6 +199,7 @@ fun CommunityChatScreen(
                 )
             }
         }
+        }
         SnackbarHost(
             hostState = snackbar,
             modifier = Modifier.align(Alignment.BottomCenter)
