@@ -470,6 +470,7 @@ class LocalBackupManager @Inject constructor(
         const val MAX_ID_LENGTH = 512
         const val MAX_TEXT_SHORT = 256
         const val MAX_TEXT_TITLE = 500
+        const val MAX_TEXT_DESC = 500
         const val MAX_URL_LENGTH = 2048
         const val MAX_NOTE_LENGTH = 2000
 
