@@ -49,6 +49,9 @@ export default function DataBrowserPage() {
   const [selected,       setSelected]       = useState<string>("publicProfiles");
   const [docs,           setDocs]           = useState<DocRow[]>([]);
   const [loading,        setLoading]        = useState(false);
+  const [loadingMore,    setLoadingMore]    = useState(false);
+  const [hasMore,        setHasMore]        = useState(false);
+  const [nextCursor,     setNextCursor]     = useState<string | null>(null);
   const [viewDoc,        setViewDoc]        = useState<DocRow | null>(null);
   const [deleteId,       setDeleteId]       = useState<string | null>(null);
   const [deleteLoading,  setDeleteLoading]  = useState(false);
@@ -68,24 +71,38 @@ export default function DataBrowserPage() {
       .catch(() => setCanManage(false));
   }, []);
 
-  const loadCollection = useCallback(async (col: string) => {
-    setLoading(true);
-    setViewDoc(null);
+  const loadCollection = useCallback(async (col: string, cursor?: string | null) => {
+    if (cursor) setLoadingMore(true);
+    else { setLoading(true); setViewDoc(null); }
     try {
       // Explicit limit: the browser must not pull unbounded collections.
-      const data = await api<{ documents?: Record<string, unknown>[]; docs?: Record<string, unknown>[] }>(
-        `/api/firestore/${col}?limit=100`
-      );
-      setDocs(
-        (data.documents ?? data.docs ?? []).map((d: Record<string, unknown>) => ({
-          id:     String(d.id ?? d._id ?? "?"),
-          fields: (d.data ?? d.fields ?? d) as Record<string, unknown>,
-        }))
-      );
+      // DA-2: cursor paging — large collections are reachable past the
+      // first page instead of silently truncating at 100 docs.
+      const url = cursor
+        ? `/api/firestore/${col}?limit=100&startAfter=${encodeURIComponent(cursor)}`
+        : `/api/firestore/${col}?limit=100`;
+      const data = await api<{
+        documents?: Record<string, unknown>[];
+        docs?: Record<string, unknown>[];
+        hasMore?: boolean;
+        nextCursor?: string | null;
+      }>(url);
+      const rows = (data.documents ?? data.docs ?? []).map((d: Record<string, unknown>) => ({
+        id:     String(d.id ?? d._id ?? "?"),
+        fields: (d.data ?? d.fields ?? d) as Record<string, unknown>,
+      }));
+      // De-dupe by id: concurrent creates/deletes between pages can overlap.
+      setDocs((prev) => {
+        if (!cursor) return rows;
+        const seen = new Set(prev.map((d) => d.id));
+        return [...prev, ...rows.filter((d) => !seen.has(d.id))];
+      });
+      setHasMore(data.hasMore ?? false);
+      setNextCursor(data.nextCursor ?? null);
     } catch (e) {
-      if (!isAbortError(e)) setDocs([]);
+      if (!isAbortError(e) && !cursor) setDocs([]);
     }
-    finally  { setLoading(false); }
+    finally  { setLoading(false); setLoadingMore(false); }
   }, []);
 
   useEffect(() => { loadCollection(selected); }, [selected, loadCollection]);
@@ -297,6 +314,19 @@ export default function DataBrowserPage() {
                   ))}
                 </tbody>
               </table>
+              {hasMore && (
+                <div className="flex justify-center px-5 py-3 border-t" style={{ borderColor: "var(--border)" }}>
+                  <button
+                    onClick={() => loadCollection(selected, nextCursor)}
+                    disabled={loadingMore}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition hover:bg-[var(--accent)] disabled:opacity-60"
+                    style={{ color: "var(--primary)" }}
+                  >
+                    {loadingMore && <Loader2 size={14} className="animate-spin" />}
+                    {loadingMore ? "جاري التحميل..." : `تحميل المزيد (${docs.length} معروض)`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

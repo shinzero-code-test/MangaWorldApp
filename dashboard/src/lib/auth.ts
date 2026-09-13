@@ -65,6 +65,9 @@ export async function getDashboardRoleCounts(fresh = false): Promise<Record<Dash
   do {
     const page = await getAdminAuth().listUsers(1000, pageToken);
     page.users.forEach((user) => {
+      // D-7: anonymous guest sessions churn per install and must not inflate
+      // viewer counts on dashboard KPIs (they have no providers).
+      if ((user.providerData?.length ?? 0) === 0) return;
       const role = user.customClaims?.role;
       counts[isDashboardRole(role) ? role : "viewer"] += 1;
     });

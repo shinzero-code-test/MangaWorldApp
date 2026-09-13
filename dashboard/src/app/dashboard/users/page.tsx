@@ -17,6 +17,8 @@ export default function UsersPage() {
   const [users,     setUsers]     = useState<User[]>([]);
   const [total,     setTotal]     = useState(0);
   const [globalRoleCounts, setGlobalRoleCounts] = useState<Record<string, number>>({});
+  const [guestCount, setGuestCount] = useState(0);
+  const [includeGuests, setIncludeGuests] = useState(false);
   const [loading,   setLoading]   = useState(true);
   const [page,      setPage]      = useState(1);
   const [search,    setSearch]    = useState("");
@@ -33,6 +35,8 @@ export default function UsersPage() {
         ...(search     && { search }),
         ...(roleFilter && { role: roleFilter }),
         ...(provFilter && { provider: provFilter }),
+        // D-7: guests excluded server-side by default; opt in to audit them.
+        ...(includeGuests && { includeGuests: "1" }),
       });
       try {
         const res  = await fetch(`/api/users?${params}`, { signal: controller.signal });
@@ -40,6 +44,7 @@ export default function UsersPage() {
         const data = await res.json();
         setUsers(data.users ?? []);
         setTotal(data.total ?? 0);
+        setGuestCount(data.guestCount ?? 0);
         if (data.roleCounts && typeof data.roleCounts === "object") {
           setGlobalRoleCounts(data.roleCounts as Record<string, number>);
         }
@@ -48,7 +53,7 @@ export default function UsersPage() {
       } finally { setLoading(false); }
     }, 300);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [page, search, roleFilter, provFilter]);
+  }, [page, search, roleFilter, provFilter, includeGuests]);
 
   // Global role totals from the server (fleet-wide, not page-scoped).
   const roleCounts = (Object.keys(globalRoleCounts).length > 0)
@@ -58,7 +63,7 @@ export default function UsersPage() {
       }, {} as Record<string, number>);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
-  const hasFilters = !!(search || roleFilter || provFilter);
+  const hasFilters = !!(search || roleFilter || provFilter || includeGuests);
 
   const statChips = [
     { id:"", label:"الكل", count: total, icon: Users },
@@ -69,7 +74,7 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="المستخدمون" subtitle={`${formatAr(total)} مستخدم مسجّل`} icon={Users} />
+      <PageHeader title="المستخدمون" subtitle={`${formatAr(total)} مستخدم مسجّل${guestCount > 0 && !includeGuests ? ` (${formatAr(guestCount)} زائر مخفي)` : ""}`} icon={Users} />
 
       <div className="flex gap-2 flex-wrap">
         {statChips.map(chip => {
@@ -110,9 +115,14 @@ export default function UsersPage() {
           <option value="">كل المزودين</option>
           <option value="google.com">Google</option>
           <option value="password">بريد إلكتروني</option>
+          <option value="anonymous">زائر</option>
         </select>
+        <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none" style={{ color:"var(--muted-foreground)" }}>
+          <input type="checkbox" checked={includeGuests} onChange={e => { setIncludeGuests(e.target.checked); setPage(1); }} />
+          إظهار الزوار
+        </label>
         {hasFilters && (
-          <button onClick={() => { setSearch(""); setRoleFilter(""); setProvFilter(""); setPage(1); }}
+          <button onClick={() => { setSearch(""); setRoleFilter(""); setProvFilter(""); setIncludeGuests(false); setPage(1); }}
             className="px-3 py-1.5 rounded-lg text-sm transition hover:bg-[var(--accent)]"
             style={{ color:"var(--muted-foreground)" }}>
             مسح الفلاتر

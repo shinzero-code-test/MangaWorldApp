@@ -243,10 +243,34 @@ service cloud.firestore {
     // Latent priv-esc guard: role authority is the Auth custom claim, never a
     // Firestore field. Reject role-shaped keys now so no future reader can be
     // fooled by a self-written `role: "super-admin"`.
+    //
+    // DA-4: the sync root doc previously allowed ANY owner-written keys
+    // (blocklist-only). A hijacked session could plant oversized/malformed
+    // fields that every other device then downloads on pull. The allowlist
+    // below mirrors FirebaseSyncManager.pushLocalSnapshot exactly; writes
+    // use SetOptions.merge() so request.resource.data is the POST-merge doc.
+    function validUserSyncDoc() {
+      return request.resource.data.keys().hasOnly(['updatedAt', 'enabledSources', 'theme', 'useDynamicColors', 'secureReaderEnabled', 'notificationDeliveryMode', 'autoCleanupReadDownloads', 'cleanupAfterHours', 'imageCacheLimitMb', 'contentBlacklist', 'spoilerCollapseDefault', 'mutedUserIds', 'totalReadingTimeMs', 'totalMangaRead'])
+        && (!request.resource.data.keys().hasAny(['updatedAt']) || request.resource.data.updatedAt is number)
+        && (!request.resource.data.keys().hasAny(['enabledSources']) || (request.resource.data.enabledSources is list && request.resource.data.enabledSources.size() <= 50))
+        && (!request.resource.data.keys().hasAny(['theme']) || (request.resource.data.theme is string && request.resource.data.theme.size() <= 32))
+        && (!request.resource.data.keys().hasAny(['useDynamicColors']) || request.resource.data.useDynamicColors is bool)
+        && (!request.resource.data.keys().hasAny(['secureReaderEnabled']) || request.resource.data.secureReaderEnabled is bool)
+        && (!request.resource.data.keys().hasAny(['notificationDeliveryMode']) || (request.resource.data.notificationDeliveryMode is string && request.resource.data.notificationDeliveryMode.size() <= 32))
+        && (!request.resource.data.keys().hasAny(['autoCleanupReadDownloads']) || request.resource.data.autoCleanupReadDownloads is bool)
+        && (!request.resource.data.keys().hasAny(['cleanupAfterHours']) || request.resource.data.cleanupAfterHours is number)
+        && (!request.resource.data.keys().hasAny(['imageCacheLimitMb']) || request.resource.data.imageCacheLimitMb is number)
+        && (!request.resource.data.keys().hasAny(['contentBlacklist']) || (request.resource.data.contentBlacklist is list && request.resource.data.contentBlacklist.size() <= 200))
+        && (!request.resource.data.keys().hasAny(['spoilerCollapseDefault']) || request.resource.data.spoilerCollapseDefault is bool)
+        && (!request.resource.data.keys().hasAny(['mutedUserIds']) || (request.resource.data.mutedUserIds is list && request.resource.data.mutedUserIds.size() <= 100))
+        && (!request.resource.data.keys().hasAny(['totalReadingTimeMs']) || request.resource.data.totalReadingTimeMs is number)
+        && (!request.resource.data.keys().hasAny(['totalMangaRead']) || request.resource.data.totalMangaRead is number);
+    }
     match /users/{userId} {
       allow read: if owner(userId);
       allow write: if owner(userId)
-        && !(request.resource.data.keys().hasAny(['role', 'isAdmin', 'isModerator']));
+        && !(request.resource.data.keys().hasAny(['role', 'isAdmin', 'isModerator']))
+        && validUserSyncDoc();
 
       match /favorites/{document=**} {
         allow read, write: if owner(userId);

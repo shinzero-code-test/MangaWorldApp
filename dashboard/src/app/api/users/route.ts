@@ -23,6 +23,10 @@ export async function GET(request: NextRequest) {
     const search = (searchParams.get("search") ?? "").trim().toLowerCase().slice(0, 128);
     const roleFilter = searchParams.get("role") || "";
     const providerFilter = searchParams.get("provider") || "";
+    // D-7: anonymous guest sessions (no providers) churn per install and
+    // used to dominate the operator's list + viewer counts. Excluded by
+    // default; pass includeGuests=1 to audit them explicitly.
+    const includeGuests = searchParams.get("includeGuests") === "1";
     // Clamp pagination: unbounded page/limit turns a full listUsers scan into
     // a DoS/cost vector with giant offsets.
     const page = Math.min(10000, Math.max(1, parseInt(searchParams.get("page") || "1") || 1));
@@ -41,32 +45,67 @@ export async function GET(request: NextRequest) {
       pageToken = result.pageToken;
     } while (pageToken);
 
-    // 2. Map to a unified user object
-    let enriched = allAuthUsers.map(authUser => ({
-      id: authUser.uid,
-      email: authUser.email || null,
-      displayName: authUser.displayName || null,
-      username: authUser.displayName || authUser.email?.split('@')[0] || "مستخدم",
-      role: authUser.customClaims?.role || "viewer",
-      emailVerified: authUser.emailVerified,
-      disabled: authUser.disabled,
-      lastSignIn: authUser.metadata.lastSignInTime,
-      createdAt: authUser.metadata.creationTime,
-      providers: authUser.providerData.map((p: { providerId: string }) => p.providerId),
-      phoneNumber: authUser.phoneNumber || null,
-    }));
+    // 2. Map to a unified user object. Anonymous guests have empty
+    // providerData (no email/password/google) — flag them so the operator
+    // can distinguish churn from real accounts.
+    let enriched = allAuthUsers.map(authUser => {
+      const providers: string[] = authUser.providerData.map((p: { providerId: string }) => p.providerId);
+      const isAnonymous = providers.length === 0;
+      return {
+        id: authUser.uid,
+        email: authUser.email || null,
+        displayName: authUser.displayName || null,
+        username: authUser.displayName || authUser.email?.split('@')[0] || (isAnonymous ? "زائر" : "مستخدم"),
+        role: authUser.customClaims?.role || "viewer",
+        emailVerified: authUser.emailVerified,
+        disabled: authUser.disabled,
+        lastSignIn: authUser.metadata.lastSignInTime,
+        createdAt: authUser.metadata.creationTime,
+        providers,
+        isAnonymous,
+        phoneNumber: authUser.phoneNumber || null,
+      };
+    });
 
-    // Global role counts (pre-filter) so the UI chips show fleet totals,
-    // not just the current page.
+    const guestCount = enriched.filter(u => u.isAnonymous).length;
+    // D-7 audit switch: provider=anonymous lists only guests; otherwise
+    // guests are hidden unless includeGuests=1 is passed explicitly.
+    if (providerFilter === "anonymous") {
+      enriched = enriched.filter(u => u.isAnonymous);
+    } else if (!includeGuests) {
+      enriched = enriched.filter(u => !u.isAnonymous);
+    }
+
+    // Global role counts over the NAMED fleet (pre-filter) so the UI chips
+    // show real totals, not the current page. D-7: guests never inflate
+    // viewer — their volume is reported separately as guestCount.
     const roleCounts: Record<string, number> = { "super-admin": 0, moderator: 0, viewer: 0 };
     for (const u of enriched) {
+      if (u.isAnonymous) continue;
       const r = typeof u.role === "string" && u.role in roleCounts ? u.role : "viewer";
       roleCounts[r] += 1;
+    }
+    if (providerFilter === "anonymous") {
+      // Guest-audit view: enriched holds only guests, so recount chips from
+      // the named fleet instead of showing zeros.
+      for (const k of Object.keys(roleCounts)) roleCounts[k] = 0;
+      for (const authUser of allAuthUsers) {
+        if ((authUser.providerData?.length ?? 0) === 0) continue;
+        const r = typeof authUser.customClaims?.role === "string" && authUser.customClaims.role in roleCounts
+          ? (authUser.customClaims.role as string)
+          : "viewer";
+        roleCounts[r] += 1;
+      }
     }
 
     // 3. Apply filters
     if (roleFilter) enriched = enriched.filter(u => u.role === roleFilter);
-    if (providerFilter) enriched = enriched.filter(u => u.providers.includes(providerFilter));
+    // Anonymous guests carry EMPTY providerData (there is no "anonymous"
+    // providerId) — the guest-audit view above already isolated them, so the
+    // generic includes() check must not wipe that list.
+    if (providerFilter && providerFilter !== "anonymous") {
+      enriched = enriched.filter(u => u.providers.includes(providerFilter));
+    }
     if (search) {
       enriched = enriched.filter(u => 
         u.email?.toLowerCase().includes(search) || 
@@ -101,6 +140,10 @@ export async function GET(request: NextRequest) {
       limit,
       hasMore,
       roleCounts,
+      // D-7: guest volume is reported separately so the operator knows how
+      // much churn is hidden when includeGuests is off.
+      guestCount,
+      includeGuests,
     });
   } catch (error: unknown) {
     const { body, status } = genericErrorResponse(error);
