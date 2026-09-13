@@ -6,10 +6,12 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.backgroundScope
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -67,30 +69,35 @@ class CommunityReadRescueTest {
     fun upstreamError_propagatesToCaller() = runTest {
         val boom = RuntimeException("denied")
         var fallbackRan = false
-        flow<String> { throw boom }.withStarvationFallback(
-            timeoutMs = 5_000L,
-            fallback = { fallbackRan = true; "x" }
-        ).test {
-            assertEquals(boom, awaitError())
+        // Direct collect (no Turbine): the raw upstream failure must surface.
+        val error = try {
+            flow<String> { throw boom }.withStarvationFallback(
+                timeoutMs = 5_000L,
+                fallback = { fallbackRan = true; "x" }
+            ).collect()
+            null
+        } catch (e: Throwable) {
+            e
         }
+        assertSame("upstream failure must propagate raw", boom, error)
         assertTrue("no rescue when upstream fails fast", !fallbackRan)
     }
 
     @Test
     fun failingFallback_reportsButNeverCrashes() = runTest {
         var reported: Throwable? = null
-        val job = launch {
+        // backgroundScope: the collection must stay alive across the time
+        // advance (cancelling Turbine up-front would kill the watchdog
+        // before it ever fires).
+        backgroundScope.launch {
             flow<String> { awaitCancellation() }.withStarvationFallback(
                 timeoutMs = 10L,
                 fallback = { throw RuntimeException("rescue boom") },
                 onFallbackError = { reported = it }
-            ).test {
-                cancelAndIgnoreRemainingEvents()
-            }
+            ).collect()
         }
         advanceTimeBy(100L)
         assertNotNull("rescue failure must reach onFallbackError", reported)
-        job.cancel()
     }
 
     @Test
