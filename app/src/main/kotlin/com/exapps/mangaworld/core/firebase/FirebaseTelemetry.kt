@@ -31,6 +31,20 @@ class FirebaseTelemetry @Inject constructor(
         crashlytics.recordException(throwable)
     }
 
+    /**
+     * Non-fatal for community read-path failures: starved listeners and
+     * failed rescue fetches. The network type is the key diagnostic — a
+     * stalled Watch stream on vpn/other with working unary writes reads
+     * exactly like "saved in Firestore but invisible in the app".
+     */
+    fun logListenerStarvation(surface: String, detail: String, throwable: Throwable) {
+        val network = refreshNetworkTypeKey()
+        crashlytics.log("listener_starvation surface=$surface detail=$detail network=$network error=${throwable.javaClass.simpleName}: ${throwable.message}")
+        crashlytics.setCustomKey("starvation_surface", surface)
+        crashlytics.setCustomKey("starvation_detail", detail)
+        crashlytics.recordException(throwable)
+    }
+
     fun setActiveSource(sourceId: String) {
         crashlytics.setCustomKey("active_source", sourceId)
     }

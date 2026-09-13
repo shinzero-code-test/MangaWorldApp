@@ -51,7 +51,8 @@ class FirebaseCommunityRepository @Inject constructor(
     private val readChapterDao: ReadChapterDao,
     private val remoteConfigManager: FirebaseRemoteConfigManager,
     private val achievementManager: com.exapps.mangaworld.core.data.AchievementManager,
-    private val settingsRepository: com.exapps.mangaworld.domain.repository.SettingsRepository
+    private val settingsRepository: com.exapps.mangaworld.domain.repository.SettingsRepository,
+    private val telemetry: FirebaseTelemetry
 ) : CommunityRepository {
 
     private val firestore = FirebaseFirestore.getInstance()
@@ -59,9 +60,19 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override fun observeMangaComments(mangaId: String): Flow<List<CommunityComment>> =
         observeComments(commentsCollection(mangaId, null))
+            .rescue("community-comments", "manga") {
+                commentsCollection(mangaId, null)
+                    .orderBy("createdAt", Query.Direction.ASCENDING)
+                    .get().await().documents.mapNotNull { it.toComment() }
+            }
 
     override fun observeChapterComments(mangaId: String, chapterUrl: String): Flow<List<CommunityComment>> =
         observeComments(commentsCollection(mangaId, chapterUrl))
+            .rescue("community-comments", "chapter") {
+                commentsCollection(mangaId, chapterUrl)
+                    .orderBy("createdAt", Query.Direction.ASCENDING)
+                    .get().await().documents.mapNotNull { it.toComment() }
+            }
 
     override fun observeReviews(mangaId: String): Flow<List<MangaReview>> = callbackFlow {
         val reg = firestore.collection("community_manga").document(mangaId)
@@ -72,12 +83,19 @@ class FirebaseCommunityRepository @Inject constructor(
                 if (error != null) {
                     android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}")
                     // Same no-starvation guarantee as observeComments.
+                    reportListenError("community-reviews", error)
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toReview() })
             }
         awaitClose { reg.remove() }
+    }.rescue("community-reviews", "manga") {
+        firestore.collection("community_manga").document(mangaId)
+            .collection("reviews")
+            .orderBy("updatedAt", Query.Direction.DESCENDING)
+            .limit(200)
+            .get().await().documents.mapNotNull { it.toReview() }
     }
 
     override fun observeReaderPresenceCount(mangaId: String, chapterUrl: String): Flow<Int> = callbackFlow {
@@ -135,10 +153,19 @@ class FirebaseCommunityRepository @Inject constructor(
                 trySend(messages)
             }
 
-            override fun onCancelled(error: DatabaseError) = Unit
+            override fun onCancelled(error: DatabaseError) {
+                android.util.Log.w("CommunityRepo", "Chat listener cancelled: ${error.code} ${error.message}")
+                trySend(emptyList())
+            }
         }
         query.addValueEventListener(listener)
         awaitClose { ref.removeEventListener(listener) }
+    }.rescue("community-chat", "messages") {
+        realtimeDb.getReference("chatRooms").child(roomId).child("messages")
+            .orderByKey().limitToLast(100)
+            .get().await().children.mapNotNull { child ->
+                (child.value as? Map<String, Any?>)?.toChatMessage(child.key.orEmpty())
+            }.sortedBy { it.createdAt }
     }
 
     override fun observeUserLists(): Flow<List<CustomUserList>> = callbackFlow {
@@ -160,10 +187,12 @@ class FirebaseCommunityRepository @Inject constructor(
     override fun observePublicProfile(userId: String): Flow<CommunityProfile?> = callbackFlow {
         val reg = firestore.collection("publicProfiles").document(userId)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); return@addSnapshotListener }
                 trySend(snapshot?.toProfile())
             }
         awaitClose { reg.remove() }
+    }.rescue("public-profile", "doc") {
+        firestore.collection("publicProfiles").document(userId).get().await().toProfile()
     }
 
     override fun observePublicLists(userId: String): Flow<List<CustomUserList>> = callbackFlow {
@@ -171,10 +200,15 @@ class FirebaseCommunityRepository @Inject constructor(
             .whereEqualTo("isPublic", true)
             .orderBy("updatedAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toCustomUserList() })
             }
         awaitClose { reg.remove() }
+    }.rescue("public-profile", "lists") {
+        firestore.collection("users").document(userId).collection("lists")
+            .whereEqualTo("isPublic", true)
+            .orderBy("updatedAt", Query.Direction.DESCENDING)
+            .get().await().documents.mapNotNull { it.toCustomUserList() }
     }
 
     override fun observePublicActivity(userId: String): Flow<List<CommunityComment>> = callbackFlow {
@@ -183,10 +217,16 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(30)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toComment() })
             }
         awaitClose { reg.remove() }
+    }.rescue("public-profile", "activity") {
+        firestore.collectionGroup("comments")
+            .whereEqualTo("authorUid", userId)
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(30)
+            .get().await().documents.mapNotNull { it.toComment() }
     }
 
     override fun observeModerationReports(): Flow<List<ModerationReport>> = callbackFlow {
@@ -689,14 +729,44 @@ class FirebaseCommunityRepository @Inject constructor(
         }
     }
 
-    private fun observeComments(collection: com.google.firebase.firestore.CollectionReference): Flow<List<CommunityComment>> = callbackFlow {
-        val reg = collection.orderBy("createdAt", Query.Direction.ASCENDING)
+    /**
+     * Listener watchdog: races the live snapshot stream against a one-shot
+     * `get()` so a stalled listener can never pin screens on blank initial
+     * state (reads land via unary RPC even when the Watch stream stalls —
+     * exactly the "saved in Firestore but invisible in the app" report).
+     * Rescue-fetch failures are reported unless plainly offline.
+     */
+    private fun <T> Flow<T>.rescue(
+        surface: String,
+        detail: String,
+        fallback: suspend () -> T
+    ): Flow<T> = withStarvationFallback(LISTENER_STARVATION_TIMEOUT_MS, fallback) { e ->
+        if ((e as? com.google.firebase.firestore.FirebaseFirestoreException)?.code !=
+            com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE
+        ) {
+            runCatching { telemetry.logListenerStarvation(surface, "$detail:rescue", e) }
+        }
+    }
+
+    /**
+     * Reports a failed snapshot listener to Crashlytics — offline stalls are
+     * routine and skipped, but anything else (denied, failed-precondition,
+     * unavailable-index…) is a config bug worth a non-fatal with the surface
+     * that hit it.
+     */
+    private fun reportListenError(surface: String, error: com.google.firebase.firestore.FirebaseFirestoreException) {
+        if (error.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE) return
+        runCatching { telemetry.logListenerStarvation(surface, "listen", error) }
+    }
+
+    private fun observeComments(collection: com.google.firebase.firestore.CollectionReference): Flow<List<CommunityComment>> = callbackFlow {        val reg = collection.orderBy("createdAt", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}")
                     // Never starve collectors: an errored listener that stays
                     // silent freezes every combine() downstream (blank screen,
                     // dead tabs). Emit empty and keep listening for recovery.
+                    reportListenError("community-comments", error)
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
