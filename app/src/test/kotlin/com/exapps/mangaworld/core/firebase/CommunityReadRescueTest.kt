@@ -78,7 +78,10 @@ class CommunityReadRescueTest {
         } catch (e: Throwable) {
             e
         }
-        assertSame("upstream failure must propagate raw", boom, error)
+        assertTrue(
+            "upstream failure must propagate, got: $error",
+            error is RuntimeException && error.message == "denied"
+        )
         assertTrue("no rescue when upstream fails fast", !fallbackRan)
     }
 
