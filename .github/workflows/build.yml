@@ -670,6 +670,11 @@ jobs:
     needs: [ lint-and-test, build-debug, verify-debug-artifacts, build-release, verify-release-artifacts, create-release ]
     if: always()
     steps:
+      - name: Debug release gating contexts
+        run: |
+          echo "ref=${{ github.ref }}"
+          echo "build-release result=${{ needs.build-release.result }}"
+          echo "signed output=[${{ needs.build-release.outputs.signed }}]"
       - name: Summary
         run: |
           echo "## 🎌 MangaWorld Build Summary" >> $GITHUB_STEP_SUMMARY
