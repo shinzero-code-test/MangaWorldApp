@@ -20,6 +20,7 @@ import coil.memory.MemoryCache
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.exapps.mangaworld.core.firebase.FirebaseStartupCoordinator
 import com.exapps.mangaworld.core.firebase.FirebaseSyncWorker
+import com.exapps.mangaworld.core.firebase.ReminderCheckWorker
 import com.exapps.mangaworld.core.firebase.SuggestionNotificationWorker
 import com.exapps.mangaworld.core.firebase.FavoriteDigestScheduler
 import com.exapps.mangaworld.core.firebase.installAppCheckProvider
@@ -135,6 +136,23 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
         // Favorite digest (sole chapter-update sweep) — scheduled via its own
         // Scheduler: 6h, settings/wifi-aware constraints, UPDATE policy (#9).
         applicationScope.launch { favoriteDigestScheduler.schedule() }
+
+        // Inactivity reminders: the startup-time check is always suppressed by
+        // the just-opened guard, so a daily background worker owns the check.
+        // No network constraint — the check is a local history read.
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "reminder_check_periodic",
+            ExistingPeriodicWorkPolicy.UPDATE,
+            PeriodicWorkRequestBuilder<ReminderCheckWorker>(24, TimeUnit.HOURS)
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiresBatteryNotLow(true)
+                        .build()
+                )
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.MINUTES)
+                .addTag("reminder_check")
+                .build()
+        )
     }
 
     private fun scheduleAutoDownload() {

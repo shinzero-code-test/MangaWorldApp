@@ -93,6 +93,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -173,16 +174,30 @@ class CommunityViewModel @Inject constructor(
     private val tab = MutableStateFlow(if (chapterUrl == null) CommunityTab.REVIEWS else CommunityTab.COMMENTS)
     private val error = MutableStateFlow<String?>(null)
     private val pending = MutableStateFlow(PendingUi())
+    // Freeze guard: every upstream below is failure-isolated. A throwing or
+    // never-emitting source used to kill/starve the combine, leaving the
+    // screen on its initial state forever — bare community_title, dead tabs,
+    // empty lists. Now each source falls back and the error banner explains.
     private val mangaTitle = flow {
-        emit(mangaCacheDao.get(mangaId)?.title ?: slug)
+        emit(runCatching { mangaCacheDao.get(mangaId)?.title ?: slug }.getOrDefault(slug))
     }.stateIn(viewModelScope, SharingStarted.Eagerly, slug)
-    private val commentsFlow = if (chapterUrl == null) {
+    private val commentsFlow: Flow<List<CommunityComment>> = (if (chapterUrl == null) {
         communityRepository.observeMangaComments(mangaId)
     } else {
         communityRepository.observeChapterComments(mangaId, chapterUrl)
+    }).catch {
+        error.value = context.getString(R.string.community_error_generic_action)
+        emit(emptyList())
     }
-    private val reviewsFlow = if (chapterUrl == null) communityRepository.observeReviews(mangaId) else flowOf(emptyList())
-    private val profileFlow: Flow<CommunityProfile?> = flow { emit(communityRepository.getCurrentProfile()) }
+    private val reviewsFlow: Flow<List<MangaReview>> =
+        (if (chapterUrl == null) communityRepository.observeReviews(mangaId) else flowOf(emptyList()))
+            .catch {
+                error.value = context.getString(R.string.community_error_generic_action)
+                emit(emptyList())
+            }
+    private val profileFlow: Flow<CommunityProfile?> = flow {
+        emit(runCatching { communityRepository.getCurrentProfile() }.getOrNull())
+    }
 
     val state: StateFlow<CommunityUiState> = combine(
         combine(commentsFlow, reviewsFlow, profileFlow, settingsRepository.getAppSettings()) { comments, reviews, profile, settings ->

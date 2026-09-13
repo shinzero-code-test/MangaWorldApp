@@ -1022,6 +1022,10 @@
     <string name="notif_action_read_now">اقرأ الآن</string>
     <string name="notif_action_add_favorite">إضافة للمفضلة</string>
     <string name="suggestion_notif_extra">\nو %1$d أخرى</string>
+    <string name="suggestion_notif_meta">★ %1$s • %2$s</string>
+    <string name="suggestion_notif_rating_only">★ %1$s</string>
+    <string name="suggestion_genre_separator">، </string>
+    <string name="suggestion_notif_no_desc">اقتراح مختار لك — افتحه لعرض التفاصيل</string>
     <string name="reminder_title">لم نرك منذ فترة!</string>
     <string name="reminder_continue_reading">هل تريد المتابعة في قراءة \"%1$s\"؟</string>
 

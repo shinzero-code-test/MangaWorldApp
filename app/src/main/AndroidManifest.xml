@@ -22,6 +22,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MangaWorld"
         android:usesCleartextTraffic="false"
+        android:enableOnBackInvokedCallback="true"
         android:hardwareAccelerated="true"
         android:largeHeap="true">
 
@@ -62,7 +63,7 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.MangaWorld" />
 
-        <!-- WorkManager foreground service (required for targetSDK 35+) -->
+        <!-- WorkManager foreground service (type declaration required since targetSDK 34) -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"

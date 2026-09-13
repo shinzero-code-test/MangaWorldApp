@@ -137,7 +137,8 @@ data class MangaItem(
     val totalChapters: Int? = null,
     val lastUpdated: Long? = null,
     val isNew: Boolean = false,
-    val url: String = ""
+    val url: String = "",
+    val description: String = ""
 )
 
 data class MangaDetail(

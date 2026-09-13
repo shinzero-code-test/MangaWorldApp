@@ -69,7 +69,12 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("updatedAt", Query.Direction.DESCENDING)
             .limit(200)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
+                if (error != null) {
+                    android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}")
+                    // Same no-starvation guarantee as observeComments.
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toReview() })
             }
         awaitClose { reg.remove() }
@@ -687,7 +692,14 @@ class FirebaseCommunityRepository @Inject constructor(
     private fun observeComments(collection: com.google.firebase.firestore.CollectionReference): Flow<List<CommunityComment>> = callbackFlow {
         val reg = collection.orderBy("createdAt", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
+                if (error != null) {
+                    android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}")
+                    // Never starve collectors: an errored listener that stays
+                    // silent freezes every combine() downstream (blank screen,
+                    // dead tabs). Emit empty and keep listening for recovery.
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toComment() })
             }
         awaitClose { reg.remove() }

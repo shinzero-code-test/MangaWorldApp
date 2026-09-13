@@ -54,14 +54,16 @@ val canSign = resolvedKeystoreFile != null && keystorePassword.isNotBlank() &&
 
 android {
     namespace  = "com.exapps.mangaworld"
-    compileSdk = 35
+    // API 36 (Android 16): Play requires target 36 for updates from Aug 2026.
+    // AGP 8.10+ is the minimum line whose documented max API covers 36.
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.exapps.mangaworld"
         minSdk        = 26
-        targetSdk     = 35
-        versionCode   = 221
-        versionName   = "8.5.2"
+        targetSdk     = 36
+        versionCode   = 222
+        versionName   = "8.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

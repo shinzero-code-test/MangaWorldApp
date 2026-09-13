@@ -44,6 +44,7 @@ import com.exapps.mangaworld.presentation.community.RepliesViewModel
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -184,6 +185,49 @@ class CommunityViewModelTest {
             vm.setTab(CommunityTab.COMMENTS)
             advanceUntilIdle()
             assertEquals(CommunityTab.COMMENTS, vm.state.value.tab)
+        }
+    }
+
+    // Freeze-guard regressions: a throwing source must fall back instead of
+    // killing/starving the combine (screen stuck on its initial state: bare
+    // title, dead tabs, empty lists).
+    @Test
+    fun community_sourcesThrow_stillEmitsEmptyWithErrorAndTabsWork() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            every { communityRepo.observeMangaComments(any()) } returns
+                flow { throw RuntimeException("offline") }
+            every { communityRepo.observeReviews(any()) } returns
+                flow { throw RuntimeException("offline") }
+            val vm = newCommunityVm()
+            advanceUntilIdle()
+            val s = vm.state.value
+            assertTrue(s.comments.isEmpty())
+            assertTrue(s.reviews.isEmpty())
+            assertNotNull("a failed source must surface the error banner, got null", s.error)
+            // Tabs are pure local state: they must respond even with no data.
+            vm.setTab(CommunityTab.COMMENTS)
+            advanceUntilIdle()
+            assertEquals(CommunityTab.COMMENTS, vm.state.value.tab)
+            vm.setTab(CommunityTab.REVIEWS)
+            advanceUntilIdle()
+            assertEquals(CommunityTab.REVIEWS, vm.state.value.tab)
+        }
+    }
+
+    @Test
+    fun community_profileThrow_stillLoadsContent() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            coEvery { communityRepo.getCurrentProfile() } throws RuntimeException("auth down")
+            every { communityRepo.observeMangaComments("m1") } returns
+                flowOf(listOf(testComment("c1", text = "first")))
+            val vm = newCommunityVm()
+            advanceUntilIdle()
+            assertEquals(listOf("c1"), vm.state.value.comments.map { it.id })
+            assertNull(vm.state.value.profile)
         }
     }
 
