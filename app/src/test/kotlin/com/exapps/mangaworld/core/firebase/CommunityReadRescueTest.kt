@@ -73,7 +73,7 @@ class CommunityReadRescueTest {
             flow<String> { throw boom }.withStarvationFallback(
                 timeoutMs = 5_000L,
                 fallback = { fallbackRan = true; "x" }
-            ).collect()
+            ).collect {}
             null
         } catch (e: Throwable) {
             e
@@ -93,7 +93,7 @@ class CommunityReadRescueTest {
                 timeoutMs = 10L,
                 fallback = { throw RuntimeException("rescue boom") },
                 onFallbackError = { reported = it }
-            ).collect()
+            ).collect {}
         }
         advanceTimeBy(100L)
         assertNotNull("rescue failure must reach onFallbackError", reported)
