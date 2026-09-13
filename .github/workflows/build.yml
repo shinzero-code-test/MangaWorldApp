@@ -336,7 +336,7 @@ jobs:
 
   # ─── Release Build ──────────────────────────────────────────────────────────
   build-release:
-    name: Build Release APKs + AAB (All ABIs)
+    name: Build Release APKs (All ABIs)
     runs-on: ubuntu-latest
     needs: [lint-and-test]
     # A skipped lint (tag pushes) must NOT gate the release: needs.*.result
@@ -429,13 +429,6 @@ jobs:
           set -euo pipefail
           ./gradlew :app:assembleRelease --stacktrace
 
-      - name: Build Release AAB
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew :app:bundleRelease --stacktrace
-
       - name: Resolve Firebase app id
         if: github.event_name == 'push' && steps.signing.outputs.signed == 'true'
         id: firebase-app
@@ -489,8 +482,6 @@ jobs:
         run: |
           echo "=== APKs ==="
           find app/build/outputs/apk -name "*.apk" -type f
-          echo "=== AABs ==="
-          find app/build/outputs/bundle -name "*.aab" -type f
 
       # ── Upload APKs per ABI ─────────────────────────────────────────────────
       - name: Upload arm64-v8a Release APK
@@ -532,14 +523,6 @@ jobs:
         with:
           name: MangaWorld-release-universal
           path: app/build/outputs/apk/release/*universal*.apk
-          if-no-files-found: error
-          retention-days: 90
-
-      - name: Upload Release AAB (Play Store)
-        uses: actions/upload-artifact@v4
-        with:
-          name: MangaWorld-release-bundle-aab
-          path: app/build/outputs/bundle/release/*.aab
           if-no-files-found: error
           retention-days: 90
 
@@ -621,7 +604,6 @@ jobs:
             - Android 8.0+ (API 26)
           files: |
             release-artifacts/**/*.apk
-            release-artifacts/**/*.aab
           draft: false
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           fail_on_unmatched_files: true
@@ -664,16 +646,14 @@ jobs:
           merge-multiple: true
           path: verify-release/
 
-      - name: Ensure release APK/AAB exist
+      - name: Ensure release APKs exist
         shell: bash
         run: |
           set -euo pipefail
           apk_count=$(find verify-release -type f -name "*.apk" | wc -l | tr -d ' ')
-          aab_count=$(find verify-release -type f -name "*.aab" | wc -l | tr -d ' ')
           echo "Release APK count: $apk_count"
-          echo "Release AAB count: $aab_count"
-          if [[ "$apk_count" -lt 1 && "$aab_count" -lt 1 ]]; then
-            echo "No release APK/AAB artifacts found." >&2
+          if [[ "$apk_count" -lt 1 ]]; then
+            echo "No release APK artifacts found." >&2
             exit 1
           fi
 
