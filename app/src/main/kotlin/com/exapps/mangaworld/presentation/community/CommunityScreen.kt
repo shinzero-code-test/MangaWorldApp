@@ -87,7 +87,6 @@ import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.components.GlassCard
 import com.exapps.mangaworld.presentation.theme.MangaColors
-import com.exapps.mangaworld.presentation.theme.LocalizedText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -271,6 +270,10 @@ class CommunityViewModel @Inject constructor(
     fun setTab(value: CommunityTab) {
         tab.value = value
     }
+
+    /** Resolves an @mention to a uid for profile navigation. Null when unknown/offline. */
+    suspend fun resolveMention(username: String): String? =
+        runCatching { communityRepository.getUidForUsername(username) }.getOrNull()
 
     fun postComment(text: String, spoiler: Boolean) {
         val profile = state.value.profile
@@ -496,6 +499,16 @@ fun CommunityScreen(
     val gatedReport: (CommunityTarget) -> Unit = { target ->
         if (isSignedIn) reportTarget = target else promptGuest()
     }
+    val unknownUserPrompt = stringResource(R.string.community_mention_unknown)
+    val gatedMention: (String) -> Unit = { name ->
+        if (isSignedIn) {
+            scope.launch {
+                val uid = viewModel.resolveMention(name)
+                if (uid != null) onOpenProfile(uid)
+                else snackbar.showSnackbar(unknownUserPrompt)
+            }
+        } else promptGuest()
+    }
 
     // Scroll once to the focused comment; later like/vote mutations must not
     // yank scroll position back (S-review).
@@ -549,7 +562,8 @@ fun CommunityScreen(
                     onReport = { gatedReport(CommunityTarget.Comment(it)) },
                     onMute = gatedMute,
                     onLike = gatedLike,
-                    onDislike = gatedDislike
+                    onDislike = gatedDislike,
+                    onMentionClick = gatedMention
                 )
 
                 CommunityTab.REVIEWS -> ReviewsContent(
@@ -575,7 +589,8 @@ fun CommunityScreen(
                     onReport = { gatedReport(CommunityTarget.Review(it)) },
                     onMute = gatedMute,
                     onLike = gatedLikeReview,
-                    onDislike = gatedDislikeReview
+                    onDislike = gatedDislikeReview,
+                    onMentionClick = gatedMention
                 )
             }
             if (state.tab == CommunityTab.COMMENTS && isSignedIn) {
@@ -732,7 +747,8 @@ private fun androidx.compose.foundation.layout.ColumnScope.CommentsContent(
     onReport: (CommunityComment) -> Unit,
     onMute: (String) -> Unit,
     onLike: (String) -> Unit,
-    onDislike: (String) -> Unit
+    onDislike: (String) -> Unit,
+    onMentionClick: ((String) -> Unit)? = null
 ) {
     LazyColumn(
         state = listState,
@@ -764,7 +780,8 @@ private fun androidx.compose.foundation.layout.ColumnScope.CommentsContent(
                 onMute = { onMute(comment.authorUid) },
                 onProfileClick = { onProfileClick(comment.authorUid) },
                 onLike = { onLike(comment.id) },
-                onDislike = { onDislike(comment.id) }
+                onDislike = { onDislike(comment.id) },
+                onMentionClick = onMentionClick
             )
         }
     }
@@ -782,7 +799,8 @@ private fun androidx.compose.foundation.layout.ColumnScope.ReviewsContent(
     onReport: (MangaReview) -> Unit,
     onMute: (String) -> Unit,
     onLike: (MangaReview) -> Unit,
-    onDislike: (MangaReview) -> Unit
+    onDislike: (MangaReview) -> Unit,
+    onMentionClick: ((String) -> Unit)? = null
 ) {
     LazyColumn(
         modifier = Modifier.weight(1f),
@@ -832,7 +850,8 @@ private fun androidx.compose.foundation.layout.ColumnScope.ReviewsContent(
                 onReport = { onReport(review) },
                 onMute = { onMute(review.authorUid) },
                 onLike = { onLike(review) },
-                onDislike = { onDislike(review) }
+                onDislike = { onDislike(review) },
+                onMentionClick = onMentionClick
             )
         }
     }
@@ -856,7 +875,8 @@ internal fun CommunityCommentCard(
     onMute: () -> Unit,
     onProfileClick: () -> Unit,
     onLike: () -> Unit,
-    onDislike: () -> Unit
+    onDislike: () -> Unit,
+    onMentionClick: ((String) -> Unit)? = null
 ) {
     var showOverflow by remember { mutableStateOf(false) }
     GlassCard(
@@ -889,7 +909,12 @@ internal fun CommunityCommentCard(
                     Text(stringResource(R.string.community_show_spoiler))
                 }
             } else {
-                LocalizedText(comment.text, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                MentionText(
+                    text = comment.text,
+                    color = MangaColors.OnSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    onMentionClick = onMentionClick
+                )
             }
             CommunityReactionRow(
                 likes = comment.likes,
@@ -914,7 +939,8 @@ internal fun CommunityReviewCard(
     onReport: () -> Unit,
     onMute: () -> Unit,
     onLike: () -> Unit,
-    onDislike: () -> Unit
+    onDislike: () -> Unit,
+    onMentionClick: ((String) -> Unit)? = null
 ) {
     var showOverflow by remember { mutableStateOf(false) }
     GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -946,10 +972,20 @@ internal fun CommunityReviewCard(
                 Text(stringResource(R.string.community_deleted_content), color = MangaColors.Muted, style = MaterialTheme.typography.bodyMedium)
             } else {
                 if (review.title.isNotBlank()) {
-                    LocalizedText(review.title, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold)
+                    MentionText(
+                        review.title,
+                        color = MangaColors.OnSurface,
+                        fontWeight = FontWeight.SemiBold,
+                        onMentionClick = onMentionClick
+                    )
                 }
                 if (review.body.isNotBlank()) {
-                    LocalizedText(review.body, color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    MentionText(
+                        review.body,
+                        color = MangaColors.OnSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        onMentionClick = onMentionClick
+                    )
                 }
             }
             CommunityReactionRow(
@@ -987,7 +1023,10 @@ private fun CommunityAuthorHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CommunityAvatar(name, avatarUrl)
+            // Avatar opens the profile too — previously only the name did.
+            Box(modifier = Modifier.clickable(enabled = !isDeleted, onClick = onProfileClick)) {
+                CommunityAvatar(name, avatarUrl)
+            }
             Column(modifier = Modifier.clickable(enabled = !isDeleted, onClick = onProfileClick)) {
                 Text(name, color = MangaColors.OnSurface, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -212,6 +212,10 @@ class RepliesViewModel @Inject constructor(
         selectedRecipientId.value = null
     }
 
+    /** Resolves an @mention to a uid for profile navigation. Null when unknown/offline. */
+    suspend fun resolveMention(username: String): String? =
+        runCatching { communityRepository.getUidForUsername(username) }.getOrNull()
+
     fun postReply(text: String, spoiler: Boolean) {
         val rootRecipient = state.value.root?.toRecipient()
         val profile = state.value.profile
@@ -412,6 +416,16 @@ fun CommunityRepliesScreen(
     val gatedReport: (CommunityTarget) -> Unit = { target ->
         if (isSignedIn) reportTarget = target else promptGuest()
     }
+    val unknownUserPrompt = stringResource(R.string.community_mention_unknown)
+    val gatedMention: (String) -> Unit = { name ->
+        if (isSignedIn) {
+            scope.launch {
+                val uid = viewModel.resolveMention(name)
+                if (uid != null) onOpenProfile(uid)
+                else snackbar.showSnackbar(unknownUserPrompt)
+            }
+        } else promptGuest()
+    }
     val gatedLikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.likeReview(review) else promptGuest() }
     val gatedDislikeReview: (MangaReview) -> Unit = { review -> if (isSignedIn) viewModel.dislikeReview(review) else promptGuest() }
 
@@ -452,7 +466,8 @@ fun CommunityRepliesScreen(
                                 onMute = { gatedMute(root.value.authorUid) },
                                 onProfileClick = { onOpenProfile(root.value.authorUid) },
                                 onLike = { gatedLike(root.value.id) },
-                                onDislike = { gatedDislike(root.value.id) }
+                                onDislike = { gatedDislike(root.value.id) },
+                                onMentionClick = gatedMention
                             )
 
                             is CommunityTarget.Review -> CommunityReviewCard(
@@ -465,7 +480,8 @@ fun CommunityRepliesScreen(
                                 onReport = { gatedReport(root) },
                                 onMute = { gatedMute(root.value.authorUid) },
                                 onLike = { gatedLikeReview(root.value) },
-                                onDislike = { gatedDislikeReview(root.value) }
+                                onDislike = { gatedDislikeReview(root.value) },
+                                onMentionClick = gatedMention
                             )
                         }
                     }
@@ -501,7 +517,8 @@ fun CommunityRepliesScreen(
                         onMute = { gatedMute(reply.authorUid) },
                         onProfileClick = { onOpenProfile(reply.authorUid) },
                         onLike = { gatedLike(reply.id) },
-                        onDislike = { gatedDislike(reply.id) }
+                        onDislike = { gatedDislike(reply.id) },
+                        onMentionClick = gatedMention
                     )
                 }
             }

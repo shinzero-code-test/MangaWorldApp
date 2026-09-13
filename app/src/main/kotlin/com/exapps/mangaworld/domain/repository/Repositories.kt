@@ -153,6 +153,8 @@ interface CommunityRepository {
     fun observePublicActivity(userId: String): Flow<List<CommunityComment>>
     fun observeModerationReports(): Flow<List<ModerationReport>>
     suspend fun getCurrentProfile(): CommunityProfile?
+    /** Resolves an @username mention to its uid via `usernames/{name}`. Null when unknown/offline. */
+    suspend fun getUidForUsername(username: String): String?
     suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String? = null, bannerUrl: String? = null, displayName: String = "", location: String = "", birthday: Long? = null)
     // A-12: NO default for showLibraryPublic — every caller must pass the
     // current value explicitly, so toggling one switch can never silently

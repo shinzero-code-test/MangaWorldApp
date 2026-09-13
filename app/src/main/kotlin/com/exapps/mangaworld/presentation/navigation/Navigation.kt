@@ -221,6 +221,7 @@ fun MangaNavGraph(
         composable(Screen.Notifications.route) {
             NotificationCenterScreen(
                 onBack = { navController.popBackStack() },
+                onOpenProfile = { userId -> navController.navigate(Screen.PublicProfile.createRoute(userId)) },
                 onNotificationClick = { item ->
                     val mangaId = item.mangaId ?: return@NotificationCenterScreen
                     // Imported/local entries store the full mangaId (imported_xxx) —
@@ -256,7 +257,11 @@ fun MangaNavGraph(
         ) { back ->
             // roomId/title are reserved for the chat screen's future room switcher;
             // nothing consumes them today, so skip decoding entirely (M-review).
-            CommunityChatScreen(onBack = { navController.popBackStack() }, isSignedIn = isSignedIn)
+            CommunityChatScreen(
+                onBack = { navController.popBackStack() },
+                isSignedIn = isSignedIn,
+                onOpenProfile = { userId -> navController.navigate(Screen.PublicProfile.createRoute(userId)) }
+            )
         }
         composable(Screen.Settings.route)    {
             SettingsScreen(

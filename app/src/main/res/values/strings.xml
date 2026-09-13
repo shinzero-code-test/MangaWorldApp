@@ -320,6 +320,7 @@
 
     <!-- ─── User List Dialog ───────────────────────────────────────────────── -->
     <string name="dialog_no_users">لا يوجد مستخدمون حالياً</string>
+    <string name="community_mention_unknown">تعذر العثور على هذا المستخدم</string>
     <string name="dialog_close">إغلاق</string>
     <string name="str_001">  أو  </string>
     <string name="str_002"> الكتابة السحابية</string>

@@ -32,6 +32,7 @@ import android.content.SharedPreferences
 import com.exapps.mangaworld.domain.model.CommunityNotification
 import com.exapps.mangaworld.domain.model.CommunityNotificationType
 import com.exapps.mangaworld.domain.repository.CommunityRepository
+import com.exapps.mangaworld.presentation.community.MentionText
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.awaitClose
@@ -157,6 +158,10 @@ class NotificationCenterViewModel @Inject constructor(
 
     fun toggleUnreadOnly() { _unreadOnly.value = !_unreadOnly.value }
 
+    /** Resolves an @mention in a notification body to a uid. Null when unknown/offline. */
+    suspend fun resolveMention(username: String): String? =
+        runCatching { communityRepository.getUidForUsername(username) }.getOrNull()
+
     fun markRead(id: String) {
         viewModelScope.launch {
             runCatching { communityRepository.markNotificationRead(id) }
@@ -205,14 +210,26 @@ class NotificationCenterViewModel @Inject constructor(
 fun NotificationCenterScreen(
     onBack: () -> Unit,
     onNotificationClick: (UnifiedNotification) -> Unit,
+    onOpenProfile: (String) -> Unit = {},
     viewModel: NotificationCenterViewModel = hiltViewModel()
 ) {
     val items by viewModel.notifications.collectAsStateWithLifecycle()
     val unreadOnly by viewModel.unreadOnly.collectAsStateWithLifecycle()
     val unreadCount by viewModel.unreadCount.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val unknownUserPrompt = stringResource(R.string.community_mention_unknown)
+    fun openMention(username: String) {
+        scope.launch {
+            val uid = viewModel.resolveMention(username)
+            if (uid != null) onOpenProfile(uid)
+            else snackbar.showSnackbar(unknownUserPrompt)
+        }
+    }
 
     Scaffold(
         containerColor = MangaColors.Background,
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.notification_center), color = MangaColors.OnSurface, fontWeight = FontWeight.Bold) },
@@ -302,7 +319,8 @@ fun NotificationCenterScreen(
                             onClick = {
                                 viewModel.markRead(item.id)
                                 onNotificationClick(item)
-                            }
+                            },
+                            onMentionClick = { openMention(it) }
                         )
                     }
                 }
@@ -314,7 +332,8 @@ fun NotificationCenterScreen(
 @Composable
 private fun NotificationCard(
     notification: UnifiedNotification,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onMentionClick: ((String) -> Unit)? = null
 ) {
     val typeIcon = when (notification.type) {
         "reply" -> Icons.Filled.Reply
@@ -366,7 +385,7 @@ private fun NotificationCard(
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer)
         ) {
-            NotificationCardRow(notification, typeIcon, typeColor, typeLabel)
+            NotificationCardRow(notification, typeIcon, typeColor, typeLabel, onMentionClick)
         }
     } else {
         com.exapps.mangaworld.presentation.components.GlassCard(
@@ -374,7 +393,7 @@ private fun NotificationCard(
             glowColors = listOf(MangaColors.PrimaryLight, MangaColors.PrimaryLight)
         ) {
             Box(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-                NotificationCardRow(notification, typeIcon, typeColor, typeLabel)
+                NotificationCardRow(notification, typeIcon, typeColor, typeLabel, onMentionClick)
             }
         }
     }
@@ -385,7 +404,8 @@ private fun NotificationCardRow(
     notification: UnifiedNotification,
     typeIcon: androidx.compose.ui.graphics.vector.ImageVector,
     typeColor: Color,
-    typeLabel: String
+    typeLabel: String,
+    onMentionClick: ((String) -> Unit)? = null
 ) {
     Row(
         Modifier.padding(14.dp),
@@ -420,12 +440,13 @@ private fun NotificationCardRow(
                     Box(Modifier.size(8.dp).clip(CircleShape).background(MangaColors.Primary))
                 }
             }
-            Text(
-                notification.body,
+            MentionText(
+                text = notification.body,
                 color = MangaColors.OnSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                onMentionClick = onMentionClick
             )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

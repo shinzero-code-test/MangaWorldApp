@@ -45,6 +45,21 @@ class FirebaseTelemetry @Inject constructor(
         crashlytics.recordException(throwable)
     }
 
+    /**
+     * Mapper-drop counter: when a snapshot arrives but tolerant mappers drop
+     * rows (strict field reads), the screen looks "empty despite data".
+     * Counts only — no document content ever leaves the device.
+     */
+    fun logMapperDrops(surface: String, received: Int, mapped: Int) {
+        if (received <= mapped) return
+        refreshNetworkTypeKey()
+        val dropped = received - mapped
+        crashlytics.log("mapper_drops surface=$surface received=$received mapped=$mapped dropped=$dropped")
+        crashlytics.setCustomKey("mapper_surface", surface)
+        crashlytics.setCustomKey("mapper_dropped", dropped)
+        crashlytics.recordException(IllegalStateException("mapper dropped $dropped/$received docs on $surface"))
+    }
+
     fun setActiveSource(sourceId: String) {
         crashlytics.setCustomKey("active_source", sourceId)
     }

@@ -4,6 +4,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -117,6 +118,10 @@ class CommunityChatViewModel @Inject constructor(
         _error.value = null
     }
 
+    /** Resolves an @mention to a uid for profile navigation. Null when unknown/offline. */
+    suspend fun resolveMention(username: String): String? =
+        runCatching { communityRepository.getUidForUsername(username) }.getOrNull()
+
     fun onSuggestionSelected(reply: String) {
         analyticsManager.logSmartReplySelected("community_chat", reply.length)
     }
@@ -126,6 +131,7 @@ class CommunityChatViewModel @Inject constructor(
 fun CommunityChatScreen(
     onBack: () -> Unit,
     isSignedIn: Boolean = true,
+    onOpenProfile: (String) -> Unit = {},
     viewModel: CommunityChatViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -163,7 +169,23 @@ fun CommunityChatScreen(
         }
         LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(messages, key = { it.id }) { msg ->
-                ChatBubble(msg)
+                ChatBubble(
+                    message = msg,
+                    onProfileClick = { onOpenProfile(msg.authorUid) },
+                    onMentionClick = { name ->
+                        scope.launch {
+                            if (!isSignedIn) {
+                                snackbar.showSnackbar(context.getString(R.string.community_error_sign_in))
+                            } else {
+                                val uid = viewModel.resolveMention(name)
+                                if (uid != null) onOpenProfile(uid)
+                                else snackbar.showSnackbar(
+                                    context.getString(R.string.community_mention_unknown)
+                                )
+                            }
+                        }
+                    }
+                )
             }
         }
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -207,12 +229,25 @@ fun CommunityChatScreen(
 }
 
 @Composable
-private fun ChatBubble(message: CommunityChatMessage) {
+private fun ChatBubble(
+    message: CommunityChatMessage,
+    onProfileClick: () -> Unit,
+    onMentionClick: ((String) -> Unit)? = null
+) {
     Card(colors = CardDefaults.cardColors(containerColor = MangaColors.SurfaceContainer), shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            LocalizedText(message.authorName, color = MangaColors.OnSurface, fontWeight = FontWeight.Bold)
+            LocalizedText(
+                message.authorName,
+                color = MangaColors.OnSurface,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable(onClick = onProfileClick)
+            )
             Text(message.authorBadge, color = MangaColors.Cyan, style = MaterialTheme.typography.labelSmall)
-            LocalizedText(message.text, color = MangaColors.OnSurfaceVariant)
+            MentionText(
+                text = message.text,
+                color = MangaColors.OnSurfaceVariant,
+                onMentionClick = onMentionClick
+            )
         }
     }
 }

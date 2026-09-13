@@ -87,7 +87,12 @@ class FirebaseCommunityRepository @Inject constructor(
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
-                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toReview() })
+                val reviewDocs = snapshot?.documents.orEmpty()
+                val mappedReviews = reviewDocs.mapNotNull { it.toReview() }
+                if (reviewDocs.size > mappedReviews.size) {
+                    runCatching { telemetry.logMapperDrops("community-reviews", reviewDocs.size, mappedReviews.size) }
+                }
+                trySend(mappedReviews)
             }
         awaitClose { reg.remove() }
     }.rescue("community-reviews", "manga") {
@@ -201,7 +206,12 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("updatedAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); return@addSnapshotListener }
-                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toCustomUserList() })
+                val listDocs = snapshot?.documents.orEmpty()
+                val mappedLists = listDocs.mapNotNull { it.toCustomUserList() }
+                if (listDocs.size > mappedLists.size) {
+                    runCatching { telemetry.logMapperDrops("public-lists", listDocs.size, mappedLists.size) }
+                }
+                trySend(mappedLists)
             }
         awaitClose { reg.remove() }
     }.rescue("public-profile", "lists") {
@@ -218,7 +228,12 @@ class FirebaseCommunityRepository @Inject constructor(
             .limit(30)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); return@addSnapshotListener }
-                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toComment() })
+                val actDocs = snapshot?.documents.orEmpty()
+                val mappedActivity = actDocs.mapNotNull { it.toComment() }
+                if (actDocs.size > mappedActivity.size) {
+                    runCatching { telemetry.logMapperDrops("public-activity", actDocs.size, mappedActivity.size) }
+                }
+                trySend(mappedActivity)
             }
         awaitClose { reg.remove() }
     }.rescue("public-profile", "activity") {
@@ -276,6 +291,12 @@ class FirebaseCommunityRepository @Inject constructor(
         val existing = firestore.collection("publicProfiles").document(uid).get().await().toProfile()
         return existing ?: defaultProfile(uid)
     }
+
+    override suspend fun getUidForUsername(username: String): String? = runCatching {
+        val normalized = username.trim().trimStart('@').lowercase()
+        if (normalized.isBlank()) return null
+        firestore.collection("usernames").document(normalized).get().await().getString("uid")
+    }.getOrNull()
 
     override suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String?, bannerUrl: String?, displayName: String, location: String, birthday: Long?) {
         withContext(NonCancellable) {
@@ -759,7 +780,8 @@ class FirebaseCommunityRepository @Inject constructor(
         runCatching { telemetry.logListenerStarvation(surface, "listen", error) }
     }
 
-    private fun observeComments(collection: com.google.firebase.firestore.CollectionReference): Flow<List<CommunityComment>> = callbackFlow {        val reg = collection.orderBy("createdAt", Query.Direction.ASCENDING)
+    private fun observeComments(collection: com.google.firebase.firestore.CollectionReference): Flow<List<CommunityComment>> = callbackFlow {
+        val reg = collection.orderBy("createdAt", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}")
@@ -770,7 +792,12 @@ class FirebaseCommunityRepository @Inject constructor(
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
-                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toComment() })
+                val docs = snapshot?.documents.orEmpty()
+                val mapped = docs.mapNotNull { it.toComment() }
+                if (docs.size > mapped.size) {
+                    runCatching { telemetry.logMapperDrops("community-comments", docs.size, mapped.size) }
+                }
+                trySend(mapped)
             }
         awaitClose { reg.remove() }
     }
