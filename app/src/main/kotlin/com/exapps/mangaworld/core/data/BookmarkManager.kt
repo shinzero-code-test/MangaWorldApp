@@ -27,7 +27,7 @@ class BookmarkManager @Inject constructor(
     }
 
     fun getBookmarks(mangaId: String): List<Bookmark> {
-        val json = prefs.getString("bookmarks_$mangaId", "[]") ?: return emptyList()
+        val json = prefs.getString("$BOOKMARK_PREFIX$mangaId", "[]") ?: return emptyList()
         return try {
             val arr = JSONArray(json)
             (0 until arr.length()).mapNotNull { i ->
@@ -75,6 +75,45 @@ class BookmarkManager @Inject constructor(
         }
     }
 
+    /** BK-1: full snapshot (mangaId → bookmarks) for local backup export. */
+    fun snapshot(): Map<String, List<Bookmark>> {
+        return prefs.all.mapNotNull { (key, _) ->
+            key.removePrefix(BOOKMARK_PREFIX).takeIf { it != key && it.isNotBlank() }?.let { mangaId ->
+                mangaId to getBookmarks(mangaId)
+            }
+        }.toMap()
+    }
+
+    /**
+     * BK-1: restore a backup snapshot. Id-union per manga (incoming wins ties)
+     * so re-imports and cross-device merges never duplicate or lose marks.
+     */
+    fun restoreBookmarks(incoming: Map<String, List<Bookmark>>) {
+        incoming.forEach { (mangaId, items) ->
+            if (mangaId.isBlank() || items.isEmpty()) return@forEach
+            saveBookmarks(mangaId, mergeBookmarks(getBookmarks(mangaId), items))
+        }
+    }
+
+    /**
+     * Pure id-union, incoming wins on id collision.
+     * Internal for unit tests — SharedPreferences is untestable on JVM.
+     */
+    internal fun mergeBookmarks(
+        existing: List<Bookmark>,
+        incoming: List<Bookmark>
+    ): List<Bookmark> {
+        val byId = existing.associateBy { it.id }.toMutableMap()
+        incoming.forEach { byId[it.id] = it }
+        val existingIds = existing.map { it.id }.toSet()
+        return existing.mapNotNull { byId[it.id] } +
+            incoming.filter { it.id !in existingIds }
+    }
+
+    private companion object {
+        const val BOOKMARK_PREFIX = "bookmarks_"
+    }
+
     private fun saveBookmarks(mangaId: String, bookmarks: List<Bookmark>) {
         val arr = JSONArray()
         bookmarks.forEach { bm ->
@@ -88,6 +127,6 @@ class BookmarkManager @Inject constructor(
             }
             arr.put(obj)
         }
-        prefs.edit().putString("bookmarks_$mangaId", arr.toString()).apply()
+        prefs.edit().putString("$BOOKMARK_PREFIX$mangaId", arr.toString()).apply()
     }
 }

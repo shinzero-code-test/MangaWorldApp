@@ -158,17 +158,31 @@ class ReadingStatsStore @Inject constructor(
                     snapshot.getLong("totalReadingTimeMs")
                 )
             }
+            // BK-4: daily charts merge per-date (max) like the totals — the old
+            // overwrite wiped charts drawn since the export on mixed restores.
             if (snapshot.has("dailyPages")) {
-                prefs[dailyPagesKey] = snapshot.getString("dailyPages")
+                prefs[dailyPagesKey] = mergeIntMapJson(
+                    prefs[dailyPagesKey] ?: "{}",
+                    snapshot.getString("dailyPages")
+                )
             }
             if (snapshot.has("dailyTimeMs")) {
-                prefs[dailyTimeKey] = snapshot.getString("dailyTimeMs")
+                prefs[dailyTimeKey] = mergeLongMapJson(
+                    prefs[dailyTimeKey] ?: "{}",
+                    snapshot.getString("dailyTimeMs")
+                )
             }
             if (snapshot.has("lastReadDate")) {
-                prefs[lastReadDateKey] = snapshot.getString("lastReadDate")
+                prefs[lastReadDateKey] = mergeLastReadDate(
+                    prefs[lastReadDateKey] ?: "",
+                    snapshot.getString("lastReadDate")
+                )
             }
             if (snapshot.has("currentStreak")) {
-                prefs[currentStreakKey] = snapshot.getInt("currentStreak")
+                prefs[currentStreakKey] = maxOf(
+                    prefs[currentStreakKey] ?: 0,
+                    snapshot.getInt("currentStreak")
+                )
             }
             if (snapshot.has("longestStreak")) {
                 prefs[longestStreakKey] = maxOf(
@@ -184,6 +198,31 @@ class ReadingStatsStore @Inject constructor(
             }
         }
     }
+
+    /**
+     * BK-4 merge helpers. Per-date max() is conservative by design: same-device
+     * re-imports stay exact, and cross-device merges never exceed either side
+     * (summing would double-count one device's day onto the other).
+     * Internal for unit tests — DataStore itself is untestable on JVM.
+     */
+    internal fun mergeIntMapJson(localJson: String, incomingJson: String): String {
+        val local = parseMap(localJson)
+        val incoming = parseMap(incomingJson)
+        val merged = (local.keys + incoming.keys)
+            .associateWith { date -> maxOf(local[date] ?: 0, incoming[date] ?: 0) }
+        return mapToJson(merged)
+    }
+
+    internal fun mergeLongMapJson(localJson: String, incomingJson: String): String {
+        val local = parseLongMap(localJson)
+        val incoming = parseLongMap(incomingJson)
+        val merged = (local.keys + incoming.keys)
+            .associateWith { date -> maxOf(local[date] ?: 0L, incoming[date] ?: 0L) }
+        return longMapToJson(merged)
+    }
+
+    internal fun mergeLastReadDate(local: String, incoming: String): String =
+        listOf(local, incoming).filter { it.isNotBlank() }.maxOrNull() ?: ""
 
     /** Parse a JSON object into a mutable Int map (used for page counts). */
     private fun parseMap(json: String): MutableMap<String, Int> {

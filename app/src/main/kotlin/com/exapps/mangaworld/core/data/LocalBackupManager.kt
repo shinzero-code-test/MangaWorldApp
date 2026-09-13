@@ -39,6 +39,8 @@ class LocalBackupManager @Inject constructor(
     private val progressDao: ReadingProgressDao,
     private val annotationDao: ReaderAnnotationDao,
     private val readingStatsStore: ReadingStatsStore,
+    private val collectionManager: CollectionManager,
+    private val bookmarkManager: BookmarkManager,
     private val settingsRepository: SettingsRepository
 ) {
     /** Outcome of a backup import — callers must surface non-success to the user. */
@@ -46,7 +48,9 @@ class LocalBackupManager @Inject constructor(
         data class Success(
             val favorites: Int = 0,
             val history: Int = 0,
-            val readChapters: Int = 0
+            val readChapters: Int = 0,
+            val collections: Int = 0,
+            val bookmarks: Int = 0
         ) : ImportResult
         object Corrupt : ImportResult
         object TooLarge : ImportResult
@@ -57,6 +61,10 @@ class LocalBackupManager @Inject constructor(
     /**
      * Returns false when nothing was written (null output stream) — callers
      * must report failure instead of success.
+     *
+     * BK-3: the document is staged to a temp file first and only then streamed
+     * to [uri] (whose open truncates it). A failure mid-copy deletes the
+     * partial target instead of leaving a truncated backup behind.
      */
     suspend fun exportTo(uri: Uri): Boolean {
         val root = JSONObject().apply {
@@ -67,6 +75,13 @@ class LocalBackupManager @Inject constructor(
             put("readChapters", JSONArray(readChapterDao.getAll().map { it.toJson() }))
             put("progress", JSONArray(progressDao.getAll().map { it.toJson() }))
             put("annotations", JSONArray(annotationDao.getAll().map { it.toJson() }))
+            // BK-1: user-curated collections + bookmarks used to be lost on
+            // every device migration — they now ride along in the backup.
+            put("collections", JSONArray(collectionManager.snapshot().map { it.toJson() }))
+            put("bookmarks", JSONArray(bookmarkManager.snapshot().map { (mangaId, items) ->
+                JSONObject().put("mangaId", mangaId)
+                    .put("items", JSONArray(items.map { it.toJson() }))
+            }))
             // Persist the RAW stored source set: getAppSettings() applies a Remote-Config filter
             // whose filtered view must never be written back, or a temporarily server-disabled
             // source would become permanently disabled after a backup round-trip.
@@ -80,12 +95,24 @@ class LocalBackupManager @Inject constructor(
             runCatching { put("readingStats", readingStatsStore.snapshot()) }
                 .onFailure { Log.w(TAG, "Stats export skipped: ${it.message}") }
         }
-        val out = context.contentResolver.openOutputStream(uri) ?: return false
-        out.bufferedWriter().use {
-            it.write(root.toString(2))
-            it.flush()
+        val text = root.toString(2)
+        val tmp = runCatching {
+            java.io.File.createTempFile("mangaworld-backup", ".json", context.cacheDir)
+                .apply { writeText(text); deleteOnExit() }
+        }.getOrNull() ?: return false
+        try {
+            context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
+                it.write(text)
+                it.flush()
+            } ?: return false
+            return true
+        } catch (e: Exception) {
+            Log.w(TAG, "Backup export failed — removing partial file: ${e.message}")
+            runCatching { context.contentResolver.delete(uri, null, null) }
+            return false
+        } finally {
+            tmp.delete()
         }
-        return true
     }
 
     suspend fun importFrom(uri: Uri): ImportResult {
@@ -137,13 +164,53 @@ class LocalBackupManager @Inject constructor(
             }
         }
 
-        root.optJSONObject("appSettings")?.toAppSettings()?.let { applyAppSettings(it) }
+        // BK-1: collections + bookmarks merge newest-wins / id-union outside
+        // the Room transaction (they live in DataStore/SharedPreferences).
+        var collectionCount = 0
+        root.optJSONArray("collections")?.let { arr ->
+            val parsed = mutableListOf<MangaCollection>()
+            arr.forEachObjects(MAX_ROWS_PER_ARRAY) { row ->
+                runCatching { row.toMangaCollection() }.getOrNull()?.let { parsed.add(it) }
+            }
+            if (parsed.isNotEmpty()) {
+                runCatching { collectionManager.restoreCollections(parsed) }
+                    .onSuccess { collectionCount = parsed.size }
+                    .onFailure { Log.w(TAG, "Collections restore skipped: ${it.message}") }
+            }
+        }
+        var bookmarkCount = 0
+        root.optJSONArray("bookmarks")?.let { arr ->
+            val parsed = mutableMapOf<String, List<Bookmark>>()
+            arr.forEachObjects(MAX_ROWS_PER_ARRAY) { entry ->
+                val mangaId = entry.optString("mangaId").take(MAX_ID_LENGTH)
+                if (mangaId.isBlank()) return@forEachObjects
+                val items = mutableListOf<Bookmark>()
+                entry.optJSONArray("items")?.forEachObjects(MAX_ROWS_PER_ARRAY) { row ->
+                    runCatching { row.toBookmark(mangaId) }.getOrNull()?.let { items.add(it) }
+                }
+                if (items.isNotEmpty()) parsed[mangaId] = items
+            }
+            if (parsed.isNotEmpty()) {
+                runCatching { bookmarkManager.restoreBookmarks(parsed) }
+                    .onSuccess { bookmarkCount = parsed.values.sumOf { it.size } }
+                    .onFailure { Log.w(TAG, "Bookmarks restore skipped: ${it.message}") }
+            }
+        }
+
+        root.optJSONObject("appSettings")?.let { obj ->
+            val parsed = obj.toAppSettings()
+            // BK-2: a backup without enabledSources must not disable everything.
+            val withSources = parsed.copy(
+                enabledSources = obj.effectiveEnabledSources(settingsRepository.getStoredEnabledSources())
+            )
+            applyAppSettings(withSources)
+        }
         root.optJSONObject("readerSettings")?.toReaderSettings()?.let { applyReaderSettings(it) }
         root.optJSONObject("readingStats")?.let { stats ->
             runCatching { readingStatsStore.restore(stats) }
                 .onFailure { Log.w(TAG, "Stats restore skipped: ${it.message}") }
         }
-        return ImportResult.Success(favCount, histCount, readCount)
+        return ImportResult.Success(favCount, histCount, readCount, collectionCount, bookmarkCount)
     }
 
     private suspend fun mergeFavorite(backup: FavoriteEntity) {
@@ -264,6 +331,56 @@ class LocalBackupManager @Inject constructor(
     private fun JSONObject.toProgressEntity() = ReadingProgressEntity(reqId("mangaId"), finiteChapter("chapterNumber"), optInt("currentPage"), optInt("totalPages"), getLong("updatedAt"))
     private fun JSONObject.toAnnotationEntity() = ReaderAnnotationEntity(reqId("mangaId"), capped("chapterUrl", MAX_URL_LENGTH), getInt("pageIndex"), capped("note", MAX_NOTE_LENGTH), optBoolean("isBookmarked"), getLong("updatedAt"))
 
+    /**
+     * BK-2: absent key keeps the stored set (never blank the library);
+     * present-but-empty honors the explicit "disable all".
+     * Internal for unit tests.
+     */
+    internal fun JSONObject.effectiveEnabledSources(stored: Set<String>): Set<String> =
+        if (has("enabledSources")) optJSONArray("enabledSources")?.toStringSet() ?: stored else stored
+
+    private fun JSONObject.toMangaCollection(): MangaCollection {
+        val id = reqId("id").take(MAX_TEXT_SHORT)
+        val name = capped("name", MAX_TEXT_TITLE).also { require(it.isNotBlank()) { "blank name" } }
+        val mangaIds = optJSONArray("mangaIds")?.let { arr ->
+            (0 until minOf(arr.length(), MAX_COLLECTION_ITEMS)).mapNotNull { i ->
+                arr.optString(i).take(MAX_ID_LENGTH).takeIf { it.isNotBlank() }
+            }
+        } ?: emptyList()
+        return MangaCollection(
+            id = id,
+            name = name,
+            description = capped("description", MAX_TEXT_DESC),
+            mangaIds = mangaIds,
+            isPublic = optBoolean("isPublic", false),
+            createdAt = optLong("createdAt"),
+            updatedAt = optLong("updatedAt")
+        )
+    }
+
+    private fun JSONObject.toBookmark(fallbackMangaId: String): Bookmark {
+        val mangaId = optString("mangaId").take(MAX_ID_LENGTH).takeIf { it.isNotBlank() } ?: fallbackMangaId
+        return Bookmark(
+            id = reqId("id").take(MAX_TEXT_SHORT),
+            mangaId = mangaId,
+            chapterUrl = capped("chapterUrl", MAX_URL_LENGTH),
+            pageIndex = optInt("pageIndex"),
+            note = capped("note", MAX_NOTE_LENGTH),
+            createdAt = optLong("createdAt")
+        )
+    }
+
+    private fun MangaCollection.toJson() = JSONObject().apply {
+        put("id", id); put("name", name); put("description", description)
+        put("mangaIds", JSONArray(mangaIds)); put("isPublic", isPublic)
+        put("createdAt", createdAt); put("updatedAt", updatedAt)
+    }
+
+    private fun Bookmark.toJson() = JSONObject().apply {
+        put("id", id); put("mangaId", mangaId); put("chapterUrl", chapterUrl)
+        put("pageIndex", pageIndex); put("note", note); put("createdAt", createdAt)
+    }
+
     private fun AppSettings.toJson() = JSONObject().apply {
         put("theme", theme.name); put("downloadOnWifiOnly", downloadOnWifiOnly); put("autoDownloadNewChapters", autoDownloadNewChapters)
         put("enableNotifications", enableNotifications); put("enabledSources", JSONArray(enabledSources.toList())); put("onboardingCompleted", onboardingCompleted)
@@ -355,6 +472,9 @@ class LocalBackupManager @Inject constructor(
         const val MAX_TEXT_TITLE = 500
         const val MAX_URL_LENGTH = 2048
         const val MAX_NOTE_LENGTH = 2000
+
+        /** Items parsed per collection / bookmark list (hostile-size guard). */
+        const val MAX_COLLECTION_ITEMS = 5000
 
         /** v3: adds `readingStats` and `showLibraryPublic`; imports of v1/v2 remain accepted. */
         const val SCHEMA_VERSION = 3

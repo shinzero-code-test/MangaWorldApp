@@ -112,6 +112,40 @@ class CollectionManager @Inject constructor(
         return collections.first().filter { mangaId in it.mangaIds }
     }
 
+    /** BK-1: full snapshot for local backup export. */
+    suspend fun snapshot(): List<MangaCollection> = collections.first()
+
+    /**
+     * BK-1: restore a backup snapshot. Newest-wins per collection id so an
+     * old backup cannot clobber newer on-device edits.
+     */
+    suspend fun restoreCollections(incoming: List<MangaCollection>) {
+        if (incoming.isEmpty()) return
+        dataStore.edit { prefs ->
+            prefs[collectionsKey] = collectionsToJson(
+                mergeCollections(parseCollections(prefs[collectionsKey] ?: "[]"), incoming)
+            )
+        }
+    }
+
+    /**
+     * Pure newest-wins union (existing order kept, new ids appended).
+     * Internal for unit tests — the DataStore wrapper above is untestable on JVM.
+     */
+    internal fun mergeCollections(
+        existing: List<MangaCollection>,
+        incoming: List<MangaCollection>
+    ): List<MangaCollection> {
+        val byId = existing.associateBy { it.id }.toMutableMap()
+        incoming.forEach { inc ->
+            val cur = byId[inc.id]
+            if (cur == null || inc.updatedAt >= cur.updatedAt) byId[inc.id] = inc
+        }
+        val existingIds = existing.map { it.id }.toSet()
+        return existing.mapNotNull { byId[it.id] } +
+            incoming.filter { it.id !in existingIds }.mapNotNull { byId[it.id] }
+    }
+
     private suspend fun addCollection(collection: MangaCollection) {
         dataStore.edit { prefs ->
             val collections = parseCollections(prefs[collectionsKey] ?: "[]").toMutableList()
