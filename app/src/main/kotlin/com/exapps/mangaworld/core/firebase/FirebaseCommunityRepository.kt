@@ -803,21 +803,44 @@ class FirebaseCommunityRepository @Inject constructor(
         )
     }
 
-    override suspend fun likeComment(commentId: String) {
-        voteOnContent(targetType = "comment", mangaId = null, targetId = commentId, vote = 1)
+    override suspend fun likeComment(commentId: String): com.exapps.mangaworld.domain.model.VoteOutcome {
+        return voteOnContent(targetType = "comment", mangaId = null, targetId = commentId, vote = 1)
     }
 
-    override suspend fun dislikeComment(commentId: String) {
-        voteOnContent(targetType = "comment", mangaId = null, targetId = commentId, vote = -1)
+    override suspend fun dislikeComment(commentId: String): com.exapps.mangaworld.domain.model.VoteOutcome {
+        return voteOnContent(targetType = "comment", mangaId = null, targetId = commentId, vote = -1)
     }
 
-    override suspend fun likeReview(mangaId: String, reviewId: String) {
-        voteOnContent(targetType = "review", mangaId = mangaId, targetId = reviewId, vote = 1)
+    override suspend fun likeReview(mangaId: String, reviewId: String): com.exapps.mangaworld.domain.model.VoteOutcome {
+        return voteOnContent(targetType = "review", mangaId = mangaId, targetId = reviewId, vote = 1)
     }
 
-    override suspend fun dislikeReview(mangaId: String, reviewId: String) {
-        voteOnContent(targetType = "review", mangaId = mangaId, targetId = reviewId, vote = -1)
+    override suspend fun dislikeReview(mangaId: String, reviewId: String): com.exapps.mangaworld.domain.model.VoteOutcome {
+        return voteOnContent(targetType = "review", mangaId = mangaId, targetId = reviewId, vote = -1)
     }
+
+    override suspend fun fetchCommentVote(targetId: String): com.exapps.mangaworld.domain.model.VoteOutcome? = runCatching {
+        if (targetId.isBlank()) return null
+        val snap = firestore.collectionGroup("comments")
+            .whereEqualTo("id", targetId)
+            .limit(1).get().await()
+        val doc = snap.documents.firstOrNull() ?: return null
+        com.exapps.mangaworld.domain.model.VoteOutcome(
+            likes = (doc.getLong("likes") ?: 0L).toInt(),
+            dislikes = (doc.getLong("dislikes") ?: 0L).toInt()
+        )
+    }.getOrNull()
+
+    override suspend fun fetchReviewVote(mangaId: String, reviewId: String): com.exapps.mangaworld.domain.model.VoteOutcome? = runCatching {
+        if (mangaId.isBlank() || reviewId.isBlank()) return null
+        val doc = firestore.collection("community_manga").document(mangaId)
+            .collection("reviews").document(reviewId).get().await()
+        if (!doc.exists()) return null
+        com.exapps.mangaworld.domain.model.VoteOutcome(
+            likes = (doc.getLong("likes") ?: 0L).toInt(),
+            dislikes = (doc.getLong("dislikes") ?: 0L).toInt()
+        )
+    }.getOrNull()
 
     override suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean) {
         withContext(NonCancellable) {
@@ -1096,10 +1119,10 @@ class FirebaseCommunityRepository @Inject constructor(
             }
         }
 
-    private suspend fun voteOnContent(targetType: String, mangaId: String?, targetId: String, vote: Int) {
+    private suspend fun voteOnContent(targetType: String, mangaId: String?, targetId: String, vote: Int): com.exapps.mangaworld.domain.model.VoteOutcome {
         require(targetId.isNotBlank()) { context.getString(R.string.community_error_invalid_content) }
         // Votes must survive navigation like every other community write.
-        withContext(NonCancellable) {
+        return withContext(NonCancellable) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val token = sessionManager.currentIdToken() ?: error(context.getString(R.string.community_error_sign_in))
             val body = org.json.JSONObject().apply {
@@ -1118,6 +1141,17 @@ class FirebaseCommunityRepository @Inject constructor(
                 conn.readTimeout = 5000
                 conn.outputStream.use { output -> output.write(body.toString().toByteArray(Charsets.UTF_8)) }
                 check(conn.responseCode in 200..299) { context.getString(R.string.community_error_vote) }
+                // Authoritative post-vote state (rec-2): drives the optimistic
+                // echo reconcile. Strict read — a body without counts is a
+                // failed vote like any other non-2xx.
+                val json = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+                val action = json.optString("action", "added")
+                com.exapps.mangaworld.domain.model.VoteOutcome(
+                    likes = json.getInt("likes"),
+                    dislikes = json.getInt("dislikes"),
+                    myVote = if (action == "removed") null else vote,
+                    action = action
+                )
             } finally {
                 conn.disconnect()
             }

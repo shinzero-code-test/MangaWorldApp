@@ -195,10 +195,17 @@ interface CommunityRepository {
     suspend fun sendChatMessage(roomId: String = "global", text: String)
     suspend fun reportComment(comment: CommunityComment, reason: String)
     suspend fun reportReview(review: MangaReview, reason: String)
-    suspend fun likeComment(commentId: String)
-    suspend fun dislikeComment(commentId: String)
-    suspend fun likeReview(mangaId: String, reviewId: String)
-    suspend fun dislikeReview(mangaId: String, reviewId: String)
+    suspend fun likeComment(commentId: String): VoteOutcome
+    suspend fun dislikeComment(commentId: String): VoteOutcome
+    suspend fun likeReview(mangaId: String, reviewId: String): VoteOutcome
+    suspend fun dislikeReview(mangaId: String, reviewId: String): VoteOutcome
+    /**
+     * Targeted one-shot re-read of vote counters (rec-4 reconcile for a
+     * stalled Watch stream). Null when the doc is gone/unreadable — the echo
+     * TTL path then owns recovery. Never throws.
+     */
+    suspend fun fetchCommentVote(targetId: String): VoteOutcome?
+    suspend fun fetchReviewVote(mangaId: String, reviewId: String): VoteOutcome?
     suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean)
     suspend fun markNotificationRead(notificationId: String)
     suspend fun markNotificationsRead(ids: List<String>)

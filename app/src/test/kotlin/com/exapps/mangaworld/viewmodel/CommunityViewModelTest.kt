@@ -33,6 +33,7 @@ import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.CommunityReplyTarget
 import com.exapps.mangaworld.domain.model.MangaReview
 import com.exapps.mangaworld.domain.model.ModerationReport
+import com.exapps.mangaworld.domain.model.VoteOutcome
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.community.CommunityChatViewModel
@@ -315,6 +316,8 @@ class CommunityViewModelTest {
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
+            every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
+            coEvery { communityRepo.likeComment(any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
             val vm = newCommunityVm()
             advanceUntilIdle()
             val comment = testComment("c1", text = "first")
@@ -324,6 +327,92 @@ class CommunityViewModelTest {
             coVerify { communityRepo.likeComment("c1") }
             coVerify { communityRepo.reportComment(comment, "spam") }
             assertNull(vm.state.value.error)
+        }
+    }
+
+    // ─── Issue 2: optimistic vote echo ───────────────────────────────────────
+
+    @Test
+    fun community_likeTap_appliesEchoAndHighlightImmediately() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
+            coEvery { communityRepo.likeComment(any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
+            val vm = newCommunityVm()
+            advanceUntilIdle()
+            vm.likeComment("c1")
+            advanceUntilIdle()
+            // Optimistic overlay: server still shows 0/0, UI shows 1/0 + highlight.
+            assertEquals(1, vm.state.value.comments.single { it.id == "c1" }.likes)
+            assertEquals(1, vm.state.value.myVotes["c1"])
+            assertTrue(vm.state.value.votesInFlight.isEmpty())
+            assertNull(vm.state.value.error)
+        }
+    }
+
+    @Test
+    fun community_secondTapWhileInFlight_isDropped() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
+            coEvery { communityRepo.likeComment(any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
+            coEvery { communityRepo.dislikeComment(any()) } returns VoteOutcome(likes = 0, dislikes = 1, myVote = -1)
+            val vm = newCommunityVm()
+            advanceUntilIdle()
+            // Both taps land before the dispatcher runs: the second sees the
+            // in-flight lock and must not fire a second request.
+            vm.likeComment("c1")
+            vm.dislikeComment("c1")
+            advanceUntilIdle()
+            coVerify(exactly = 1) { communityRepo.likeComment("c1") }
+            coVerify(exactly = 0) { communityRepo.dislikeComment(any()) }
+            assertEquals(1, vm.state.value.myVotes["c1"])
+        }
+    }
+
+    @Test
+    fun community_retractTap_clearsHighlight() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
+            coEvery { communityRepo.likeComment(any()) } returnsMany listOf(
+                VoteOutcome(likes = 1, dislikes = 0, myVote = 1, action = "added"),
+                VoteOutcome(likes = 0, dislikes = 0, myVote = null, action = "removed")
+            )
+            val vm = newCommunityVm()
+            advanceUntilIdle()
+            vm.likeComment("c1")
+            advanceUntilIdle()
+            assertEquals(1, vm.state.value.myVotes["c1"])
+            // The 300ms anti-double-tap guard uses wall time: sleep past it so
+            // the deliberate retract is accepted, not deduped.
+            Thread.sleep(350)
+            vm.likeComment("c1")
+            advanceUntilIdle()
+            assertNull(vm.state.value.myVotes["c1"])
+            assertEquals(0, vm.state.value.comments.single { it.id == "c1" }.likes)
+        }
+    }
+
+    @Test
+    fun community_voteFailure_evictsEchoAndSetsError() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
+            coEvery { communityRepo.likeComment(any()) } throws RuntimeException("offline")
+            val vm = newCommunityVm()
+            advanceUntilIdle()
+            vm.likeComment("c1")
+            advanceUntilIdle()
+            // Failed write must not leave a lying echo/highlight behind.
+            assertEquals(0, vm.state.value.comments.single { it.id == "c1" }.likes)
+            assertNull(vm.state.value.myVotes["c1"])
+            assertTrue(vm.state.value.votesInFlight.isEmpty())
+            assertNotNull(vm.state.value.error)
         }
     }
 

@@ -71,6 +71,10 @@ export async function POST(request: NextRequest) {
       return { likes: transition.likes, dislikes: transition.dislikes, changed: transition.changed, action: transition.action };
     });
 
+    // myVote mirrors the transition for the client's optimistic echo: the
+    // retracted vote reads back as "no vote" (null), anything else echoes
+    // the cast value.
+
     // Like/dislike fan-out (best-effort — the vote is already committed).
     // Clients cannot write to another user's notifications (owner-only rule),
     // so the server creates the REVIEW_REACTION doc + FCM via Admin SDK.
@@ -122,7 +126,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, ...result });
+    return NextResponse.json({
+      success: true,
+      ...result,
+      myVote: result.action === "removed" ? null : payload.vote,
+    });
   } catch (error) {
     if (error instanceof ContentNotFoundError) {
       return NextResponse.json({ error: "المحتوى غير موجود" }, { status: 404 });

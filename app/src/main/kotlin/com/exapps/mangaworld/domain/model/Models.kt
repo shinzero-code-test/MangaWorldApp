@@ -513,6 +513,18 @@ data class CommunityNotification(
     val read: Boolean = false
 )
 
+/**
+ * Authoritative result of a like/dislike vote (server transaction).
+ * All-defaults so relaxed test doubles stay safe. `myVote`: 1 = liked,
+ * -1 = disliked, null = retracted/no vote.
+ */
+data class VoteOutcome(
+    val likes: Int = 0,
+    val dislikes: Int = 0,
+    val myVote: Int? = null,
+    val action: String = "added"
+)
+
 data class ModerationReport(
     val id: String,
     val commentId: String,

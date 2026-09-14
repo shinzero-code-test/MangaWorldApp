@@ -97,7 +97,11 @@ data class RepliesUiState(
     /** A reply send is in flight — composer locks + shows progress. */
     val isSending: Boolean = false,
     /** Last successful reply send (ms epoch) — composer clears on change. */
-    val lastReplySentAt: Long? = null
+    val lastReplySentAt: Long? = null,
+    /** This client's vote per target id (1 / -1) — drives button highlight. */
+    val myVotes: Map<String, Int> = emptyMap(),
+    /** Targets with a vote request in flight — their buttons lock. */
+    val votesInFlight: Set<String> = emptySet()
 )
 
 /** Local overlay of a reply/edit until the authoritative snapshot lands (v8 #6). */
@@ -114,7 +118,15 @@ private data class ReplyPending(
     val edits: Map<String, PendingReplyEdit> = emptyMap(),
     val reviewEdits: Map<String, PendingRootReviewEdit> = emptyMap(),
     val sendingReplies: Int = 0,
-    val lastReplySentAt: Long? = null
+    val lastReplySentAt: Long? = null,
+    /** Optimistic vote overlays by target id (shared semantics with CommunityScreen). */
+    val voteEchoes: Map<String, VoteEcho> = emptyMap(),
+    /** This client's vote by target id (1 / -1); absent = none. */
+    val myVotes: Map<String, Int> = emptyMap(),
+    /** Targets with a vote request in flight — buttons lock. */
+    val voteInFlight: Set<String> = emptySet(),
+    /** Last accepted tap per target (ms epoch) — 300ms double-tap guard. */
+    val lastVoteTapMs: Map<String, Long> = emptyMap()
 )
 
 @HiltViewModel
@@ -160,8 +172,21 @@ class RepliesViewModel @Inject constructor(
             ReplyBits(selectedId, currentError, pd)
         }
     ) { data, bits ->
+        val now = System.currentTimeMillis()
+        // Vote echoes overlay counters as server + delta until the snapshot
+        // lands the expected counts (Issue 2). Declared before root so the
+        // thread root card gets the same overlay as replies.
+        fun applyVoteEcho(id: String, likes: Int, dislikes: Int): Pair<Int, Int> {
+            val echo = bits.pending.voteEchoes[id]
+                ?.takeIf { now - it.at < ECHO_TTL_MS && (likes != it.expectedLikes || dislikes != it.expectedDislikes) }
+                ?: return likes to dislikes
+            return maxOf(0, likes + echo.dLikes) to maxOf(0, dislikes + echo.dDislikes)
+        }
         val root = if (reviewId == null) {
-            data.comments.firstOrNull { it.id == rootId }?.let { CommunityTarget.Comment(it) }
+            data.comments.firstOrNull { it.id == rootId }?.let {
+                val (likes, dislikes) = applyVoteEcho(it.id, it.likes, it.dislikes)
+                CommunityTarget.Comment(it.copy(likes = likes, dislikes = dislikes))
+            }
         } else {
             data.reviews.firstOrNull { it.id == reviewId }?.let { review ->
                 // Pending edit overlay: edited content renders immediately
@@ -170,10 +195,10 @@ class RepliesViewModel @Inject constructor(
                     ?.takeIf { review.updatedAt < it.at - EDIT_LANDED_TOLERANCE_MS }
                     ?.let { review.copy(title = it.title, body = it.body, rating = it.rating) }
                     ?: review
-                CommunityTarget.Review(edited)
+                val (likes, dislikes) = applyVoteEcho(edited.id, edited.likes, edited.dislikes)
+                CommunityTarget.Review(edited.copy(likes = likes, dislikes = dislikes))
             }
         }
-        val now = System.currentTimeMillis()
         // Optimistic overlays (v8 #6): apply pending edits, then append echoes that
         // the snapshot has not reflected yet.
         val liveReplies = flattenLegacyAndFlatReplies(
@@ -181,10 +206,12 @@ class RepliesViewModel @Inject constructor(
             else data.comments.filter { it.reviewId == reviewId },
             rootId
         ).map { c ->
-            bits.pending.edits[c.id]
+            val edited = bits.pending.edits[c.id]
                 ?.takeIf { (c.editedAt ?: 0L) < it.at - EDIT_LANDED_TOLERANCE_MS }
                 ?.let { c.copy(text = it.text, spoiler = it.spoiler) }
                 ?: c
+            val (likes, dislikes) = applyVoteEcho(c.id, edited.likes, edited.dislikes)
+            edited.copy(likes = likes, dislikes = dislikes)
         }
         val echoed = bits.pending.echoes.filter { echo ->
             now - echo.createdAt < ECHO_TTL_MS &&
@@ -202,7 +229,9 @@ class RepliesViewModel @Inject constructor(
             appSettings = data.settings,
             error = bits.currentError,
             isSending = bits.pending.sendingReplies > 0,
-            lastReplySentAt = bits.pending.lastReplySentAt
+            lastReplySentAt = bits.pending.lastReplySentAt,
+            myVotes = bits.pending.myVotes,
+            votesInFlight = bits.pending.voteInFlight
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, RepliesUiState())
 
@@ -327,20 +356,147 @@ class RepliesViewModel @Inject constructor(
         settingsRepository.setMutedUserIds(muted + uid)
     }
 
-    fun likeComment(commentId: String) = launchAction(R.string.community_error_vote) {
-        communityRepository.likeComment(commentId)
+    fun likeComment(commentId: String) = castCommentVote(commentId, 1)
+
+    fun dislikeComment(commentId: String) = castCommentVote(commentId, -1)
+
+    fun likeReview(review: MangaReview) = castReviewVote(review, 1)
+
+    fun dislikeReview(review: MangaReview) = castReviewVote(review, -1)
+
+    /**
+     * Optimistic vote pipeline, mirroring CommunityViewModel (Issue 2):
+     * instant echo + highlight, in-flight lock + 300ms dedupe, authoritative
+     * reconcile on response, 2s snapshot-confirm with targeted re-fetch.
+     */
+    private fun castCommentVote(commentId: String, tappedVote: Int) {
+        val now = System.currentTimeMillis()
+        val snapshot = pending.value
+        if (commentId in snapshot.voteInFlight) return
+        if (now - (snapshot.lastVoteTapMs[commentId] ?: 0L) < VOTE_TAP_DEBOUNCE_MS) return
+        val server = state.value.replies.firstOrNull { it.id == commentId }
+            ?: (state.value.root as? CommunityTarget.Comment)?.value?.takeIf { it.id == commentId }
+            ?: return
+        castVote(
+            targetId = commentId,
+            tappedVote = tappedVote,
+            serverCounts = server.likes to server.dislikes,
+            priorMyVote = snapshot.myVotes[commentId],
+            post = { v -> if (v == 1) communityRepository.likeComment(commentId) else communityRepository.dislikeComment(commentId) },
+            serverCountsNow = {
+                state.value.replies.firstOrNull { it.id == commentId }?.let { it.likes to it.dislikes }
+                    ?: (state.value.root as? CommunityTarget.Comment)?.value
+                        ?.takeIf { it.id == commentId }?.let { it.likes to it.dislikes }
+            },
+            fetch = { communityRepository.fetchCommentVote(commentId)?.let { it.likes to it.dislikes } }
+        )
     }
 
-    fun dislikeComment(commentId: String) = launchAction(R.string.community_error_vote) {
-        communityRepository.dislikeComment(commentId)
+    private fun castReviewVote(review: MangaReview, tappedVote: Int) {
+        val now = System.currentTimeMillis()
+        val snapshot = pending.value
+        if (review.id in snapshot.voteInFlight) return
+        if (now - (snapshot.lastVoteTapMs[review.id] ?: 0L) < VOTE_TAP_DEBOUNCE_MS) return
+        castVote(
+            targetId = review.id,
+            tappedVote = tappedVote,
+            serverCounts = review.likes to review.dislikes,
+            priorMyVote = snapshot.myVotes[review.id],
+            post = { v -> if (v == 1) communityRepository.likeReview(review.mangaId, review.id) else communityRepository.dislikeReview(review.mangaId, review.id) },
+            serverCountsNow = {
+                (state.value.root as? CommunityTarget.Review)?.value
+                    ?.takeIf { it.id == review.id }?.let { it.likes to it.dislikes }
+            },
+            fetch = { communityRepository.fetchReviewVote(review.mangaId, review.id)?.let { it.likes to it.dislikes } }
+        )
     }
 
-    fun likeReview(review: MangaReview) = launchAction(R.string.community_error_vote) {
-        communityRepository.likeReview(review.mangaId, review.id)
+    private fun castVote(
+        targetId: String,
+        tappedVote: Int,
+        serverCounts: Pair<Int, Int>,
+        priorMyVote: Int?,
+        post: suspend (Int) -> com.exapps.mangaworld.domain.model.VoteOutcome,
+        serverCountsNow: () -> Pair<Int, Int>?,
+        fetch: suspend () -> Pair<Int, Int>?
+    ) {
+        val now = System.currentTimeMillis()
+        val chained = pending.value.voteEchoes[targetId]
+        val echo = computeVoteEcho(
+            targetId = targetId,
+            tappedVote = tappedVote,
+            previousMyVote = chained?.myVote ?: priorMyVote,
+            baseLikes = chained?.expectedLikes ?: serverCounts.first,
+            baseDislikes = chained?.expectedDislikes ?: serverCounts.second,
+            at = now
+        )
+        pending.update {
+            it.copy(
+                voteEchoes = it.voteEchoes + (targetId to echo),
+                myVotes = if (echo.myVote == null) it.myVotes - targetId else it.myVotes + (targetId to echo.myVote),
+                voteInFlight = it.voteInFlight + targetId,
+                lastVoteTapMs = it.lastVoteTapMs + (targetId to now)
+            )
+        }
+        launchAction(R.string.community_error_vote) {
+            val outcome = try {
+                post(tappedVote)
+            } catch (throwable: CancellationException) {
+                throw throwable
+            } catch (throwable: Throwable) {
+                pending.update {
+                    it.copy(
+                        voteEchoes = it.voteEchoes - targetId,
+                        myVotes = if (priorMyVote == null) it.myVotes - targetId else it.myVotes + (targetId to priorMyVote),
+                        voteInFlight = it.voteInFlight - targetId
+                    )
+                }
+                throw throwable
+            }
+            pending.update {
+                it.copy(
+                    voteEchoes = it.voteEchoes + (targetId to echo.copy(
+                        myVote = outcome.myVote,
+                        expectedLikes = outcome.likes,
+                        expectedDislikes = outcome.dislikes,
+                        at = System.currentTimeMillis()
+                    )),
+                    myVotes = if (outcome.myVote == null) it.myVotes - targetId else it.myVotes + (targetId to outcome.myVote),
+                    voteInFlight = it.voteInFlight - targetId
+                )
+            }
+            confirmVoteEcho(targetId, serverCountsNow, fetch)
+        }
     }
 
-    fun dislikeReview(review: MangaReview) = launchAction(R.string.community_error_vote) {
-        communityRepository.dislikeReview(review.mangaId, review.id)
+    private suspend fun confirmVoteEcho(
+        targetId: String,
+        serverCountsNow: () -> Pair<Int, Int>?,
+        fetch: suspend () -> Pair<Int, Int>?
+    ) {
+        kotlinx.coroutines.delay(VOTE_CONFIRM_DELAY_MS)
+        if (targetId !in pending.value.voteEchoes) return
+        // Fast path: the snapshot already carries the write — evict silently.
+        val live = serverCountsNow()
+        val current = pending.value.voteEchoes[targetId]
+        if (current != null && live != null
+            && live.first == current.expectedLikes && live.second == current.expectedDislikes
+        ) {
+            pending.update { it.copy(voteEchoes = it.voteEchoes - targetId) }
+            return
+        }
+        if (current == null) return
+        // Slow Watch: one-shot re-read decides — match extends the echo,
+        // anything else (or unreadable) evicts and lets server truth rule.
+        val fresh = runCatching { fetch() }.getOrNull() ?: return
+        pending.update { cur ->
+            val echo = cur.voteEchoes[targetId] ?: return@update cur
+            if (fresh.first == echo.expectedLikes && fresh.second == echo.expectedDislikes) {
+                cur.copy(voteEchoes = cur.voteEchoes + (targetId to echo.copy(at = System.currentTimeMillis())))
+            } else {
+                cur.copy(voteEchoes = cur.voteEchoes - targetId)
+            }
+        }
     }
 
     private fun launchAction(fallbackRes: Int, trackSending: Boolean = false, block: suspend () -> Unit) {
@@ -467,6 +623,8 @@ fun CommunityRepliesScreen(
                                 onProfileClick = { onOpenProfile(root.value.authorUid) },
                                 onLike = { gatedLike(root.value.id) },
                                 onDislike = { gatedDislike(root.value.id) },
+                                myVote = state.myVotes[root.value.id],
+                                votesEnabled = root.value.id !in state.votesInFlight,
                                 onMentionClick = gatedMention
                             )
 
@@ -481,6 +639,8 @@ fun CommunityRepliesScreen(
                                 onMute = { gatedMute(root.value.authorUid) },
                                 onLike = { gatedLikeReview(root.value) },
                                 onDislike = { gatedDislikeReview(root.value) },
+                                myVote = state.myVotes[root.value.id],
+                                votesEnabled = root.value.id !in state.votesInFlight,
                                 onMentionClick = gatedMention
                             )
                         }
@@ -518,6 +678,8 @@ fun CommunityRepliesScreen(
                         onProfileClick = { onOpenProfile(reply.authorUid) },
                         onLike = { gatedLike(reply.id) },
                         onDislike = { gatedDislike(reply.id) },
+                        myVote = state.myVotes[reply.id],
+                        votesEnabled = reply.id !in state.votesInFlight,
                         onMentionClick = gatedMention
                     )
                 }
