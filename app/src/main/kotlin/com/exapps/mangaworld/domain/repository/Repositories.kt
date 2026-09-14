@@ -155,12 +155,6 @@ interface CommunityRepository {
     suspend fun getCurrentProfile(): CommunityProfile?
     /** Resolves an @mention to its uid via `usernames/{name}`. Null when unknown/offline. */
     suspend fun getUidForUsername(username: String): String?
-    /** Live follow state of the current user toward [targetUid]. False when signed out. */
-    fun observeIsFollowing(targetUid: String): Flow<Boolean>
-    /** Follows [targetUid]. No-op for self-follow; throws on failure. */
-    suspend fun followUser(targetUid: String)
-    /** Unfollows [targetUid]. Idempotent; throws on failure. */
-    suspend fun unfollowUser(targetUid: String)
     suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String? = null, bannerUrl: String? = null, displayName: String = "", location: String = "", birthday: Long? = null)
     // A-12: NO default for showLibraryPublic — every caller must pass the
     // current value explicitly, so toggling one switch can never silently

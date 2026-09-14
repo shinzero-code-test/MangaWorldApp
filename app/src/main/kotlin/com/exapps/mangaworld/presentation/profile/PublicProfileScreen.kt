@@ -112,7 +112,7 @@ class PublicProfileViewModel @Inject constructor(
     // Real follow state: observed from relationships/{me}/following/{them}.
     // The write path is NonCancellable + the button renders this flow, so a
     // failed toggle snaps back by itself instead of lying.
-    val isFollowing: StateFlow<Boolean> = communityRepository.observeIsFollowing(userId)
+    val isFollowing: StateFlow<Boolean> = communityRepository.isFollowing(userId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val _selectedListId = MutableStateFlow<String?>(null)

@@ -40,7 +40,7 @@ class PublicProfileFollowTest {
     fun setup() {
         clearMocks(communityRepo, libraryRepo, sessionManager)
         every { sessionManager.currentUserId() } returns "me"
-        every { communityRepo.observeIsFollowing(any()) } returns flowOf(false)
+        every { communityRepo.isFollowing(any()) } returns flowOf(false)
     }
 
     @After
@@ -60,7 +60,7 @@ class PublicProfileFollowTest {
         val dispatcher = StandardTestDispatcher()
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
-            every { communityRepo.observeIsFollowing("them") } returns flowOf(true)
+            every { communityRepo.isFollowing("them") } returns flowOf(true)
             val vm = newVm()
             advanceUntilIdle()
             assertTrue(vm.isFollowing.value)
@@ -87,7 +87,7 @@ class PublicProfileFollowTest {
         val dispatcher = StandardTestDispatcher()
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
-            every { communityRepo.observeIsFollowing("them") } returns flowOf(true)
+            every { communityRepo.isFollowing("them") } returns flowOf(true)
             val vm = newVm()
             advanceUntilIdle()
             vm.toggleFollow()
