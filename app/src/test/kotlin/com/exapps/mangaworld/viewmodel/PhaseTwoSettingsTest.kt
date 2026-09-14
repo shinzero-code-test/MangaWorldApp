@@ -12,6 +12,7 @@ import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.CustomUserList
 import com.exapps.mangaworld.domain.model.CustomUserListItem
 import com.exapps.mangaworld.domain.repository.CommunityRepository
+import com.exapps.mangaworld.domain.repository.ProfilePrivacyFlag
 import com.exapps.mangaworld.domain.repository.SecurityRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.profile.ProfileSettingsViewModel
@@ -419,20 +420,34 @@ class PhaseTwoSettingsTest {
     // ─── C-cluster: profile & accounts ────────────────────────────────────
 
     @Test
-    fun updatePrivacy_preservesLibraryFlag() {
+    fun privacyFlagWrites_neverTouchSiblingFlags() {
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             stubBase()
-            // User previously hid their library: toggling other switches must
-            // not silently re-enable it (A-12 regression test).
-            coEvery { communityRepo.getCurrentProfile() } returns
-                CommunityProfile(uid = "u1", username = "old", showLibraryPublic = false)
+            // Named user (guests are gated before any write).
+            val named = mockk<FirebaseUser>(relaxed = true)
+            every { named.isAnonymous } returns false
+            every { sessionManager.currentUser() } returns named
             val vm = createVm()
             advanceUntilIdle()
-            vm.updatePrivacy(showLists = true, showActivity = true, isPublic = true)
+            // Toggling lists/activity must not silently rewrite the library
+            // flag (A-12 class, now structurally impossible: single-key merge).
+            vm.setPrivacyFlag(ProfilePrivacyFlag.SHOW_LISTS_PUBLIC, true)
+            vm.setPrivacyFlag(ProfilePrivacyFlag.SHOW_ACTIVITY_PUBLIC, false)
             advanceUntilIdle()
-            coVerify { communityRepo.updateProfilePrivacy(true, true, false) }
+            coVerify(exactly = 1) {
+                communityRepo.updateProfilePrivacyFlag(ProfilePrivacyFlag.SHOW_LISTS_PUBLIC, true)
+            }
+            coVerify(exactly = 1) {
+                communityRepo.updateProfilePrivacyFlag(ProfilePrivacyFlag.SHOW_ACTIVITY_PUBLIC, false)
+            }
+            coVerify(exactly = 0) {
+                communityRepo.updateProfilePrivacyFlag(ProfilePrivacyFlag.SHOW_LIBRARY_PUBLIC, any())
+            }
+            coVerify(exactly = 0) {
+                communityRepo.updateProfilePrivacyFlag(ProfilePrivacyFlag.IS_PUBLIC, any())
+            }
         }
     }
 
