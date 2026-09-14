@@ -170,6 +170,43 @@ jobs:
         working-directory: dashboard
         run: npm run lint
 
+  # ─── Firestore Rules Verification ───────────────────────────────────────────
+  # Boots the Firestore emulator with the shipped rules + indexes and replays
+  # the app's exact public-library query (visitor/owner/denied/legacy/anon).
+  # A rules change that breaks provability or privacy fails here instead of in
+  # prod (PL-1). Tag pushes skip like every other check job.
+  firestore-rules:
+    name: Firestore Rules Verification
+    runs-on: ubuntu-latest
+    if: "!startsWith(github.ref, 'refs/tags/')"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Install dependencies
+        working-directory: dashboard
+        run: npm ci
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Verify rules in emulator
+        run: firebase emulators:exec --only firestore "node scripts/verify-firestore-rules.mjs"
+        working-directory: dashboard
+
   # ─── Debug Build ────────────────────────────────────────────────────────────
   build-debug:
     name: Build Debug APKs (All ABIs)
@@ -338,12 +375,12 @@ jobs:
   build-release:
     name: Build Release APKs (All ABIs)
     runs-on: ubuntu-latest
-    needs: [lint-and-test]
-    # A skipped lint (tag pushes) must NOT gate the release: needs.*.result
+    needs: [lint-and-test, firestore-rules]
+    # A skipped check (tag pushes) must NOT gate the release: needs.*.result
     # would otherwise skip this job too. Branch pushes still require green
-    # lint/tests; tag pushes (already validated on main) proceed regardless.
+    # lint/tests/rules; tag pushes (already validated on main) proceed regardless.
     if: |
-      always() && (needs.lint-and-test.result == 'success' || startsWith(github.ref, 'refs/tags/')) && (
+      always() && ((needs.lint-and-test.result == 'success' && needs.firestore-rules.result == 'success') || startsWith(github.ref, 'refs/tags/')) && (
         github.event_name == 'push' ||
         startsWith(github.ref, 'refs/tags/v') ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both'))
@@ -661,7 +698,7 @@ jobs:
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [ lint-and-test, build-debug, verify-debug-artifacts, build-release, verify-release-artifacts, create-release ]
+    needs: [ lint-and-test, firestore-rules, build-debug, verify-debug-artifacts, build-release, verify-release-artifacts, create-release ]
     if: always()
     steps:
       - name: Debug release gating contexts
@@ -676,6 +713,7 @@ jobs:
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Lint & Tests | ${{ needs.lint-and-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Firestore Rules | ${{ needs.firestore-rules.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Debug APKs | ${{ needs.build-debug.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ABIs Built" >> $GITHUB_STEP_SUMMARY

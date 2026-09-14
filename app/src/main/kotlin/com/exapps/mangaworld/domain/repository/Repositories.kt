@@ -137,6 +137,17 @@ interface SettingsRepository {
     suspend fun removeMutedUser(uid: String)
 }
 
+/**
+ * Visitor-library load outcome. `Ready` carries rows — empty means
+ * hidden-or-genuinely-empty. `Failed` means the query definitively errored
+ * (missing index, config, offline): UI must show "temporarily unavailable",
+ * never the misleading empty placeholder.
+ */
+sealed interface PublicLibraryState {
+    data class Ready(val items: List<FavoriteManga>) : PublicLibraryState
+    data object Failed : PublicLibraryState
+}
+
 interface CommunityRepository {
     fun observeMangaComments(mangaId: String): Flow<List<CommunityComment>>
     fun observeChapterComments(mangaId: String, chapterUrl: String): Flow<List<CommunityComment>>
@@ -154,9 +165,13 @@ interface CommunityRepository {
     /**
      * Public reading-status library for visitors (Firestore `users/{uid}/favorites`
      * filtered to readingStatus rows). Gated server-side by
-     * `publicProfiles.showLibraryPublic`. Empty when hidden/private/denied.
+     * `publicProfiles.showLibraryPublic`.
+     *
+     * `Ready` carries rows — empty means hidden-or-empty. `Failed` means the
+     * query definitively errored (index/config/offline): callers must render
+     * "temporarily unavailable", never the misleading empty placeholder.
      */
-    fun observePublicLibrary(userId: String): Flow<List<FavoriteManga>>
+    fun observePublicLibrary(userId: String): Flow<PublicLibraryState>
     fun observeModerationReports(): Flow<List<ModerationReport>>
     suspend fun getCurrentProfile(): CommunityProfile?
     /** Resolves an @mention to its uid via `usernames/{name}`. Null when unknown/offline. */

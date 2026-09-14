@@ -45,6 +45,7 @@ import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
 import com.exapps.mangaworld.core.firebase.CloudinaryUploader
 import com.exapps.mangaworld.core.firebase.AccountMergeRequiredException
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
+import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
 import com.exapps.mangaworld.core.firebase.ProviderManagementRequiresSignInException
 import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.CommunityProfile
@@ -79,6 +80,7 @@ class ProfileSettingsViewModel @Inject constructor(
     private val communityRepository: CommunityRepository,
     private val settingsRepository: SettingsRepository,
     private val sessionManager: FirebaseSessionManager,
+    private val syncManager: FirebaseSyncManager,
     private val securityRepository: SecurityRepository,
     private val favoriteDao: FavoriteDao,
     private val historyDao: ReadingHistoryDao,
@@ -365,13 +367,30 @@ class ProfileSettingsViewModel @Inject constructor(
     fun toggleBiometric(enabled: Boolean) { viewModelScope.launch { settingsRepository.setBiometricLock(enabled) } }
     fun toggleShowLibraryPublic(enabled: Boolean) {
         viewModelScope.launch {
-            settingsRepository.setShowLibraryPublic(enabled)
-            val c = communityRepository.getCurrentProfile()
-            communityRepository.updateProfilePrivacy(
-                c?.showListsPublic ?: true,
-                c?.showActivityPublic ?: true,
-                enabled
-            )
+            // Guests have no syncable library — the rules now reject anonymous
+            // profile writes, so stop at a sign-in prompt instead of a denial.
+            if (sessionManager.currentUser()?.isAnonymous != false) {
+                _saveError.value = context.getString(R.string.settings_provider_guest_error)
+                return@launch
+            }
+            val result = runCatching {
+                // Never invent sibling flags: a missing/failed profile read
+                // aborts instead of resetting lists/activity to true (the
+                // A-12 class of bug, pointed at the other two flags).
+                val c = communityRepository.getCurrentProfile()
+                    ?: error(context.getString(R.string.profile_save_failed))
+                settingsRepository.setShowLibraryPublic(enabled)
+                communityRepository.updateProfilePrivacy(
+                    c.showListsPublic,
+                    c.showActivityPublic,
+                    enabled
+                )
+                // Enabling "public" must result in data being present: push now
+                // instead of leaving a stale/empty cloud library behind.
+                if (enabled) syncManager.pushLocalSnapshot(force = true)
+            }
+            result.onSuccess { refreshProfile() }
+                .onFailure { _saveError.value = context.getString(R.string.profile_save_failed) }
         }
     }
     fun signOut() {
@@ -957,7 +976,12 @@ fun ProfileSettingsScreen(
                 }
             }
             Section(stringResource(R.string.settings_privacy), Icons.Filled.Visibility, MangaColors.Yellow, "privacy", expandedSection, onToggle = { expandedSection = it }) {
-                PrivacySection(profile?.isPublic ?: true, profile?.showListsPublic ?: true, profile?.showActivityPublic ?: true, appSettings.showLibraryPublic, blockedUsers.size,
+                // PL-4: all four flags render from the CLOUD profile (single
+                // source of truth). The local DataStore pref lies after
+                // reinstall (resets true) while the cloud flag may be false.
+                PrivacySection(profile?.isPublic ?: true, profile?.showListsPublic ?: true, profile?.showActivityPublic ?: true, profile?.showLibraryPublic ?: true, blockedUsers.size,
+                    isGuest = isGuest,
+                    onGuestTap = { viewModel.promptGuestSignIn() },
                     onTogglePublic = { p -> viewModel.updatePrivacy(profile?.showListsPublic ?: true, profile?.showActivityPublic ?: true, p) },
                     onToggleLists = { l -> viewModel.updatePrivacy(l, profile?.showActivityPublic ?: true, profile?.isPublic ?: true) },
                     onToggleActivity = { a -> viewModel.updatePrivacy(profile?.showListsPublic ?: true, a, profile?.isPublic ?: true) },
@@ -1183,14 +1207,24 @@ private fun Section(title: String, icon: ImageVector, tint: Color, key: String, 
     }
 }
 
-@Composable private fun PrivacySection(isPublic: Boolean, showLists: Boolean, showActivity: Boolean, showLibraryPublic: Boolean, blockedCount: Int, onTogglePublic: (Boolean) -> Unit, onToggleLists: (Boolean) -> Unit, onToggleActivity: (Boolean) -> Unit, onToggleShowLibraryPublic: (Boolean) -> Unit, onShowBlockedUsers: () -> Unit) {
+@Composable private fun PrivacySection(isPublic: Boolean, showLists: Boolean, showActivity: Boolean, showLibraryPublic: Boolean, blockedCount: Int, isGuest: Boolean, onGuestTap: () -> Unit, onTogglePublic: (Boolean) -> Unit, onToggleLists: (Boolean) -> Unit, onToggleActivity: (Boolean) -> Unit, onToggleShowLibraryPublic: (Boolean) -> Unit, onShowBlockedUsers: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Public, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.public_account), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = isPublic, onCheckedChange = onTogglePublic, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.List, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_show_lists_public), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = showLists, onCheckedChange = onToggleLists, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.History, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_show_activity_public), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = showActivity, onCheckedChange = onToggleActivity, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.LibraryBooks, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_show_library_public), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = showLibraryPublic, onCheckedChange = onToggleShowLibraryPublic, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
+        // A-16 for privacy: guests can never back these flags with synced data
+        // (anonymous pushes no-op; rules reject anonymous profile writes), so
+        // toggles intercept to the sign-in prompt instead of failing silently.
+        if (isGuest) {
+            Text(stringResource(R.string.privacy_guest_note), color = MangaColors.Muted, style = MaterialTheme.typography.bodySmall)
+        }
+        PrivacyToggleRow(Icons.Filled.Public, stringResource(R.string.public_account), isPublic, isGuest, onGuestTap, onTogglePublic)
+        PrivacyToggleRow(Icons.Filled.List, stringResource(R.string.settings_show_lists_public), showLists, isGuest, onGuestTap, onToggleLists)
+        PrivacyToggleRow(Icons.Filled.History, stringResource(R.string.settings_show_activity_public), showActivity, isGuest, onGuestTap, onToggleActivity)
+        PrivacyToggleRow(Icons.Filled.LibraryBooks, stringResource(R.string.settings_show_library_public), showLibraryPublic, isGuest, onGuestTap, onToggleShowLibraryPublic)
         Row(Modifier.fillMaxWidth().clickable(onClick = onShowBlockedUsers).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Block, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(stringResource(R.string.settings_block_users), color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Text(stringResource(R.string.fmt_023, blockedCount), color = MangaColors.OnSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
     }
+}
+
+@Composable private fun PrivacyToggleRow(icon: ImageVector, label: String, checked: Boolean, isGuest: Boolean, onGuestTap: () -> Unit, onToggle: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = MangaColors.Muted, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(12.dp)); Text(label, color = MangaColors.OnSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)); Switch(checked = checked, onCheckedChange = { if (isGuest) onGuestTap() else onToggle(it) }, colors = SwitchDefaults.colors(checkedThumbColor = MangaColors.Cyan, checkedTrackColor = MangaColors.CyanDim, uncheckedThumbColor = MangaColors.Muted, uncheckedTrackColor = MangaColors.SurfaceHigh)) }
 }
 
 @Composable private fun LibrarySection(favCount: Int, readingCount: Int, histCount: Int, readCount: Int) {

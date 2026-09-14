@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.LibraryRepository
+import com.exapps.mangaworld.domain.repository.PublicLibraryState
 import com.exapps.mangaworld.presentation.profile.PublicProfileViewModel
 import io.mockk.clearMocks
 import io.mockk.coVerify
@@ -45,7 +46,7 @@ class PublicProfileFollowTest {
         every { communityRepo.observePublicLists(any()) } returns flowOf(emptyList())
         every { communityRepo.observePublicActivity(any()) } returns flowOf(emptyList())
         every { communityRepo.observePublicListItems(any(), any()) } returns flowOf(emptyList())
-        every { communityRepo.observePublicLibrary(any()) } returns flowOf(emptyList())
+        every { communityRepo.observePublicLibrary(any()) } returns flowOf(PublicLibraryState.Ready(emptyList()))
     }
 
     @After

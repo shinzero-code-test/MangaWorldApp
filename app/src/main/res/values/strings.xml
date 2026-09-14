@@ -513,6 +513,8 @@
     <string name="favorites">المفضلة</string>
     <string name="str_190">المفضلة، السجل، التقدم، الإعدادات، والملاحظات</string>
     <string name="library_public_visible">المكتبة متاح للعرض العام</string>
+    <string name="library_temporarily_unavailable">تعذر تحميل المكتبة العامة مؤقتاً</string>
+    <string name="privacy_guest_note">أنشئ حساباً دائماً لإدارة إعدادات الخصوصية ومشاركة مكتبتك</string>
     <string name="local_backup">النسخ الاحتياطي المحلي</string>
     <string name="recent_activity">النشاط الأخير</string>
     <string name="str_194">النشاط اليومي (آخر 30 يوم)</string>

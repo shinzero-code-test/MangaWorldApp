@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PersonRemove
@@ -95,7 +96,9 @@ data class PublicProfileUiState(
     val activity: List<CommunityComment> = emptyList(),
     val selectedListId: String? = null,
     val listItems: List<CustomUserListItem> = emptyList(),
-    val readingLists: Map<String, List<FavoriteManga>> = emptyMap()
+    val readingLists: Map<String, List<FavoriteManga>> = emptyMap(),
+    /** Visitor library query definitively failed — show "unavailable", not empty. */
+    val libraryFailed: Boolean = false
 )
 
 @HiltViewModel
@@ -122,6 +125,7 @@ class PublicProfileViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _readingLists = MutableStateFlow<Map<String, List<FavoriteManga>>>(emptyMap())
+    private val _libraryFailed = MutableStateFlow(false)
 
     // Freeze guard (same class as CommunityScreen): a throwing source must
     // fall back instead of starving the combine and pinning the screen on a
@@ -135,9 +139,11 @@ class PublicProfileViewModel @Inject constructor(
         combine(
             _selectedListId,
             _listItems,
-            _readingLists
-        ) { selectedId, items, readingLists -> Triple(selectedId, items, readingLists) }
-    ) { (profile, lists, activity), (selectedId, items, readingLists) ->
+            _readingLists,
+            _libraryFailed
+        ) { selectedId, items, readingLists, libraryFailed -> Triple(selectedId, items, Pair(readingLists, libraryFailed)) }
+    ) { (profile, lists, activity), (selectedId, items, library) ->
+        val (readingLists, libraryFailed) = library
         // Soft-deleted anchors (blanked text) are thread scaffolding, not
         // activity worth headlining — drop them instead of blank rows.
         val visibleActivity = if (profile?.showActivityPublic == true) {
@@ -149,7 +155,8 @@ class PublicProfileViewModel @Inject constructor(
             activity = visibleActivity,
             selectedListId = selectedId,
             listItems = items,
-            readingLists = if (profile?.showLibraryPublic == true) readingLists else emptyMap()
+            readingLists = if (profile?.showLibraryPublic == true) readingLists else emptyMap(),
+            libraryFailed = profile?.showLibraryPublic == true && libraryFailed
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, PublicProfileUiState())
 
@@ -166,10 +173,19 @@ class PublicProfileViewModel @Inject constructor(
         } else {
             // Visitors: public reading-status library from Firestore
             // (users/{uid}/favorites gated by showLibraryPublic). Grouped here
-            // so the same section UI renders for owners and visitors.
+            // so the same section UI renders for owners and visitors. A Failed
+            // outcome keeps the rows empty but flags the section unavailable.
             viewModelScope.launch {
-                communityRepository.observePublicLibrary(userId).collect { list ->
-                    _readingLists.value = list.groupBy { it.readingStatus ?: "reading" }
+                communityRepository.observePublicLibrary(userId).collect { load ->
+                    when (load) {
+                        is com.exapps.mangaworld.domain.repository.PublicLibraryState.Ready -> {
+                            _readingLists.value = load.items.groupBy { it.readingStatus ?: "reading" }
+                            _libraryFailed.value = false
+                        }
+                        com.exapps.mangaworld.domain.repository.PublicLibraryState.Failed -> {
+                            _libraryFailed.value = true
+                        }
+                    }
                 }
             }
         }
@@ -241,14 +257,19 @@ fun PublicProfileScreen(onBack: () -> Unit, onItemClick: (sourceId: String, slug
 
         // Public reading-status library (users/{uid}/favorites gated by
         // showLibraryPublic). Owners read Room; visitors read Firestore via
-        // observePublicLibrary — both land in state.readingLists.
+        // observePublicLibrary — both land in state.readingLists. A failed
+        // visitor query renders "unavailable", never the empty placeholder.
         if (state.profile?.showLibraryPublic == true) {
             item {
-                PublicLibrarySection(
-                    readingLists = state.readingLists,
-                    isOwnProfile = viewModel.isOwnProfile,
-                    onItemClick = onItemClick
-                )
+                if (state.libraryFailed) {
+                    LibraryUnavailableSection()
+                } else {
+                    PublicLibrarySection(
+                        readingLists = state.readingLists,
+                        isOwnProfile = viewModel.isOwnProfile,
+                        onItemClick = onItemClick
+                    )
+                }
             }
         }
 
@@ -258,8 +279,8 @@ fun PublicProfileScreen(onBack: () -> Unit, onItemClick: (sourceId: String, slug
             }
         }
 
-        val hasLibrary = state.profile?.showLibraryPublic == true && state.readingLists.values.any { it.isNotEmpty() }
-        if (state.lists.isEmpty() && state.activity.isEmpty() && !hasLibrary) {
+        val hasLibrary = state.profile?.showLibraryPublic == true && !state.libraryFailed && state.readingLists.values.any { it.isNotEmpty() }
+        if (state.lists.isEmpty() && state.activity.isEmpty() && !hasLibrary && !state.libraryFailed) {
             item {
                 EmptyPublicContent()
             }
@@ -686,6 +707,40 @@ private fun PublicListCard(
 // =====================================================================================
 // Public List Item Card
 // =====================================================================================
+
+@Composable
+private fun LibraryUnavailableSection() {
+    Column(Modifier.padding(top = 32.dp)) {
+        SectionHeader(
+            title = stringResource(R.string.library_section_title),
+            subtitle = stringResource(R.string.library_temporarily_unavailable)
+        )
+        Spacer(Modifier.height(14.dp))
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(MangaColors.SurfaceContainer)
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                Icons.Filled.CloudOff,
+                contentDescription = null,
+                tint = MangaColors.Muted,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.library_temporarily_unavailable),
+                color = MangaColors.OnSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
 
 @Composable
 private fun PublicLibrarySection(

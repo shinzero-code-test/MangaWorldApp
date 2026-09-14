@@ -30,6 +30,7 @@ import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -205,7 +206,15 @@ class FirebaseCommunityRepository @Inject constructor(
             .whereEqualTo("isPublic", true)
             .orderBy("updatedAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); trySend(emptyList()); return@addSnapshotListener }
+                if (error != null) {
+                    android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}")
+                    reportListenError("public-profile", error)
+                    trySend(emptyList())
+                    if (error.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.FAILED_PRECONDITION) {
+                        retryQueryNow("public-profile") { fetchPublicLists(userId) }
+                    }
+                    return@addSnapshotListener
+                }
                 val listDocs = snapshot?.documents.orEmpty()
                 val mappedLists = listDocs.mapNotNull { it.toCustomUserList() }
                 if (listDocs.size > mappedLists.size) {
@@ -215,11 +224,14 @@ class FirebaseCommunityRepository @Inject constructor(
             }
         awaitClose { reg.remove() }
     }.rescue("public-profile", "lists") {
+        fetchPublicLists(userId)
+    }
+
+    private suspend fun fetchPublicLists(userId: String): List<CustomUserList> =
         firestore.collection("users").document(userId).collection("lists")
             .whereEqualTo("isPublic", true)
             .orderBy("updatedAt", Query.Direction.DESCENDING)
             .get().await().documents.mapNotNull { it.toCustomUserList() }
-    }
 
     override fun observePublicActivity(userId: String): Flow<List<CommunityComment>> = callbackFlow {
         val reg = firestore.collectionGroup("comments")
@@ -227,7 +239,15 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(30)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); trySend(emptyList()); return@addSnapshotListener }
+                if (error != null) {
+                    android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}")
+                    reportListenError("public-profile", error)
+                    trySend(emptyList())
+                    if (error.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.FAILED_PRECONDITION) {
+                        retryQueryNow("public-profile") { fetchPublicActivity(userId) }
+                    }
+                    return@addSnapshotListener
+                }
                 val actDocs = snapshot?.documents.orEmpty()
                 val mappedActivity = actDocs.mapNotNull { it.toComment() }
                 if (actDocs.size > mappedActivity.size) {
@@ -237,14 +257,17 @@ class FirebaseCommunityRepository @Inject constructor(
             }
         awaitClose { reg.remove() }
     }.rescue("public-profile", "activity") {
+        fetchPublicActivity(userId)
+    }
+
+    private suspend fun fetchPublicActivity(userId: String): List<CommunityComment> =
         firestore.collectionGroup("comments")
             .whereEqualTo("authorUid", userId)
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(30)
             .get().await().documents.mapNotNull { it.toComment() }
-    }
 
-    override fun observePublicLibrary(userId: String): Flow<List<com.exapps.mangaworld.domain.model.FavoriteManga>> = callbackFlow {
+    override fun observePublicLibrary(userId: String): Flow<com.exapps.mangaworld.domain.repository.PublicLibraryState> = callbackFlow {
         // whereIn proves the rules constraint
         // (resource.data.readingStatus in [...]) at query-planning time.
         val statuses = listOf("reading", "completed", "plan_to_read", "on_hold", "dropped")
@@ -255,17 +278,60 @@ class FirebaseCommunityRepository @Inject constructor(
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     android.util.Log.w("CommunityRepo", "Public library listener failed: code=${error.code} message=${error.message}")
-                    reportListenError("public-library", error)
-                    trySend(emptyList())
+                    when (error.code) {
+                        // Privacy gate → hidden, not failed; counted, not a non-fatal.
+                        com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED -> {
+                            reportListenError("public-library", error)
+                            trySend(com.exapps.mangaworld.domain.repository.PublicLibraryState.Ready(emptyList()))
+                        }
+                        // Query-planning failure (e.g. undeployed index): signal
+                        // now AND race the one-shot get() immediately instead of
+                        // waiting out the 8s watchdog behind an empty screen.
+                        // A transient that recovers still lands via trySend.
+                        com.google.firebase.firestore.FirebaseFirestoreException.Code.FAILED_PRECONDITION -> {
+                            reportListenError("public-library", error)
+                            trySend(com.exapps.mangaworld.domain.repository.PublicLibraryState.Failed)
+                            launch {
+                                runCatching { fetchPublicLibrary(userId) }
+                                    .onSuccess { trySend(com.exapps.mangaworld.domain.repository.PublicLibraryState.Ready(it)) }
+                                // Failure here is already reported; Failed stands.
+                            }
+                        }
+                        else -> {
+                            reportListenError("public-library", error)
+                            trySend(com.exapps.mangaworld.domain.repository.PublicLibraryState.Failed)
+                        }
+                    }
                     return@addSnapshotListener
                 }
                 val docs = snapshot?.documents.orEmpty()
-                trySend(docs.mapNotNull { FirebaseSyncMerge.favorite(it)?.toLibraryDomain() })
+                trySend(
+                    com.exapps.mangaworld.domain.repository.PublicLibraryState.Ready(
+                        docs.mapNotNull { FirebaseSyncMerge.favorite(it)?.toLibraryDomain() }
+                    )
+                )
             }
         awaitClose { reg.remove() }
     }.rescue("public-library", "favorites") {
+        // Never rethrow: the listener already reported; map every outcome so
+        // the watchdog's onFallbackError stays silent for this surface.
+        runCatching { fetchPublicLibrary(userId) }.fold(
+            onSuccess = { com.exapps.mangaworld.domain.repository.PublicLibraryState.Ready(it) },
+            onFailure = { e ->
+                if ((e as? com.google.firebase.firestore.FirebaseFirestoreException)?.code ==
+                    com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED
+                ) {
+                    com.exapps.mangaworld.domain.repository.PublicLibraryState.Ready(emptyList())
+                } else {
+                    com.exapps.mangaworld.domain.repository.PublicLibraryState.Failed
+                }
+            }
+        )
+    }
+
+    private suspend fun fetchPublicLibrary(userId: String): List<com.exapps.mangaworld.domain.model.FavoriteManga> {
         val statuses = listOf("reading", "completed", "plan_to_read", "on_hold", "dropped")
-        firestore.collection("users").document(userId).collection("favorites")
+        return firestore.collection("users").document(userId).collection("favorites")
             .whereIn("readingStatus", statuses)
             .orderBy("addedAt", Query.Direction.DESCENDING)
             .limit(200).get().await()
@@ -308,11 +374,27 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("addedAt", Query.Direction.DESCENDING)
             .limit(200)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); trySend(emptyList()); return@addSnapshotListener }
+                if (error != null) {
+                    android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}")
+                    reportListenError("public-profile", error)
+                    trySend(emptyList())
+                    if (error.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.FAILED_PRECONDITION) {
+                        retryQueryNow("public-profile") { fetchPublicListItems(userId, listId) }
+                    }
+                    return@addSnapshotListener
+                }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toCustomUserListItem() })
             }
         awaitClose { reg.remove() }
     }
+
+    private suspend fun fetchPublicListItems(userId: String, listId: String): List<CustomUserListItem> =
+        firestore.collection("users").document(userId)
+            .collection("lists").document(listId)
+            .collection("items")
+            .orderBy("addedAt", Query.Direction.DESCENDING)
+            .limit(200)
+            .get().await().documents.mapNotNull { it.toCustomUserListItem() }
 
     override suspend fun getCurrentProfile(): CommunityProfile? {
         val uid = sessionManager.ensureFirebaseSession() ?: return null
@@ -814,8 +896,40 @@ class FirebaseCommunityRepository @Inject constructor(
      */
     private fun reportListenError(surface: String, error: com.google.firebase.firestore.FirebaseFirestoreException) {
         if (error.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE) return
-        if (error.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED) return
+        // Privacy denials stay non-fatals-free, but are now COUNTED per surface
+        // (logListenerDenial) so "denied" stops being indistinguishable from
+        // "empty" and "failed" in diagnostics.
+        if (error.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+            runCatching { telemetry.logListenerDenial(surface, error.code.name) }
+            return
+        }
         runCatching { telemetry.logListenerStarvation(surface, "listen", error) }
+    }
+
+    /**
+     * Query-planning failures (FAILED_PRECONDITION — e.g. an index that hasn't
+     * finished deploying) get both an immediate report AND an immediate
+     * one-shot retry, instead of waiting out the 8s starvation watchdog
+     * behind an empty screen. Callers emit empty first for UI liveness; a
+     * recovered fetch still lands via trySend. A retry that fails the SAME way
+     * stays silent (the listener already reported this incident).
+     */
+    private fun <T> kotlinx.coroutines.channels.ProducerScope<T>.retryQueryNow(
+        surface: String,
+        fetch: suspend () -> T
+    ) = launch {
+        runCatching { fetch() }
+            .onSuccess { trySend(it) }
+            .onFailure { e ->
+                val code = (e as? com.google.firebase.firestore.FirebaseFirestoreException)?.code
+                if (code != null
+                    && code != com.google.firebase.firestore.FirebaseFirestoreException.Code.FAILED_PRECONDITION
+                    && code != com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED
+                    && code != com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE
+                ) {
+                    runCatching { telemetry.logListenerStarvation(surface, "immediate-retry", e) }
+                }
+            }
     }
 
     private fun observeComments(collection: com.google.firebase.firestore.CollectionReference): Flow<List<CommunityComment>> = callbackFlow {

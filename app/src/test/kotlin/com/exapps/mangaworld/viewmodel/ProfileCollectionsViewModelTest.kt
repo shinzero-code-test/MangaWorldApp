@@ -45,6 +45,7 @@ import com.exapps.mangaworld.domain.model.FavoriteManga
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.LibraryRepository
+import com.exapps.mangaworld.domain.repository.PublicLibraryState
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.collections.CollectionDetailViewModel
 import com.exapps.mangaworld.presentation.collections.CollectionsViewModel
@@ -143,6 +144,7 @@ class ProfileCollectionsViewModelTest {
         communityRepository = communityRepo,
         settingsRepository = settingsRepo,
         sessionManager = sessionManager,
+        syncManager = mockk(relaxed = true),
         securityRepository = securityRepo,
         favoriteDao = favoriteDao,
         historyDao = historyDao,
@@ -246,7 +248,7 @@ class ProfileCollectionsViewModelTest {
         every { communityRepo.observePublicLists(any()) } returns flowOf(listOf(testList()))
         every { communityRepo.observePublicActivity(any()) } returns flowOf(listOf(testComment()))
         every { communityRepo.observePublicListItems(any(), any()) } returns flowOf(emptyList())
-        every { communityRepo.observePublicLibrary(any()) } returns flowOf(emptyList())
+        every { communityRepo.observePublicLibrary(any()) } returns flowOf(PublicLibraryState.Ready(emptyList()))
         val vm = PublicProfileViewModel(
             SavedStateHandle(mapOf("userId" to "u2")),
             communityRepo,
@@ -279,9 +281,11 @@ class ProfileCollectionsViewModelTest {
         every { communityRepo.observePublicActivity(any()) } returns flowOf(emptyList())
         every { communityRepo.observePublicListItems(any(), any()) } returns flowOf(emptyList())
         every { communityRepo.observePublicLibrary(any()) } returns flowOf(
-            listOf(
-                testFavorite("m1").copy(readingStatus = "reading"),
-                testFavorite("m2").copy(readingStatus = "completed")
+            PublicLibraryState.Ready(
+                listOf(
+                    testFavorite("m1").copy(readingStatus = "reading"),
+                    testFavorite("m2").copy(readingStatus = "completed")
+                )
             )
         )
         val vm = PublicProfileViewModel(
@@ -310,7 +314,9 @@ class ProfileCollectionsViewModelTest {
         every { communityRepo.observePublicActivity(any()) } returns flowOf(emptyList())
         every { communityRepo.observePublicListItems(any(), any()) } returns flowOf(emptyList())
         every { communityRepo.observePublicLibrary(any()) } returns flowOf(
-            listOf(testFavorite("m1").copy(readingStatus = "reading"))
+            PublicLibraryState.Ready(
+                listOf(testFavorite("m1").copy(readingStatus = "reading"))
+            )
         )
         val vm = PublicProfileViewModel(
             SavedStateHandle(mapOf("userId" to "u2")),
@@ -319,6 +325,32 @@ class ProfileCollectionsViewModelTest {
             sessionManager
         )
         advanceUntilIdle()
+        assertTrue(vm.state.value.readingLists.isEmpty())
+        assertFalse(vm.state.value.libraryFailed)
+        }
+    }
+
+    @Test
+    fun publicProfile_visitorLibraryFailureFlagsUnavailable() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        every { sessionManager.currentUserId() } returns "u1"
+        every { communityRepo.observePublicProfile(any()) } returns flowOf(
+            testProfile(uid = "u2", username = "someone").copy(showLibraryPublic = true)
+        )
+        every { communityRepo.observePublicLists(any()) } returns flowOf(emptyList())
+        every { communityRepo.observePublicActivity(any()) } returns flowOf(emptyList())
+        every { communityRepo.observePublicListItems(any(), any()) } returns flowOf(emptyList())
+        every { communityRepo.observePublicLibrary(any()) } returns flowOf(PublicLibraryState.Failed)
+        val vm = PublicProfileViewModel(
+            SavedStateHandle(mapOf("userId" to "u2")),
+            communityRepo,
+            libraryRepo,
+            sessionManager
+        )
+        advanceUntilIdle()
+        assertTrue(vm.state.value.libraryFailed)
         assertTrue(vm.state.value.readingLists.isEmpty())
         }
     }
@@ -333,7 +365,7 @@ class ProfileCollectionsViewModelTest {
         every { communityRepo.observePublicLists(any()) } returns flowOf(emptyList())
         every { communityRepo.observePublicActivity(any()) } returns flowOf(emptyList())
         every { communityRepo.observePublicListItems(any(), any()) } returns flowOf(emptyList())
-        every { communityRepo.observePublicLibrary(any()) } returns flowOf(emptyList())
+        every { communityRepo.observePublicLibrary(any()) } returns flowOf(PublicLibraryState.Ready(emptyList()))
         every { communityRepo.isFollowing("u2") } returns flowOf(false)
         val vm = PublicProfileViewModel(
             SavedStateHandle(mapOf("userId" to "u2")),

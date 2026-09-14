@@ -353,10 +353,15 @@ service cloud.firestore {
       // profiles don't render blank to other users. Writes always persist
       // the flag explicitly via upsertProfile.
       allow read: if owner(userId) || resource.data.get('isPublic', true) == true;
+      // Profiles are a named-user feature (parity with canWriteCommunity):
+      // anonymous sessions must not create profile docs or flip privacy flags
+      // they can never back with synced data (permanently-empty public page).
       allow create: if owner(userId)
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
         && validProfileStrings()
         && request.resource.data.keys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'location', 'birthday', 'badgeLabel', 'createdAt', 'updatedAt']);
       allow update: if owner(userId)
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
         && validProfileStrings()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'displayName', 'avatarUrl', 'bannerUrl', 'isPublic', 'showListsPublic', 'showActivityPublic', 'showLibraryPublic', 'bio', 'location', 'birthday', 'badgeLabel', 'createdAt', 'updatedAt']);
       allow delete: if owner(userId);

@@ -46,12 +46,26 @@ class FirebaseTelemetry @Inject constructor(
     }
 
     /**
+     * Denial counter per surface: PERMISSION_DENIED on a public surface is
+     * usually routine (private profile / hidden section), so it must NOT be a
+     * non-fatal — but swallowing it entirely made "query denied" invisible
+     * next to "query empty" and "data absent". This logs the code + surface
+     * (no PII, no exception) so denial spikes are distinguishable in
+     * Crashlytics logs without alert fatigue.
+     */
+    fun logListenerDenial(surface: String, code: String) {
+        refreshNetworkTypeKey()
+        crashlytics.log("listener_denial surface=$surface code=$code")
+        crashlytics.setCustomKey("denial_surface", surface)
+        crashlytics.setCustomKey("denial_code", code)
+    }
+
+    /**
      * Mapper-drop counter: when a snapshot arrives but tolerant mappers drop
      * rows (strict field reads), the screen looks "empty despite data".
      * Counts only — no document content ever leaves the device.
      */
-    fun logMapperDrops(surface: String, received: Int, mapped: Int) {
-        if (received <= mapped) return
+    fun logMapperDrops(surface: String, received: Int, mapped: Int) {        if (received <= mapped) return
         refreshNetworkTypeKey()
         val dropped = received - mapped
         crashlytics.log("mapper_drops surface=$surface received=$received mapped=$mapped dropped=$dropped")
