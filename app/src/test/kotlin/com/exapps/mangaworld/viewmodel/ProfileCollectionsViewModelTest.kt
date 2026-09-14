@@ -223,9 +223,16 @@ class ProfileCollectionsViewModelTest {
         coVerify(exactly = 1) {
             communityRepo.updateProfilePrivacyFlag(ProfilePrivacyFlag.SHOW_ACTIVITY_PUBLIC, false)
         }
-        // RA-5: no read-modify-write — init performs the single profile read;
-        // the toggle itself adds none, so it cannot clobber sibling flags.
-        coVerify(exactly = 1) { communityRepo.getCurrentProfile() }
+        // RA-5: no read-modify-write — forget init's reads, then prove the
+        // toggle itself performs zero profile reads (so it cannot clobber
+        // sibling flags with stale values).
+        clearMocks(communityRepo, answers = false)
+        vm.setPrivacyFlag(ProfilePrivacyFlag.SHOW_ACTIVITY_PUBLIC, true)
+        advanceUntilIdle()
+        coVerify(exactly = 0) { communityRepo.getCurrentProfile() }
+        coVerify(exactly = 1) {
+            communityRepo.updateProfilePrivacyFlag(ProfilePrivacyFlag.SHOW_ACTIVITY_PUBLIC, true)
+        }
         }
     }
 

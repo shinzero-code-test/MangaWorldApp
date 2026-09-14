@@ -47,6 +47,12 @@ class PublicProfileFollowTest {
         every { communityRepo.observePublicActivity(any()) } returns flowOf(emptyList())
         every { communityRepo.observePublicListItems(any(), any()) } returns flowOf(emptyList())
         every { communityRepo.observePublicLibrary(any()) } returns flowOf(PublicLibraryState.Ready(emptyList()))
+        // Relaxed authState would emit a default mock (uid "") and flip
+        // isOwnProfile; stub the real session explicitly instead.
+        val me = mockk<com.google.firebase.auth.FirebaseUser>(relaxed = true)
+        every { me.uid } returns "me"
+        every { me.isAnonymous } returns false
+        every { sessionManager.authState } returns flowOf(me)
     }
 
     @After
