@@ -373,7 +373,8 @@ enum class CommunityNotificationType {
     REVIEW_REACTION,
     COMMENT_THREAD,
     CHAT_MENTION,
-    SYSTEM_ALERT
+    SYSTEM_ALERT,
+    FOLLOW
 }
 
 data class CommunityProfile(

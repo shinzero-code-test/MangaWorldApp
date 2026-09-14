@@ -163,6 +163,15 @@ class PublicProfileViewModel @Inject constructor(
                 }
                 _readingLists.value = map
             }
+        } else {
+            // Visitors: public reading-status library from Firestore
+            // (users/{uid}/favorites gated by showLibraryPublic). Grouped here
+            // so the same section UI renders for owners and visitors.
+            viewModelScope.launch {
+                communityRepository.observePublicLibrary(userId).collect { list ->
+                    _readingLists.value = list.groupBy { it.readingStatus ?: "reading" }
+                }
+            }
         }
     }
 
@@ -230,10 +239,10 @@ fun PublicProfileScreen(onBack: () -> Unit, onItemClick: (sourceId: String, slug
             }
         }
 
-        // The reading-status library lives under users/{uid}/favorites, which
-        // rules keep owner-only — it can never populate for visitors, so the
-        // section stays hidden instead of showing an "available" empty box.
-        if (isOwnProfile && state.profile?.showLibraryPublic == true) {
+        // Public reading-status library (users/{uid}/favorites gated by
+        // showLibraryPublic). Owners read Room; visitors read Firestore via
+        // observePublicLibrary — both land in state.readingLists.
+        if (state.profile?.showLibraryPublic == true) {
             item {
                 PublicLibrarySection(
                     readingLists = state.readingLists,
@@ -701,7 +710,7 @@ private fun PublicLibrarySection(
         )
         Spacer(Modifier.height(14.dp))
 
-        if (isOwnProfile && hasAnyItems) {
+        if (hasAnyItems) {
             Column(
                 modifier = Modifier
                     .padding(horizontal = 20.dp)

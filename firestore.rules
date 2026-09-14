@@ -272,8 +272,15 @@ service cloud.firestore {
         && !(request.resource.data.keys().hasAny(['role', 'isAdmin', 'isModerator']))
         && validUserSyncDoc();
 
-      match /favorites/{document=**} {
-        allow read, write: if owner(userId);
+      match /favorites/{favId} {
+        // Public library: reading-status rows are visible when the owner
+        // opted into a public library. Pure favorites (no readingStatus)
+        // stay private. Missing showLibraryPublic defaults public (app default).
+        allow read: if owner(userId) || (
+          get(/databases/$(database)/documents/publicProfiles/$(userId)).data.get('showLibraryPublic', true) == true
+          && resource.data.get('readingStatus', null) in ['reading', 'completed', 'plan_to_read', 'on_hold', 'dropped']
+        );
+        allow write: if owner(userId);
       }
 
       match /readingHistory/{document=**} {
@@ -353,6 +360,17 @@ service cloud.firestore {
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == resource.data.uid;
       allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // Collection-group read aliases: guarantees collectionGroup("comments"/"reviews")
+    // listeners never reject with PERMISSION_DENIED for public reads, regardless
+    // of which parent path (manga-level vs chapter-level) a doc lives under.
+    // Read-only — writes stay governed by the nested matches below.
+    match /{path=**}/comments/{commentId} {
+      allow read: if true;
+    }
+    match /{path=**}/reviews/{reviewId} {
+      allow read: if true;
     }
 
     match /community_manga/{mangaId} {

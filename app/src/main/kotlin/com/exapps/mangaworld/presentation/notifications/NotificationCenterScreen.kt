@@ -82,6 +82,7 @@ class NotificationCenterViewModel @Inject constructor(
                         CommunityNotificationType.COMMENT_THREAD -> "thread"
                         CommunityNotificationType.CHAT_MENTION -> "chat"
                         CommunityNotificationType.SYSTEM_ALERT -> "system"
+                        CommunityNotificationType.FOLLOW -> "follow"
                     },
                     mangaId = notif.mangaId,
                     read = notif.read,
@@ -341,6 +342,7 @@ private fun NotificationCard(
         "reaction" -> Icons.Filled.Star
         "thread" -> Icons.Filled.Forum
         "chat" -> Icons.Filled.Chat
+        "follow" -> Icons.Filled.PersonAdd
         "system" -> Icons.Filled.Info
         "chapter_update" -> Icons.Filled.NewReleases
         "suggestion" -> Icons.Filled.AutoAwesome
@@ -356,6 +358,7 @@ private fun NotificationCard(
         "reaction" -> MangaColors.Yellow
         "thread" -> MangaColors.Green
         "chat" -> MangaColors.Orange
+        "follow" -> MangaColors.Pink
         "system" -> MangaColors.Muted
         "chapter_update" -> MangaColors.Cyan
         "suggestion" -> MangaColors.Yellow
@@ -370,6 +373,7 @@ private fun NotificationCard(
         "reaction" -> stringResource(R.string.interact)
         "thread" -> stringResource(R.string.discussion_alt)
         "chat" -> stringResource(R.string.conversation)
+        "follow" -> stringResource(R.string.follow)
         "system" -> stringResource(R.string.alert)
         "chapter_update" -> stringResource(R.string.home_latest)
         "suggestion" -> stringResource(R.string.more_suggestions)

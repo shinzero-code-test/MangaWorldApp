@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { type DocumentReference } from "firebase-admin/firestore";
 import { rejectAnonymousUser, verifyAppIdToken } from "@/lib/app-auth";
 import { allowAppMutation } from "@/lib/app-rate-limit";
-import { getAdminDb } from "@/lib/firebase-admin";
+import { getAdminDb, getAdminMessaging } from "@/lib/firebase-admin";
 import { genericErrorResponse } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +68,57 @@ export async function POST(request: NextRequest) {
       transaction.update(contentRef, { likes, dislikes });
       return { likes, dislikes, changed: true };
     });
+
+    // Like/dislike fan-out (best-effort — the vote is already committed).
+    // Clients cannot write to another user's notifications (owner-only rule),
+    // so the server creates the REVIEW_REACTION doc + FCM via Admin SDK.
+    // Idempotent repeats (changed == false) stay silent.
+    if (result.changed) {
+      try {
+        const contentSnap = await contentRef.get();
+        const contentData = contentSnap.data();
+        const authorUid = contentData?.authorUid as string | undefined;
+        if (authorUid && authorUid !== user.uid) {
+          const voterProfile = (await db.collection("publicProfiles").doc(user.uid).get()).data();
+          const voterName = String(voterProfile?.displayName || voterProfile?.username || "مستخدم");
+          const isLike = payload.vote === 1;
+          const contentMangaId = targetType === "review"
+            ? String(mangaId)
+            : String(contentData?.mangaId ?? "");
+          const notifRef = db.collection("users").doc(authorUid).collection("notifications").doc(randomUUID());
+          await notifRef.set({
+            id: notifRef.id,
+            type: "REVIEW_REACTION",
+            title: isLike ? "إعجاب جديد" : "تقييم جديد",
+            body: `${voterName} ${isLike ? "أعجب" : "قيّم"} ${targetType === "review" ? "بمراجعتك" : "بتعليقك"}`,
+            mangaId: contentMangaId,
+            slug: String(contentData?.slug ?? ""),
+            sourceId: String(contentData?.sourceId ?? ""),
+            chapterUrl: (contentData?.chapterUrl as string | null) ?? null,
+            commentId: targetType === "comment" ? String(targetId) : null,
+            createdAt: Date.now(),
+            read: false,
+          });
+          const devices = await db.collection("users").doc(authorUid).collection("devices").get();
+          const tokens = devices.docs
+            .map((d) => d.data().token)
+            .filter((t): t is string => typeof t === "string");
+          if (tokens.length > 0) {
+            await getAdminMessaging().sendEachForMulticast({
+              tokens: tokens.slice(0, 500),
+              data: {
+                title: isLike ? "إعجاب جديد" : "تقييم جديد",
+                body: `${voterName} تفاعل مع المحتوى الخاص بك`,
+                type: "REVIEW_REACTION",
+                ...(contentMangaId ? { mangaId: contentMangaId } : {}),
+              },
+            }).catch(() => null);
+          }
+        }
+      } catch {
+        /* notify failure must never fail the vote */
+      }
+    }
 
     return NextResponse.json({ success: true, ...result });
   } catch (error) {

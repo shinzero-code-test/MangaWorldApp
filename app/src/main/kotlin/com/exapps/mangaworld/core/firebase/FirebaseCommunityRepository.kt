@@ -192,7 +192,7 @@ class FirebaseCommunityRepository @Inject constructor(
     override fun observePublicProfile(userId: String): Flow<CommunityProfile?> = callbackFlow {
         val reg = firestore.collection("publicProfiles").document(userId)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); return@addSnapshotListener }
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); trySend(null); return@addSnapshotListener }
                 trySend(snapshot?.toProfile())
             }
         awaitClose { reg.remove() }
@@ -205,7 +205,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .whereEqualTo("isPublic", true)
             .orderBy("updatedAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); return@addSnapshotListener }
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); trySend(emptyList()); return@addSnapshotListener }
                 val listDocs = snapshot?.documents.orEmpty()
                 val mappedLists = listDocs.mapNotNull { it.toCustomUserList() }
                 if (listDocs.size > mappedLists.size) {
@@ -227,7 +227,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(30)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); return@addSnapshotListener }
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); trySend(emptyList()); return@addSnapshotListener }
                 val actDocs = snapshot?.documents.orEmpty()
                 val mappedActivity = actDocs.mapNotNull { it.toComment() }
                 if (actDocs.size > mappedActivity.size) {
@@ -242,6 +242,34 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(30)
             .get().await().documents.mapNotNull { it.toComment() }
+    }
+
+    override fun observePublicLibrary(userId: String): Flow<List<com.exapps.mangaworld.domain.model.FavoriteManga>> = callbackFlow {
+        // whereIn proves the rules constraint
+        // (resource.data.readingStatus in [...]) at query-planning time.
+        val statuses = listOf("reading", "completed", "plan_to_read", "on_hold", "dropped")
+        val reg = firestore.collection("users").document(userId).collection("favorites")
+            .whereIn("readingStatus", statuses)
+            .orderBy("addedAt", Query.Direction.DESCENDING)
+            .limit(200)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.w("CommunityRepo", "Public library listener failed: code=${error.code} message=${error.message}")
+                    reportListenError("public-library", error)
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                val docs = snapshot?.documents.orEmpty()
+                trySend(docs.mapNotNull { FirebaseSyncMerge.favorite(it)?.toLibraryDomain() })
+            }
+        awaitClose { reg.remove() }
+    }.rescue("public-library", "favorites") {
+        val statuses = listOf("reading", "completed", "plan_to_read", "on_hold", "dropped")
+        firestore.collection("users").document(userId).collection("favorites")
+            .whereIn("readingStatus", statuses)
+            .orderBy("addedAt", Query.Direction.DESCENDING)
+            .limit(200).get().await()
+            .documents.mapNotNull { FirebaseSyncMerge.favorite(it)?.toLibraryDomain() }
     }
 
     override fun observeModerationReports(): Flow<List<ModerationReport>> = callbackFlow {
@@ -280,7 +308,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .orderBy("addedAt", Query.Direction.DESCENDING)
             .limit(200)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("public-profile", error); trySend(emptyList()); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { it.toCustomUserListItem() })
             }
         awaitClose { reg.remove() }
@@ -513,6 +541,9 @@ class FirebaseCommunityRepository @Inject constructor(
             )
             reviewRef.set(review.toMap()).await()
         }
+        // Edit-mentions: the dashboard diffs @mentions in title+body against
+        // already-notified ones and notifies only fresh mentions (best-effort).
+        notifyEdit(mangaId = mangaId, chapterUrl = null, commentId = null, reviewId = profile.uid)
         }
     }
 
@@ -533,6 +564,9 @@ class FirebaseCommunityRepository @Inject constructor(
                 )
             )
             .await()
+        // Edit-mentions: server diffs against already-notified mentions so only
+        // newly-added @mentions fire (best-effort, never fails the edit).
+        notifyEdit(mangaId = comment.mangaId, chapterUrl = comment.chapterUrl, commentId = comment.id)
         }
     }
 
@@ -762,21 +796,25 @@ class FirebaseCommunityRepository @Inject constructor(
         detail: String,
         fallback: suspend () -> T
     ): Flow<T> = withStarvationFallback(LISTENER_STARVATION_TIMEOUT_MS, fallback) { e ->
-        if ((e as? com.google.firebase.firestore.FirebaseFirestoreException)?.code !=
-            com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE
+        val code = (e as? com.google.firebase.firestore.FirebaseFirestoreException)?.code
+        // UNAVAILABLE = offline (routine). PERMISSION_DENIED = privacy gate
+        // (private profile / hidden section / signed-out viewer) — expected.
+        if (code != com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE
+            && code != com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED
         ) {
             runCatching { telemetry.logListenerStarvation(surface, "$detail:rescue", e) }
         }
     }
 
     /**
-     * Reports a failed snapshot listener to Crashlytics — offline stalls are
-     * routine and skipped, but anything else (denied, failed-precondition,
-     * unavailable-index…) is a config bug worth a non-fatal with the surface
-     * that hit it.
+     * Reports a failed snapshot listener to Crashlytics — offline stalls and
+     * privacy denials are routine and skipped. Anything else
+     * (failed-precondition, unavailable-index…) is a config bug worth a
+     * non-fatal with the surface that hit it.
      */
     private fun reportListenError(surface: String, error: com.google.firebase.firestore.FirebaseFirestoreException) {
         if (error.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE) return
+        if (error.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED) return
         runCatching { telemetry.logListenerStarvation(surface, "listen", error) }
     }
 
@@ -871,6 +909,75 @@ class FirebaseCommunityRepository @Inject constructor(
                 throw cancellation
             } catch (_: Exception) {
                 // Push notifications are best-effort — never fail the parent write.
+                Unit
+            }
+        }
+
+    /**
+     * Edit-mention trigger: the dashboard diffs current @mentions against
+     * already-notified ones in `commentNotificationDispatches` and notifies
+     * only fresh mentions. Best-effort — never fails the edit.
+     */
+    private suspend fun notifyEdit(
+        mangaId: String,
+        chapterUrl: String?,
+        commentId: String? = null,
+        reviewId: String? = null
+    ) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val token = sessionManager.currentIdToken() ?: return@withContext
+            val body = org.json.JSONObject().apply {
+                put("mangaId", mangaId)
+                if (chapterUrl != null) put("chapterUrl", chapterUrl)
+                if (commentId != null) put("commentId", commentId)
+                if (reviewId != null) put("reviewId", reviewId)
+            }
+            val conn = java.net.URL("${CloudinaryUploader.DASHBOARD_BASE_URL}/api/notifications/push-edit").openConnection() as java.net.HttpURLConnection
+            try {
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.doOutput = true
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
+                conn.outputStream.use { os -> os.write(body.toString().toByteArray()) }
+                conn.responseCode
+            } finally {
+                conn.disconnect()
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            Unit
+        }
+    }
+
+    /**
+     * Follow trigger: client already wrote the relationships batch; the server
+     * verifies it exists then fans out the FOLLOW notification + FCM via the
+     * Admin SDK (clients cannot write to another user's notifications).
+     */
+    private suspend fun notifyFollow(targetUid: String) =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val token = sessionManager.currentIdToken() ?: return@withContext
+                val body = org.json.JSONObject().apply { put("targetUid", targetUid) }
+                val conn = java.net.URL("${CloudinaryUploader.DASHBOARD_BASE_URL}/api/notifications/follow").openConnection() as java.net.HttpURLConnection
+                try {
+                    conn.requestMethod = "POST"
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.setRequestProperty("Authorization", "Bearer $token")
+                    conn.doOutput = true
+                    conn.connectTimeout = 5000
+                    conn.readTimeout = 5000
+                    conn.outputStream.use { os -> os.write(body.toString().toByteArray()) }
+                    conn.responseCode
+                } finally {
+                    conn.disconnect()
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
                 Unit
             }
         }
@@ -1345,7 +1452,9 @@ class FirebaseCommunityRepository @Inject constructor(
     private fun DocumentSnapshot.toNotification(): CommunityNotification? = runCatching {
         CommunityNotification(
             id = getString("id") ?: id,
-            type = getString("type")?.let { CommunityNotificationType.valueOf(it) } ?: CommunityNotificationType.REPLY,
+            type = getString("type")?.let { raw ->
+                runCatching { CommunityNotificationType.valueOf(raw.uppercase()) }.getOrNull()
+            } ?: CommunityNotificationType.REPLY,
             title = getString("title") ?: return null,
             body = getString("body") ?: return null,
             mangaId = getString("mangaId") ?: return null,
@@ -1372,6 +1481,20 @@ class FirebaseCommunityRepository @Inject constructor(
             updatedAt = getLong("updatedAt") ?: 0L
         )
     }.getOrNull()
+
+    private fun com.exapps.mangaworld.core.data.local.entity.FavoriteEntity.toLibraryDomain(): com.exapps.mangaworld.domain.model.FavoriteManga =
+        com.exapps.mangaworld.domain.model.FavoriteManga(
+            mangaId = mangaId,
+            slug = slug,
+            title = title,
+            coverUrl = coverUrl,
+            source = com.exapps.mangaworld.domain.model.MangaSource.fromId(sourceId),
+            addedAt = addedAt,
+            readChapters = readChapters,
+            totalChapters = totalChapters,
+            readingStatus = readingStatus,
+            isFavorite = isFavorite
+        )
 
     private fun DocumentSnapshot.toCustomUserListItem(): CustomUserListItem? = runCatching {
         CustomUserListItem(
@@ -1432,6 +1555,9 @@ class FirebaseCommunityRepository @Inject constructor(
             batch.set(firestore.collection("relationships").document(uid).collection("following").document(targetUid), data1)
             batch.set(firestore.collection("relationships").document(targetUid).collection("followers").document(uid), data2)
         }.await()
+        // FOLLOW notification is fanned out server-side (Admin SDK bypasses the
+        // owner-only users/{uid}/notifications rule). Best-effort.
+        notifyFollow(targetUid)
     }
 
     private suspend fun getCurrentProfileForUid(uid: String): CommunityProfile? =
@@ -1459,7 +1585,7 @@ class FirebaseCommunityRepository @Inject constructor(
     override fun observeFollowing(userId: String): Flow<List<UserFollow>> = callbackFlow {
         val reg = firestore.collection("relationships").document(userId).collection("following")
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("relationships", error); trySend(emptyList()); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { doc ->
                     UserFollow(uid = doc.getString("uid") ?: doc.id, username = doc.getString("username") ?: "", followedAt = doc.getLong("followedAt") ?: 0L)
                 })
@@ -1470,7 +1596,7 @@ class FirebaseCommunityRepository @Inject constructor(
     override fun observeFollowers(userId: String): Flow<List<UserFollow>> = callbackFlow {
         val reg = firestore.collection("relationships").document(userId).collection("followers")
             .addSnapshotListener { snapshot, error ->
-                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); return@addSnapshotListener }
+                if (error != null) { android.util.Log.w("CommunityRepo", "Snapshot listener failed: code=${error.code} message=${error.message}"); reportListenError("relationships", error); trySend(emptyList()); return@addSnapshotListener }
                 trySend(snapshot?.documents.orEmpty().mapNotNull { doc ->
                     UserFollow(uid = doc.getString("uid") ?: doc.id, username = doc.getString("username") ?: "", followedAt = doc.getLong("followedAt") ?: 0L)
                 })

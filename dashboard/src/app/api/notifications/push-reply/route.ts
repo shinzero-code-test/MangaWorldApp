@@ -94,7 +94,12 @@ export async function POST(request: NextRequest) {
     }));
     const shouldDispatch = await db.runTransaction(async (transaction) => {
       if ((await transaction.get(dispatchRef)).exists) return false;
-      transaction.create(dispatchRef, { authorUid: user.uid, createdAt: Date.now() });
+      transaction.create(dispatchRef, {
+        authorUid: user.uid,
+        createdAt: Date.now(),
+        // Edit-diff baseline: push-edit notifies only mentions added AFTER this.
+        notifiedMentions: mentions.map((m) => m.toLowerCase()),
+      });
       if (reviewId) {
         transaction.update(
           db.collection("community_manga").doc(mangaId).collection("reviews").doc(reviewId),

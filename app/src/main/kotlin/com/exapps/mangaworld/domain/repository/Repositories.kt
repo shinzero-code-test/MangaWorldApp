@@ -151,6 +151,12 @@ interface CommunityRepository {
     fun observePublicProfile(userId: String): Flow<CommunityProfile?>
     fun observePublicLists(userId: String): Flow<List<CustomUserList>>
     fun observePublicActivity(userId: String): Flow<List<CommunityComment>>
+    /**
+     * Public reading-status library for visitors (Firestore `users/{uid}/favorites`
+     * filtered to readingStatus rows). Gated server-side by
+     * `publicProfiles.showLibraryPublic`. Empty when hidden/private/denied.
+     */
+    fun observePublicLibrary(userId: String): Flow<List<FavoriteManga>>
     fun observeModerationReports(): Flow<List<ModerationReport>>
     suspend fun getCurrentProfile(): CommunityProfile?
     /** Resolves an @mention to its uid via `usernames/{name}`. Null when unknown/offline. */

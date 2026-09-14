@@ -41,6 +41,11 @@ class PublicProfileFollowTest {
         clearMocks(communityRepo, libraryRepo, sessionManager)
         every { sessionManager.currentUserId() } returns "me"
         every { communityRepo.isFollowing(any()) } returns flowOf(false)
+        every { communityRepo.observePublicProfile(any()) } returns flowOf(null)
+        every { communityRepo.observePublicLists(any()) } returns flowOf(emptyList())
+        every { communityRepo.observePublicActivity(any()) } returns flowOf(emptyList())
+        every { communityRepo.observePublicListItems(any(), any()) } returns flowOf(emptyList())
+        every { communityRepo.observePublicLibrary(any()) } returns flowOf(emptyList())
     }
 
     @After
