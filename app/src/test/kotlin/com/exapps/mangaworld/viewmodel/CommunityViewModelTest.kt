@@ -40,6 +40,7 @@ import com.exapps.mangaworld.presentation.community.CommunityChatViewModel
 import com.exapps.mangaworld.presentation.community.CommunityTab
 import com.exapps.mangaworld.presentation.community.CommunityTarget
 import com.exapps.mangaworld.presentation.community.CommunityViewModel
+import com.exapps.mangaworld.presentation.community.computeVoteEcho
 import com.exapps.mangaworld.presentation.community.ModerationDashboardViewModel
 import com.exapps.mangaworld.presentation.community.RepliesViewModel
 import io.mockk.*
@@ -343,6 +344,9 @@ class CommunityViewModelTest {
             advanceUntilIdle()
             vm.likeComment("c1")
             advanceUntilIdle()
+            // The tap must reach the repository (distinguishes a dropped tap
+            // from a broken overlay if this ever goes red again).
+            coVerify(exactly = 1) { communityRepo.likeComment("c1") }
             // Optimistic overlay: server still shows 0/0, UI shows 1/0 + highlight.
             assertEquals(1, vm.state.value.comments.single { it.id == "c1" }.likes)
             assertEquals(1, vm.state.value.myVotes["c1"])
@@ -414,6 +418,38 @@ class CommunityViewModelTest {
             assertTrue(vm.state.value.votesInFlight.isEmpty())
             assertNotNull(vm.state.value.error)
         }
+    }
+
+    // ─── computeVoteEcho: pure client mirror of the server toggle ──────────────
+
+    @Test
+    fun voteEcho_firstLikeAddsOne() {
+        val echo = computeVoteEcho("c1", 1, null, 5, 2)
+        assertEquals(1, echo.myVote)
+        assertEquals(6, echo.expectedLikes)
+        assertEquals(2, echo.expectedDislikes)
+    }
+
+    @Test
+    fun voteEcho_repeatRetracts() {
+        val echo = computeVoteEcho("c1", 1, 1, 6, 2)
+        assertNull(echo.myVote)
+        assertEquals(5, echo.expectedLikes)
+        assertEquals(2, echo.expectedDislikes)
+    }
+
+    @Test
+    fun voteEcho_switchMovesVote() {
+        val echo = computeVoteEcho("c1", -1, 1, 6, 2)
+        assertEquals(-1, echo.myVote)
+        assertEquals(5, echo.expectedLikes)
+        assertEquals(3, echo.expectedDislikes)
+    }
+
+    @Test
+    fun voteEcho_neverDrivesExpectedNegative() {
+        val echo = computeVoteEcho("c1", 1, 1, 0, 0)
+        assertEquals(0, echo.expectedLikes)
     }
 
     // ─── RepliesViewModel ─────────────────────────────────────────────────────
