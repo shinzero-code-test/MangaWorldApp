@@ -232,7 +232,7 @@ fun MangaNavGraph(
                     // a detail screen with a blank slug is the old error screen.
                     if (item.type == "follow") {
                         val target = item.targetUid
-                        if (target != null) onOpenProfile(target)
+                        if (target != null) navController.navigate(Screen.PublicProfile.createRoute(target))
                         return@NotificationCenterScreen
                     }
                     val mangaId = item.mangaId
