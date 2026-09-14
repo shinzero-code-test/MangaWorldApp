@@ -74,13 +74,13 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import androidx.compose.runtime.Stable
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -109,8 +109,11 @@ class PublicProfileViewModel @Inject constructor(
 
     val isOwnProfile: Boolean = userId == sessionManager.currentUserId()
 
-    private val _isFollowing = MutableStateFlow(false)
-    val isFollowing: StateFlow<Boolean> = _isFollowing.asStateFlow()
+    // Real follow state: observed from relationships/{me}/following/{them}.
+    // The write path is NonCancellable + the button renders this flow, so a
+    // failed toggle snaps back by itself instead of lying.
+    val isFollowing: StateFlow<Boolean> = communityRepository.observeIsFollowing(userId)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val _selectedListId = MutableStateFlow<String?>(null)
     private val _listItems = _selectedListId.flatMapLatest { id ->
@@ -135,10 +138,15 @@ class PublicProfileViewModel @Inject constructor(
             _readingLists
         ) { selectedId, items, readingLists -> Triple(selectedId, items, readingLists) }
     ) { (profile, lists, activity), (selectedId, items, readingLists) ->
+        // Soft-deleted anchors (blanked text) are thread scaffolding, not
+        // activity worth headlining — drop them instead of blank rows.
+        val visibleActivity = if (profile?.showActivityPublic == true) {
+            activity.filterNot { it.isDeleted }
+        } else emptyList()
         PublicProfileUiState(
             profile = profile,
             lists = if (profile?.showListsPublic == true) lists else emptyList(),
-            activity = if (profile?.showActivityPublic == true) activity else emptyList(),
+            activity = visibleActivity,
             selectedListId = selectedId,
             listItems = items,
             readingLists = if (profile?.showLibraryPublic == true) readingLists else emptyMap()
@@ -163,7 +171,15 @@ class PublicProfileViewModel @Inject constructor(
     }
 
     fun toggleFollow() {
-        _isFollowing.value = !_isFollowing.value
+        if (isOwnProfile) return
+        viewModelScope.launch(NonCancellable) {
+            runCatching {
+                if (isFollowing.value) communityRepository.unfollowUser(userId)
+                else communityRepository.followUser(userId)
+            }.onFailure {
+                android.util.Log.w("PublicProfile", "Follow toggle failed: ${it.message}")
+            }
+        }
     }
 }
 
@@ -214,7 +230,10 @@ fun PublicProfileScreen(onBack: () -> Unit, onItemClick: (sourceId: String, slug
             }
         }
 
-        if (state.profile?.showLibraryPublic == true) {
+        // The reading-status library lives under users/{uid}/favorites, which
+        // rules keep owner-only — it can never populate for visitors, so the
+        // section stays hidden instead of showing an "available" empty box.
+        if (isOwnProfile && state.profile?.showLibraryPublic == true) {
             item {
                 PublicLibrarySection(
                     readingLists = state.readingLists,

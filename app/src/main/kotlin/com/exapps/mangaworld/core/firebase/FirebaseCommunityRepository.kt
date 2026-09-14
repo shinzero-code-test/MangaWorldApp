@@ -298,6 +298,65 @@ class FirebaseCommunityRepository @Inject constructor(
         firestore.collection("usernames").document(normalized).get().await().getString("uid")
     }.getOrNull()
 
+    override fun observeIsFollowing(targetUid: String): Flow<Boolean> = callbackFlow {
+        val me = sessionManager.currentUserId()
+        if (me == null || me == targetUid) {
+            trySend(false)
+            close()
+            return@callbackFlow
+        }
+        val reg = firestore.collection("relationships").document(me)
+            .collection("following").document(targetUid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.w("CommunityRepo", "Follow listener failed: code=${error.code} message=${error.message}")
+                    trySend(false)
+                    return@addSnapshotListener
+                }
+                trySend(snapshot?.exists() == true)
+            }
+        awaitClose { reg.remove() }
+    }
+
+    override suspend fun followUser(targetUid: String) {
+        withContext(NonCancellable) {
+            val me = sessionManager.currentUserId()
+                ?: error(context.getString(R.string.community_error_sign_in))
+            require(me != targetUid) { context.getString(R.string.community_error_generic_action) }
+            val now = System.currentTimeMillis()
+            firestore.runBatch { batch ->
+                batch.set(
+                    firestore.collection("relationships").document(me)
+                        .collection("following").document(targetUid),
+                    mapOf("uid" to targetUid, "createdAt" to now)
+                )
+                batch.set(
+                    firestore.collection("relationships").document(targetUid)
+                        .collection("followers").document(me),
+                    mapOf("uid" to me, "createdAt" to now)
+                )
+            }.await()
+        }
+    }
+
+    override suspend fun unfollowUser(targetUid: String) {
+        withContext(NonCancellable) {
+            val me = sessionManager.currentUserId()
+                ?: error(context.getString(R.string.community_error_sign_in))
+            if (me == targetUid) return@withContext
+            firestore.runBatch { batch ->
+                batch.delete(
+                    firestore.collection("relationships").document(me)
+                        .collection("following").document(targetUid)
+                )
+                batch.delete(
+                    firestore.collection("relationships").document(targetUid)
+                        .collection("followers").document(me)
+                )
+            }.await()
+        }
+    }
+
     override suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String?, bannerUrl: String?, displayName: String, location: String, birthday: Long?) {
         withContext(NonCancellable) {
         val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
