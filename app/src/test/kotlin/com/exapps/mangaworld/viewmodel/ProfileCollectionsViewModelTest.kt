@@ -208,7 +208,7 @@ class ProfileCollectionsViewModelTest {
     }
 
     @Test
-    fun profileSettings_setPrivacyFlagWritesSingleKeyWithoutProfileRead() {
+    fun profileSettings_setPrivacyFlagWritesOnlyItsOwnKey() {
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
         Dispatchers.setMain(dispatcher)
@@ -216,9 +216,10 @@ class ProfileCollectionsViewModelTest {
         every { sessionManager.currentUser() } returns mockk(relaxed = true) {
             every { isAnonymous } returns false
         }
-        // RA-5: profile reads are impossible — a read-modify-write toggle
-        // would fail here; the single-key merge must still land.
-        coEvery { communityRepo.getCurrentProfile() } throws RuntimeException("down")
+        // Distinctive sibling flags: if the toggle ever goes back to
+        // read-modify-write-triple, a sibling write leaks and fails below.
+        coEvery { communityRepo.getCurrentProfile() } returns
+            testProfile().copy(showListsPublic = false, showActivityPublic = false, showLibraryPublic = false)
         val vm = createProfileSettingsVm()
         advanceUntilIdle()
         vm.setPrivacyFlag(ProfilePrivacyFlag.SHOW_ACTIVITY_PUBLIC, false)
@@ -231,6 +232,9 @@ class ProfileCollectionsViewModelTest {
         }
         coVerify(exactly = 0) {
             communityRepo.updateProfilePrivacyFlag(ProfilePrivacyFlag.IS_PUBLIC, any())
+        }
+        coVerify(exactly = 0) {
+            communityRepo.updateProfilePrivacyFlag(ProfilePrivacyFlag.SHOW_LISTS_PUBLIC, any())
         }
         }
     }
