@@ -340,6 +340,10 @@ class CommunityViewModelTest {
             Dispatchers.setMain(dispatcher)
             every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
             coEvery { communityRepo.likeComment(any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
+            // Relaxed mockk answers unstubbed nullable custom returns with a
+            // zero-mock, NOT null — stub the reconcile fetch explicitly or the
+            // confirm step misreads it as "truth moved on" and evicts.
+            coEvery { communityRepo.fetchCommentVote(any()) } returns null
             val vm = newCommunityVm()
             advanceUntilIdle()
             vm.likeComment("c1")
@@ -363,6 +367,7 @@ class CommunityViewModelTest {
             every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
             coEvery { communityRepo.likeComment(any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
             coEvery { communityRepo.dislikeComment(any()) } returns VoteOutcome(likes = 0, dislikes = 1, myVote = -1)
+            coEvery { communityRepo.fetchCommentVote(any()) } returns null
             val vm = newCommunityVm()
             advanceUntilIdle()
             // Both taps land before the dispatcher runs: the second sees the
@@ -386,6 +391,7 @@ class CommunityViewModelTest {
                 VoteOutcome(likes = 1, dislikes = 0, myVote = 1, action = "added"),
                 VoteOutcome(likes = 0, dislikes = 0, myVote = null, action = "removed")
             )
+            coEvery { communityRepo.fetchCommentVote(any()) } returns null
             val vm = newCommunityVm()
             advanceUntilIdle()
             vm.likeComment("c1")
@@ -398,6 +404,26 @@ class CommunityViewModelTest {
             advanceUntilIdle()
             assertNull(vm.state.value.myVotes["c1"])
             assertEquals(0, vm.state.value.comments.single { it.id == "c1" }.likes)
+        }
+    }
+
+    @Test
+    fun community_confirmFetchMovedOn_evictsEchoButKeepsHighlight() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
+            coEvery { communityRepo.likeComment(any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
+            // The one-shot re-read sees truth the echo doesn't cover (concurrent
+            // voters moved the snapshot): overlay evicts to server truth, but
+            // our recorded vote highlight stands — the write did land.
+            coEvery { communityRepo.fetchCommentVote(any()) } returns VoteOutcome(likes = 5, dislikes = 5)
+            val vm = newCommunityVm()
+            advanceUntilIdle()
+            vm.likeComment("c1")
+            advanceUntilIdle()
+            assertEquals(0, vm.state.value.comments.single { it.id == "c1" }.likes)
+            assertEquals(1, vm.state.value.myVotes["c1"])
         }
     }
 
