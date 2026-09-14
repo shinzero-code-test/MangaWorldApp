@@ -286,10 +286,16 @@ service cloud.firestore {
         // Public library: reading-status rows are visible when the owner
         // opted into a public library. Pure favorites (no readingStatus)
         // stay private. Missing showLibraryPublic defaults public (app default).
-        allow read: if owner(userId) || (
+        // RA-7: intent is the reading-status LIST, not favourites — no
+        // isFavorite check by design, so a deselected favourite that keeps a
+        // status still shows until status-cleared.
+        // Signed-in only (RA-1): fully unauthenticated clients cannot
+        // enumerate anyone's library; the app always holds a session
+        // (anonymous at minimum) before rendering these screens.
+        allow read: if signedIn() && (owner(userId) || (
           publicFlag(userId, 'showLibraryPublic')
           && resource.data.get('readingStatus', null) in ['reading', 'completed', 'plan_to_read', 'on_hold', 'dropped']
-        );
+        ));
         allow write: if owner(userId);
       }
 
@@ -331,17 +337,18 @@ service cloud.firestore {
         // Same legacy-default rule as publicProfiles above: a missing
         // showListsPublic flag reads as public (app default). A list doc's
         // OWN isPublic stays fail-closed — a missing flag there denies.
-        allow read: if owner(userId) || (
+        // Signed-in only (RA-1, like favorites).
+        allow read: if signedIn() && (owner(userId) || (
           publicFlag(userId, 'showListsPublic')
           && resource.data.isPublic == true
-        );
+        ));
         allow write: if owner(userId);
 
         match /items/{document=**} {
-          allow read: if owner(userId) || (
+          allow read: if signedIn() && (owner(userId) || (
             publicFlag(userId, 'showListsPublic')
             && get(/databases/$(database)/documents/users/$(userId)/lists/$(listId)).data.isPublic == true
-          );
+          ));
           allow write: if owner(userId);
         }
       }
@@ -352,7 +359,9 @@ service cloud.firestore {
       // reads (the app itself defaults a missing flag to public) so old
       // profiles don't render blank to other users. Writes always persist
       // the flag explicitly via upsertProfile.
-      allow read: if owner(userId) || resource.data.get('isPublic', true) == true;
+      // Signed-in only (RA-1): anonymous-or-better sessions only; fully
+      // unauthenticated enumeration is denied.
+      allow read: if signedIn() && (owner(userId) || resource.data.get('isPublic', true) == true);
       // Profiles are a named-user feature (parity with canWriteCommunity):
       // anonymous sessions must not create profile docs or flip privacy flags
       // they can never back with synced data (permanently-empty public page).
@@ -502,27 +511,39 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Named users only (parity with canWriteCommunity): anonymous sessions
+    // must not follow or appear in follower lists — a guest entry would show
+    // a blank username with no follow notification behind it (RA-2).
+    function namedOwner(uid) {
+      return owner(uid)
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function namedSelf(followerUid) {
+      return signedIn()
+        && followerUid == request.auth.uid
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
     match /relationships/{uid} {
       allow read: if signedIn();
       allow write: if false;
 
       match /following/{targetUid} {
         allow read: if signedIn();
-        allow create: if owner(uid) && request.resource.data.uid == targetUid && uid != targetUid;
-        allow update: if owner(uid) && request.resource.data.uid == resource.data.uid;
-        allow delete: if owner(uid);
+        allow create: if namedOwner(uid) && request.resource.data.uid == targetUid && uid != targetUid;
+        allow update: if namedOwner(uid) && request.resource.data.uid == resource.data.uid;
+        allow delete: if namedOwner(uid);
       }
 
       match /followers/{followerUid} {
         allow read: if signedIn();
-        allow create: if signedIn()
-          && followerUid == request.auth.uid
+        allow create: if namedSelf(followerUid)
           && request.resource.data.uid == request.auth.uid;
-        allow update: if signedIn()
-          && followerUid == request.auth.uid
+        allow update: if namedSelf(followerUid)
           && resource.data.uid == request.auth.uid
           && request.resource.data.uid == resource.data.uid;
-        allow delete: if signedIn() && followerUid == request.auth.uid && resource.data.uid == request.auth.uid;
+        allow delete: if namedSelf(followerUid) && resource.data.uid == request.auth.uid;
       }
     }
 

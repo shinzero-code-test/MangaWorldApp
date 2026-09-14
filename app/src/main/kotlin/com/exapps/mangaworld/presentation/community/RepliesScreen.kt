@@ -384,7 +384,10 @@ class RepliesViewModel @Inject constructor(
             tappedVote = tappedVote,
             serverCounts = server.likes to server.dislikes,
             priorMyVote = snapshot.myVotes[commentId],
-            post = { v -> if (v == 1) communityRepository.likeComment(commentId) else communityRepository.dislikeComment(commentId) },
+            post = { v ->
+                if (v == 1) communityRepository.likeComment(commentId, mangaId)
+                else communityRepository.dislikeComment(commentId, mangaId)
+            },
             serverCountsNow = {
                 state.value.replies.firstOrNull { it.id == commentId }?.let { it.likes to it.dislikes }
                     ?: (state.value.root as? CommunityTarget.Comment)?.value

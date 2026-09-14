@@ -318,14 +318,14 @@ class CommunityViewModelTest {
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
-            coEvery { communityRepo.likeComment(any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
+            coEvery { communityRepo.likeComment(any(), any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
             val vm = newCommunityVm()
             advanceUntilIdle()
             val comment = testComment("c1", text = "first")
             vm.likeComment("c1")
             vm.report(CommunityTarget.Comment(comment), "spam")
             advanceUntilIdle()
-            coVerify { communityRepo.likeComment("c1") }
+            coVerify { communityRepo.likeComment("c1", "m1") }
             coVerify { communityRepo.reportComment(comment, "spam") }
             assertNull(vm.state.value.error)
         }
@@ -339,7 +339,7 @@ class CommunityViewModelTest {
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
-            coEvery { communityRepo.likeComment(any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
+            coEvery { communityRepo.likeComment(any(), any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
             // Relaxed mockk answers unstubbed nullable custom returns with a
             // zero-mock, NOT null — stub the reconcile fetch explicitly or the
             // confirm step misreads it as "truth moved on" and evicts.
@@ -350,7 +350,7 @@ class CommunityViewModelTest {
             advanceUntilIdle()
             // The tap must reach the repository (distinguishes a dropped tap
             // from a broken overlay if this ever goes red again).
-            coVerify(exactly = 1) { communityRepo.likeComment("c1") }
+            coVerify(exactly = 1) { communityRepo.likeComment("c1", "m1") }
             // Optimistic overlay: server still shows 0/0, UI shows 1/0 + highlight.
             assertEquals(1, vm.state.value.comments.single { it.id == "c1" }.likes)
             assertEquals(1, vm.state.value.myVotes["c1"])
@@ -365,8 +365,8 @@ class CommunityViewModelTest {
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
-            coEvery { communityRepo.likeComment(any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
-            coEvery { communityRepo.dislikeComment(any()) } returns VoteOutcome(likes = 0, dislikes = 1, myVote = -1)
+            coEvery { communityRepo.likeComment(any(), any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
+            coEvery { communityRepo.dislikeComment(any(), any()) } returns VoteOutcome(likes = 0, dislikes = 1, myVote = -1)
             coEvery { communityRepo.fetchCommentVote(any()) } returns null
             val vm = newCommunityVm()
             advanceUntilIdle()
@@ -375,8 +375,8 @@ class CommunityViewModelTest {
             vm.likeComment("c1")
             vm.dislikeComment("c1")
             advanceUntilIdle()
-            coVerify(exactly = 1) { communityRepo.likeComment("c1") }
-            coVerify(exactly = 0) { communityRepo.dislikeComment(any()) }
+            coVerify(exactly = 1) { communityRepo.likeComment("c1", "m1") }
+            coVerify(exactly = 0) { communityRepo.dislikeComment(any(), any()) }
             assertEquals(1, vm.state.value.myVotes["c1"])
         }
     }
@@ -387,7 +387,7 @@ class CommunityViewModelTest {
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
-            coEvery { communityRepo.likeComment(any()) } returnsMany listOf(
+            coEvery { communityRepo.likeComment(any(), any()) } returnsMany listOf(
                 VoteOutcome(likes = 1, dislikes = 0, myVote = 1, action = "added"),
                 VoteOutcome(likes = 0, dislikes = 0, myVote = null, action = "removed")
             )
@@ -413,7 +413,7 @@ class CommunityViewModelTest {
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
-            coEvery { communityRepo.likeComment(any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
+            coEvery { communityRepo.likeComment(any(), any()) } returns VoteOutcome(likes = 1, dislikes = 0, myVote = 1)
             // The one-shot re-read sees truth the echo doesn't cover (concurrent
             // voters moved the snapshot): overlay evicts to server truth, but
             // our recorded vote highlight stands — the write did land.
@@ -433,7 +433,7 @@ class CommunityViewModelTest {
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             every { communityRepo.observeMangaComments("m1") } returns flowOf(listOf(testComment("c1", text = "first")))
-            coEvery { communityRepo.likeComment(any()) } throws RuntimeException("offline")
+            coEvery { communityRepo.likeComment(any(), any()) } throws RuntimeException("offline")
             val vm = newCommunityVm()
             advanceUntilIdle()
             vm.likeComment("c1")

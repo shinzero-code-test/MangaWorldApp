@@ -10,14 +10,9 @@
  * Run:  firebase emulators:exec --only firestore "node scripts/verify-firestore-rules.mjs"
  * Requires @firebase/rules-unit-testing (devDependency).
  * Exits non-zero on the first failed assertion (CI gate).
- *
- * NOTE (RA-1): unauthenticated access to the public branches is currently
- * allowed by design-legacy and intentionally NOT asserted here; when RA-1
- * lands (signedIn() on public branches), add the signed-out-denied case.
  */
-import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
-import { readFileSync } from "node:fs";
-import { doc, setDoc, collection, query, where, orderBy, limit, getDocs } from "firebase/firestore";
+import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";import { readFileSync } from "node:fs";
+import { doc, setDoc, getDoc, collection, query, where, orderBy, limit, getDocs } from "firebase/firestore";
 
 const PROJECT_ID = process.env.FIRESTORE_EMULATOR_PROJECT_ID ?? "mangaworld-live-260519";
 const STATUSES = ["reading", "completed", "plan_to_read", "on_hold", "dropped"];
@@ -107,6 +102,45 @@ async function main() {
       setDoc(doc(anonDb, "publicProfiles", "anon-uid"), { username: "ghost", showLibraryPublic: true })
     );
     check("anonymous profile write is denied", true);
+
+    // 6b. Anonymous sessions cannot follow or be followed (RA-2 rules).
+    await assertFails(
+      setDoc(doc(anonDb, "relationships", "anon-uid", "following", "owner-uid"), {
+        uid: "owner-uid", username: "owner", followedAt: 1,
+      })
+    );
+    check("anonymous following write is denied", true);
+    // Named-user follow writes still pass (control).
+    await assertSucceeds(
+      setDoc(doc(visitorDb, "relationships", "visitor-uid", "following", "owner-uid"), {
+        uid: "owner-uid", username: "owner", followedAt: 1,
+      })
+    );
+    check("named following write succeeds (control)", true);
+
+    // 7. Fully unauthenticated clients are denied everywhere public (RA-1):
+    // the app always holds a session (anonymous at minimum) on these screens.
+    // (Each case uses a query that an authenticated visitor is allowed, so a
+    // denial isolates the signedIn() gate rather than the privacy flags.)
+    await setDoc(doc(ownerDb, "users", "owner-uid", "lists", "l1"), {
+      id: "l1", name: "Summer", description: "", coverUrl: "", rating: 0,
+      genres: [], isPublic: true, itemCount: 0, createdAt: 1, updatedAt: 2,
+    });
+    const publicListsQuery = (db) => query(
+      collection(doc(db, "users", "owner-uid"), "lists"),
+      where("isPublic", "==", true),
+      orderBy("updatedAt", "desc")
+    );
+    const authedLists = await assertSucceeds(getDocs(publicListsQuery(visitorDb)));
+    check("visitor lists query succeeds (control)", authedLists.docs.length === 1 && authedLists.docs[0].id === "l1");
+    const signedOut = testEnv.unauthenticatedContext();
+    const signedOutDb = signedOut.firestore();
+    await assertFails(getDocs(visitorQuery(signedOutDb, "owner-uid")));
+    check("signed-out library query is denied", true);
+    await assertFails(getDocs(publicListsQuery(signedOutDb)));
+    check("signed-out lists query is denied", true);
+    await assertFails(getDoc(doc(signedOutDb, "publicProfiles", "owner-uid")));
+    check("signed-out profile read is denied", true);
 
     await testEnv.clearFirestore();
   } finally {

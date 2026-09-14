@@ -230,21 +230,6 @@ class UserProfileViewModel @Inject constructor(
         viewModelScope.launch { runCatching { communityRepository.markNotificationRead(id) } }
     }
 
-    fun updatePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean) {
-        viewModelScope.launch {
-            runCatching {
-                // A-12: preserve the current library flag (no 2-arg default).
-                val current = communityRepository.getCurrentProfile()
-                communityRepository.updateProfilePrivacy(
-                    showListsPublic,
-                    showActivityPublic,
-                    current?.showLibraryPublic ?: true
-                )
-            }
-            refreshProfile()
-        }
-    }
-
     /**
      * Self-heal (issue 2): a signed-in user with no username (social signup on
      * an older build) gets the email-derived profile on next visit, so they

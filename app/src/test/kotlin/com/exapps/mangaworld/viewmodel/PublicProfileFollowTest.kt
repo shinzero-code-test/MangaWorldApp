@@ -110,7 +110,7 @@ class PublicProfileFollowTest {
             Dispatchers.setMain(dispatcher)
             val vm = newVm(userId = "me")
             advanceUntilIdle()
-            assertTrue(vm.isOwnProfile)
+            assertTrue(vm.isOwnProfile.value)
             vm.toggleFollow()
             advanceUntilIdle()
             coVerify(exactly = 0) { communityRepo.followUser(any()) }

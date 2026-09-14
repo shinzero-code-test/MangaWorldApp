@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await verifyAppIdToken(request);
     rejectAnonymousUser(user);
-    if (!(await allowAppMutation(`community-vote:${user.uid}`, 120, 60 * 1000))){
+    if (!(await allowAppMutation(`community-vote:${user.uid}`, 30, 60 * 1000))){
       return NextResponse.json({ error: "تم إرسال عدد كبير من المحاولات. حاول مرة أخرى لاحقاً." }, { status: 429 });
     }
 
@@ -24,7 +24,10 @@ export async function POST(request: NextRequest) {
     const targetType: TargetType = payload.targetType === "review" ? "review" : "comment";
     const targetId = typeof payload.targetId === "string" ? payload.targetId : payload.commentId;
     const mangaId = payload.mangaId;
-    if (!isIdentifier(targetId) || !isVote(payload.vote) || (targetType === "review" && !isIdentifier(mangaId))) {
+    // mangaId is required for reviews; for comments it is an optional
+    // disambiguation hint (VC-5) — validated when present, ignored otherwise.
+    if (!isIdentifier(targetId) || !isVote(payload.vote) || (targetType === "review" && !isIdentifier(mangaId)) ||
+        (mangaId !== undefined && !isIdentifier(mangaId))) {
       return NextResponse.json({ error: "طلب تصويت غير صالح" }, { status: 400 });
     }
 
@@ -35,13 +38,22 @@ export async function POST(request: NextRequest) {
     } else {
       const comments = await db.collectionGroup("comments")
         .where("id", "==", targetId)
-        .limit(2)
+        .limit(10)
         .get();
       if (comments.empty) throw new ContentNotFoundError();
-      if (comments.size > 1) {
+      let candidates = comments.docs;
+      if (candidates.length > 1 && typeof mangaId === "string" && mangaId.length > 0) {
+        // Legacy duplicate ids across manga/chapter paths: the client's
+        // screen-level manga id isolates the intended doc instead of
+        // blocking the vote forever. Anything still ambiguous stays a loud
+        // 409 — guessing across docs would misattribute counters.
+        const hinted = candidates.filter((d) => d.data()?.mangaId === mangaId);
+        if (hinted.length === 1) candidates = hinted;
+      }
+      if (candidates.length !== 1) {
         return NextResponse.json({ error: "معرف التعليق غير واضح" }, { status: 409 });
       }
-      contentRef = comments.docs[0].ref;
+      contentRef = candidates[0].ref;
     }
 
     const voteRef = contentRef.collection("votes").doc(user.uid);
@@ -52,7 +64,10 @@ export async function POST(request: NextRequest) {
       ]);
       const content = contentSnapshot.data();
       if (!content) throw new ContentNotFoundError();
-      if (content.authorUid === user.uid) throw new SelfVoteError();
+      // Fail closed: a doc without an author cannot prove non-self (VC-5).
+      const authorUid = content.authorUid;
+      if (typeof authorUid !== "string" || authorUid.length === 0) throw new SelfVoteError();
+      if (authorUid === user.uid) throw new SelfVoteError();
 
       // Toggle semantics: repeat retracts, opposite switches, fresh adds.
       // Pure math lives in lib/vote-transition (unit-tested, no I/O).
@@ -85,41 +100,51 @@ export async function POST(request: NextRequest) {
         const contentData = contentSnap.data();
         const authorUid = contentData?.authorUid as string | undefined;
         if (authorUid && authorUid !== user.uid) {
-          const voterProfile = (await db.collection("publicProfiles").doc(user.uid).get()).data();
+          // Independent reads go in parallel so fan-out doesn't inflate the
+          // perceived tap latency (VC-5): profile (name) + devices (tokens).
+          const [voterProfileSnap, devicesSnap] = await Promise.all([
+            db.collection("publicProfiles").doc(user.uid).get(),
+            db.collection("users").doc(authorUid).collection("devices").get(),
+          ]);
+          const voterProfile = voterProfileSnap.data();
           const voterName = String(voterProfile?.displayName || voterProfile?.username || "مستخدم");
           const isLike = payload.vote === 1;
           const contentMangaId = targetType === "review"
             ? String(mangaId)
             : String(contentData?.mangaId ?? "");
           const notifRef = db.collection("users").doc(authorUid).collection("notifications").doc(randomUUID());
-          await notifRef.set({
-            id: notifRef.id,
-            type: "REVIEW_REACTION",
-            title: isLike ? "إعجاب جديد" : "تقييم جديد",
-            body: `${voterName} ${isLike ? "أعجب" : "قيّم"} ${targetType === "review" ? "بمراجعتك" : "بتعليقك"}`,
-            mangaId: contentMangaId,
-            slug: String(contentData?.slug ?? ""),
-            sourceId: String(contentData?.sourceId ?? ""),
-            chapterUrl: (contentData?.chapterUrl as string | null) ?? null,
-            commentId: targetType === "comment" ? String(targetId) : null,
-            createdAt: Date.now(),
-            read: false,
-          });
-          const devices = await db.collection("users").doc(authorUid).collection("devices").get();
-          const tokens = devices.docs
+          const tokens = devicesSnap.docs
             .map((d) => d.data().token)
             .filter((t): t is string => typeof t === "string");
-          if (tokens.length > 0) {
-            await getAdminMessaging().sendEachForMulticast({
-              tokens: tokens.slice(0, 500),
-              data: {
-                title: isLike ? "إعجاب جديد" : "تقييم جديد",
-                body: `${voterName} تفاعل مع المحتوى الخاص بك`,
-                type: "REVIEW_REACTION",
-                ...(contentMangaId ? { mangaId: contentMangaId } : {}),
-              },
-            }).catch(() => null);
-          }
+          // The notification write and the push send are independent.
+          await Promise.all([
+            notifRef.set({
+              id: notifRef.id,
+              type: "REVIEW_REACTION",
+              title: isLike ? "إعجاب جديد" : "تقييم جديد",
+              body: `${voterName} ${isLike ? "أعجب" : "قيّم"} ${targetType === "review" ? "بمراجعتك" : "بتعليقك"}`,
+              mangaId: contentMangaId,
+              slug: String(contentData?.slug ?? ""),
+              sourceId: String(contentData?.sourceId ?? ""),
+              chapterUrl: (contentData?.chapterUrl as string | null) ?? null,
+              commentId: targetType === "comment" ? String(targetId) : null,
+              createdAt: Date.now(),
+              read: false,
+            }),
+            (async () => {
+              if (tokens.length > 0) {
+                await getAdminMessaging().sendEachForMulticast({
+                  tokens: tokens.slice(0, 500),
+                  data: {
+                    title: isLike ? "إعجاب جديد" : "تقييم جديد",
+                    body: `${voterName} تفاعل مع المحتوى الخاص بك`,
+                    type: "REVIEW_REACTION",
+                    ...(contentMangaId ? { mangaId: contentMangaId } : {}),
+                  },
+                }).catch(() => null);
+              }
+            })(),
+          ]);
         }
       } catch {
         /* notify failure must never fail the vote */

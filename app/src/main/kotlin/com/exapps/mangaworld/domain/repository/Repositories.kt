@@ -148,6 +148,14 @@ sealed interface PublicLibraryState {
     data object Failed : PublicLibraryState
 }
 
+/** Single privacy flag for targeted writes (see updateProfilePrivacyFlag). */
+enum class ProfilePrivacyFlag(val field: String) {
+    SHOW_LISTS_PUBLIC("showListsPublic"),
+    SHOW_ACTIVITY_PUBLIC("showActivityPublic"),
+    SHOW_LIBRARY_PUBLIC("showLibraryPublic"),
+    IS_PUBLIC("isPublic")
+}
+
 interface CommunityRepository {
     fun observeMangaComments(mangaId: String): Flow<List<CommunityComment>>
     fun observeChapterComments(mangaId: String, chapterUrl: String): Flow<List<CommunityComment>>
@@ -177,10 +185,15 @@ interface CommunityRepository {
     /** Resolves an @mention to its uid via `usernames/{name}`. Null when unknown/offline. */
     suspend fun getUidForUsername(username: String): String?
     suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String? = null, bannerUrl: String? = null, displayName: String = "", location: String = "", birthday: Long? = null)
-    // A-12: NO default for showLibraryPublic — every caller must pass the
-    // current value explicitly, so toggling one switch can never silently
-    // re-enable another.
-    suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean, showLibraryPublic: Boolean)
+    /**
+     * Targeted single-flag privacy write (RA-5): a merge-set of exactly one
+     * privacy key, with NO read-modify-write, so concurrent toggles from two
+     * devices can never clobber each other (last-writer-wins at flag
+     * granularity instead of triple granularity). Prefer this over
+     * rewriting the whole triple — including for `isPublic`, which is just
+     * another flag here (identity fields stay out of the write entirely).
+     */
+    suspend fun updateProfilePrivacyFlag(flag: ProfilePrivacyFlag, value: Boolean)
     suspend fun createOrUpdateList(listId: String?, name: String, description: String, coverUrl: String, rating: Float, genres: List<String>, isPublic: Boolean): String
     suspend fun deleteList(listId: String)
     suspend fun addMangaToList(listId: String, item: CustomUserListItem)
@@ -195,8 +208,8 @@ interface CommunityRepository {
     suspend fun sendChatMessage(roomId: String = "global", text: String)
     suspend fun reportComment(comment: CommunityComment, reason: String)
     suspend fun reportReview(review: MangaReview, reason: String)
-    suspend fun likeComment(commentId: String): VoteOutcome
-    suspend fun dislikeComment(commentId: String): VoteOutcome
+    suspend fun likeComment(commentId: String, mangaId: String): VoteOutcome
+    suspend fun dislikeComment(commentId: String, mangaId: String): VoteOutcome
     suspend fun likeReview(mangaId: String, reviewId: String): VoteOutcome
     suspend fun dislikeReview(mangaId: String, reviewId: String): VoteOutcome
     /**

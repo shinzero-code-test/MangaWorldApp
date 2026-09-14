@@ -76,9 +76,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import androidx.compose.runtime.Stable
 import kotlinx.coroutines.NonCancellable
@@ -110,7 +112,19 @@ class PublicProfileViewModel @Inject constructor(
 ) : ViewModel() {
     private val userId: String = savedStateHandle["userId"] ?: ""
 
-    val isOwnProfile: Boolean = userId == sessionManager.currentUserId()
+    // Reactive session (RA-6): a cold-start deep link into your own profile
+    // must flip to the owner path once the session resolves, instead of
+    // pinning the one-shot read taken before auth warmed up.
+    private val viewer = sessionManager.authState
+        .stateIn(viewModelScope, SharingStarted.Eagerly, sessionManager.currentUser())
+
+    val isOwnProfile: StateFlow<Boolean> = viewer.map { it?.uid == userId }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, userId == sessionManager.currentUserId())
+
+    // Guests can view but never follow (RA-2): the button is hidden for them,
+    // mirroring the compose-button gating on community screens.
+    val isGuestViewer: StateFlow<Boolean> = viewer.map { it?.isAnonymous != false }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, sessionManager.currentUser()?.isAnonymous != false)
 
     // Real follow state: observed from relationships/{me}/following/{them}.
     // The write path is NonCancellable + the button renders this flow, so a
@@ -161,29 +175,32 @@ class PublicProfileViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.Eagerly, PublicProfileUiState())
 
     init {
-        if (isOwnProfile) {
-            viewModelScope.launch {
-                val statuses = listOf("reading", "completed", "plan_to_read", "on_hold", "dropped")
-                val map = mutableMapOf<String, List<FavoriteManga>>()
-                for (status in statuses) {
-                    map[status] = libraryRepository.getFavoritesByStatus(status)
-                }
-                _readingLists.value = map
-            }
-        } else {
-            // Visitors: public reading-status library from Firestore
-            // (users/{uid}/favorites gated by showLibraryPublic). Grouped here
-            // so the same section UI renders for owners and visitors. A Failed
-            // outcome keeps the rows empty but flags the section unavailable.
-            viewModelScope.launch {
-                communityRepository.observePublicLibrary(userId).collect { load ->
-                    when (load) {
-                        is com.exapps.mangaworld.domain.repository.PublicLibraryState.Ready -> {
-                            _readingLists.value = load.items.groupBy { it.readingStatus ?: "reading" }
-                            _libraryFailed.value = false
-                        }
-                        com.exapps.mangaworld.domain.repository.PublicLibraryState.Failed -> {
-                            _libraryFailed.value = true
+        // collectLatest: a session flip mid-screen (sign-in/out, deep-link
+        // race) swaps the data source instead of stranding the first guess.
+        viewModelScope.launch {
+            isOwnProfile.collectLatest { own ->
+                if (own) {
+                    val statuses = listOf("reading", "completed", "plan_to_read", "on_hold", "dropped")
+                    val map = mutableMapOf<String, List<FavoriteManga>>()
+                    for (status in statuses) {
+                        map[status] = libraryRepository.getFavoritesByStatus(status)
+                    }
+                    _readingLists.value = map
+                    _libraryFailed.value = false
+                } else {
+                    // Visitors: public reading-status library from Firestore
+                    // (users/{uid}/favorites gated by showLibraryPublic). Grouped
+                    // here so the same section UI renders for owners/visitors.
+                    // A Failed outcome keeps rows empty but flags unavailable.
+                    communityRepository.observePublicLibrary(userId).collect { load ->
+                        when (load) {
+                            is com.exapps.mangaworld.domain.repository.PublicLibraryState.Ready -> {
+                                _readingLists.value = load.items.groupBy { it.readingStatus ?: "reading" }
+                                _libraryFailed.value = false
+                            }
+                            com.exapps.mangaworld.domain.repository.PublicLibraryState.Failed -> {
+                                _libraryFailed.value = true
+                            }
                         }
                     }
                 }
@@ -196,7 +213,7 @@ class PublicProfileViewModel @Inject constructor(
     }
 
     fun toggleFollow() {
-        if (isOwnProfile) return
+        if (isOwnProfile.value) return
         viewModelScope.launch(NonCancellable) {
             runCatching {
                 if (isFollowing.value) communityRepository.unfollowUser(userId)
@@ -225,7 +242,8 @@ fun PublicProfileScreen(onBack: () -> Unit, onItemClick: (sourceId: String, slug
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isFollowing by viewModel.isFollowing.collectAsStateWithLifecycle()
     val profile = state.profile
-    val isOwnProfile = viewModel.isOwnProfile
+    val isOwnProfile by viewModel.isOwnProfile.collectAsStateWithLifecycle()
+    val isGuestViewer by viewModel.isGuestViewer.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(MangaColors.Background),
@@ -236,8 +254,8 @@ fun PublicProfileScreen(onBack: () -> Unit, onItemClick: (sourceId: String, slug
                 profile = profile,
                 listsCount = state.lists.size,
                 activityCount = state.activity.size,
-                isOwnProfile = isOwnProfile,
                 isFollowing = isFollowing,
+                showFollowButton = !isOwnProfile && !isGuestViewer,
                 onBack = onBack,
                 onToggleFollow = { viewModel.toggleFollow() }
             )
@@ -266,7 +284,7 @@ fun PublicProfileScreen(onBack: () -> Unit, onItemClick: (sourceId: String, slug
                 } else {
                     PublicLibrarySection(
                         readingLists = state.readingLists,
-                        isOwnProfile = viewModel.isOwnProfile,
+                        isOwnProfile = isOwnProfile,
                         onItemClick = onItemClick
                     )
                 }
@@ -297,8 +315,8 @@ private fun PublicProfileHero(
     profile: CommunityProfile?,
     listsCount: Int,
     activityCount: Int,
-    isOwnProfile: Boolean,
     isFollowing: Boolean,
+    showFollowButton: Boolean,
     onBack: () -> Unit,
     onToggleFollow: () -> Unit
 ) {
@@ -379,7 +397,7 @@ private fun PublicProfileHero(
             ) {
                 ProfileAvatar(profile = profile)
 
-                if (!isOwnProfile) {
+                if (showFollowButton) {
                     FollowButton(isFollowing = isFollowing, onClick = onToggleFollow)
                 }
             }

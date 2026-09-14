@@ -51,6 +51,7 @@ import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.UserFollow
 import com.exapps.mangaworld.domain.repository.CommunityRepository
+import com.exapps.mangaworld.domain.repository.ProfilePrivacyFlag
 import com.exapps.mangaworld.domain.repository.SecurityRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.BuildConfig
@@ -335,25 +336,37 @@ class ProfileSettingsViewModel @Inject constructor(
         }
     }
 
-    fun updatePrivacy(showLists: Boolean, showActivity: Boolean, isPublic: Boolean) {
+    /**
+     * Single-flag privacy writes (RA-5): each toggle persists exactly its own
+     * key — never a read-modify-write triple, so a concurrent change from
+     * another device can't be clobbered, and a failed profile read can't
+     * reset sibling flags to true (the A-12 bug class, ex-RA-3).
+     */
+    fun setPublicAccount(isPublic: Boolean) {
         viewModelScope.launch {
+            if (sessionManager.currentUser()?.isAnonymous != false) {
+                _saveError.value = context.getString(R.string.settings_provider_guest_error)
+                return@launch
+            }
             val result = runCatching {
-                val c = communityRepository.getCurrentProfile()
-                communityRepository.upsertProfile(
-                    username = c?.username ?: "",
-                    bio = c?.bio ?: "",
-                    isPublic = isPublic,
-                    avatarUrl = c?.avatarUrl,
-                    bannerUrl = c?.bannerUrl,
-                    displayName = c?.displayName ?: ""
+                communityRepository.updateProfilePrivacyFlag(
+                    ProfilePrivacyFlag.IS_PUBLIC,
+                    isPublic
                 )
-                // A-12: pass the CURRENT library flag — the old 2-arg call
-                // silently reset showLibraryPublic to true on every toggle.
-                communityRepository.updateProfilePrivacy(
-                    showLists,
-                    showActivity,
-                    c?.showLibraryPublic ?: true
-                )
+            }
+            result.onSuccess { refreshProfile() }
+                .onFailure { _saveError.value = context.getString(R.string.profile_save_failed) }
+        }
+    }
+
+    fun setPrivacyFlag(flag: ProfilePrivacyFlag, value: Boolean) {
+        viewModelScope.launch {
+            if (sessionManager.currentUser()?.isAnonymous != false) {
+                _saveError.value = context.getString(R.string.settings_provider_guest_error)
+                return@launch
+            }
+            val result = runCatching {
+                communityRepository.updateProfilePrivacyFlag(flag, value)
             }
             result.onSuccess { refreshProfile() }
                 .onFailure { _saveError.value = context.getString(R.string.profile_save_failed) }
@@ -374,15 +387,9 @@ class ProfileSettingsViewModel @Inject constructor(
                 return@launch
             }
             val result = runCatching {
-                // Never invent sibling flags: a missing/failed profile read
-                // aborts instead of resetting lists/activity to true (the
-                // A-12 class of bug, pointed at the other two flags).
-                val c = communityRepository.getCurrentProfile()
-                    ?: error(context.getString(R.string.profile_save_failed))
                 settingsRepository.setShowLibraryPublic(enabled)
-                communityRepository.updateProfilePrivacy(
-                    c.showListsPublic,
-                    c.showActivityPublic,
+                communityRepository.updateProfilePrivacyFlag(
+                    ProfilePrivacyFlag.SHOW_LIBRARY_PUBLIC,
                     enabled
                 )
                 // Enabling "public" must result in data being present: push now
@@ -982,9 +989,9 @@ fun ProfileSettingsScreen(
                 PrivacySection(profile?.isPublic ?: true, profile?.showListsPublic ?: true, profile?.showActivityPublic ?: true, profile?.showLibraryPublic ?: true, blockedUsers.size,
                     isGuest = isGuest,
                     onGuestTap = { viewModel.promptGuestSignIn() },
-                    onTogglePublic = { p -> viewModel.updatePrivacy(profile?.showListsPublic ?: true, profile?.showActivityPublic ?: true, p) },
-                    onToggleLists = { l -> viewModel.updatePrivacy(l, profile?.showActivityPublic ?: true, profile?.isPublic ?: true) },
-                    onToggleActivity = { a -> viewModel.updatePrivacy(profile?.showListsPublic ?: true, a, profile?.isPublic ?: true) },
+                    onTogglePublic = { p -> viewModel.setPublicAccount(p) },
+                    onToggleLists = { l -> viewModel.setPrivacyFlag(ProfilePrivacyFlag.SHOW_LISTS_PUBLIC, l) },
+                    onToggleActivity = { a -> viewModel.setPrivacyFlag(ProfilePrivacyFlag.SHOW_ACTIVITY_PUBLIC, a) },
                     onToggleShowLibraryPublic = { enabled -> viewModel.toggleShowLibraryPublic(enabled) },
                     onShowBlockedUsers = { showBlockedUsers = true })
             }

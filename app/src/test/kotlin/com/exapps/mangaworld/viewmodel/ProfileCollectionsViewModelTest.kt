@@ -45,6 +45,7 @@ import com.exapps.mangaworld.domain.model.FavoriteManga
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.LibraryRepository
+import com.exapps.mangaworld.domain.repository.ProfilePrivacyFlag
 import com.exapps.mangaworld.domain.repository.PublicLibraryState
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.collections.CollectionDetailViewModel
@@ -176,7 +177,7 @@ class ProfileCollectionsViewModelTest {
     }
 
     @Test
-    fun userProfile_markReadAndPrivacyForwardToRepo() {
+    fun userProfile_markReadForwardsToRepo() {
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
         Dispatchers.setMain(dispatcher)
@@ -184,11 +185,47 @@ class ProfileCollectionsViewModelTest {
         val vm = createUserProfileVm()
         advanceUntilIdle()
         vm.markRead("n1")
-        vm.updatePrivacy(showListsPublic = true, showActivityPublic = false)
         advanceUntilIdle()
         coVerify { communityRepo.markNotificationRead("n1") }
-        // A-12: the library flag travels explicitly (testProfile defaults true).
-        coVerify { communityRepo.updateProfilePrivacy(true, false, true) }
+        }
+    }
+
+    @Test
+    fun profileSettings_guestPrivacyWriteIsGated() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        stubProfileSettingsVm()
+        every { sessionManager.currentUser() } returns mockk(relaxed = true) {
+            every { isAnonymous } returns true
+        }
+        val vm = createProfileSettingsVm()
+        advanceUntilIdle()
+        vm.setPrivacyFlag(ProfilePrivacyFlag.SHOW_LISTS_PUBLIC, false)
+        advanceUntilIdle()
+        coVerify(exactly = 0) { communityRepo.updateProfilePrivacyFlag(any(), any()) }
+        }
+    }
+
+    @Test
+    fun profileSettings_setPrivacyFlagWritesSingleKeyWithoutProfileRead() {
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        stubProfileSettingsVm()
+        every { sessionManager.currentUser() } returns mockk(relaxed = true) {
+            every { isAnonymous } returns false
+        }
+        val vm = createProfileSettingsVm()
+        advanceUntilIdle()
+        vm.setPrivacyFlag(ProfilePrivacyFlag.SHOW_ACTIVITY_PUBLIC, false)
+        advanceUntilIdle()
+        coVerify(exactly = 1) {
+            communityRepo.updateProfilePrivacyFlag(ProfilePrivacyFlag.SHOW_ACTIVITY_PUBLIC, false)
+        }
+        // RA-5: no read-modify-write — init performs the single profile read;
+        // the toggle itself adds none, so it cannot clobber sibling flags.
+        coVerify(exactly = 1) { communityRepo.getCurrentProfile() }
         }
     }
 
@@ -256,7 +293,7 @@ class ProfileCollectionsViewModelTest {
             sessionManager
         )
         advanceUntilIdle()
-        assertFalse(vm.isOwnProfile)
+        assertFalse(vm.isOwnProfile.value)
         assertEquals("u2", vm.state.value.profile?.uid)
         assertTrue(vm.state.value.lists.isEmpty())
         assertTrue(vm.state.value.activity.isEmpty())
@@ -295,7 +332,7 @@ class ProfileCollectionsViewModelTest {
             sessionManager
         )
         advanceUntilIdle()
-        assertFalse(vm.isOwnProfile)
+        assertFalse(vm.isOwnProfile.value)
         assertEquals(listOf("m1"), vm.state.value.readingLists["reading"]?.map { it.mangaId })
         assertEquals(listOf("m2"), vm.state.value.readingLists["completed"]?.map { it.mangaId })
         }

@@ -53,7 +53,8 @@ class FirebaseCommunityRepository @Inject constructor(
     private val remoteConfigManager: FirebaseRemoteConfigManager,
     private val achievementManager: com.exapps.mangaworld.core.data.AchievementManager,
     private val settingsRepository: com.exapps.mangaworld.domain.repository.SettingsRepository,
-    private val telemetry: FirebaseTelemetry
+    private val telemetry: FirebaseTelemetry,
+    private val analyticsManager: FirebaseAnalyticsManager
 ) : CommunityRepository {
 
     private val firestore = FirebaseFirestore.getInstance()
@@ -469,14 +470,15 @@ class FirebaseCommunityRepository @Inject constructor(
         }
     }
 
-    override suspend fun updateProfilePrivacy(showListsPublic: Boolean, showActivityPublic: Boolean, showLibraryPublic: Boolean) {
+    override suspend fun updateProfilePrivacyFlag(flag: com.exapps.mangaworld.domain.repository.ProfilePrivacyFlag, value: Boolean) {
         withContext(NonCancellable) {
         val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
+        // Single-key merge: no read, so a concurrent toggle from another
+        // device can never be clobbered (RA-5). Rules allow any subset of the
+        // profile allowlist, so one key + updatedAt passes as-is.
         firestore.collection("publicProfiles").document(uid).set(
             mapOf(
-                "showListsPublic" to showListsPublic,
-                "showActivityPublic" to showActivityPublic,
-                "showLibraryPublic" to showLibraryPublic,
+                flag.field to value,
                 "updatedAt" to System.currentTimeMillis()
             ),
             SetOptions.merge()
@@ -803,12 +805,12 @@ class FirebaseCommunityRepository @Inject constructor(
         )
     }
 
-    override suspend fun likeComment(commentId: String): com.exapps.mangaworld.domain.model.VoteOutcome {
-        return voteOnContent(targetType = "comment", mangaId = null, targetId = commentId, vote = 1)
+    override suspend fun likeComment(commentId: String, mangaId: String): com.exapps.mangaworld.domain.model.VoteOutcome {
+        return voteOnContent(targetType = "comment", mangaId = mangaId, targetId = commentId, vote = 1)
     }
 
-    override suspend fun dislikeComment(commentId: String): com.exapps.mangaworld.domain.model.VoteOutcome {
-        return voteOnContent(targetType = "comment", mangaId = null, targetId = commentId, vote = -1)
+    override suspend fun dislikeComment(commentId: String, mangaId: String): com.exapps.mangaworld.domain.model.VoteOutcome {
+        return voteOnContent(targetType = "comment", mangaId = mangaId, targetId = commentId, vote = -1)
     }
 
     override suspend fun likeReview(mangaId: String, reviewId: String): com.exapps.mangaworld.domain.model.VoteOutcome {
@@ -924,6 +926,14 @@ class FirebaseCommunityRepository @Inject constructor(
         // "empty" and "failed" in diagnostics.
         if (error.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED) {
             runCatching { telemetry.logListenerDenial(surface, error.code.name) }
+            // RA-4: Crashlytics custom keys are last-write-wins, so also emit
+            // a countable analytics event (surface + code params, no PII).
+            runCatching {
+                analyticsManager.logEvent(
+                    "listener_denial",
+                    mapOf("surface" to surface, "code" to error.code.name)
+                )
+            }
             return
         }
         runCatching { telemetry.logListenerStarvation(surface, "listen", error) }
@@ -1692,6 +1702,11 @@ class FirebaseCommunityRepository @Inject constructor(
     override suspend fun followUser(targetUid: String) {
         val uid = sessionManager.currentUserId() ?: return
         require(uid != targetUid) { context.getString(R.string.community_error_self_follow) }
+        // Named users only (RA-2): the rules reject anonymous relationship
+        // writes; fail here with a sign-in message instead of a bare denial.
+        if (sessionManager.currentUser()?.isAnonymous != false) {
+            error(context.getString(R.string.community_error_sign_in))
+        }
         val myProfile = getCurrentProfile()
         val targetProfile = getCurrentProfileForUid(targetUid)
         val followedAt = System.currentTimeMillis()
@@ -1718,6 +1733,9 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override suspend fun unfollowUser(targetUid: String) {
         val uid = sessionManager.currentUserId() ?: return
+        if (sessionManager.currentUser()?.isAnonymous != false) {
+            error(context.getString(R.string.community_error_sign_in))
+        }
         firestore.runBatch { batch ->
             batch.delete(firestore.collection("relationships").document(uid).collection("following").document(targetUid))
             batch.delete(firestore.collection("relationships").document(targetUid).collection("followers").document(uid))

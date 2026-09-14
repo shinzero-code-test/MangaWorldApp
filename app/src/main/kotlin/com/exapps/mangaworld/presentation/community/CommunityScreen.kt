@@ -519,7 +519,12 @@ class CommunityViewModel @Inject constructor(
             tappedVote = tappedVote,
             serverCounts = server.likes to server.dislikes,
             priorMyVote = snapshot.myVotes[commentId],
-            post = { v -> if (v == 1) communityRepository.likeComment(commentId) else communityRepository.dislikeComment(commentId) },
+            post = { v ->
+                // The screen-level manga id disambiguates legacy duplicate
+                // comment ids server-side (VC-5); reviews carry their own.
+                if (v == 1) communityRepository.likeComment(commentId, mangaId)
+                else communityRepository.dislikeComment(commentId, mangaId)
+            },
             serverCountsNow = {
                 state.value.comments.firstOrNull { it.id == commentId }?.let { it.likes to it.dislikes }
             },

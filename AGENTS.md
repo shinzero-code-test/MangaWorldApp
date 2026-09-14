@@ -65,6 +65,7 @@ Dashboard: `dashboard/src/` (Next.js App Router) with `dashboard/vercel.json`, `
 - **Base scrapers**: `BaseScraperImpl`, `MadaraBaseScraper` (Madara WordPress), `MangaReaderBaseScraper` (MangaReader theme), plus custom scrapers. Shared parsing: `ScraperText.firstChapterNumber()` / `.slugFromHref()` / `.extractViews()`
 - **Room v15**: schemas exported to `app/schemas/` via KSP `room.schemaLocation`. Migrations 8→15 hand-written in `MangaDatabase.kt`. `exportSchema = true`
 - **Favourites vs Reading List**: `FavoriteEntity.isFavorite` boolean separate from `readingStatus` string. `removeFavorite` sets `isFavorite=false` — does NOT delete entity row
+- **Public library intent (RA-7)**: the visitor library is the *reading-status* list, not favourites — `users/{uid}/favorites` public reads match `readingStatus in [...]` with no `isFavorite` check, so a deselected favourite that keeps a status still shows publicly until status-cleared. By design, not a leak.
 - **No FirebaseFunctions dependency**: External API calls use raw HttpURLConnection or OkHttp
 - **Cloudinary is the ONLY image upload mechanism**: Firebase Storage forbidden. App uploads proxy through dashboard's `POST /api/cloudinary/app-upload`
 - **Firebase Auth is the sole provider-to-UID authority**
