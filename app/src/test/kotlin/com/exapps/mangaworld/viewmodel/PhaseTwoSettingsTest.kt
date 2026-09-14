@@ -117,6 +117,7 @@ class PhaseTwoSettingsTest {
         communityRepository = communityRepo,
         settingsRepository = settingsRepo,
         sessionManager = sessionManager,
+        syncManager = mockk(relaxed = true),
         securityRepository = securityRepo,
         favoriteDao = favoriteDao,
         historyDao = historyDao,
