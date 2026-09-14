@@ -208,4 +208,92 @@ class FirebaseSyncMergeTest {
         org.junit.Assert.assertNull(FirebaseSyncMerge.parseReadMarkDocId("m|abc"))
         org.junit.Assert.assertNull(FirebaseSyncMerge.parseReadMarkDocId("|1.0"))
     }
+
+    // ─── v8.7.1: R8-obfuscated release docs + explicit-map pushes ────────────
+
+    /** Stubs every typed getter from a field map, mirroring real Firestore ints-as-Long. */
+    private fun mapDoc(
+        id: String,
+        fields: Map<String, Any?>
+    ): com.google.firebase.firestore.DocumentSnapshot {
+        val doc = io.mockk.mockk<com.google.firebase.firestore.DocumentSnapshot>(relaxed = true)
+        io.mockk.every { doc.id } returns id
+        io.mockk.every { doc.data } returns fields
+        fields.forEach { (k, v) ->
+            when (v) {
+                is String -> io.mockk.every { doc.getString(k) } returns v
+                is Long -> io.mockk.every { doc.getLong(k) } returns v
+                is Int -> io.mockk.every { doc.getLong(k) } returns v.toLong()
+                is Double -> io.mockk.every { doc.getDouble(k) } returns v
+                is Float -> io.mockk.every { doc.getDouble(k) } returns v.toDouble()
+                is Boolean -> io.mockk.every { doc.getBoolean(k) } returns v
+            }
+        }
+        return doc
+    }
+
+    @org.junit.Test
+    fun obfuscatedReleaseDocsAreSkipped() {
+        // Pre-v8.7.1 release builds stored entities under single-letter keys.
+        val junk = mapOf("a" to 1L, "b" to "x", "c" to "y", "d" to "z", "e" to 5L, "f" to 1L, "g" to true)
+        org.junit.Assert.assertNull(FirebaseSyncMerge.favorite(mapDoc("m1", junk)))
+        org.junit.Assert.assertNull(FirebaseSyncMerge.history(mapDoc("m1", junk)))
+        org.junit.Assert.assertNull(FirebaseSyncMerge.annotation(mapDoc("m1", junk)))
+    }
+
+    @org.junit.Test
+    fun favoriteSyncMapRoundTripsIncludingStatus() {
+        val entity = com.exapps.mangaworld.core.data.local.entity.FavoriteEntity(
+            mangaId = "azora_solo",
+            slug = "solo",
+            title = "Solo Leveling",
+            coverUrl = "https://example.com/c.jpg",
+            sourceId = "azora",
+            addedAt = 7_000L,
+            readChapters = 3,
+            totalChapters = 10,
+            readingStatus = "reading",
+            isFavorite = true
+        )
+        val parsed = FirebaseSyncMerge.favorite(mapDoc("azora_solo", FirebaseSyncMerge.favoriteToMap(entity)))!!
+        org.junit.Assert.assertEquals("azora_solo", parsed.mangaId)
+        org.junit.Assert.assertEquals("reading", parsed.readingStatus)
+        org.junit.Assert.assertEquals(3, parsed.readChapters)
+        org.junit.Assert.assertTrue(parsed.isFavorite)
+    }
+
+    @org.junit.Test
+    fun historySyncMapRoundTripsChapterNumber() {
+        val entity = ReadingHistoryEntity(
+            mangaId = "azora_h",
+            slug = "h",
+            title = "T",
+            coverUrl = "",
+            sourceId = "azora",
+            lastChapterNumber = 12.5f,
+            lastChapterUrl = "ch",
+            lastReadAt = 9_000L,
+            readChapters = 12,
+            totalChapters = 20
+        )
+        val parsed = FirebaseSyncMerge.history(mapDoc("azora_h", FirebaseSyncMerge.historyToMap(entity)))!!
+        org.junit.Assert.assertEquals(12.5f, parsed.lastChapterNumber)
+        org.junit.Assert.assertEquals(9_000L, parsed.lastReadAt)
+    }
+
+    @org.junit.Test
+    fun annotationSyncMapRoundTrips() {
+        val entity = ReaderAnnotationEntity(
+            mangaId = "m1",
+            chapterUrl = "ch",
+            pageIndex = 3,
+            note = "n",
+            isBookmarked = true,
+            updatedAt = 1_000L
+        )
+        val parsed = FirebaseSyncMerge.annotation(mapDoc("m1", FirebaseSyncMerge.annotationToMap(entity)))!!
+        org.junit.Assert.assertEquals(3, parsed.pageIndex)
+        org.junit.Assert.assertTrue(parsed.isBookmarked)
+        org.junit.Assert.assertEquals("n", parsed.note)
+    }
 }

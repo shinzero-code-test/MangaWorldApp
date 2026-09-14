@@ -54,6 +54,11 @@
 -keep class com.exapps.mangaworld.core.data.remote.scraper.** { *; }
 
 # ── Firestore-serialized data classes (toObject()/toMap() must survive R8) ─────
+# Entity POJOs must NEVER be renamed: release builds once stored favorites /
+# history / annotations under obfuscated single-letter keys (no readingStatus),
+# invisible to every named-field query. Pushes now use explicit maps, but the
+# keep stands as a second net for toObject() pulls and any future POJO write.
+-keep class com.exapps.mangaworld.core.data.local.entity.** { *; }
 -keep class com.exapps.mangaworld.core.data.local.SyncTombstone { *; }
 -keep class com.exapps.mangaworld.core.data.AchievementManager$* { *; }
 

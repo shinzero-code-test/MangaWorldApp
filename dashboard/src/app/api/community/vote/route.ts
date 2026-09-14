@@ -5,6 +5,7 @@ import { rejectAnonymousUser, verifyAppIdToken } from "@/lib/app-auth";
 import { allowAppMutation } from "@/lib/app-rate-limit";
 import { getAdminDb, getAdminMessaging } from "@/lib/firebase-admin";
 import { genericErrorResponse } from "@/lib/security";
+import { computeVoteTransition, isVote } from "@/lib/vote-transition";
 
 export const dynamic = "force-dynamic";
 
@@ -53,27 +54,28 @@ export async function POST(request: NextRequest) {
       if (!content) throw new ContentNotFoundError();
       if (content.authorUid === user.uid) throw new SelfVoteError();
 
-      const previousVote = voteSnapshot.data()?.value;
-      if (previousVote === payload.vote) {
-        return {
-          likes: nonNegativeCount(content.likes),
-          dislikes: nonNegativeCount(content.dislikes),
-          changed: false,
-        };
+      // Toggle semantics: repeat retracts, opposite switches, fresh adds.
+      // Pure math lives in lib/vote-transition (unit-tested, no I/O).
+      const transition = computeVoteTransition(
+        voteSnapshot.data()?.value,
+        payload.vote,
+        content.likes,
+        content.dislikes
+      );
+      if (transition.removeVoteDoc) {
+        transaction.delete(voteRef);
+      } else {
+        transaction.set(voteRef, { uid: user.uid, value: payload.vote, updatedAt: Date.now() });
       }
-
-      const likes = Math.max(0, nonNegativeCount(content.likes) + voteDelta(previousVote, payload.vote, 1));
-      const dislikes = Math.max(0, nonNegativeCount(content.dislikes) + voteDelta(previousVote, payload.vote, -1));
-      transaction.set(voteRef, { uid: user.uid, value: payload.vote, updatedAt: Date.now() });
-      transaction.update(contentRef, { likes, dislikes });
-      return { likes, dislikes, changed: true };
+      transaction.update(contentRef, { likes: transition.likes, dislikes: transition.dislikes });
+      return { likes: transition.likes, dislikes: transition.dislikes, changed: transition.changed, action: transition.action };
     });
 
     // Like/dislike fan-out (best-effort — the vote is already committed).
     // Clients cannot write to another user's notifications (owner-only rule),
     // so the server creates the REVIEW_REACTION doc + FCM via Admin SDK.
-    // Idempotent repeats (changed == false) stay silent.
-    if (result.changed) {
+    // Retractions stay silent — nobody needs a "like removed" ping.
+    if (result.action !== "removed") {
       try {
         const contentSnap = await contentRef.get();
         const contentData = contentSnap.data();
@@ -138,16 +140,4 @@ class SelfVoteError extends Error {}
 
 function isIdentifier(value: unknown): value is string {
   return typeof value === "string" && value.length >= 1 && value.length <= 512 && !value.includes("/");
-}
-
-function isVote(value: unknown): value is 1 | -1 {
-  return value === 1 || value === -1;
-}
-
-function nonNegativeCount(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
-}
-
-function voteDelta(previousVote: unknown, nextVote: 1 | -1, targetVote: 1 | -1): number {
-  return Number(previousVote === targetVote) * -1 + Number(nextVote === targetVote);
 }

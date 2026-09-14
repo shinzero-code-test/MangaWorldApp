@@ -9,6 +9,16 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    // Privacy-flag gate shared by lists/items/favorites public reads.
+    // Legacy accounts predate publicProfiles entirely — fail OPEN to the app
+    // default (public), mirroring the isPublic fail-open on profile reads.
+    // The exists() short-circuit matters: get() on a missing doc errors,
+    // which would deny every public read for profile-less users.
+    function publicFlag(userId, flag) {
+      return !exists(/databases/$(database)/documents/publicProfiles/$(userId))
+        || get(/databases/$(database)/documents/publicProfiles/$(userId)).data.get(flag, true) == true;
+    }
+
     function canWriteCommunity(authorUid) {
       return signedIn()
         && request.auth.token.firebase.sign_in_provider != 'anonymous'
@@ -277,7 +287,7 @@ service cloud.firestore {
         // opted into a public library. Pure favorites (no readingStatus)
         // stay private. Missing showLibraryPublic defaults public (app default).
         allow read: if owner(userId) || (
-          get(/databases/$(database)/documents/publicProfiles/$(userId)).data.get('showLibraryPublic', true) == true
+          publicFlag(userId, 'showLibraryPublic')
           && resource.data.get('readingStatus', null) in ['reading', 'completed', 'plan_to_read', 'on_hold', 'dropped']
         );
         allow write: if owner(userId);
@@ -322,14 +332,14 @@ service cloud.firestore {
         // showListsPublic flag reads as public (app default). A list doc's
         // OWN isPublic stays fail-closed — a missing flag there denies.
         allow read: if owner(userId) || (
-          get(/databases/$(database)/documents/publicProfiles/$(userId)).data.get('showListsPublic', true) == true
+          publicFlag(userId, 'showListsPublic')
           && resource.data.isPublic == true
         );
         allow write: if owner(userId);
 
         match /items/{document=**} {
           allow read: if owner(userId) || (
-            get(/databases/$(database)/documents/publicProfiles/$(userId)).data.get('showListsPublic', true) == true
+            publicFlag(userId, 'showListsPublic')
             && get(/databases/$(database)/documents/users/$(userId)/lists/$(listId)).data.isPublic == true
           );
           allow write: if owner(userId);

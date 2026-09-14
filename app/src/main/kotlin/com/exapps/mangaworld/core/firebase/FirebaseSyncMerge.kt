@@ -77,6 +77,12 @@ internal object FirebaseSyncMerge {
 
     /** mangaId falls back to the doc id (push writes use mangaId as doc id). */
     fun favorite(doc: DocumentSnapshot): FavoriteEntity? = runCatching {
+        // Junk guard: release POJOs predating explicit-map writes were stored
+        // under obfuscated single-letter keys (R8 renamed the getters). Such
+        // docs carry none of the stable keys — skip them so pulls never
+        // resurrect blank rows (they heal on the next overwrite push).
+        // Empty/missing data keeps the legacy lenient path (unit-test mocks).
+        if (isObfuscatedDoc(doc, FAVORITE_SYNC_KEYS)) return null
         val mangaId = doc.getString("mangaId")?.takeIf { it.isNotBlank() } ?: doc.id
         if (mangaId.isBlank()) return null
         FavoriteEntity(
@@ -94,6 +100,7 @@ internal object FirebaseSyncMerge {
     }.getOrNull()
 
     fun history(doc: DocumentSnapshot): ReadingHistoryEntity? = runCatching {
+        if (isObfuscatedDoc(doc, HISTORY_SYNC_KEYS)) return null
         val mangaId = doc.getString("mangaId")?.takeIf { it.isNotBlank() } ?: doc.id
         if (mangaId.isBlank()) return null
         ReadingHistoryEntity(
@@ -112,6 +119,7 @@ internal object FirebaseSyncMerge {
     }.getOrNull()
 
     fun annotation(doc: DocumentSnapshot): ReaderAnnotationEntity? = runCatching {
+        if (isObfuscatedDoc(doc, ANNOTATION_SYNC_KEYS)) return null
         val mangaId = doc.getString("mangaId")?.takeIf { it.isNotBlank() } ?: return null
         val chapterUrl = doc.getString("chapterUrl")?.takeIf { it.isNotBlank() } ?: return null
         ReaderAnnotationEntity(
@@ -123,4 +131,75 @@ internal object FirebaseSyncMerge {
             updatedAt = doc.getLong("updatedAt") ?: 0L
         )
     }.getOrNull()
+
+    // ─── Push serialization ───────────────────────────────────────────────
+    //
+    // NEVER push Room POJOs directly: R8 renames Kotlin getters in release
+    // builds, so FavoriteEntity et al. landed in Firestore under obfuscated
+    // single-letter keys (a..g) with no readingStatus — invisible to every
+    // named-field query (public library) and reader. Explicit maps keep stable
+    // keys regardless of shrinking (proguard keeps are a second net, below).
+
+    private val FAVORITE_SYNC_KEYS = setOf(
+        "mangaId", "slug", "title", "coverUrl", "sourceId", "addedAt",
+        "readChapters", "totalChapters", "readingStatus", "isFavorite"
+    )
+
+    private val HISTORY_SYNC_KEYS = setOf(
+        "mangaId", "slug", "title", "coverUrl", "sourceId", "lastChapterNumber",
+        "lastChapterUrl", "lastReadAt", "readChapters", "totalChapters", "durationMs"
+    )
+
+    private val ANNOTATION_SYNC_KEYS = setOf(
+        "mangaId", "chapterUrl", "pageIndex", "note", "isBookmarked", "updatedAt"
+    )
+
+    /**
+     * True when the doc has fields but NONE of the stable sync keys — the
+     * fingerprint of R8-obfuscated release writes (a..g). Empty/missing data
+     * is NOT junk (keeps the legacy lenient path and relaxed-mock tests).
+     */
+    private fun isObfuscatedDoc(doc: DocumentSnapshot, knownKeys: Set<String>): Boolean {
+        val keys = doc.data?.keys ?: return false
+        return keys.isNotEmpty() && keys.none { it in knownKeys }
+    }
+
+    /** Field names mirror [favorite] exactly — readers and writers share them. */
+    fun favoriteToMap(entity: FavoriteEntity): Map<String, Any?> = mapOf(
+        "mangaId" to entity.mangaId,
+        "slug" to entity.slug,
+        "title" to entity.title,
+        "coverUrl" to entity.coverUrl,
+        "sourceId" to entity.sourceId,
+        "addedAt" to entity.addedAt,
+        "readChapters" to entity.readChapters,
+        "totalChapters" to entity.totalChapters,
+        "readingStatus" to entity.readingStatus,
+        "isFavorite" to entity.isFavorite
+    )
+
+    /** Field names mirror [history] exactly. Floats ride as doubles. */
+    fun historyToMap(entity: ReadingHistoryEntity): Map<String, Any?> = mapOf(
+        "mangaId" to entity.mangaId,
+        "slug" to entity.slug,
+        "title" to entity.title,
+        "coverUrl" to entity.coverUrl,
+        "sourceId" to entity.sourceId,
+        "lastChapterNumber" to entity.lastChapterNumber.toDouble(),
+        "lastChapterUrl" to entity.lastChapterUrl,
+        "lastReadAt" to entity.lastReadAt,
+        "readChapters" to entity.readChapters,
+        "totalChapters" to entity.totalChapters,
+        "durationMs" to entity.durationMs
+    )
+
+    /** Field names mirror [annotation] exactly. */
+    fun annotationToMap(entity: ReaderAnnotationEntity): Map<String, Any?> = mapOf(
+        "mangaId" to entity.mangaId,
+        "chapterUrl" to entity.chapterUrl,
+        "pageIndex" to entity.pageIndex,
+        "note" to entity.note,
+        "isBookmarked" to entity.isBookmarked,
+        "updatedAt" to entity.updatedAt
+    )
 }

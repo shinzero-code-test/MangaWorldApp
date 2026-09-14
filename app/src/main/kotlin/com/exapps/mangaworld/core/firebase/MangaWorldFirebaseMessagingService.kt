@@ -89,12 +89,17 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
     ) {
 
         val intent = when {
+            // FOLLOW carries the follower uid instead of manga linkage — open
+            // their public profile, never a blank detail screen.
+            type.equals("FOLLOW", ignoreCase = true) && !message.data["targetUid"].isNullOrBlank() ->
+                AppLaunchIntents.profile(this, message.data.getValue("targetUid"))
+
             message.data["sourceId"] != null && message.data["slug"] != null ->
                 AppLaunchIntents.detail(this, message.data.getValue("sourceId"), message.data.getValue("slug"))
 
             else -> AppLaunchIntents.latestUpdates(this)
         }
-        val requestCode = (message.data["sourceId"] ?: "") + "_" + (message.data["slug"] ?: "") + "_" + (message.data["chapterUrl"] ?: "")
+        val requestCode = (message.data["sourceId"] ?: "") + "_" + (message.data["slug"] ?: "") + "_" + (message.data["chapterUrl"] ?: "") + "_" + (message.data["targetUid"] ?: "")
         val pendingIntent = PendingIntent.getActivity(
             this,
             requestCode.hashCode().coerceAtLeast(1),

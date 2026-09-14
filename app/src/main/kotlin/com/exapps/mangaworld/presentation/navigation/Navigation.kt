@@ -212,7 +212,11 @@ fun MangaNavGraph(
                 onItemClick = { sourceId, slug -> navController.navigate(Screen.Detail.createRoute(sourceId, slug)) }
             )
         }
-        composable(Screen.PublicProfile.route, arguments = listOf(navArgument("userId") { type = NavType.StringType })) {
+        composable(
+            Screen.PublicProfile.route,
+            arguments = listOf(navArgument("userId") { type = NavType.StringType }),
+            deepLinks = listOf(navDeepLink { uriPattern = "mangaworld://screen/profile/{userId}" })
+        ) {
             PublicProfileScreen(
                 onBack = { navController.popBackStack() },
                 onItemClick = { sourceId, slug -> navController.navigate(Screen.Detail.createRoute(sourceId, slug)) }
@@ -223,7 +227,16 @@ fun MangaNavGraph(
                 onBack = { navController.popBackStack() },
                 onOpenProfile = { userId -> navController.navigate(Screen.PublicProfile.createRoute(userId)) },
                 onNotificationClick = { item ->
-                    val mangaId = item.mangaId ?: return@NotificationCenterScreen
+                    // FOLLOW carries no manga — route to the follower's profile.
+                    // Legacy follow docs (no targetUid) are read-and-stay: opening
+                    // a detail screen with a blank slug is the old error screen.
+                    if (item.type == "follow") {
+                        val target = item.targetUid
+                        if (target != null) onOpenProfile(target)
+                        return@NotificationCenterScreen
+                    }
+                    val mangaId = item.mangaId
+                    if (mangaId.isNullOrBlank()) return@NotificationCenterScreen
                     // Imported/local entries store the full mangaId (imported_xxx) —
                     // routing them through substring parsing would strip the prefix
                     // and land on a blank detail screen.

@@ -63,6 +63,8 @@ export async function POST(request: NextRequest) {
         sourceId: "",
         chapterUrl: null,
         commentId: null,
+        // In-app + FCM routing target: the follower's public profile.
+        targetUid: user.uid,
         createdAt: Date.now(),
         read: false,
       },
@@ -77,7 +79,7 @@ export async function POST(request: NextRequest) {
       if (tokens.length > 0) {
         await getAdminMessaging().sendEachForMulticast({
           tokens: tokens.slice(0, 500),
-          data: { title: "متابِع جديد", body: `${myName} بدأ بمتابعتك`, type: "FOLLOW" },
+          data: { title: "متابِع جديد", body: `${myName} بدأ بمتابعتك`, type: "FOLLOW", targetUid: user.uid },
         });
       }
     } catch {

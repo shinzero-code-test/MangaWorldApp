@@ -25,6 +25,9 @@ object AppLaunchIntents {
     fun detail(context: Context, sourceId: String, slug: String): Intent =
         intent(context, "$Scheme://manga/$sourceId/$slug")
 
+    fun profile(context: Context, userId: String): Intent =
+        intent(context, "$Scheme://screen/profile/$userId")
+
     fun reader(context: Context, sourceId: String, mangaId: String, chapterUrl: String): Intent {
         val uri = Uri.Builder()
             .scheme(Scheme)

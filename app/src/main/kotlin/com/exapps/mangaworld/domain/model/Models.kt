@@ -507,6 +507,8 @@ data class CommunityNotification(
     val sourceId: String,
     val chapterUrl: String? = null,
     val commentId: String? = null,
+    /** FOLLOW notifications carry the follower's uid (manga fields are blank). */
+    val targetUid: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val read: Boolean = false
 )

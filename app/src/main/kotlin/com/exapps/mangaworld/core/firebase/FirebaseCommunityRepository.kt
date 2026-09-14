@@ -1345,6 +1345,7 @@ class FirebaseCommunityRepository @Inject constructor(
         "sourceId" to sourceId,
         "chapterUrl" to chapterUrl,
         "commentId" to commentId,
+        "targetUid" to targetUid,
         "createdAt" to createdAt,
         "read" to read
     )
@@ -1462,6 +1463,7 @@ class FirebaseCommunityRepository @Inject constructor(
             sourceId = getString("sourceId")?.takeIf { id -> com.exapps.mangaworld.domain.model.MangaSource.entries.any { it.id == id } } ?: "azora",
             chapterUrl = getString("chapterUrl"),
             commentId = getString("commentId"),
+            targetUid = getString("targetUid"),
             createdAt = getLong("createdAt") ?: 0L,
             read = getBoolean("read") ?: false
         )

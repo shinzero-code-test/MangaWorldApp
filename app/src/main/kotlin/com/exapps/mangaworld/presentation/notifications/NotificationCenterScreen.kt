@@ -54,6 +54,8 @@ data class UnifiedNotification(
     val body: String,
     val type: String,           // "community", "chapter_update", "suggestion", "reminder"
     val mangaId: String? = null,
+    /** FOLLOW notifications route to this uid's public profile (mangaId blank). */
+    val targetUid: String? = null,
     val read: Boolean = false,
     val timestamp: Long = 0L,
     val icon: String = "notifications"  // icon key for display
@@ -85,6 +87,7 @@ class NotificationCenterViewModel @Inject constructor(
                         CommunityNotificationType.FOLLOW -> "follow"
                     },
                     mangaId = notif.mangaId,
+                    targetUid = notif.targetUid,
                     read = notif.read,
                     timestamp = notif.createdAt
                 )

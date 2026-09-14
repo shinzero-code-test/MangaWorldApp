@@ -105,6 +105,11 @@ class FirebaseSyncManager @Inject constructor(
                 .associate { (id, _, readAt) -> id to readAt }
 
             val writes = mutableListOf<Pair<DocumentReference, Any>>()
+            // Entity collections ride as explicit maps with OVERWRITE semantics
+            // (plain set, no merge): merge would preserve obfuscated junk keys
+            // (a..g) from pre-v8.7.1 release POJO writes alongside the clean
+            // fields. Overwrite heals those docs on the next push. Votes live
+            // in subcollections, which set() never touches.
             writes += userRef to mapOf(
                 "updatedAt" to System.currentTimeMillis(),
                 "enabledSources" to settings.enabledSources.toList(),
@@ -142,20 +147,24 @@ class FirebaseSyncManager @Inject constructor(
                 "volumeButtonPageTurn" to reader.volumeButtonPageTurn,
                 "doubleTapZoom" to reader.doubleTapZoom
             )
+            val overwrites = mutableListOf<Pair<DocumentReference, Any>>()
             favorites.forEach { favorite ->
                 if (shouldPushLocal(favorite.addedAt, remoteFavTs[favorite.mangaId])) {
-                    writes += userRef.collection("favorites").document(favorite.mangaId) to favorite
+                    overwrites += userRef.collection("favorites").document(favorite.mangaId) to
+                        FirebaseSyncMerge.favoriteToMap(favorite)
                 }
             }
             history.forEach { item ->
                 if (shouldPushLocal(item.lastReadAt, remoteHistTs[item.mangaId])) {
-                    writes += userRef.collection("readingHistory").document(item.mangaId) to item
+                    overwrites += userRef.collection("readingHistory").document(item.mangaId) to
+                        FirebaseSyncMerge.historyToMap(item)
                 }
             }
             annotations.forEach { annotation ->
                 val key = annotationDocId(annotation)
                 if (shouldPushLocal(annotation.updatedAt, remoteAnnoTs[key])) {
-                    writes += userRef.collection("readerAnnotations").document(key) to annotation
+                    overwrites += userRef.collection("readerAnnotations").document(key) to
+                        FirebaseSyncMerge.annotationToMap(annotation)
                 }
             }
             readMarks.forEach { mark ->
@@ -179,6 +188,9 @@ class FirebaseSyncManager @Inject constructor(
             }
 
             commitChunked(writes)
+            // Entity snapshots overwrite (see above) — merged writes would keep
+            // the obfuscated legacy keys alive next to the clean fields.
+            commitOverwrite(overwrites)
             // Tombstoned rows must disappear from cloud too — otherwise new
             // devices resurrect them on first pull (their tombstones are local).
             commitChunkedDeletes(tombstones.map { userRef.collection(it.collection).document(it.documentId) })
@@ -628,6 +640,31 @@ class FirebaseSyncManager @Inject constructor(
             // Partial push must NOT report success: the worker maps this to retry,
             // and silent success would park lost chunks behind the hourly throttle.
             error("FirebaseSync: $failedChunks/${chunks.size} sync chunks failed")
+        }
+    }
+
+    /**
+     * Plain-set variant for full entity snapshots (favorites/history/
+     * annotations). Unlike [commitChunked] this does NOT merge, so legacy
+     * obfuscated keys from pre-v8.7.1 release POJO writes are dropped instead
+     * of preserved next to the clean fields. Same fail-loud contract.
+     */
+    private suspend fun commitOverwrite(writes: List<Pair<DocumentReference, Any>>) {
+        if (writes.isEmpty()) return
+        val chunks = writes.chunked(400)
+        var failedChunks = 0
+        for ((index, chunk) in chunks.withIndex()) {
+            runCatching {
+                val batch: WriteBatch = firestore.batch()
+                chunk.forEach { (ref, value) -> batch.set(ref, value) }
+                batch.commit().await()
+            }.onFailure { e ->
+                android.util.Log.e("FirebaseSync", "Overwrite chunk ${index + 1}/${chunks.size} failed: ${e.message}")
+                failedChunks++
+            }
+        }
+        if (failedChunks > 0) {
+            error("FirebaseSync: $failedChunks/${chunks.size} sync overwrite chunks failed")
         }
     }
 
