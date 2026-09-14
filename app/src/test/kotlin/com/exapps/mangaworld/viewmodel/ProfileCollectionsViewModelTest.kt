@@ -262,7 +262,7 @@ class ProfileCollectionsViewModelTest {
     }
 
     @Test
-    fun publicProfile_toggleFollowFlipsState() {
+    fun publicProfile_toggleFollowWritesThroughRepository() {
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
         Dispatchers.setMain(dispatcher)
@@ -271,6 +271,7 @@ class ProfileCollectionsViewModelTest {
         every { communityRepo.observePublicLists(any()) } returns flowOf(emptyList())
         every { communityRepo.observePublicActivity(any()) } returns flowOf(emptyList())
         every { communityRepo.observePublicListItems(any(), any()) } returns flowOf(emptyList())
+        every { communityRepo.isFollowing("u2") } returns flowOf(false)
         val vm = PublicProfileViewModel(
             SavedStateHandle(mapOf("userId" to "u2")),
             communityRepo,
@@ -278,11 +279,12 @@ class ProfileCollectionsViewModelTest {
             sessionManager
         )
         advanceUntilIdle()
+        // Button truth comes from the observed relationships doc, never a local flip.
         assertFalse(vm.isFollowing.value)
         vm.toggleFollow()
-        assertTrue(vm.isFollowing.value)
-        vm.toggleFollow()
-        assertFalse(vm.isFollowing.value)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { communityRepo.followUser("u2") }
+        coVerify(exactly = 0) { communityRepo.unfollowUser(any()) }
         }
     }
 
