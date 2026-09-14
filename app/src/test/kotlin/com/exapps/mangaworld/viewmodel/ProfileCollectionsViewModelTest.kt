@@ -216,6 +216,9 @@ class ProfileCollectionsViewModelTest {
         every { sessionManager.currentUser() } returns mockk(relaxed = true) {
             every { isAnonymous } returns false
         }
+        // RA-5: profile reads are impossible — a read-modify-write toggle
+        // would fail here; the single-key merge must still land.
+        coEvery { communityRepo.getCurrentProfile() } throws RuntimeException("down")
         val vm = createProfileSettingsVm()
         advanceUntilIdle()
         vm.setPrivacyFlag(ProfilePrivacyFlag.SHOW_ACTIVITY_PUBLIC, false)
@@ -223,15 +226,11 @@ class ProfileCollectionsViewModelTest {
         coVerify(exactly = 1) {
             communityRepo.updateProfilePrivacyFlag(ProfilePrivacyFlag.SHOW_ACTIVITY_PUBLIC, false)
         }
-        // RA-5: no read-modify-write — forget init's reads, then prove the
-        // toggle itself performs zero profile reads (so it cannot clobber
-        // sibling flags with stale values).
-        clearMocks(communityRepo, answers = false)
-        vm.setPrivacyFlag(ProfilePrivacyFlag.SHOW_ACTIVITY_PUBLIC, true)
-        advanceUntilIdle()
-        coVerify(exactly = 0) { communityRepo.getCurrentProfile() }
-        coVerify(exactly = 1) {
-            communityRepo.updateProfilePrivacyFlag(ProfilePrivacyFlag.SHOW_ACTIVITY_PUBLIC, true)
+        coVerify(exactly = 0) {
+            communityRepo.updateProfilePrivacyFlag(ProfilePrivacyFlag.SHOW_LIBRARY_PUBLIC, any())
+        }
+        coVerify(exactly = 0) {
+            communityRepo.updateProfilePrivacyFlag(ProfilePrivacyFlag.IS_PUBLIC, any())
         }
         }
     }
