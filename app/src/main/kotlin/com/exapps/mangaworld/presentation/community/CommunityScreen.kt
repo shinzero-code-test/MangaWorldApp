@@ -291,6 +291,9 @@ class CommunityViewModel @Inject constructor(
             val echo = voteEchoes[id]
                 ?.takeIf { now - it.at < ECHO_TTL_MS && (likes != it.expectedLikes || dislikes != it.expectedDislikes) }
                 ?: return likes to dislikes
+            // Clamped for display; the confirm step recovers raw server counts
+            // clamp-aware (a clamped row can't prove anything — it defers to
+            // the one-shot fetch instead of misreading the match).
             return maxOf(0, likes + echo.dLikes) to maxOf(0, dislikes + echo.dDislikes)
         }
         val liveComments = data.comments.map { c ->
@@ -604,10 +607,19 @@ class CommunityViewModel @Inject constructor(
 
     /**
      * Belt-and-braces reconcile (rec-4): 2s after the write, the snapshot
-     * should carry the expected counts. If it does, evict early. If not,
-     * one-shot-fetch the doc: a match means the Watch stream is just slow
-     * (extend the echo), anything else (or an unreadable doc) evicts and lets
-     * server truth rule. Never throws.
+     * should carry the expected counts. The displayed counts already include
+     * our own overlay, so the raw server position is recovered by subtracting
+     * the echo delta — comparing display counts directly would trivially
+     * match and wrongly evict every echo (the count would visibly revert).
+     * A clamped row (0 with a negative delta) proves nothing either way and
+     * defers to the fetch instead of misreading the match.
+     * - raw == expected → landed → evict.
+     * - raw == base → snapshot stale → one-shot fetch: match extends the
+     *   echo (slow Watch), anything else evicts.
+     * - otherwise concurrent voters moved the snapshot → rebase the echo so
+     *   our delta keeps applying on fresh truth.
+     * Every mutation is generation-guarded (echo.at): a newer tap owns the
+     * row and this stale check must not touch it. Never throws.
      */
     private suspend fun confirmVoteEcho(
         targetId: String,
@@ -615,21 +627,45 @@ class CommunityViewModel @Inject constructor(
         fetch: suspend () -> Pair<Int, Int>?
     ) {
         kotlinx.coroutines.delay(VOTE_CONFIRM_DELAY_MS)
-        if (targetId !in pending.value.voteEchoes) return
+        val echo = pending.value.voteEchoes[targetId] ?: return
+        val dLikes = echo.expectedLikes - echo.baseLikes
+        val dDislikes = echo.expectedDislikes - echo.baseDislikes
         val live = serverCountsNow()
-        val current = pending.value.voteEchoes[targetId]
-        if (current != null && live != null
-            && live.first == current.expectedLikes && live.second == current.expectedDislikes
-        ) {
-            pending.update { it.copy(voteEchoes = it.voteEchoes - targetId) }
-            return
+        // Clamp fog: a displayed 0 with a negative delta could hide any raw
+        // value in [0, -delta] — unreadable, so skip straight to the fetch.
+        val clamped = live != null &&
+            ((live.first == 0 && dLikes < 0) || (live.second == 0 && dDislikes < 0))
+        if (live != null && !clamped) {
+            val raw = (live.first - dLikes) to (live.second - dDislikes)
+            if (raw.first == echo.expectedLikes && raw.second == echo.expectedDislikes) {
+                pending.update { cur ->
+                    if (cur.voteEchoes[targetId]?.at != echo.at) return@update cur
+                    cur.copy(voteEchoes = cur.voteEchoes - targetId)
+                }
+                return
+            }
+            if (raw.first != echo.baseLikes || raw.second != echo.baseDislikes) {
+                pending.update { cur ->
+                    if (cur.voteEchoes[targetId]?.at != echo.at) return@update cur
+                    cur.copy(
+                        voteEchoes = cur.voteEchoes + (targetId to echo.copy(
+                            baseLikes = raw.first,
+                            baseDislikes = raw.second,
+                            expectedLikes = raw.first + dLikes,
+                            expectedDislikes = raw.second + dDislikes,
+                            at = System.currentTimeMillis()
+                        ))
+                    )
+                }
+                return
+            }
         }
-        if (current == null) return
         val fresh = runCatching { fetch() }.getOrNull() ?: return
         pending.update { cur ->
-            val echo = cur.voteEchoes[targetId] ?: return@update cur
-            if (fresh.first == echo.expectedLikes && fresh.second == echo.expectedDislikes) {
-                cur.copy(voteEchoes = cur.voteEchoes + (targetId to echo.copy(at = System.currentTimeMillis())))
+            val current = cur.voteEchoes[targetId]
+            if (current?.at != echo.at) return@update cur
+            if (fresh.first == current.expectedLikes && fresh.second == current.expectedDislikes) {
+                cur.copy(voteEchoes = cur.voteEchoes + (targetId to current.copy(at = System.currentTimeMillis())))
             } else {
                 cur.copy(voteEchoes = cur.voteEchoes - targetId)
             }
@@ -1344,11 +1380,11 @@ private fun CommunityReactionRow(
         IconButton(onClick = onLike, enabled = votesEnabled, modifier = Modifier.size(48.dp)) {
             Icon(Icons.Filled.ThumbUp, stringResource(R.string.community_like), tint = if (myVote == 1) MangaColors.Cyan else MangaColors.Muted, modifier = Modifier.size(18.dp))
         }
-        Text(likes.toString(), color = if (myVote == 1) MangaColors.Cyan else MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
+        Text(maxOf(0, likes).toString(), color = if (myVote == 1) MangaColors.Cyan else MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
         IconButton(onClick = onDislike, enabled = votesEnabled, modifier = Modifier.size(48.dp)) {
             Icon(Icons.Filled.ThumbDown, stringResource(R.string.community_dislike), tint = if (myVote == -1) MangaColors.Cyan else MangaColors.Muted, modifier = Modifier.size(18.dp))
         }
-        Text(dislikes.toString(), color = if (myVote == -1) MangaColors.Cyan else MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
+        Text(maxOf(0, dislikes).toString(), color = if (myVote == -1) MangaColors.Cyan else MangaColors.Muted, style = MaterialTheme.typography.labelSmall)
         IconButton(onClick = onOpenReplies, modifier = Modifier.size(48.dp)) {
             Icon(Icons.Filled.Forum, stringResource(R.string.community_view_replies), tint = MangaColors.PrimaryLight, modifier = Modifier.size(18.dp))
         }

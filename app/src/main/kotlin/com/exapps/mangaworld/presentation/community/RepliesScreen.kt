@@ -180,6 +180,8 @@ class RepliesViewModel @Inject constructor(
             val echo = bits.pending.voteEchoes[id]
                 ?.takeIf { now - it.at < ECHO_TTL_MS && (likes != it.expectedLikes || dislikes != it.expectedDislikes) }
                 ?: return likes to dislikes
+            // Clamped for display (see CommunityScreen): a clamped row can't
+            // prove anything in reconcile and defers to the one-shot fetch.
             return maxOf(0, likes + echo.dLikes) to maxOf(0, dislikes + echo.dDislikes)
         }
         val root = if (reviewId == null) {
@@ -475,24 +477,46 @@ class RepliesViewModel @Inject constructor(
         fetch: suspend () -> Pair<Int, Int>?
     ) {
         kotlinx.coroutines.delay(VOTE_CONFIRM_DELAY_MS)
-        if (targetId !in pending.value.voteEchoes) return
-        // Fast path: the snapshot already carries the write — evict silently.
+        val echo = pending.value.voteEchoes[targetId] ?: return
+        // Displayed counts already include our own overlay: recover the raw
+        // server position by subtracting the echo delta (see CommunityScreen).
+        // A clamped row proves nothing and defers to the fetch.
+        val dLikes = echo.expectedLikes - echo.baseLikes
+        val dDislikes = echo.expectedDislikes - echo.baseDislikes
         val live = serverCountsNow()
-        val current = pending.value.voteEchoes[targetId]
-        if (current != null && live != null
-            && live.first == current.expectedLikes && live.second == current.expectedDislikes
-        ) {
-            pending.update { it.copy(voteEchoes = it.voteEchoes - targetId) }
-            return
+        val clamped = live != null &&
+            ((live.first == 0 && dLikes < 0) || (live.second == 0 && dDislikes < 0))
+        if (live != null && !clamped) {
+            val raw = (live.first - dLikes) to (live.second - dDislikes)
+            if (raw.first == echo.expectedLikes && raw.second == echo.expectedDislikes) {
+                pending.update { cur ->
+                    if (cur.voteEchoes[targetId]?.at != echo.at) return@update cur
+                    cur.copy(voteEchoes = cur.voteEchoes - targetId)
+                }
+                return
+            }
+            if (raw.first != echo.baseLikes || raw.second != echo.baseDislikes) {
+                pending.update { cur ->
+                    if (cur.voteEchoes[targetId]?.at != echo.at) return@update cur
+                    cur.copy(
+                        voteEchoes = cur.voteEchoes + (targetId to echo.copy(
+                            baseLikes = raw.first,
+                            baseDislikes = raw.second,
+                            expectedLikes = raw.first + dLikes,
+                            expectedDislikes = raw.second + dDislikes,
+                            at = System.currentTimeMillis()
+                        ))
+                    )
+                }
+                return
+            }
         }
-        if (current == null) return
-        // Slow Watch: one-shot re-read decides — match extends the echo,
-        // anything else (or unreadable) evicts and lets server truth rule.
         val fresh = runCatching { fetch() }.getOrNull() ?: return
         pending.update { cur ->
-            val echo = cur.voteEchoes[targetId] ?: return@update cur
-            if (fresh.first == echo.expectedLikes && fresh.second == echo.expectedDislikes) {
-                cur.copy(voteEchoes = cur.voteEchoes + (targetId to echo.copy(at = System.currentTimeMillis())))
+            val current = cur.voteEchoes[targetId]
+            if (current?.at != echo.at) return@update cur
+            if (fresh.first == current.expectedLikes && fresh.second == current.expectedDislikes) {
+                cur.copy(voteEchoes = cur.voteEchoes + (targetId to current.copy(at = System.currentTimeMillis())))
             } else {
                 cur.copy(voteEchoes = cur.voteEchoes - targetId)
             }
