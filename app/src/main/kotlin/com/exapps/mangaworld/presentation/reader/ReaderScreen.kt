@@ -593,6 +593,7 @@ private fun ReaderContent(
             }
     }
     }
+}
 
 // ─── Shared zoomable page (all modes) ─────────────────────────────────────────
 // Single source of truth for double-tap + pinch. Uses `transformable` with
