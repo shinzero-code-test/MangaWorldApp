@@ -35,6 +35,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -42,7 +43,6 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import app.cash.turbine.test
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
@@ -433,21 +433,24 @@ class DetailReaderViewModelTest {
     fun readerViewportScroll_emitsDirection() {
         // Volume keys in webtoon mode emit viewport-scroll directions through
         // a lossless event flow (not state — no replay, no recompositions).
+        // Plain collect (not Turbine): the only possible outcome here is
+        // pass/fail — awaitItem-style unbounded waits once wedged this
+        // suite's worker until the 30-minute step timeout.
         val dispatcher = newDispatcher()
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             stubReaderCommon()
             val vm = createReaderViewModel(dispatcher)
-            vm.viewportNudges.test {
-                vm.requestViewportScroll(1)
-                assertEquals(1, awaitItem())
-                vm.requestViewportScroll(-1)
-                assertEquals(-1, awaitItem())
-                // Out-of-range input is clamped to a single screenful step.
-                vm.requestViewportScroll(99)
-                assertEquals(1, awaitItem())
-                cancelAndIgnoreRemainingEvents()
-            }
+            val received = mutableListOf<Int>()
+            val collectJob = launch { vm.viewportNudges.collect { received += it } }
+            runCurrent()
+            vm.requestViewportScroll(1)
+            vm.requestViewportScroll(-1)
+            // Out-of-range input is clamped to a single screenful step.
+            vm.requestViewportScroll(99)
+            runCurrent()
+            assertEquals(listOf(1, -1, 1), received)
+            collectJob.cancel()
         }
     }
 
