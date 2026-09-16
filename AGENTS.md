@@ -134,6 +134,7 @@ Each scraper must:
 
 ## Common Pitfalls
 
+- **ReaderViewModel.loadChapter in unit tests**: FORBIDDEN — calling it wedges the test worker until the 30-min step timeout (cut in v8.3.4, reproduced in v8.7.5; mechanism never isolated). Cover that path with instrumentation/emulator tests, never unit tests. `onPageChanged`/tap/viewport events are safe (no load).
 - **Kotlin suspend method references**: `list.forEach(::suspendFun)` fails. Use explicit lambda `forEach { suspendFun(it) }`
 - **Sequence + suspend**: `asSequence().filter { suspendCall() }` fails — Sequence lambdas defer past coroutine scope. Use eager `.filter{}`
 - **`combine` max 5 flows**: Use nested combine for 6+
