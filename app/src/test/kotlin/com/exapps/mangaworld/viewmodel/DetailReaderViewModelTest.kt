@@ -42,6 +42,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import app.cash.turbine.test
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
@@ -425,6 +426,28 @@ class DetailReaderViewModelTest {
             assertTrue(firstLoad != vm.state.value.loadId)
             assertEquals(1, vm.state.value.chapterRanges.size)
             assertEquals("https://example.com/c2", vm.state.value.chapterRanges.single().chapterUrl)
+        }
+    }
+
+    @Test
+    fun readerViewportScroll_emitsDirection() {
+        // Volume keys in webtoon mode emit viewport-scroll directions through
+        // a lossless event flow (not state — no replay, no recompositions).
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubReaderCommon()
+            val vm = createReaderViewModel(dispatcher)
+            vm.viewportNudges.test {
+                vm.requestViewportScroll(1)
+                assertEquals(1, awaitItem())
+                vm.requestViewportScroll(-1)
+                assertEquals(-1, awaitItem())
+                // Out-of-range input is clamped to a single screenful step.
+                vm.requestViewportScroll(99)
+                assertEquals(1, awaitItem())
+                cancelAndIgnoreRemainingEvents()
+            }
         }
     }
 

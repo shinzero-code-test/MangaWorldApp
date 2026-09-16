@@ -708,6 +708,19 @@ class ReaderViewModel @Inject constructor(
     }
 
     fun toggleControls() = _state.update { it.copy(showControls = !it.showControls) }
+
+    /**
+     * Webtoon/vertical volume-scroll requests: +1 scrolls forward (toward the
+     * chapter end), -1 backward. The list owns its LazyListState, so the VM
+     * only emits the direction; WebtoonReader scrolls by viewport and the live
+     * center-tracking reconciles currentPage/counter/progress automatically.
+     */
+    private val _viewportNudges = MutableSharedFlow<Int>(extraBufferCapacity = 16)
+    val viewportNudges: SharedFlow<Int> = _viewportNudges.asSharedFlow()
+
+    fun requestViewportScroll(direction: Int) {
+        _viewportNudges.tryEmit(direction.coerceIn(-1, 1))
+    }
     fun setReaderMode(mode: ReaderMode) {
         _state.update { it.copy(readerMode = mode) }
         viewModelScope.launch { settingsRepo.updateReaderMode(mode) }

@@ -49,7 +49,10 @@ import androidx.compose.ui.unit.dp
 import coil.transform.Transformation
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
@@ -61,8 +64,14 @@ import com.exapps.mangaworld.presentation.theme.MangaColors
 import com.exapps.mangaworld.presentation.webview.WebViewSolverActivity
 import android.view.accessibility.AccessibilityManager
 
-private fun android.content.Context.announceForAccessibility(text: String) {
-    val am = getSystemService(android.content.Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
+/**
+ * Volume-key paging distance in webtoon mode, as a fraction of the viewport
+ * height. 0.95 keeps a thin overlap strip so the eye never loses its place
+ * when the old bottom lands at the top.
+ */
+private const val VIEWPORT_SCROLL_FRACTION = 0.95f
+
+private fun android.content.Context.announceForAccessibility(text: String) {    val am = getSystemService(android.content.Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
     if (am?.isEnabled == true) {
         val event = android.view.accessibility.AccessibilityEvent.obtain().apply {
             eventType = android.view.accessibility.AccessibilityEvent.TYPE_ANNOUNCEMENT
@@ -125,16 +134,28 @@ fun ReaderScreen(
             .focusable()
             .onPreviewKeyEvent { event ->
                 if (state.volumeButtonPageTurn && event.type == KeyEventType.KeyDown) {
+                    // Webtoon/vertical: volume pages by SCREENFUL (viewport
+                    // scroll) instead of jumping whole pages — the collector
+                    // in WebtoonReader performs the scroll; pager modes keep
+                    // the classic prev/next page turn.
+                    val isWebtoon = state.readerMode == ReaderMode.VERTICAL_SCROLL ||
+                        state.readerMode == ReaderMode.WEBTOON
                     when (event.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_VOLUME_UP -> {
-                            val prev = (state.currentPage - 1).coerceAtLeast(0)
-                            if (prev != state.currentPage) viewModel.onPageChanged(prev)
+                            if (isWebtoon) viewModel.requestViewportScroll(-1)
+                            else {
+                                val prev = (state.currentPage - 1).coerceAtLeast(0)
+                                if (prev != state.currentPage) viewModel.onPageChanged(prev)
+                            }
                             // Consume so the system volume UI doesn't appear while paging.
                             true
                         }
                         KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                            val next = (state.currentPage + 1).coerceAtMost(maxOf(0, state.totalPages - 1))
-                            if (next != state.currentPage) viewModel.onPageChanged(next)
+                            if (isWebtoon) viewModel.requestViewportScroll(1)
+                            else {
+                                val next = (state.currentPage + 1).coerceAtMost(maxOf(0, state.totalPages - 1))
+                                if (next != state.currentPage) viewModel.onPageChanged(next)
+                            }
                             true
                         }
                         else -> false
@@ -226,7 +247,9 @@ fun ReaderScreen(
                         }
                     },
                     onLongPress = { showSavePageDialog = true },
-                    onModeChange = viewModel::setReaderMode
+                    onModeChange = viewModel::setReaderMode,
+                    // Stable VM flow reference — collecting it causes no recompositions.
+                    viewportNudges = viewModel.viewportNudges
                 )
                 }
         }
@@ -497,7 +520,8 @@ private fun ReaderContent(
     onVisibleRangeChanged: (Int, Int) -> Unit,
     onTap: (Float, Float) -> Unit,
     onLongPress: () -> Unit = {},
-    onModeChange: (ReaderMode) -> Unit
+    onModeChange: (ReaderMode) -> Unit,
+    viewportNudges: Flow<Int>
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
@@ -520,7 +544,8 @@ private fun ReaderContent(
                     pageSpacing = state.pageSpacing,
                     currentPage = state.currentPage,
                     chapterRanges = state.chapterRanges,
-                    doubleTapZoomEnabled = state.doubleTapZoom
+                    doubleTapZoomEnabled = state.doubleTapZoom,
+                    viewportNudges = viewportNudges
                 )
         ReaderMode.HORIZONTAL_RTL ->
             if (state.dualPageLandscape && isLandscape) {
@@ -659,7 +684,8 @@ private fun WebtoonReader(
     pageSpacing: Int = 0,
     currentPage: Int = 0,
     chapterRanges: List<ReaderChapterRange> = emptyList(),
-    doubleTapZoomEnabled: Boolean = true
+    doubleTapZoomEnabled: Boolean = true,
+    viewportNudges: Flow<Int> = emptyFlow()
 ) {
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = initialPage.coerceIn(0, maxOf(0, pages.size - 1))
@@ -704,6 +730,21 @@ private fun WebtoonReader(
                 } else {
                     listState.animateScrollToItem(currentPage)
                 }
+            }
+        }
+    }
+
+    // Volume-key paging: scroll by ~one screenful with a small overlap strip
+    // so the eye never loses its place (bottom lands at top on forward, and
+    // vice versa). collectLatest: a rapid second press retargets from the live
+    // position instead of queueing stale glides. Position, counter, progress
+    // and continuous-chapter appends reconcile through the live center
+    // tracking above — no manual onPageChanged needed.
+    LaunchedEffect(listState) {
+        viewportNudges.collectLatest { direction ->
+            val viewport = listState.layoutInfo.viewportSize.height
+            if (viewport > 0 && direction != 0) {
+                listState.animateScrollBy(direction * viewport * VIEWPORT_SCROLL_FRACTION)
             }
         }
     }
@@ -952,8 +993,8 @@ private object PageAspectCache {
         if (aspect.isFinite() && aspect > 0.1f && aspect < 5f) {
             map[url] = aspect
             if (map.size > MAX_ENTRIES) {
-                val it = map.entries.iterator()
-                repeat(50) { if (it.hasNext()) { it.next(); it.remove() } }
+                val entries = map.entries.iterator()
+                repeat(50) { if (entries.hasNext()) { entries.next(); entries.remove() } }
             }
         }
     }
