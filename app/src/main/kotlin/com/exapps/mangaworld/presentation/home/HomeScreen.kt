@@ -319,10 +319,22 @@ private fun FeaturedCarousel(
 ) {
     val pagerState = rememberPagerState { items.size }
 
+    // A same-source refresh can shrink the list while the pager sits on a now
+    // invalid page (out-of-bounds crash at measure time) — clamp back to 0.
+    // Single-item (or empty) lists never auto-scroll: `% 1` would just
+    // re-animate to page 0 every 4s for no visual effect.
+    LaunchedEffect(items.size) {
+        if (items.isNotEmpty() && pagerState.currentPage >= items.size) {
+            runCatching { pagerState.scrollToPage(0) }
+        }
+    }
+
     // Auto-scroll — pause when user is interacting
     LaunchedEffect(pagerState, items.size) {
+        if (items.size < 2) return@LaunchedEffect
         while (true) {
             delay(4000)
+            if (items.size < 2) return@LaunchedEffect
             if (!pagerState.isScrollInProgress) {
                 val next = (pagerState.currentPage + 1) % items.size
                 pagerState.animateScrollToPage(next)

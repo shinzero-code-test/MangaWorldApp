@@ -47,8 +47,7 @@ data class ReaderUiState(
     val isLoading: Boolean = true,
     val pages: List<ChapterPage> = emptyList(),
     val currentPage: Int = 0,
-    val totalPages: Int = 0,
-    // Kotatsu-style continuous scroll: one flat deque of pages in reading
+    val totalPages: Int = 0,    // Kotatsu-style continuous scroll: one flat deque of pages in reading
     // order. Ranges map global indices back to their owning chapter so the
     // counter, slider, progress and read-marks stay PER-CHAPTER (never a
     // combined total), while scrolling never breaks across chapters.
@@ -64,6 +63,14 @@ data class ReaderUiState(
     val brightness: Float = 1.0f,
     val error: String? = null,
     val chapterUrl: String = "",
+    /**
+     * Chapter-load generation, bumped on every loadChapter reset. The UI keys
+     * scroll/pager state on it so opening another chapter always starts from
+     * its own restored position instead of reusing the previous chapter's
+     * scroll offset (which then "corrected" itself with a visible jump).
+     * Continuous-scroll appends never bump it, so the list is preserved.
+     */
+    val loadId: Long = 0L,
     val chapterNumber: Float? = null,
     val chapterTitle: String? = null,
     val mangaId: String = "",
@@ -131,6 +138,8 @@ class ReaderViewModel @Inject constructor(
 
     private var currentSource: MangaSource = MangaSource.STARZ
     private var sessionCheckpointAt: Long? = null
+    /** Bumped on every loadChapter so the UI can key scroll state per chapter load. */
+    private var chapterLoadSeq = 0L
     // Scope that outlives viewModelScope cancellation so end-of-session flushes
     // (presence-off, reading-time) actually run from onCleared.
     private val flushScope = CoroutineScope(SupervisorJob() + defaultDispatcher)
@@ -191,11 +200,13 @@ class ReaderViewModel @Inject constructor(
         currentSource = source
         prefetchedNextChapterUrl = null
         appendJob?.cancel()
+        val loadSeq = ++chapterLoadSeq
         _state.update {
             it.copy(
                 isLoading = true,
                 error = null,
                 chapterUrl = chapterUrl,
+                loadId = loadSeq,
                 mangaId = mangaId,
                 pages = emptyList(),
                 totalPages = 0,
@@ -221,12 +232,16 @@ class ReaderViewModel @Inject constructor(
                 if (localPages.isNotEmpty()) {
                     val indexed = localPages.mapIndexed { i, p -> p.copy(index = i) }
                     val chNum = parseFallbackChapterNumber(chapterUrl)
+                    // Offline disk reads restore progress exactly like online
+                    // ones — previously they always restarted at page 0.
+                    val (savedPage, _) = libraryRepo.getReadingProgress(mangaId, chNum)
+                    val startPage = savedPage.coerceIn(0, maxOf(0, indexed.size - 1))
                     _state.update {
                         it.copy(
                             isLoading = false,
                             pages = indexed,
                             totalPages = indexed.size,
-                            currentPage = 0,
+                            currentPage = startPage,
                             chapterNumber = chNum,
                             chapterRanges = listOf(
                                 ReaderChapterRange(
@@ -237,7 +252,7 @@ class ReaderViewModel @Inject constructor(
                                     endIndexExclusive = indexed.size
                                 )
                             ),
-                            pageInChapter = 0,
+                            pageInChapter = startPage,
                             chapterPageCount = indexed.size,
                             downloadMessage = context.getString(R.string.read_offline)
                         )
@@ -289,12 +304,16 @@ class ReaderViewModel @Inject constructor(
             if (localPages.isNotEmpty()) {
                 val currentChapterNumber = chapterMeta?.number ?: parseFallbackChapterNumber(chapterUrl)
                 val indexed = localPages.mapIndexed { i, p -> p.copy(index = i) }
+                // Downloaded chapters restore progress exactly like streamed
+                // ones — previously they always restarted at page 0.
+                val (savedLocalPage, _) = libraryRepo.getReadingProgress(mangaId, currentChapterNumber)
+                val localStartPage = savedLocalPage.coerceIn(0, maxOf(0, indexed.size - 1))
                 _state.update {
                     it.copy(
                         isLoading = false,
                         pages = indexed,
                         totalPages = indexed.size,
-                        currentPage = 0,
+                        currentPage = localStartPage,
                         chapterNumber = currentChapterNumber,
                         chapterTitle = chapterMeta?.title,
                         chapterRanges = listOf(
@@ -306,7 +325,7 @@ class ReaderViewModel @Inject constructor(
                                 endIndexExclusive = indexed.size
                             )
                         ),
-                        pageInChapter = 0,
+                        pageInChapter = localStartPage,
                         chapterPageCount = indexed.size,
                         downloadMessage = context.getString(R.string.read_offline)
                     )
@@ -536,7 +555,20 @@ class ReaderViewModel @Inject constructor(
                     _state.update { it.copy(isAppendingNextChapter = false) }
                     return@launch
                 }
-                val base = _state.value.pages.size
+                // Ownership guard: the chapter switched while fetching (prev/
+                // next jump, new loadChapter) — appending the old chapter's
+                // pages onto the new chapter's deque would corrupt indices,
+                // ranges and the reading position. Drop the stale payload.
+                val cur = _state.value
+                if (cur.mangaId != mangaId || cur.chapterRanges.none { it.chapterUrl == lastLoadedUrl }) {
+                    _state.update { it.copy(isAppendingNextChapter = false) }
+                    return@launch
+                }
+                if (cur.chapterRanges.any { it.chapterUrl == next.url }) {
+                    _state.update { it.copy(isAppendingNextChapter = false) }
+                    return@launch
+                }
+                val base = cur.pages.size
                 val indexed = fetched.mapIndexed { i, p -> p.copy(index = base + i) }
                 val newRange = ReaderChapterRange(
                     chapterUrl = next.url,
@@ -545,12 +577,12 @@ class ReaderViewModel @Inject constructor(
                     startIndex = base,
                     endIndexExclusive = base + indexed.size
                 )
-                _state.update { cur ->
-                    val combined = cur.pages + indexed
-                    cur.copy(
+                _state.update { cur2 ->
+                    val combined = cur2.pages + indexed
+                    cur2.copy(
                         pages = combined,
                         totalPages = combined.size,
-                        chapterRanges = cur.chapterRanges + newRange,
+                        chapterRanges = cur2.chapterRanges + newRange,
                         isAppendingNextChapter = false
                     )
                 }
@@ -559,6 +591,12 @@ class ReaderViewModel @Inject constructor(
                 if (!st.incognitoMode) {
                     imagePrefetcher.prefetchPages(indexed.take(APPEND_PREFETCH_COUNT))
                 }
+            } catch (e: CancellationException) {
+                // A chapter switch cancels the in-flight append: reset the flag
+                // (so later positions can retry) and rethrow — swallowing
+                // cancellation breaks structured concurrency.
+                _state.update { it.copy(isAppendingNextChapter = false) }
+                throw e
             } catch (_: Exception) {
                 _state.update { it.copy(isAppendingNextChapter = false) }
             }

@@ -64,11 +64,27 @@ class HomeViewModel @Inject constructor(
     /** First settings emission restores the last source; later ones keep the live choice. */
     private var restoredLastSource = false
 
+    /**
+     * Source-load generation: every loadHome cancels the previous job and
+     * bumps the sequence, so a slow earlier source that lands last can never
+     * overwrite the newer selection (stale completions are dropped even if
+     * cancellation lands late).
+     */
+    private var homeLoadJob: Job? = null
+    private var homeLoadSeq = 0L
+
     init {
         viewModelScope.launch {
             settingsRepo.getAppSettings()
                 .map { settings -> settings to MangaSource.entries.filter { it.id in settings.enabledSources } }
-                .distinctUntilChanged()
+                // Key on content-affecting settings ONLY: loadHome persists
+                // lastSourceId on every load, and reacting to our own write
+                // re-fired a load of the stale activeSource that raced (and
+                // could beat) the user's tap.
+                .distinctUntilChanged { old, new ->
+                    old.first.enabledSources == new.first.enabledSources &&
+                        old.first.contentBlacklist == new.first.contentBlacklist
+                }
                 .collectLatest { (settings, enabledSources) ->
                     val current = _state.value.activeSource
                     _state.update { it.copy(availableSources = enabledSources) }
@@ -87,6 +103,8 @@ class HomeViewModel @Inject constructor(
                         else -> enabledSources.first()
                     }
                     if (nextSource == null) {
+                        homeLoadJob?.cancel()
+                        homeLoadSeq++
                         _state.update {
                             it.copy(
                                 isLoading = false,
@@ -185,16 +203,39 @@ class HomeViewModel @Inject constructor(
     }
 
     fun loadHome(source: MangaSource = _state.value.activeSource, blockedKeywords: Set<String> = emptySet()) {
-        viewModelScope.launch {
-            if (source !in _state.value.availableSources) return@launch
+        if (source !in _state.value.availableSources) return
+        // New generation first: any in-flight older load is obsolete, and its
+        // late response must be ignored even if cancellation lands late.
+        homeLoadJob?.cancel()
+        val seq = ++homeLoadSeq
+        if (source != _state.value.activeSource) {
+            // Optimistic switch: the highlight moves instantly and the old
+            // source's rows never render as the new source's (the previous
+            // silent-refresh kept showing them until the network returned,
+            // and on failure the highlight never moved at all).
+            _state.update {
+                it.copy(
+                    activeSource = source,
+                    isLoading = true,
+                    isOffline = false,
+                    error = null,
+                    featured = emptyList(),
+                    latestChapters = emptyList(),
+                    trending = emptyList(),
+                    suggested = emptyList()
+                )
+            }
+        }
+        homeLoadJob = viewModelScope.launch {
             runCatching { settingsRepo.setLastSourceId(source.id) }
             // Show the cached snapshot instantly (if any) so offline launches
             // still render content; the network refresh replaces it below.
             val cached = runCatching { homeCacheDao.get(source.id) }.getOrNull()
             val cachedData = cached?.payloadJson?.let { HomeCacheCodec.decode(it) }
             if (cachedData != null && _state.value.featured.isEmpty()) {
-                applyHomeData(source, cachedData, blockedKeywords, offline = true)
+                if (seq == homeLoadSeq) applyHomeData(source, cachedData, blockedKeywords, offline = true, seq = seq)
             }
+            if (seq != homeLoadSeq) return@launch
             // Silent refresh when content is already visible (no shimmer flash).
             if (_state.value.featured.isEmpty()) {
                 _state.update { it.copy(isLoading = true, error = null) }
@@ -203,6 +244,7 @@ class HomeViewModel @Inject constructor(
             }
             repo.getHomeData(source)
                 .onSuccess { data ->
+                    if (seq != homeLoadSeq) return@onSuccess
                     firebaseTelemetry.setActiveSource(source.id)
                     runCatching {
                         homeCacheDao.upsert(
@@ -212,10 +254,11 @@ class HomeViewModel @Inject constructor(
                             )
                         )
                     }
-                    applyHomeData(source, data, blockedKeywords, offline = false)
+                    applyHomeData(source, data, blockedKeywords, offline = false, seq = seq)
                     analyticsManager.logHomeLayoutExposure(_state.value.homeLayoutVariant, source.id)
                 }
                 .onFailure {
+                    if (seq != homeLoadSeq) return@onFailure
                     if (_state.value.featured.isEmpty() && cachedData == null) {
                         _state.update { it.copy(isLoading = false, isOffline = false, error = context.getString(R.string.download_error)) }
                     } else {
@@ -226,12 +269,13 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    /** Shared filter + state write for fresh and cached payloads. */
+    /** Shared filter + state write for fresh and cached payloads. Drops stale generations. */
     private suspend fun applyHomeData(
         source: MangaSource,
         data: HomeData,
         blockedKeywords: Set<String>,
-        offline: Boolean
+        offline: Boolean,
+        seq: Long
     ) {
         val filteredFeatured = data.featured.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.id }
         val filteredLatest = data.latestChapters.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.chapterUrl }
@@ -246,6 +290,9 @@ class HomeViewModel @Inject constructor(
                 (filteredFeatured + filteredTrending).distinctBy { it.id }
             ).distinctBy { it.id }
         }
+        // A newer source switch started while suggestions were scoring —
+        // never paint this generation's rows over it.
+        if (seq != homeLoadSeq) return
         _state.update {
             it.copy(
                 isLoading = false,

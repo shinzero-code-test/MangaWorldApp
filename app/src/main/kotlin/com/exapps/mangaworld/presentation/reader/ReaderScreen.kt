@@ -50,8 +50,6 @@ import coil.transform.Transformation
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
@@ -219,8 +217,7 @@ fun ReaderScreen(
                     state = state,
                     // Updated-state read: stable across recompositions.
                     onPageChanged = viewModel::onPageChanged,
-                    onVisibleRangeChanged = viewModel::onVisibleRangeChanged,
-                    // Stable reference: routing lives in the VM (snapshot read),
+                    onVisibleRangeChanged = viewModel::onVisibleRangeChanged,                    // Stable reference: routing lives in the VM (snapshot read),
                     // so brightness/page-spacing churn no longer recomposes pages.
                     onTap = remember(viewModel) {
                         { x, y ->
@@ -504,6 +501,11 @@ private fun ReaderContent(
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
+    // key(loadId): scroll/pager state is per chapter LOAD. Without this,
+    // opening another chapter reuses the previous chapter's scroll offset or
+    // pager page (then "corrects" with a visible jump). Appends never bump
+    // loadId, so continuous scroll is preserved mid-chain.
+    key(state.loadId) {
     when (state.readerMode) {
             ReaderMode.VERTICAL_SCROLL, ReaderMode.WEBTOON ->
                 WebtoonReader(
@@ -565,7 +567,7 @@ private fun ReaderContent(
                     doubleTapZoomEnabled = state.doubleTapZoom)
             }
     }
-}
+    }
 
 // ─── Shared zoomable page (all modes) ─────────────────────────────────────────
 // Single source of truth for double-tap + pinch. Uses `transformable` with
@@ -667,16 +669,18 @@ private fun WebtoonReader(
     // reading position (firstVisible alone never reaches a short last page).
     // pages.size is an effect key — without it the closure goes stale after
     // chapters are appended and the counter gets stuck (the reported bug).
+    // Reports LIVE (also mid-scroll, not only after settling): the settle-only
+    // filter left the counter/slider/progress visibly behind while scrolling
+    // and skipped read-marks for chapters flung straight through.
     LaunchedEffect(listState, pages.size) {
         snapshotFlow {
             val info = listState.layoutInfo
             val first = listState.firstVisibleItemIndex
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: first
-            Triple(first, last, listState.isScrollInProgress)
+            first to last
         }
-            .filter { (_, _, scrolling) -> !scrolling }
             .distinctUntilChanged()
-            .collect { (first, last, _) ->
+            .collect { (first, last) ->
                 if (pages.isNotEmpty()) onVisibleRangeChanged(
                     first.coerceIn(0, pages.size - 1),
                     last.coerceIn(0, pages.size - 1)
@@ -685,14 +689,21 @@ private fun WebtoonReader(
     }
 
     // Allow slider / volume / tap-zone code to scroll to a specific page.
-    // Guard against feedback: only animate when the target differs from BOTH
+    // Guard against feedback: only scroll when the target differs from BOTH
     // first and last visible (continuous lists show 2+ items at once).
+    // Far jumps (bottom slider across dozens of pages) snap instantly —
+    // animating through every intermediate page thrashed position writes and
+    // took seconds to arrive.
     LaunchedEffect(currentPage, pages.size) {
         if (currentPage in pages.indices) {
             val first = listState.firstVisibleItemIndex
             val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: first
             if (currentPage != first && currentPage != last) {
-                listState.animateScrollToItem(currentPage)
+                if (kotlin.math.abs(currentPage - first) > 3) {
+                    listState.scrollToItem(currentPage)
+                } else {
+                    listState.animateScrollToItem(currentPage)
+                }
             }
         }
     }
@@ -794,12 +805,28 @@ private fun DualPageReader(
     }
 
     // Volume / tap-zone / slider changes update currentPage without swiping —
-    // animate the pager so the visible spread follows the ViewModel.
-    LaunchedEffect(currentPage, pages.size) {
+    // animate the pager so the visible spread follows the ViewModel. Far jumps
+    // snap instantly instead of gliding through every intermediate spread.
+    LaunchedEffect(currentPage) {
         if (spreadPages.isEmpty()) return@LaunchedEffect
         val target = spreadForGlobal(currentPage.coerceIn(0, maxOf(0, pages.size - 1)))
         if (target != pagerState.currentPage) {
-            runCatching { pagerState.animateScrollToPage(target) }
+            runCatching {
+                if (kotlin.math.abs(target - pagerState.currentPage) > 2) pagerState.scrollToPage(target)
+                else pagerState.animateScrollToPage(target)
+            }
+        }
+    }
+
+    // List growth (continuous-scroll append) shifts every index when the data
+    // is reversed for RTL — snap back onto the same global page instantly.
+    // Animating here both glided visibly AND fired the report effect mid-glide
+    // with a transient wrong page. LTR appends are a no-op (target == current).
+    LaunchedEffect(pages.size) {
+        if (spreadPages.isEmpty()) return@LaunchedEffect
+        val target = spreadForGlobal(currentPage.coerceIn(0, maxOf(0, pages.size - 1)))
+        if (target != pagerState.currentPage) {
+            runCatching { pagerState.scrollToPage(target) }
         }
     }
 
@@ -864,12 +891,26 @@ private fun HorizontalReader(
 
     // External page changes (volume keys, side taps, bottom slider) must move
     // the pager — previously onPageChanged only updated state, leaving the
-    // visible page behind so volume appeared broken.
-    LaunchedEffect(currentPage, pages.size) {
+    // visible page behind so volume appeared broken. Far jumps snap instantly.
+    LaunchedEffect(currentPage) {
         if (orderedPages.isEmpty()) return@LaunchedEffect
         val target = pagerIndexForGlobal(currentPage.coerceIn(0, maxOf(0, pages.size - 1)))
         if (target != pagerState.currentPage) {
-            runCatching { pagerState.animateScrollToPage(target) }
+            runCatching {
+                if (kotlin.math.abs(target - pagerState.currentPage) > 2) pagerState.scrollToPage(target)
+                else pagerState.animateScrollToPage(target)
+            }
+        }
+    }
+
+    // List growth (continuous-scroll append) shifts every index when the data
+    // is reversed for RTL — snap back onto the same global page instantly
+    // (see DualPageReader). LTR appends are a no-op (target == current).
+    LaunchedEffect(pages.size) {
+        if (orderedPages.isEmpty()) return@LaunchedEffect
+        val target = pagerIndexForGlobal(currentPage.coerceIn(0, maxOf(0, pages.size - 1)))
+        if (target != pagerState.currentPage) {
+            runCatching { pagerState.scrollToPage(target) }
         }
     }
 
@@ -893,6 +934,31 @@ private fun HorizontalReader(
 
 // ─── Single Page Image ────────────────────────────────────────────────────────
 
+// Process-lifetime aspect-ratio memory: webtoon items measure 0-height until
+// their image arrives, so every page expanded late and shoved the whole list
+// (reading position drifted while scrolling). Once a page's ratio is known it
+// is reserved up-front via aspectRatio, making revisits and re-entries stable.
+// First views still measure on arrival — strictly better than before, and the
+// cache is capped so it cannot grow without bound.
+private object PageAspectCache {
+    private const val MAX_ENTRIES = 400
+    private val map = LinkedHashMap<String, Float>(128, 0.75f, true)
+
+    @Synchronized
+    fun get(url: String): Float? = map[url]
+
+    @Synchronized
+    fun put(url: String, aspect: Float) {
+        if (aspect.isFinite() && aspect > 0.1f && aspect < 5f) {
+            map[url] = aspect
+            if (map.size > MAX_ENTRIES) {
+                val it = map.entries.iterator()
+                repeat(50) { if (it.hasNext()) { it.next(); it.remove() } }
+            }
+        }
+    }
+}
+
 @Composable
 private fun MangaPageImage(
     page: ChapterPage,
@@ -901,8 +967,12 @@ private fun MangaPageImage(
     displayNumber: Int = page.index + 1
 ) {
     val ctx = LocalContext.current
-    var isLoading by remember { mutableStateOf(true) }
-    var isError by remember { mutableStateOf(false) }
+    // Keyed by URL: LazyColumn reuses item slots by index across chapters, so
+    // unkeyed state leaked the previous chapter's loaded/error flags.
+    val pageUrl = page.url
+    var aspect by remember(pageUrl) { mutableStateOf(PageAspectCache.get(pageUrl)) }
+    var isLoading by remember(pageUrl) { mutableStateOf(aspect == null) }
+    var isError by remember(pageUrl) { mutableStateOf(false) }
     val transformations: List<Transformation> = remember(imageFilter) {
         if (imageFilter == ReaderImageFilter.SMART_CROP) listOf(SmartCropTransformation()) else emptyList()
     }
@@ -921,10 +991,21 @@ private fun MangaPageImage(
             imageLoader = ctx.imageLoader,
             contentDescription = stringResource(R.string.accessibility_page, displayNumber),
             contentScale = ContentScale.FillWidth,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
+                .then(if (aspect != null) Modifier.aspectRatio(aspect!!) else Modifier),
             colorFilter = imageFilter.toColorFilter(),
             onLoading = { isLoading = true; isError = false },
-            onSuccess = { isLoading = false; isError = false },
+            onSuccess = { result ->
+                isLoading = false; isError = false
+                val drawable = result.result.drawable
+                val w = drawable.intrinsicWidth
+                val h = drawable.intrinsicHeight
+                if (w > 0 && h > 0) {
+                    val ratio = w.toFloat() / h.toFloat()
+                    PageAspectCache.put(pageUrl, ratio)
+                    aspect = ratio
+                }
+            },
             onError = { isLoading = false; isError = true }
         )
         if (isLoading) {

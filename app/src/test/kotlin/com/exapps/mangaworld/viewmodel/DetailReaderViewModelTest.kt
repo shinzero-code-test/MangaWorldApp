@@ -379,4 +379,53 @@ class DetailReaderViewModelTest {
         }
     }
 
+    @Test
+    fun readerLoad_downloadedChapterRestoresSavedProgress() {
+        // The downloaded/offline branch hardcoded currentPage = 0, ignoring
+        // saved progress — offline reads always restarted at page 0.
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubReaderCommon()
+            coEvery { mangaRepo.getMangaDetail(any(), any()) } returns Result.success(testDetail())
+            every { downloadQueueManager.getLocalChapterPages(any(), any()) } returns testPages()
+            coEvery { libraryRepo.getReadingProgress(any(), any()) } returns (2 to 3)
+            val vm = createReaderViewModel(dispatcher)
+            vm.loadChapter("https://example.com/c1", "azora_test-slug", MangaSource.AZORA)
+            awaitUntil { !vm.state.value.isLoading }
+            assertEquals(2, vm.state.value.currentPage)
+            assertEquals(2, vm.state.value.pageInChapter)
+            assertEquals(3, vm.state.value.chapterPageCount)
+            assertEquals(1, vm.state.value.chapterRanges.size)
+        }
+    }
+
+    @Test
+    fun readerLoad_chapterSwitchResetsPositionAndBumpsLoadId() {
+        // Opening another chapter must reset to its own (restored) position
+        // and bump loadId so the UI drops the old scroll/pager state instead
+        // of reusing it and flash-correcting.
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+            Dispatchers.setMain(dispatcher)
+            stubReaderCommon()
+            coEvery { mangaRepo.getMangaDetail(any(), any()) } returns Result.success(testDetail())
+            coEvery { mangaRepo.getChapterPages(any(), any(), any()) } returns Result.success(testPages())
+            coEvery { libraryRepo.getReadingProgress(any(), any()) } returns (0 to 3)
+            val vm = createReaderViewModel(dispatcher)
+            vm.loadChapter("https://example.com/c1", "azora_test-slug", MangaSource.AZORA)
+            awaitUntil { vm.state.value.pages.isNotEmpty() }
+            val firstLoad = vm.state.value.loadId
+            vm.onPageChanged(2)
+            awaitUntil { vm.state.value.currentPage == 2 }
+            vm.loadChapter("https://example.com/c2", "azora_test-slug", MangaSource.AZORA)
+            awaitUntil { !vm.state.value.isLoading && vm.state.value.chapterUrl == "https://example.com/c2" }
+            assertEquals(0, vm.state.value.currentPage)
+            assertEquals(0, vm.state.value.pageInChapter)
+            assertTrue(firstLoad != vm.state.value.loadId)
+            assertEquals(1, vm.state.value.chapterRanges.size)
+            assertEquals("https://example.com/c2", vm.state.value.chapterRanges.single().chapterUrl)
+        }
+    }
+
 }

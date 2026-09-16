@@ -11,6 +11,7 @@ import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.home.HomeViewModel
 import io.mockk.*
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -260,6 +261,57 @@ class HomeViewModelTest {
         assertEquals(MangaSource.OLYMPUS, vm.state.value.activeSource)
         coVerify { settingsRepo.setLastSourceId("olympus") }
     }
+    }
+
+    @Test
+    fun rapidSourceSwitch_lastLoadWins() {
+        // AZORA hangs; OLYMPUS answers instantly. Tapping OLYMPUS mid-load
+        // must win, and the late AZORA response must never overwrite it
+        // (no cancellation/generation guard did exactly that).
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        val gate = CompletableDeferred<Unit>()
+        coEvery { mangaRepo.getHomeData(MangaSource.AZORA) } coAnswers {
+            gate.await()
+            Result.success(HomeData(featured = listOf(testManga("a1"))))
+        }
+        coEvery { mangaRepo.getHomeData(MangaSource.OLYMPUS) } returns
+            Result.success(HomeData(featured = listOf(testManga("b1"))))
+        val vm = createViewModel()
+        advanceUntilIdle() // init AZORA load is now parked at the gate
+        vm.selectSource(MangaSource.OLYMPUS)
+        advanceUntilIdle()
+        assertEquals(MangaSource.OLYMPUS, vm.state.value.activeSource)
+        assertEquals(listOf("b1"), vm.state.value.featured.map { it.id })
+        gate.complete(Unit)
+        advanceUntilIdle()
+        // The stale AZORA response lands last — it must be dropped.
+        assertEquals(MangaSource.OLYMPUS, vm.state.value.activeSource)
+        assertEquals(listOf("b1"), vm.state.value.featured.map { it.id })
+        }
+    }
+
+    @Test
+    fun lastSourceIdWrite_doesNotRetriggerLoad() {
+        // loadHome persists lastSourceId on every load; the settings
+        // collector must ignore our own write, otherwise it re-fires a load
+        // of the stale activeSource that races the user's tap.
+        val dispatcher = newDispatcher()
+        runTest(dispatcher) {
+        Dispatchers.setMain(dispatcher)
+        val settingsFlow = MutableStateFlow(
+            AppSettings(enabledSources = setOf("azora", "olympus"), lastSourceId = "azora")
+        )
+        every { settingsRepo.getAppSettings() } returns settingsFlow
+        val vm = createViewModel()
+        advanceUntilIdle()
+        coVerify(exactly = 1) { mangaRepo.getHomeData(MangaSource.AZORA) }
+        settingsFlow.value = settingsFlow.value.copy(lastSourceId = "olympus")
+        advanceUntilIdle()
+        coVerify(exactly = 1) { mangaRepo.getHomeData(any()) }
+        assertEquals(MangaSource.AZORA, vm.state.value.activeSource)
+        }
     }
 
     private fun testManga(id: String) = MangaItem(
