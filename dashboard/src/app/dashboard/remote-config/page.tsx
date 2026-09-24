@@ -29,7 +29,6 @@ const SOURCE_DOMAINS: { id: string; label: string; def: string }[] = [
   { id: "lavascans",     label: "لاڤا سكانز",         def: "https://lavascans.com" },
   { id: "stellarsaber",  label: "StellarSaber",       def: "https://stellarsaber.pro" },
   { id: "procomic",      label: "ProChan",            def: "https://procomic.pro" },
-  { id: "rockmanga",     label: "روكس مانجا",         def: "https://rocksmanga.com" },
 ];
 
 const DOMAIN_DESC = "النطاق الأساسي للمصدر — يُستخدم عند انتقال الدومين. اترك القيمة الافتراضية ما لم يتوقف المصدر عن العمل.";

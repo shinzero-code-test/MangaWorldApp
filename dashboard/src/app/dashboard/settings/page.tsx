@@ -54,7 +54,6 @@ const SOURCE_TOGGLES: { key: string; label: string }[] = [
   { key: "source_lavascans_enabled", label: "LavaScans" },
   { key: "source_stellarsaber_enabled", label: "StellarSaber" },
   { key: "source_procomic_enabled", label: "ProComic" },
-  { key: "source_rockmanga_enabled", label: "RockManga" },
 ];
 
 const DEFAULT: AppSettings = {

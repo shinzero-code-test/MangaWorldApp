@@ -89,7 +89,7 @@ internal fun MangaDetail.toCacheEntity() = MangaCacheEntity(
 
 @Singleton
 class MangaRepositoryImpl @Inject constructor(
-    private val scrapers: Map<String, @JvmSuppressWildcards MangaScraper>,
+    private val registry: com.exapps.mangaworld.core.source.plugins.SourceRegistry,
     private val cacheDao: MangaCacheDao,
     private val favoriteDao: FavoriteDao,
     private val firebaseTelemetry: FirebaseTelemetry,
@@ -97,7 +97,7 @@ class MangaRepositoryImpl @Inject constructor(
 ) : MangaRepository {
 
     private fun scraper(source: MangaSource): MangaScraper =
-        scrapers[source.id] ?: error("No scraper for ${source.id}. This source does not support online operations.")
+        registry.scraperFor(source.id) ?: error("No scraper for ${source.id}. This source does not support online operations.")
 
     override suspend fun getHomeData(source: MangaSource) =
         runCatching {
@@ -108,7 +108,7 @@ class MangaRepositoryImpl @Inject constructor(
     override fun searchManga(filters: SearchFilters): Flow<PagingData<MangaItem>> = Pager(
         config = PagingConfig(pageSize = 24, enablePlaceholders = false)
     ) {
-        MangaPagingSource(scrapers, filters)
+        MangaPagingSource(registry.scraperMap(), filters)
     }.flow
 
     override suspend fun searchMangaDirect(query: String, source: MangaSource, page: Int): Result<List<MangaItem>> {
@@ -186,7 +186,7 @@ class MangaRepositoryImpl @Inject constructor(
         val sources = if (source != null) listOf(source) else MangaSource.entries.toList()
         return sources.flatMap { s ->
             if (s.id !in allowed) return@flatMap emptyList()
-            val sc = scrapers[s.id] ?: return@flatMap emptyList()
+            val sc = registry.scraperFor(s.id) ?: return@flatMap emptyList()
             sc.getGenres().getOrDefault(emptyList())
         }.distinct().sorted()
     }
@@ -232,7 +232,7 @@ class MangaPagingSource(
             val rawResults: List<MangaItem> = coroutineScope {
                 val deferred: List<kotlinx.coroutines.Deferred<List<MangaItem>>> = sources.map { source ->
                     async {
-                        val scraper = scrapers[source.id] ?: return@async emptyList<MangaItem>()
+                        val scraper = registry.scraperFor(source.id) ?: return@async emptyList<MangaItem>()
                         val fetched = if (needsLocalFiltering) {
                             val aggregate = mutableListOf<MangaItem>()
                             for (subPage in page until page + 3) {
@@ -307,7 +307,11 @@ class LibraryRepositoryImpl @Inject constructor(
 ) : LibraryRepository {
 
     override fun getFavorites(): Flow<List<FavoriteManga>> =
-        favoriteDao.getAllFavorites().map { list -> list.map { it.toDomain() } }
+        // Dead sources (removed plugins, e.g. rockmanga) are hidden, never resurrected
+        // under another source via the AZORA fallback.
+        favoriteDao.getAllFavorites().map { list ->
+            list.filter { MangaSource.fromIdOrNull(it.sourceId) != null }.map { it.toDomain() }
+        }
 
     override suspend fun addFavorite(manga: FavoriteManga) {
         val existing = favoriteDao.getById(manga.mangaId)
@@ -335,7 +339,9 @@ class LibraryRepositoryImpl @Inject constructor(
         prefs.clearSyncTombstone("favorites", manga.mangaId)
     }
     override suspend fun getFavoritesByStatus(status: String): List<FavoriteManga> =
-        favoriteDao.getByStatus(status).map { it.toDomain() }
+        favoriteDao.getByStatus(status)
+            .filter { MangaSource.fromIdOrNull(it.sourceId) != null }
+            .map { it.toDomain() }
     override suspend fun updateReadingStatus(mangaId: String, status: String?) {
         // Metadata belongs to the caller that creates the entry through ensureLibraryEntry().
         // Avoid persisting an unusable placeholder record if that invariant is violated.
@@ -345,7 +351,9 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override fun getReadingHistory(): Flow<List<ReadingHistoryItem>> =
-        historyDao.getAllHistory().map { list -> list.map { it.toDomain() } }
+        historyDao.getAllHistory().map { list ->
+            list.filter { MangaSource.fromIdOrNull(it.sourceId) != null }.map { it.toDomain() }
+        }
 
     override suspend fun updateReadingHistory(
         mangaId: String, slug: String, title: String, coverUrl: String,

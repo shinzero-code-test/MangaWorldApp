@@ -23,7 +23,13 @@ enum class SourceEngine(val serialName: String) {
     MANGAREADER("mangareader"),
     ASTRO("astro"),
     API("api"),
-    SCRIPT("script");
+    SCRIPT("script"),
+
+    /**
+     * Built-in Kotlin scrapers with site-specific logic (no remote equivalent).
+     * Rejected for remote manifests — a downloaded plugin must always name a real engine.
+     */
+    CUSTOM("custom");
 
     companion object {
         fun fromSerialName(name: String): SourceEngine? = entries.find { it.serialName == name }
@@ -70,6 +76,12 @@ data class PluginManifest(
     val baseUrl: String,
     val requiresVerification: Boolean,
     val enabledByDefault: Boolean,
+    /**
+     * Distribution-policy gate (robots-gated APIs etc.). When true the source must never
+     * auto-enable or auto-update: install/update surface it for explicit user opt-in and the
+     * sync layer treats it as consent-required. Optional, defaults to false.
+     */
+    val requiresPermission: Boolean = false,
     /** Engine deviations only; keys whitelisted per engine (see ManifestParser). */
     val config: Map<String, String>,
     /** API-engine only: nested `paths` string map. */

@@ -16,7 +16,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 8.7.5 (versionCode 233)
+- **Current version**: 8.8.0 (versionCode 234)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 36 · **Compile SDK**: 36
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -64,9 +64,9 @@ Dashboard: `dashboard/src/` (Next.js App Router) with `dashboard/vercel.json`, `
 
 ## Key Architecture Facts
 
-- **DI**: Hilt multibindings for scrapers (`@IntoMap @StringKey("sourceId")`) — 18 sources, all match enum ↔ DI ↔ logo drawables
+- **DI**: Hilt multibindings for source plugins (`@Binds @IntoMap @StringKey("sourceId")` in `SourcePluginModule`) — 17 sources, each a `SourcePlugin` (descriptor + display + scraper); `SourceRegistry` merges builtins with future remotes. Rockmanga removed (dead upstream).
 - **Base scrapers**: `BaseScraperImpl`, `MadaraBaseScraper` (Madara WordPress), `MangaReaderBaseScraper` (MangaReader theme), plus custom scrapers. Shared parsing: `ScraperText.firstChapterNumber()` / `.slugFromHref()` / `.extractViews()`
-- **Source plugins (Phase 0, v8.8.0 train)**: contract package `core/source/plugins/` — pure Kotlin, zero Android deps, JVM-CI-safe. Frozen schema v1 (`PluginManifest`), JCS (RFC 8785) canonicalization minus `signature`, strict duplicate-key rejection, closed engine vocab, literal-host allow-lists, compat-gate-before-schema. Deps: Tink 1.18.0 (raw Ed25519 verify), Jackson tree-model-only (no reflection/R8 rules), erdtman JCS 1.1. Contract tests: 11 suites under `core/source/` tests. Full plan: `tmp/source-plugin-plan-v3.md`. Not wired into production flows yet (Phase 1).
+- **Source plugins (Phase 0, v8.8.0 train)**: contract package `core/source/plugins/` — pure Kotlin, zero Android deps, JVM-CI-safe. Frozen schema v1 (`PluginManifest`), JCS (RFC 8785) canonicalization minus `signature`, strict duplicate-key rejection, closed engine vocab, literal-host allow-lists, compat-gate-before-schema. Deps: Tink 1.18.0 (raw Ed25519 verify), Jackson tree-model-only (no reflection/R8 rules), erdtman JCS 1.1. Contract tests: 11 suites under `core/source/` tests. `requiresPermission` flag (robots-gated APIs — never auto-enable), `SourceEngine.CUSTOM` is builtin-only (rejected for remote manifests). Full plan: `tmp/source-plugin-plan-v3.md`. Phase 1 (v8.8.0): `SourcePlugin`/`SourceRegistry`/`SourceDisplayResolver`, 17 builtin plugins, rockmanga removed.
 - **Room v15**: schemas exported to `app/schemas/` via KSP `room.schemaLocation`. Migrations 8→15 hand-written in `MangaDatabase.kt`. `exportSchema = true`
 - **Favourites vs Reading List**: `FavoriteEntity.isFavorite` boolean separate from `readingStatus` string. `removeFavorite` sets `isFavorite=false` — does NOT delete entity row
 - **Public library intent (RA-7)**: the visitor library is the *reading-status* list, not favourites — `users/{uid}/favorites` public reads match `readingStatus in [...]` with no `isFavorite` check, so a deselected favourite that keeps a status still shows publicly until status-cleared. By design, not a leak.
@@ -92,12 +92,32 @@ Dashboard: `dashboard/src/` (Next.js App Router) with `dashboard/vercel.json`, `
 - Access control: `isSignedIn` passed from `MainActivity` → `MangaNavGraph` → screen composables
 - RTDB chat rules reject anonymous writes server-side; client gates UI too
 
+## Source Plugins (v8.8.0+ — replaces "Scraper Architecture" below)
+
+Each source is a `SourcePlugin` (`core/source/plugins/`): descriptor + display + scraper.
+Adding a source = **one plugin class + one `@Binds` line** in `SourcePluginModule`:
+
+1. Extend `BaseScraperImpl`, `MadaraBaseScraper`, or `MangaReaderBaseScraper` (or reuse a theme engine as-is)
+2. Add a `@Singleton` plugin class (see `BuiltinSourcePlugins.kt`) with:
+   - `descriptor`: id (== stored sourceId, NEVER rename), `SourceEngine`, baseUrl, `requiresVerification`,
+     `allowedHosts` (base + cover/reader/API/storage CDNs from the audit), `config` from the
+     `PluginConfigKeys` vocabulary (chapter-list strategy, image-Referer policy, list path…)
+   - `display`: existing `R.string`/`R.drawable` (underscore naming for new PNGs)
+   - `scraper`: the implementation instance
+3. Bind it in `SourcePluginModule` with `@Binds @IntoMap @StringKey("sourceId")`
+4. Ship a captured-style fixture under `app/src/test/resources/scrapers/` + a test driving the REAL parser (never re-implement selectors inline — tautological fixtures pass while prod breaks)
+5. Remote Config needs NO edit (kill-switch/domain keys derive from the registry)
+
+**Per-source audit evidence**: `tmp/analysis/` (2026-09-24, Chromium-verified). Treat HTTP/WAF behavior as dated; re-verify before trusting. Key corrections baked in: Starz fully working (audit 403s were egress-specific); StellarSaber is AES-**128**-GCM; Hijala cover = `.manga-info .thumb img[data-src]`, no default split-stitching; Leko/Lionz/Spark chapters via numeric `manga_get_chapters` (NOT slug-ajax); LekMangaOnline oEmbed thumbnail broken; Despair canonical = despair-world.com.
+
+**Removed sources**: rockmanga/rocksmanga.com died upstream — enum/DI/drawable/strings/fixture deleted. Stored rows filter at repository layer, never AZORA-fallback. Same rule for any future removal.
+
 ## Scraper Architecture (New Sources)
 
 Each scraper must:
 1. Extend `BaseScraperImpl`, `MadaraBaseScraper`, or `MangaReaderBaseScraper`
-2. Add entry to `MangaSource` enum in `domain/model/Models.kt`
-3. Register in `core/di/Modules.kt` ScraperModule with `@Provides @Singleton @IntoMap @StringKey("sourceId")`
+2. Wrap it in a `SourcePlugin` (see above) — do NOT touch `MangaSource` beyond the enum entry, do NOT add a `Modules.kt` provider
+3. Add entry to `MangaSource` enum in `domain/model/Models.kt` (deprecated bridge until Phase 2)
 4. Place logo PNG in `res/drawable/` (underscore naming)
 5. Ship a captured-style fixture under `app/src/test/resources/scrapers/` + a test driving the REAL parser (never re-implement selectors inline — tautological fixtures pass while prod breaks)
 

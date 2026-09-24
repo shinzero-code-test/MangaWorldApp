@@ -2,7 +2,6 @@ package com.exapps.mangaworld.core.firebase
 
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.SourceDomainOverrides
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
@@ -29,7 +28,12 @@ data class ScraperRuntimeConfig(
 
 @Singleton
 class FirebaseRemoteConfigManager @Inject constructor(
-    @IoDispatcher private val ioDispatcher: CoroutineDispatcher
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    /**
+     * Provider (not direct) — the registry's plugins need SettingsRepository,
+     * which needs this manager. Lazy lookup breaks the cycle.
+     */
+    private val registryProvider: javax.inject.Provider<com.exapps.mangaworld.core.source.plugins.SourceRegistry>
 ) {
     private val remoteConfig: FirebaseRemoteConfig = FirebaseRemoteConfig.getInstance()
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -79,42 +83,6 @@ class FirebaseRemoteConfigManager @Inject constructor(
             ).await()
             remoteConfig.setDefaultsAsync(
                 mapOf(
-                    "source_olympus_enabled" to true,
-                    "source_azora_enabled" to true,
-                    "source_starz_enabled" to true,
-                    "source_mangasid_enabled" to true,
-                    "source_meshmanga_enabled" to true,
-                    "source_asq3_enabled" to true,
-                    "source_lekmanga_enabled" to true,
-                    "source_lekmangaonline_enabled" to true,
-                    "source_likemanga_enabled" to true,
-                    "source_linkmanga_enabled" to true,
-                    "source_mangaleko_enabled" to true,
-                    "source_mangalionz_enabled" to true,
-                    "source_areascans_enabled" to true,
-                    "source_hijala_enabled" to true,
-                    "source_lavascans_enabled" to true,
-                    "source_stellarsaber_enabled" to true,
-                    "source_procomic_enabled" to true,
-                    "source_rockmanga_enabled" to true,
-                    "source_olympus_base_url" to "https://olympustaff.com",
-                    "source_azora_base_url" to "https://azorafly.com",
-                    "source_starz_base_url" to "https://starzmanga.com",
-                    "source_mangasid_base_url" to "https://mangasid.com",
-                    "source_meshmanga_base_url" to "https://meshmanga.com",
-                    "source_asq3_base_url" to "https://3asq.online",
-                    "source_lekmanga_base_url" to "https://mangalik.net",
-                    "source_lekmangaonline_base_url" to "https://lekmanga.online",
-                    "source_likemanga_base_url" to "https://like-manga.net",
-                    "source_linkmanga_base_url" to "https://link-manga.net",
-                    "source_mangaleko_base_url" to "https://manga-leko.site",
-                    "source_mangalionz_base_url" to "https://manga-lionz.org",
-                    "source_areascans_base_url" to "https://ar.kenmanga.com",
-                    "source_hijala_base_url" to "https://hijala.com",
-                    "source_lavascans_base_url" to "https://lavascans.com",
-                    "source_stellarsaber_base_url" to "https://stellarsaber.pro",
-                    "source_procomic_base_url" to "https://procomic.pro",
-                    "source_rockmanga_base_url" to "https://rocksmanga.com",
                     "scraper_selector_overrides" to "{}",
                     "scraper_connect_timeout_seconds" to 30,
                     "scraper_read_timeout_seconds" to 30,
@@ -126,9 +94,22 @@ class FirebaseRemoteConfigManager @Inject constructor(
                     "engagement_tier_warming_ms" to 900000L,
                     "engagement_tier_active_ms" to 3600000L,
                     "engagement_tier_avid_ms" to 36000000L
-                )
+                ) + sourceDefaultEntries()
             ).await()
             applyState()
+        }
+    }
+
+    /**
+     * Per-source defaults straight from the plugin registry: enabled + base URL per
+     * known source. Adding a source needs no Remote Config edit (and rockmanga's dead
+     * keys simply stop being read once the plugin is gone).
+     */
+    private fun sourceDefaultEntries(): Map<String, Any> = buildMap {
+        for (plugin in registryProvider.get().all()) {
+            val id = plugin.descriptor.id.value
+            put("source_${id}_enabled", true)
+            put("source_${id}_base_url", plugin.descriptor.baseUrl)
         }
     }
 
@@ -144,39 +125,29 @@ class FirebaseRemoteConfigManager @Inject constructor(
     fun currentScraperRuntimeConfig(): ScraperRuntimeConfig = scraperRuntimeConfig.value
 
     private fun applyState() {
+        // Registry-driven: every known plugin gets kill-switch + domain keys.
+        val plugins = registryProvider.get().all()
         val disabled = buildSet {
-            if (!remoteConfig.getBoolean("source_olympus_enabled")) add("olympus")
-            if (!remoteConfig.getBoolean("source_azora_enabled")) add("azora")
-            if (!remoteConfig.getBoolean("source_starz_enabled")) add("starz")
-            if (!remoteConfig.getBoolean("source_mangasid_enabled")) add("mangasid")
-            if (!remoteConfig.getBoolean("source_meshmanga_enabled")) add("meshmanga")
-            if (!remoteConfig.getBoolean("source_asq3_enabled")) add("asq3")
-            if (!remoteConfig.getBoolean("source_lekmanga_enabled")) add("lekmanga")
-            if (!remoteConfig.getBoolean("source_lekmangaonline_enabled")) add("lekmangaonline")
-            if (!remoteConfig.getBoolean("source_likemanga_enabled")) add("likemanga")
-            if (!remoteConfig.getBoolean("source_linkmanga_enabled")) add("linkmanga")
-            if (!remoteConfig.getBoolean("source_mangaleko_enabled")) add("mangaleko")
-            if (!remoteConfig.getBoolean("source_mangalionz_enabled")) add("mangalionz")
-            if (!remoteConfig.getBoolean("source_areascans_enabled")) add("areascans")
-            if (!remoteConfig.getBoolean("source_hijala_enabled")) add("hijala")
-            if (!remoteConfig.getBoolean("source_lavascans_enabled")) add("lavascans")
-            if (!remoteConfig.getBoolean("source_stellarsaber_enabled")) add("stellarsaber")
-            if (!remoteConfig.getBoolean("source_procomic_enabled")) add("procomic")
-            if (!remoteConfig.getBoolean("source_rockmanga_enabled")) add("rockmanga")
+            for (plugin in plugins) {
+                val id = plugin.descriptor.id.value
+                if (!remoteConfig.getBoolean("source_${id}_enabled")) add(id)
+            }
         }
         _disabledSourceIds.value = disabled
 
         // Per-source domains. Only non-blank, valid origins are kept — anything
-        // else falls back to the enum default inside SourceDomainOverrides.
+        // else falls back to the descriptor default inside SourceDomainOverrides.
         val domainOverrides: Map<String, String> = buildMap<String, String> {
-            for (source in MangaSource.entries) {
-                val raw = remoteConfig.getString("source_${source.id}_base_url")
-                SourceDomainOverrides.normalizeBaseUrl(raw)?.let { put(source.id, it) }
+            for (plugin in plugins) {
+                val id = plugin.descriptor.id.value
+                val raw = remoteConfig.getString("source_${id}_base_url")
+                SourceDomainOverrides.normalizeBaseUrl(raw)?.let { put(id, it) }
             }
         }
         _sourceBaseUrls.value = buildMap<String, String> {
-            for (source in MangaSource.entries) {
-                put(source.id, domainOverrides[source.id] ?: source.baseUrl)
+            for (plugin in plugins) {
+                val id = plugin.descriptor.id.value
+                put(id, domainOverrides[id] ?: plugin.descriptor.baseUrl)
             }
         }
         SourceDomainOverrides.replaceAll(domainOverrides)

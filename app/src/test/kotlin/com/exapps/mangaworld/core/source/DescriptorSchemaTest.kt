@@ -115,6 +115,37 @@ class DescriptorSchemaTest {
     }
 
     @Test
+    fun requiresPermissionAcceptedWhenBoolean() {
+        val kp = PluginTestFixtures.generateKeyPair()
+        val parser = ManifestParser(
+            trustedKeys = mapOf("k1" to PluginTestFixtures.rawPublicKey(kp.public)),
+            host = PluginTestFixtures.HOST
+        )
+        val node = PluginTestFixtures.manifestTree { it.put("requiresPermission", true) }
+        val result = parser.parseAndVerify(PluginTestFixtures.signManifest(node, "k1", kp.private))
+        assertTrue(result is ManifestResult.Valid)
+        assertEquals(true, (result as ManifestResult.Valid).manifest.requiresPermission)
+
+        // Absent flag defaults to false.
+        val node2 = PluginTestFixtures.manifestTree()
+        val result2 = parser.parseAndVerify(PluginTestFixtures.signManifest(node2, "k1", kp.private))
+        assertTrue(result2 is ManifestResult.Valid)
+        assertEquals(false, (result2 as ManifestResult.Valid).manifest.requiresPermission)
+    }
+
+    @Test
+    fun requiresPermissionNonBooleanRejected() {
+        expectViolation { it.put("requiresPermission", "yes") }
+    }
+
+    @Test
+    fun customEngineRejectedForRemoteManifests() {
+        // CUSTOM is builtin-only: a downloaded manifest naming it fails closed.
+        expectViolation { it.put("engine", "custom") }
+    }
+}
+
+    @Test
     fun namesAndLogoRules() {
         expectViolation { it.replace("names", PluginTestFixtures.mapper.createObjectNode()) }
         expectViolation { it.withObject("/names").put("ar", "") }

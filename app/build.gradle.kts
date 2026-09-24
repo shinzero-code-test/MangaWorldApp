@@ -62,8 +62,8 @@ android {
         applicationId = "com.exapps.mangaworld"
         minSdk        = 26
         targetSdk     = 36
-        versionCode   = 233
-        versionName   = "8.7.5"
+        versionCode   = 234
+        versionName   = "8.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

@@ -308,7 +308,12 @@ class FirebaseCommunityRepository @Inject constructor(
                 val docs = snapshot?.documents.orEmpty()
                 trySend(
                     com.exapps.mangaworld.domain.repository.PublicLibraryState.Ready(
-                        docs.mapNotNull { FirebaseSyncMerge.favorite(it)?.toLibraryDomain() }
+                        // Dead sources (removed plugins) stay hidden, never AZORA-fallback.
+                        docs.mapNotNull { doc ->
+                            FirebaseSyncMerge.favorite(doc)
+                                ?.takeIf { com.exapps.mangaworld.domain.model.MangaSource.fromIdOrNull(it.sourceId) != null }
+                                ?.toLibraryDomain()
+                        }
                     )
                 )
             }
@@ -336,7 +341,11 @@ class FirebaseCommunityRepository @Inject constructor(
             .whereIn("readingStatus", statuses)
             .orderBy("addedAt", Query.Direction.DESCENDING)
             .limit(200).get().await()
-            .documents.mapNotNull { FirebaseSyncMerge.favorite(it)?.toLibraryDomain() }
+            .documents.mapNotNull { doc ->
+                FirebaseSyncMerge.favorite(doc)
+                    ?.takeIf { com.exapps.mangaworld.domain.model.MangaSource.fromIdOrNull(it.sourceId) != null }
+                    ?.toLibraryDomain()
+            }
     }
 
     override fun observeModerationReports(): Flow<List<ModerationReport>> = callbackFlow {

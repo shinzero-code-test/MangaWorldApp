@@ -22,7 +22,6 @@ const SOURCE_DOMAINS: { id: string; label: string; def: string }[] = [
   { id: "lavascans",     label: "لاڤا سكانز",         def: "https://lavascans.com" },
   { id: "stellarsaber",  label: "StellarSaber",       def: "https://stellarsaber.pro" },
   { id: "procomic",      label: "ProChan",            def: "https://procomic.pro" },
-  { id: "rockmanga",     label: "روكس مانجا",         def: "https://rocksmanga.com" },
 ];
 
 function isValidHttpUrl(raw: string): boolean {

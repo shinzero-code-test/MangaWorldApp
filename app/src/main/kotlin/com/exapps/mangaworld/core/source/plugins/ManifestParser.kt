@@ -83,6 +83,7 @@ class ManifestParser(
         // Unknown engine NAMES are a vocabulary violation (closed set), not a version gap.
         val engine = obj.get("engine")?.takeIf { it.isTextual }?.asText()
             ?.let { SourceEngine.fromSerialName(it) }
+            ?.takeIf { it != SourceEngine.CUSTOM }
             ?: return ManifestResult.Invalid(
                 ManifestInvalidReason.SCHEMA_VIOLATION, "unknown engine"
             )
@@ -168,6 +169,10 @@ class ManifestParser(
             ?: return fail("bad requiresVerification")
         val enabledByDefault = obj.get("enabledByDefault")?.takeIf { it.isBoolean }?.asBoolean()
             ?: return fail("bad enabledByDefault")
+        val requiresPermission = obj.get("requiresPermission")?.let {
+            if (!it.isBoolean) return fail("bad requiresPermission")
+            it.asBoolean()
+        } ?: false
 
         val configNode = obj.get("config")
         if (configNode != null && !configNode.isObject) return fail("bad config")
@@ -232,6 +237,7 @@ class ManifestParser(
                 baseUrl = baseUrl,
                 requiresVerification = requiresVerification,
                 enabledByDefault = enabledByDefault,
+                requiresPermission = requiresPermission,
                 config = config,
                 apiPaths = apiPaths,
                 allowedHosts = allowedHosts,
@@ -285,6 +291,7 @@ class ManifestParser(
         private val KNOWN_FIELDS = setOf(
             "id", "version", "minAppVersion", "issuedAt", "bridgeApi", "names", "logo",
             "engine", "engineApi", "baseUrl", "requiresVerification", "enabledByDefault",
+            "requiresPermission",
             "config", "paths", "allowedHosts", "timeoutMs", "maxResponseMb",
             "scriptSha256", "signature"
         )
@@ -302,7 +309,10 @@ class ManifestParser(
             SourceEngine.MANGAREADER to THEME_CONFIG_KEYS,
             SourceEngine.ASTRO to THEME_CONFIG_KEYS,
             SourceEngine.API to API_CONFIG_KEYS,
-            SourceEngine.SCRIPT to emptySet()
+            SourceEngine.SCRIPT to emptySet(),
+            // Built-in custom scrapers take no remote config; present so the
+            // whitelist lookup stays total over the enum.
+            SourceEngine.CUSTOM to emptySet()
         )
     }
 }

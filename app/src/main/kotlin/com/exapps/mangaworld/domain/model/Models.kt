@@ -36,8 +36,10 @@ enum class MangaSource(
     STELLARSABER("stellarsaber", R.string.source_stellarsaber, "https://stellarsaber.pro", true, ThemeType.MANGAREADER, R.drawable.stellarsaber_pro_logo),
 
     // ─── New Arabic Sources (Custom) ──────────────────────────────────────────
-    PROCOMIC("procomic", R.string.source_procomic, "https://procomic.pro", true, ThemeType.CUSTOM, R.drawable.procomic_pro_logo),
-    ROCKMANGA("rockmanga", R.string.source_rockmanga, "https://rocksmanga.com", false, ThemeType.MADARA_CUSTOM, R.drawable.rocksmanga_com_logo);
+    // NOTE: rockmanga/rocksmanga.com died upstream (audit 2026-09-24) and was removed.
+    // Stored rows with sourceId "rockmanga" are filtered at the repository layer —
+    // never resurrected via the AZORA fallback.
+    PROCOMIC("procomic", R.string.source_procomic, "https://procomic.pro", true, ThemeType.CUSTOM, R.drawable.procomic_pro_logo);
 
     /** Drawable resource ID for the site logo. Used in SourcesScreen grid. */
     val logoDrawableRes: Int get() = logoRes
@@ -70,7 +72,7 @@ enum class MangaSource(
         val NEW_SOURCES = setOf(
             ASQ3, LEKMANGA, LEKMANGAONLINE, LIKEMANGA, LINKMANGA,
             MANGALEKO, MANGALIONZ, AREASCANS, HIJALA, LAVASCANS,
-            STELLARSABER, PROCOMIC, ROCKMANGA
+            STELLARSABER, PROCOMIC
         )
     }
 }

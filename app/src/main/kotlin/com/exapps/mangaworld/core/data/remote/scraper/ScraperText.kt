@@ -68,7 +68,7 @@ object ScraperText {
 
     /**
      * Parses Arabic relative/absolute date labels ("12 يناير 2024") into epoch ms.
-     * Previously copy-pasted across Madara/MangaReader/RockManga.
+     * Previously copy-pasted across Madara/MangaReader scrapers.
      */
     fun parseArabicDate(rawText: String?): Long? {
         val text = rawText?.trim().takeUnless { it.isNullOrEmpty() } ?: return null

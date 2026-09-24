@@ -65,7 +65,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.CacheManager
 import com.exapps.mangaworld.core.data.WidgetSnapshotStore
-import com.exapps.mangaworld.core.data.remote.scraper.MangaScraper
 import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.effectiveHost
@@ -108,7 +107,7 @@ data class DiagnosticsUiState(
 
 @HiltViewModel
 class DiagnosticsViewModel @Inject constructor(
-    private val scrapers: Map<String, @JvmSuppressWildcards MangaScraper>,
+    private val registry: com.exapps.mangaworld.core.source.plugins.SourceRegistry,
     private val settingsRepository: SettingsRepository,
     private val widgetSnapshotStore: WidgetSnapshotStore,
     private val cacheManager: CacheManager
@@ -127,7 +126,7 @@ class DiagnosticsViewModel @Inject constructor(
             val statuses = coroutineScope {
                 MangaSource.entries.map { source ->
                     async {
-                        val scraper = scrapers[source.id]
+                        val scraper = registry.scraperFor(source.id)
                         if (scraper == null) {
                             SourceDiagnosticStatus(source, homeOk = false, searchResults = 0, hasCookie = false, error = "Scraper missing")
                         } else {
