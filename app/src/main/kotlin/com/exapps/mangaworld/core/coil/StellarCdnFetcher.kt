@@ -3,6 +3,7 @@ package com.exapps.mangaworld.core.coil
 import coil.ImageLoader
 import coil.fetch.FetchResult
 import coil.fetch.Fetcher
+import coil.fetch.SourceResult
 import coil.request.Options
 import com.exapps.mangaworld.core.data.remote.scraper.StellarCrypto
 import com.exapps.mangaworld.core.data.remote.scraper.StellarKeyStore
@@ -57,7 +58,7 @@ class StellarCdnFetcher(
             } catch (e: Exception) {
                 throw IOException("stellar: decrypt failed", e)
             }
-            return FetchResult.Source(
+            return SourceResult(
                 source = Buffer().write(plain),
                 fileSystem = FileSystem.SYSTEM,
                 mimeType = sniffMime(plain)

@@ -78,7 +78,7 @@ class StellarCdnFetcherTest {
         val plain = webpBytes()
         val store = StellarKeyStore().also { it.put(chapter, key) }
         val fetcher = StellarCdnFetcher(binUrl, headers(), Call.Factory { fakeCall(encryptedBin(plain)) }, store)
-        val result = fetcher.fetch() as coil.fetch.FetchResult.Source
+        val result = fetcher.fetch() as coil.fetch.SourceResult
         val out = Buffer()
         result.source.readAll(out)
         assertArrayEquals(plain, out.readByteArray())

@@ -1,7 +1,8 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
-import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import javax.inject.Inject
 
@@ -71,8 +72,10 @@ class StellarSaberScraper @Inject constructor(
             Regex("""["']nonce["']\s*:\s*["']([^"']+)""").find(html)?.groupValues?.get(1)
         }
         if (!chapterId.isNullOrBlank() && !cdnNonce.isNullOrBlank()) {
-            runCatching { fetchCdnKey(chapterId, cdnNonce, ajaxNonce, chapterUrl) }
-                .onSuccess { key -> keyStore.put(chapterUrl, key) }
+            // Failure here must not fail the chapter: fall back to the base path below.
+            runCatching {
+                keyStore.put(chapterUrl, fetchCdnKey(chapterId, cdnNonce, ajaxNonce, chapterUrl))
+            }
         }
         slots.mapIndexedNotNull { index, img ->
             val cdnUrl = img.attr("abs:data-cdn-url").ifEmpty { img.attr("data-cdn-url") }
@@ -84,15 +87,15 @@ class StellarSaberScraper @Inject constructor(
 
     /**
      * `POST admin-ajax.php action=flavor_cdn_get_key` → base64 16-byte key.
-     * Returns null (caller falls back) on any deviation — volatile nonces and keys
-     * must never hard-fail the chapter into an error when the base path might work.
+     * Throws on any deviation (caught by the outer runCatching → base-path fallback):
+     * volatile nonces and keys must never hard-fail the chapter.
      */
     private suspend fun fetchCdnKey(
         chapterId: String,
         cdnNonce: String,
         ajaxNonce: String?,
         chapterUrl: String
-    ): ByteArray? = withContext(kotlinx.coroutines.Dispatchers.IO) {
+    ): ByteArray = withContext(kotlinx.coroutines.Dispatchers.IO) {
         val form = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM)
             .addFormDataPart("action", "flavor_cdn_get_key")
             .addFormDataPart("chapter_id", chapterId)
@@ -107,10 +110,13 @@ class StellarSaberScraper @Inject constructor(
             .post(form.build())
             .build()
         val body = client.newCall(request).execute().use { it.body?.string().orEmpty() }
-        val json = runCatching { org.json.JSONObject(body) }.getOrNull() ?: return@withContext null
-        if (!json.optBoolean("success", false)) return@withContext null
+        val json = runCatching { org.json.JSONObject(body) }.getOrNull()
+            ?: error("stellar: key endpoint returned non-JSON")
+        if (!json.optBoolean("success", false)) error("stellar: key endpoint refused")
         val keyB64 = json.optJSONObject("data")?.optString("key").orEmpty()
         val key = runCatching { java.util.Base64.getDecoder().decode(keyB64) }.getOrNull()
-        key?.takeIf { it.size == com.exapps.mangaworld.core.data.remote.scraper.StellarCrypto.KEY_BYTES }
+        require(key != null && key.size == StellarCrypto.KEY_BYTES) { "stellar: bad key bytes" }
+        key
+    }
     }
 }
