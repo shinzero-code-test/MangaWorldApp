@@ -73,15 +73,18 @@ object PluginTestFixtures {
         KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
 
     /**
-     * Raw 32-byte Ed25519 public key from JDK X.509 encoding (fixed 12-byte RFC 8410
-     * prefix + 32 key bytes). Asserts the prefix so format drift fails loudly.
+     * Raw 32-byte Ed25519 public key from JDK X.509 encoding: fixed 12-byte RFC 8410
+     * SubjectPublicKeyInfo header (`30 2a || 30 05 06 03 2b 65 70 || 03 21 00`) + 32 key
+     * bytes. Asserts the header so provider format drift fails loudly.
      */
     fun rawPublicKey(publicKey: PublicKey): ByteArray {
         val encoded = publicKey.encoded
-        val prefix = byteArrayOf(
-            0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20
+        val expectedHeader = byteArrayOf(
+            0x30.toByte(), 0x2a.toByte(), 0x30.toByte(), 0x05.toByte(),
+            0x06.toByte(), 0x03.toByte(), 0x2b.toByte(), 0x65.toByte(),
+            0x70.toByte(), 0x03.toByte(), 0x21.toByte(), 0x00.toByte()
         )
-        require(encoded.size == 44 && encoded.copyOfRange(0, 12).contentEquals(prefix)) {
+        require(encoded.size == 44 && encoded.copyOfRange(0, 12).contentEquals(expectedHeader)) {
             "unexpected Ed25519 SPKI layout"
         }
         return encoded.copyOfRange(12, 44)
