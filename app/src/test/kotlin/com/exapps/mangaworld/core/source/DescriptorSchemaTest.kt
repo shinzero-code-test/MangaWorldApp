@@ -76,7 +76,7 @@ class DescriptorSchemaTest {
         expectViolation { it.withObject("/config") }
         // `paths` is api-only.
         val paths = PluginTestFixtures.mapper.createObjectNode().put("list", "data")
-        expectViolation { it.set("paths", paths) }
+        expectViolation { it.replace("paths", paths) }
     }
 
     @Test
@@ -100,7 +100,7 @@ class DescriptorSchemaTest {
         expectViolation { it.putArray("allowedHosts") }
         val many = PluginTestFixtures.mapper.createArrayNode()
         repeat(17) { many.add("h$it.example.com") }
-        expectViolation { it.set("allowedHosts", many) }
+        expectViolation { it.replace("allowedHosts", many) }
     }
 
     @Test
@@ -113,7 +113,7 @@ class DescriptorSchemaTest {
 
     @Test
     fun namesAndLogoRules() {
-        expectViolation { it.set("names", PluginTestFixtures.mapper.createObjectNode()) }
+        expectViolation { it.replace("names", PluginTestFixtures.mapper.createObjectNode()) }
         expectViolation { it.withObject("/names").put("ar", "") }
         expectViolation { it.put("logo", "/abs/path.png") }
         expectViolation { it.put("logo", "http://insecure.example/x.png") }

@@ -64,7 +64,7 @@ object PluginTestFixtures {
     fun reversedJson(node: ObjectNode): String {
         val reversed = mapper.createObjectNode()
         node.fields().asSequence().toList().asReversed().forEach { (k, v) ->
-            reversed.set(k, v)
+            reversed.replace(k, v)
         }
         return mapper.writeValueAsString(reversed)
     }
