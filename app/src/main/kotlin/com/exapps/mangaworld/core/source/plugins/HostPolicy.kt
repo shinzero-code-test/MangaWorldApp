@@ -100,17 +100,17 @@ object HostPolicy {
         maxHops: Int = MAX_REDIRECT_HOPS
     ): RedirectDecision {
         if (location.isNullOrBlank()) return RedirectDecision.NoRedirect
-        if (hopsUsed >= maxHops) return RedirectDecision.Reject(RedirectDecision.RejectReason.HOP_BUDGET_EXCEEDED)
+        if (hopsUsed >= maxHops) return RedirectDecision.Reject(RedirectRejectReason.HOP_BUDGET_EXCEEDED)
         val next = runCatching {
             URI(currentUrl.trim()).resolve(location.trim())
-        }.getOrNull() ?: return RedirectDecision.Reject(RedirectDecision.RejectReason.UNPARSEABLE)
+        }.getOrNull() ?: return RedirectDecision.Reject(RedirectRejectReason.UNPARSEABLE)
         if (!next.scheme.equals("https", ignoreCase = true)) {
             // Catches both plain-http targets and https→http downgrades mid-chain.
-            return RedirectDecision.Reject(RedirectDecision.RejectReason.NOT_HTTPS)
+            return RedirectDecision.Reject(RedirectRejectReason.NOT_HTTPS)
         }
         val host = next.host?.lowercase()?.trimEnd('.').orEmpty()
         if (!isHostAllowed(host, allowedHosts)) {
-            return RedirectDecision.Reject(RedirectDecision.RejectReason.HOST_NOT_ALLOWED)
+            return RedirectDecision.Reject(RedirectRejectReason.HOST_NOT_ALLOWED)
         }
         return RedirectDecision.Follow(next.toASCIIString())
     }
