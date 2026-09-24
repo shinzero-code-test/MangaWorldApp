@@ -98,7 +98,7 @@ class StellarKeyStoreTest {
             store.put("https://stellarsaber.pro/chapter/$i/", ByteArray(16) { i.toByte() })
         }
         assertNull(store.get("https://stellarsaber.pro/chapter/0/"))
-        assertEquals(1.toByte(), store.get("https://stellarsaber.pro/chapter/10/")!![0])
+        assertEquals(10.toByte(), store.get("https://stellarsaber.pro/chapter/10/")!![0])
     }
 
     @Test

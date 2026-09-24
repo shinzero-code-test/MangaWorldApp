@@ -38,21 +38,32 @@ class StellarDecryptInterceptor @Inject constructor(
         // ChapterPage headers always carry Referer: <chapterUrl> for this source.
         val key = request.header("Referer")?.let { keys.get(it) } ?: return response
         if (!response.isSuccessful) return response
+        // Consumed exactly once: both branches below rebuild a fresh body, because a
+        // re-read of the drained original throws (this bit the fail-open path once).
+        val contentType = response.header("Content-Type")?.let {
+            runCatching { it.toMediaTypeOrNull() }.getOrNull()
+        }
         val bin = runCatching { response.body?.bytes() }.getOrNull() ?: return response
         val plain = try {
             StellarCrypto.decrypt(bin, key)
         } catch (_: Exception) {
-            // Wrong/stale key or corrupt payload: GCM fails closed. Hand the original
-            // bytes on so Coil renders its error state instead of crashing the load.
-            return response
+            null
         }
-        val body = plain.toResponseBody(sniffImageMime(plain)?.toMediaTypeOrNull())
-        return response.newBuilder()
-            .removeHeader("Content-Length")
-            .removeHeader("Content-Encoding")
-            .removeHeader("Transfer-Encoding")
-            .body(body)
-            .build()
+        return if (plain != null) {
+            response.newBuilder()
+                .removeHeader("Content-Length")
+                .removeHeader("Content-Encoding")
+                .removeHeader("Transfer-Encoding")
+                .body(plain.toResponseBody(sniffImageMime(plain)?.toMediaTypeOrNull()))
+                .build()
+        } else {
+            // Wrong/stale key or corrupt payload: GCM fails closed. Hand the ORIGINAL
+            // bytes on in a fresh body so Coil renders its error state instead of
+            // crashing the load on a drained stream.
+            response.newBuilder()
+                .body(bin.toResponseBody(contentType))
+                .build()
+        }
     }
 
     companion object {

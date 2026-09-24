@@ -312,7 +312,11 @@ class AreaScansScraper @Inject constructor(
      */
     internal fun parseInfoRows(doc: org.jsoup.nodes.Document): Map<String, String> =
         doc.select(".info-row").associate { row ->
-            val cells = row.select("div, span, dd, li, td")
+            // Direct children only: Element.select() would also match the row itself.
+            val cells = row.children().filter {
+                it.tagName() == "div" || it.tagName() == "span" || it.tagName() == "dd" ||
+                    it.tagName() == "li" || it.tagName() == "td"
+            }
             val label = cells.firstOrNull()?.text()?.cleanText().orEmpty()
             val value = cells.drop(1).joinToString(" ") { it.text().cleanText() }.cleanText()
             label to value
