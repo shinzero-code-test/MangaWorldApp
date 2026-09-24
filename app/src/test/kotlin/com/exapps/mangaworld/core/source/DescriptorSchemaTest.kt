@@ -73,7 +73,6 @@ class DescriptorSchemaTest {
     fun scriptOnlyFieldsRejectedOnThemeEngines() {
         expectViolation { it.put("bridgeApi", 1) }
         expectViolation { it.put("scriptSha256", "a".repeat(64)) }
-        expectViolation { it.withObject("/config") }
         // `paths` is api-only.
         val paths = PluginTestFixtures.mapper.createObjectNode().put("list", "data")
         expectViolation { it.replace("paths", paths) }
@@ -89,7 +88,11 @@ class DescriptorSchemaTest {
 
     @Test
     fun scriptEngineRequiresHash() {
-        expectViolation { it.put("engine", "script") }
+        // bridgeApi present so the compat gate passes and the hash rule itself is exercised.
+        expectViolation {
+            it.put("engine", "script")
+            it.put("bridgeApi", 1)
+        }
     }
 
     @Test

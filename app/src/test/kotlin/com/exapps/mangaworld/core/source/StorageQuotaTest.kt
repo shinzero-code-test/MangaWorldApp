@@ -43,9 +43,9 @@ class StorageQuotaTest {
             stored,
             activeVersions = mapOf(starz to 4, hijala to 1),
             previousVersions = mapOf(starz to 3),
-            budgetBytes = 250
+            budgetBytes = 300
         )
-        // 400 total, budget 250 → evict 150+; only v2 is eligible.
+        // 400 total, budget 300 → evict v2 (100); only v2 is eligible.
         assertEquals(listOf(v(starz, 2, 100)), plan.evict)
         assertEquals(false, plan.stillOverBudget)
     }
