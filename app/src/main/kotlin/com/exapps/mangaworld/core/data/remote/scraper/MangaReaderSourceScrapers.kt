@@ -118,5 +118,4 @@ class StellarSaberScraper @Inject constructor(
         require(key != null && key.size == StellarCrypto.KEY_BYTES) { "stellar: bad key bytes" }
         key
     }
-    }
 }
