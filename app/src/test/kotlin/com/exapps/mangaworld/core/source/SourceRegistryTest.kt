@@ -107,4 +107,68 @@ class SourceRegistryTest {
             assertTrue(d.version >= 1)
         }
     }
+
+    // ─── Phase 2A verified overrides ──────────────────────────────────────────
+
+    @Test
+    fun officialVerifiedMaySupersedeBuiltin() {
+        val registry = SourceRegistry(mapOf("hijala" to fakePlugin("hijala")))
+        val updated = fakePlugin("hijala")
+        val outcome = registry.registerVerified(
+            updated, com.exapps.mangaworld.core.source.plugins.PluginOrigin.OFFICIAL
+        )
+        assertTrue(outcome is SourceRegistry.RegisterOutcome.Superseded)
+        assertTrue(registry.isOverridden("hijala"))
+        assertTrue(registry.pluginFor("hijala") === updated)
+    }
+
+    @Test
+    fun hostExpansionDetectedContractionSilent() {
+        val registry = SourceRegistry(mapOf("hijala" to fakePlugin("hijala")))
+        val grown = object : SourcePlugin by fakePlugin("hijala") {
+            override val descriptor = fakePlugin("hijala").descriptor.copy(
+                allowedHosts = setOf("hijala.example", "cdn.hijala.example")
+            )
+        }
+        val outcome = registry.registerVerified(
+            grown, com.exapps.mangaworld.core.source.plugins.PluginOrigin.OFFICIAL
+        )
+        assertTrue(outcome is SourceRegistry.RegisterOutcome.Superseded)
+        assertTrue((outcome as SourceRegistry.RegisterOutcome.Superseded).hostsExpanded)
+        assertTrue(registry.clearOverride("hijala"))
+        assertTrue(!registry.isOverridden("hijala"))
+    }
+
+    @Test
+    fun customNeverShadowsBuiltin() {
+        val registry = SourceRegistry(mapOf("hijala" to fakePlugin("hijala")))
+        val outcome = registry.registerVerified(
+            fakePlugin("hijala"), com.exapps.mangaworld.core.source.plugins.PluginOrigin.CUSTOM
+        )
+        assertTrue(outcome is SourceRegistry.RegisterOutcome.Refused)
+        assertTrue(!registry.isOverridden("hijala"))
+    }
+
+    @Test
+    fun consentGate() {
+        val plain = fakePlugin("newsite")
+        assertTrue(
+            SourceRegistry.needsConsent(
+                plain, com.exapps.mangaworld.core.source.plugins.PluginOrigin.CUSTOM
+            )
+        )
+        assertTrue(
+            !SourceRegistry.needsConsent(
+                plain, com.exapps.mangaworld.core.source.plugins.PluginOrigin.OFFICIAL
+            )
+        )
+        val gated = object : SourcePlugin by plain {
+            override val descriptor = plain.descriptor.copy(requiresPermission = true)
+        }
+        assertTrue(
+            SourceRegistry.needsConsent(
+                gated, com.exapps.mangaworld.core.source.plugins.PluginOrigin.OFFICIAL
+            )
+        )
+    }
 }

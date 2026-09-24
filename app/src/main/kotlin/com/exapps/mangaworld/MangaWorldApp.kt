@@ -47,6 +47,7 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     @Inject lateinit var downloadQueueManager: com.exapps.mangaworld.core.data.download.DownloadQueueManager
     @Inject lateinit var readingStatsStore: com.exapps.mangaworld.core.data.ReadingStatsStore
     @Inject lateinit var favoriteDigestScheduler: FavoriteDigestScheduler
+    @Inject lateinit var bundledPluginLoader: com.exapps.mangaworld.core.source.plugins.BundledPluginLoader
 
     internal val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -93,6 +94,10 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
                 .onFailure { android.util.Log.w("MangaWorldApp", "Download recovery failed: ${it.message}") }
             // Bound daily reading-stat maps (no-op when nothing to prune).
             runCatching { readingStatsStore.pruneOldStats() }
+            // Phase 2A pilots: verify bundled signed descriptors and activate them as
+            // official overrides. Fails closed to builtins; never crashes startup.
+            runCatching { bundledPluginLoader.bootstrap() }
+                .onFailure { android.util.Log.w("MangaWorldApp", "Pilot bootstrap failed: ${it.message}") }
         }
     }
 

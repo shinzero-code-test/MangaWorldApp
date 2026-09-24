@@ -299,7 +299,12 @@ class ManifestParser(
         /** Engine deviations only — anything else in `config` is a schema violation. */
         private val THEME_CONFIG_KEYS = setOf(
             "ajaxChapters", "chapterListSelector", "lazyImageAttrs",
-            "featuredSelector", "latestSelector", "detailSelector", "pageImageSelector"
+            "featuredSelector", "latestSelector", "detailSelector", "pageImageSelector",
+            // Phase 1 standard vocabulary (PluginConfigKeys): chapter-list strategy,
+            // image-Referer policy, archive path, search action. Builtin descriptors
+            // already carry these — remote manifests must accept the same set.
+            "chapterListStrategy", "chapterAjaxPath", "chapterAction",
+            "listPath", "imageRefererPolicy", "searchAction"
         )
         private val API_CONFIG_KEYS = setOf(
             "homeEndpoint", "searchEndpoint", "detailEndpoint", "pagesEndpoint"

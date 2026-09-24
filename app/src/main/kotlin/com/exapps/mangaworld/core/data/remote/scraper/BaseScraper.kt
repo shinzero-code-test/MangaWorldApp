@@ -15,6 +15,16 @@ import org.jsoup.nodes.Document
 interface MangaScraper {
     val source: MangaSource
 
+    /**
+     * Phase 2A migration hook: the verified manifest driving this scraper, when the
+     * plugin was installed from signed JSON (pilots, then remote descriptors in 2B).
+     * Null for classic builtins whose metadata still comes from code. The plugin
+     * wrapper ([SourcePlugin.descriptor]) is authoritative — this is the scraper-side
+     * view for engine code that only holds a [MangaScraper].
+     */
+    val pluginDescriptor: com.exapps.mangaworld.core.source.plugins.PluginManifest?
+        get() = null
+
     suspend fun getHomeData(): Result<HomeData>
     suspend fun getMangaDetail(slug: String): Result<MangaDetail>
     suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>>
@@ -55,7 +65,8 @@ class SourceHttpException(val code: Int, val url: String) :
 abstract class BaseScraperImpl(
     protected val client: OkHttpClient,
     override val source: MangaSource,
-    protected val settingsRepo: SettingsRepository
+    protected val settingsRepo: SettingsRepository,
+    override val pluginDescriptor: com.exapps.mangaworld.core.source.plugins.PluginManifest? = null
 ) : MangaScraper {
 
     /**

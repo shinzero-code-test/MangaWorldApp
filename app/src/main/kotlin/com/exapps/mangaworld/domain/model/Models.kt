@@ -47,6 +47,16 @@ enum class MangaSource(
     enum class ThemeType { MADARA, MANGAREADER, ASTRO, API, OTHER, CUSTOM, MADARA_CUSTOM }
 
     companion object {
+        /**
+         * Phase 2A: prefer [fromIdOrNull] (unknown ids stay unknown). This AZORA
+         * fallback exists only for legacy call sites that cannot represent "unknown"
+         * yet; every migrated path (registry, library filters, navigation guards) must
+         * use [fromIdOrNull] so dead/removed sources are never resurrected.
+         */
+        @Deprecated(
+            "AZORA-fallback hides unknown/dead sources; use fromIdOrNull + explicit handling. " +
+                "Will become ERROR at Phase 2-complete."
+        )
         fun fromId(id: String): MangaSource {
             val found = entries.find { it.id == id }
             if (found == null) {

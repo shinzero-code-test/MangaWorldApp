@@ -156,7 +156,7 @@ object DatabaseModule {
         // every update since is negligible. No fallbackToDestructiveMigration on
         // upgrade — a missing migration must crash loudly, never wipe silently.
         Room.databaseBuilder(ctx, MangaDatabase::class.java, "mangaworld.db")
-            .addMigrations(MangaDatabase.MIGRATION_8_9, MangaDatabase.MIGRATION_9_10, MangaDatabase.MIGRATION_10_11, MangaDatabase.MIGRATION_11_12, MangaDatabase.MIGRATION_12_13, MangaDatabase.MIGRATION_13_14, MangaDatabase.MIGRATION_14_15)
+            .addMigrations(MangaDatabase.MIGRATION_8_9, MangaDatabase.MIGRATION_9_10, MangaDatabase.MIGRATION_10_11, MangaDatabase.MIGRATION_11_12, MangaDatabase.MIGRATION_12_13, MangaDatabase.MIGRATION_13_14, MangaDatabase.MIGRATION_14_15, MangaDatabase.MIGRATION_15_16)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
@@ -191,6 +191,10 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideHomeCacheDao(db: MangaDatabase) = db.homeCacheDao()
+
+    @Provides
+    @Singleton
+    fun providePluginDao(db: MangaDatabase) = db.pluginDao()
 }
 
 @Module

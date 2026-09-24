@@ -19,8 +19,9 @@ import com.exapps.mangaworld.core.data.local.entity.*
         DownloadBatchEntity::class,
         DownloadedMangaEntity::class,
         HomeCacheEntity::class,
+        PluginEntity::class,
     ],
-    version = 15,         // v15: home_cache offline snapshots (one row per source)
+    version = 16,         // v16: plugin_index (Phase 2A local activation pointers)
     exportSchema = true   // Schemas exported to app/schemas via KSP arg — enables MigrationTestHelper coverage
 )
 abstract class MangaDatabase : RoomDatabase() {
@@ -34,6 +35,7 @@ abstract class MangaDatabase : RoomDatabase() {
     abstract fun downloadBatchDao(): DownloadBatchDao
     abstract fun downloadedMangaDao(): DownloadedMangaDao
     abstract fun homeCacheDao(): HomeCacheDao
+    abstract fun pluginDao(): PluginDao
 
     companion object {
         val MIGRATION_8_9 = object : Migration(8, 9) {
@@ -115,6 +117,22 @@ abstract class MangaDatabase : RoomDatabase() {
                     CREATE TABLE IF NOT EXISTS home_cache (
                         sourceId TEXT NOT NULL PRIMARY KEY,
                         payloadJson TEXT NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )
+                """.trimIndent())
+            }
+        }
+
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS plugin_index (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        activeVersion INTEGER,
+                        previousVersion INTEGER,
+                        origin TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        manifestJson TEXT,
                         updatedAt INTEGER NOT NULL
                     )
                 """.trimIndent())

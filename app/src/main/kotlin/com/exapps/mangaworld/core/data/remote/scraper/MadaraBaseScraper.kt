@@ -26,8 +26,9 @@ open class MadaraBaseScraper(
     source: MangaSource,
     settingsRepo: SettingsRepository,
     protected val datePattern: String = "d MMMM، yyyy",
-    protected val ajaxSearchAction: String = "madara_load_more"
-) : BaseScraperImpl(client, source, settingsRepo) {
+    protected val ajaxSearchAction: String = "madara_load_more",
+    pluginDescriptor: com.exapps.mangaworld.core.source.plugins.PluginManifest? = null
+) : BaseScraperImpl(client, source, settingsRepo, pluginDescriptor) {
 
     protected open val listPath: String = "/manga/"
 

@@ -57,6 +57,20 @@ class FirebaseRemoteConfigManager @Inject constructor(
     val scraperRuntimeConfig: StateFlow<ScraperRuntimeConfig> = _scraperRuntimeConfig.asStateFlow()
 
     /**
+     * Phase 2A trust transport: rotation announcements (cross-signed by a
+     * currently-trusted key — Remote Config alone can never introduce a key).
+     * Raw JSON; merged with the APK-pinned set via [PluginTrust.resolveTrustedKeys].
+     */
+    private val _pluginRotationJson = MutableStateFlow("")
+    val pluginRotationJson: StateFlow<String> = _pluginRotationJson.asStateFlow()
+
+    /** Effective verification keys: pinned always, RC additions only when cross-signed. */
+    fun pluginTrustedKeys(): Map<String, ByteArray> =
+        com.exapps.mangaworld.core.source.plugins.PluginTrust.resolveTrustedKeys(
+            rcJson = _pluginRotationJson.value.ifBlank { null }
+        )
+
+    /**
      * Effective source base URLs (`source_<id>` → origin). The dashboard edits
      * these via Remote Config keys `source_<id>_base_url`; blank/invalid
      * values fall back to the enum defaults. Lets admins follow domain moves
@@ -93,7 +107,8 @@ class FirebaseRemoteConfigManager @Inject constructor(
                     "remote_alert_message" to "",
                     "engagement_tier_warming_ms" to 900000L,
                     "engagement_tier_active_ms" to 3600000L,
-                    "engagement_tier_avid_ms" to 36000000L
+                    "engagement_tier_avid_ms" to 36000000L,
+                    "plugin_key_rotation" to ""
                 ) + sourceDefaultEntries()
             ).await()
             applyState()
@@ -161,6 +176,7 @@ class FirebaseRemoteConfigManager @Inject constructor(
             .filter { it.isNotBlank() }
             .toSet()
         _remoteAlertMessage.value = remoteConfig.getString("remote_alert_message")
+        _pluginRotationJson.value = remoteConfig.getString("plugin_key_rotation")
         _scraperRuntimeConfig.value = ScraperRuntimeConfig(
             connectTimeoutSeconds = remoteConfig.getLong("scraper_connect_timeout_seconds").toInt().coerceIn(5, 90),
             readTimeoutSeconds = remoteConfig.getLong("scraper_read_timeout_seconds").toInt().coerceIn(5, 120),

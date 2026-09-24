@@ -24,8 +24,9 @@ open class MangaReaderBaseScraper(
     source: MangaSource,
     settingsRepo: SettingsRepository,
     protected val pageSize: Int = 24,
-    protected val searchPageSize: Int = 10
-) : BaseScraperImpl(client, source, settingsRepo) {
+    protected val searchPageSize: Int = 10,
+    pluginDescriptor: com.exapps.mangaworld.core.source.plugins.PluginManifest? = null
+) : BaseScraperImpl(client, source, settingsRepo, pluginDescriptor) {
 
     protected open val listPath: String = "/manga/"
 
