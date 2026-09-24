@@ -69,7 +69,7 @@ class SuggestionsManager @Inject constructor(
             MangaSuggestion(
                 mangaId = manga.id,
                 title = manga.title,
-                sourceId = manga.source.id,
+                sourceId = manga.source.value,
                 relevance = relevance
             )
         )

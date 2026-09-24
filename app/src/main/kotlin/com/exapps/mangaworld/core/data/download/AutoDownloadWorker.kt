@@ -72,7 +72,7 @@ class AutoDownloadWorker @AssistedInject constructor(
                             slug = favorite.slug,
                             title = favorite.title,
                             coverUrl = favorite.coverUrl,
-                            sourceId = source.id
+                            sourceId = source.value
                         )
                         downloadQueueManager.enqueueAndRun(
                             taskId = "auto_${UUID.randomUUID()}",
@@ -85,7 +85,7 @@ class AutoDownloadWorker @AssistedInject constructor(
                             pages = pages,
                             wifiOnly = settings.downloadOnWifiOnly,
                             referer = chapter.url,
-                            sourceId = source.id,
+                            sourceId = source.value,
                             mangaSlug = favorite.slug
                         )
                     }

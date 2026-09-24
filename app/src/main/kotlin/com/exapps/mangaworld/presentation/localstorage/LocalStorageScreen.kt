@@ -180,6 +180,7 @@ fun LocalStorageScreen(
                 ) {
                     items(mangas, key = { it.mangaId }) { manga ->
                         LocalMangaCard(
+                            sourceNames = sourceNames,
                             manga = manga,
                             autoTags = autoTags[manga.mangaId].orEmpty(),
                             downloadedChapters = viewModel.chapterCount(manga),
@@ -225,6 +226,7 @@ fun LocalStorageScreen(
 @Composable
 private fun LocalMangaCard(
     manga: DownloadedMangaEntity,
+    sourceNames: Map<String, String>,
     autoTags: List<String>,
     downloadedChapters: Int,
     onClick: () -> Unit,

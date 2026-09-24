@@ -235,7 +235,7 @@ class AzoraScraper @Inject constructor(
                         chapterUrl   = "${resolvedBaseUrl}/series/$seriesSlug/$chapterSlug",
                         timeAgo      = createdAt.take(10),
                         publishedAt  = dateLong,
-                        source       = source,
+                        source = SourceId(sourceId),
                         isNew        = isNew
                     )
                 )
@@ -386,7 +386,7 @@ class AzoraScraper @Inject constructor(
             slug         = slug,
             title        = title.ifBlank { slug },
             coverUrl     = coverUrl,
-            source       = source,
+            source = SourceId(sourceId),
             alternativeTitles = altTitles,
             artistName   = artistName,
             description  = description,
@@ -460,7 +460,7 @@ class AzoraScraper @Inject constructor(
                     slug     = slug,
                     title    = post.optString("postTitle", slug),
                     coverUrl = post.optString("featuredImage", ""),
-                    source   = source,
+                    source = SourceId(sourceId),
                     status   = MangaStatus.from(post.optString("seriesStatus")),
                     type     = MangaType.from(post.optString("seriesType")),
                     rating   = post.optDouble("averageRating").takeIf { it > 0 }?.toFloat(),
@@ -503,7 +503,7 @@ class AzoraScraper @Inject constructor(
                         slug     = slug,
                         title    = post.optString("postTitle", slug),
                         coverUrl = post.optString("featuredImage", ""),
-                        source   = source,
+                        source = SourceId(sourceId),
                         rating   = post.optDouble("averageRating").takeIf { it > 0 }?.toFloat(),
                         status   = MangaStatus.from(post.optString("seriesStatus", "")),
                         type     = MangaType.from(post.optString("seriesType", "")),
@@ -572,7 +572,7 @@ class AzoraScraper @Inject constructor(
             slug     = slug,
             title    = decodeStr(obj["postTitle"]).cleanText().ifBlank { slug },
             coverUrl = decodeStr(obj["featuredImage"]),
-            source   = source,
+            source = SourceId(sourceId),
             status   = MangaStatus.from(decodeStr(obj["seriesStatus"])),
             type     = MangaType.from(decodeStr(obj["seriesType"])),
             rating   = decodeFloat(obj["averageRating"]).takeIf { it > 0f },
@@ -620,7 +620,7 @@ class AzoraScraper @Inject constructor(
                     slug     = slug,
                     title    = title,
                     coverUrl = coverUrl,
-                    source   = source,
+                    source = SourceId(sourceId),
                     type     = MangaType.from(typeSpan?.text()),
                     status   = MangaStatus.from(statusTxt),
                     url      = "${resolvedBaseUrl}/series/$slug"

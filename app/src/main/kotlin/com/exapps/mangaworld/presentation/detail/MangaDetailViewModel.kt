@@ -504,7 +504,7 @@ class MangaDetailViewModel @Inject constructor(
                             normalizeTitle(manga.title).contains(normalizeTitle(item.title))
                         }
                         SourceComparison(
-                            source = source,
+                            source = comparisonEntry(source.value),
                             match = match,
                             chapterCount = match?.let { detail ->
                                 mangaRepo.getMangaDetail(detail.slug, source).getOrNull()?.totalChapters ?: 0
@@ -512,7 +512,7 @@ class MangaDetailViewModel @Inject constructor(
                         )
                     } catch (e: Exception) {
                         SourceComparison(
-                            source = source,
+                            source = comparisonEntry(source.value),
                             match = null,
                             error = context.getString(R.string.unknown_error)
                         )
@@ -523,6 +523,16 @@ class MangaDetailViewModel @Inject constructor(
             _state.update { it.copy(sourceComparisons = results) }
         }
     }
+
+    /** Display entry for a comparison row (unknown ids render raw, never another source). */
+    private fun comparisonEntry(id: String): SourceUiEntry =
+        sourceUiMapper.entry(id)
+            ?: SourceUiEntry(
+                id = id, name = id,
+                logoRes = 0,
+                engine = com.exapps.mangaworld.core.source.plugins.SourceEngine.CUSTOM,
+                requiresVerification = false, hostHint = ""
+            )
 
     private fun normalizeTitle(value: String): String = value.lowercase()
         .replace("[\\u064B-\\u065F]".toRegex(), "")

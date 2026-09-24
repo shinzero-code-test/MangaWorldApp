@@ -158,7 +158,7 @@ class SuggestionNotificationWorker @AssistedInject constructor(
                     mangaId = manga.id,
                     title = manga.title,
                     coverUrl = manga.coverUrl,
-                    sourceId = manga.source.id,
+                    sourceId = manga.source.value,
                     relevance = 0.5f
                 )
             }

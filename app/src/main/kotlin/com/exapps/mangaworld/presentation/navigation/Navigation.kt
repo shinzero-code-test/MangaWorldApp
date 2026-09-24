@@ -15,7 +15,7 @@ import androidx.navigation.*
 import androidx.navigation.compose.*
 import androidx.compose.runtime.remember
 import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
-import com.exapps.mangaworld.core.source.plugins.SourceDomainOverrides
+import com.exapps.mangaworld.domain.model.SourceDomainOverrides
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.core.source.plugins.SourceRegistry
 import dagger.hilt.EntryPoint

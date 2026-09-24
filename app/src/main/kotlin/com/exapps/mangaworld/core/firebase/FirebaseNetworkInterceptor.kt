@@ -1,7 +1,7 @@
 package com.exapps.mangaworld.core.firebase
 
 import com.exapps.mangaworld.core.source.plugins.HostPolicy
-import com.exapps.mangaworld.core.source.plugins.SourceDomainOverrides
+import com.exapps.mangaworld.domain.model.SourceDomainOverrides
 import com.google.firebase.perf.FirebasePerformance
 import okhttp3.Interceptor
 import okhttp3.Response
