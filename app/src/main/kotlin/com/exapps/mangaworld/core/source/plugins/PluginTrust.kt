@@ -84,9 +84,9 @@ object PluginTrust {
 
     /** Exact canonical bytes a rotation announcement is signed over (JCS, sorted keys). */
     fun rotationCanonicalBytes(newKeyId: String, newPublicKeyB64: String, validFrom: String): ByteArray =
-        "{\"newKeyId\":\"${jcsEscape(newKeyId)}\"," +
+        ("{\"newKeyId\":\"${jcsEscape(newKeyId)}\"," +
             "\"newPublicKeyB64\":\"${jcsEscape(newPublicKeyB64)}\"," +
-            "\"validFrom\":\"${jcsEscape(validFrom)}\"}"
+            "\"validFrom\":\"${jcsEscape(validFrom)}\"}")
             .toByteArray(Charsets.UTF_8)
 
     private fun jcsEscape(s: String): String = buildString {
