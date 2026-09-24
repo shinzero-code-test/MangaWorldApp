@@ -143,7 +143,6 @@ class DescriptorSchemaTest {
         // CUSTOM is builtin-only: a downloaded manifest naming it fails closed.
         expectViolation { it.put("engine", "custom") }
     }
-}
 
     @Test
     fun namesAndLogoRules() {
