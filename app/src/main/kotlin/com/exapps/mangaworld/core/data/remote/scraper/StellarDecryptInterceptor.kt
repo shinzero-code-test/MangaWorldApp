@@ -36,12 +36,9 @@ class StellarDecryptInterceptor @Inject constructor(
         }
         val response = chain.proceed(request)
         // ChapterPage headers always carry Referer: <chapterUrl> for this source.
-        val key = request.header("Referer")?.let { keys.get(it) }
-        val bin = if (key != null && response.isSuccessful) {
-            runCatching { response.body?.bytes() }.getOrNull()
-        } else {
-            null
-        } ?: return response
+        val key = request.header("Referer")?.let { keys.get(it) } ?: return response
+        if (!response.isSuccessful) return response
+        val bin = runCatching { response.body?.bytes() }.getOrNull() ?: return response
         val plain = try {
             StellarCrypto.decrypt(bin, key)
         } catch (_: Exception) {
