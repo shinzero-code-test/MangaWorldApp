@@ -66,7 +66,7 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(@ApplicationContext ctx: Context, firebaseNetworkInterceptor: FirebaseNetworkInterceptor): OkHttpClient {
+    fun provideOkHttpClient(@ApplicationContext ctx: Context, firebaseNetworkInterceptor: FirebaseNetworkInterceptor, stellarDecryptInterceptor: StellarDecryptInterceptor): OkHttpClient {
         val cacheDir = File(ctx.cacheDir, "http_cache")
         val cache = Cache(cacheDir, 50L * 1024 * 1024) // 50MB
 
@@ -83,6 +83,9 @@ object NetworkModule {
             .connectionPool(ConnectionPool(10, 5, TimeUnit.MINUTES))
             .addInterceptor(firebaseNetworkInterceptor)
             .addInterceptor(logging)
+            // Host-gated Stellar CDN decryption (matches .bin on cdn-stellarsaber.com
+            // only; every other request passes through untouched).
+            .addInterceptor(stellarDecryptInterceptor)
             .addInterceptor { chain ->
                 val req = chain.request().newBuilder()
                     .header("User-Agent", BaseScraperImpl.USER_AGENT)
@@ -95,7 +98,7 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideImageLoader(@ApplicationContext ctx: Context): ImageLoader {
+    fun provideImageLoader(@ApplicationContext ctx: Context, stellarDecryptInterceptor: StellarDecryptInterceptor): ImageLoader {
         // Dedicated image client: the shared scraper client's Firebase perf
         // interceptor + retry-on-IOException added trace spam and retry storms
         // to every cover request (M-review). Images get a lean client instead.
@@ -103,6 +106,8 @@ object NetworkModule {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .connectionPool(ConnectionPool(10, 5, TimeUnit.MINUTES))
+            // Host-gated Stellar CDN decryption (see NetworkModule client).
+            .addInterceptor(stellarDecryptInterceptor)
             .addInterceptor { chain ->
                 chain.proceed(
                     chain.request().newBuilder()

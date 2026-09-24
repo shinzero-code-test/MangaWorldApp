@@ -43,7 +43,6 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     @Inject lateinit var widgetRefreshScheduler: WidgetRefreshScheduler
     @Inject lateinit var appShortcutManager: AppShortcutManager
     @Inject lateinit var okHttpClient: OkHttpClient
-    @Inject lateinit var stellarKeyStore: com.exapps.mangaworld.core.data.remote.scraper.StellarKeyStore
     @Inject lateinit var firebaseStartupCoordinator: FirebaseStartupCoordinator
     @Inject lateinit var downloadQueueManager: com.exapps.mangaworld.core.data.download.DownloadQueueManager
     @Inject lateinit var readingStatsStore: com.exapps.mangaworld.core.data.ReadingStatsStore
@@ -59,16 +58,6 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .okHttpClient(okHttpClient)
-            .components {
-                // Ahead of Coil's default HTTP fetcher (user components take
-                // precedence): decrypts StellarSaber's encrypted CDN objects.
-                add(
-                    com.exapps.mangaworld.core.coil.StellarCdnFetcher.Factory(
-                        okHttpClient,
-                        stellarKeyStore
-                    )
-                )
-            }
             .diskCache {
                 DiskCache.Builder()
                     .directory(File(cacheDir, "coil_image_cache"))
