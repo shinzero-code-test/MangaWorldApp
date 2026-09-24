@@ -82,7 +82,7 @@ jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 # Source-plugin contract (Phase 0): pure-Java, JVM-test-safe, R8-safe.
 # Tink ships consumer ProGuard rules; Jackson is used tree-model-only (no reflection);
 # JCS has zero transitive deps.
-tink = { group = "com.google.crypto.tink", name = "tink", version.ref = "tink" }
+tink = { group = "com.google.crypto.tink", name = "tink-android", version.ref = "tink" }
 jackson-databind = { group = "com.fasterxml.jackson.core", name = "jackson-databind", version.ref = "jackson" }
 json-canonicalization = { group = "io.github.erdtman", name = "java-json-canonicalization", version.ref = "jcs" }
 play-services-base = { group = "com.google.android.gms", name = "play-services-base", version.ref = "play-services-base" }
