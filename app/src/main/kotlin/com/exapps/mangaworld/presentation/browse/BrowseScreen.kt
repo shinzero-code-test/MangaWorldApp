@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.SortBy
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
@@ -101,15 +100,13 @@ fun BrowseScreen(
                     label = { Text(stringResource(R.string.search_all_sources)) }
                 )
             }
-            items(MangaSource.entries.size, key = { MangaSource.entries[it].id }) { index ->
-                val src = MangaSource.entries[index]
-                if (uiState.enabledSourceIds.contains(src.id)) {
-                    FilterChip(
-                        selected = uiState.selectedSource == src,
-                        onClick = { viewModel.setSource(src) },
-                        label = { Text(stringResource(src.nameRes)) }
-                    )
-                }
+            items(uiState.sourceEntries.size, key = { uiState.sourceEntries[it].id }) { index ->
+                val src = uiState.sourceEntries[index]
+                FilterChip(
+                    selected = uiState.selectedSource?.value == src.id,
+                    onClick = { viewModel.setSource(src.id) },
+                    label = { Text(src.name) }
+                )
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -170,17 +167,17 @@ fun BrowseScreen(
             // Composite key with the positional index: the same manga (same
             // source + slug) can legitimately appear twice in one page window
             // while filters refresh, and duplicate keys crash Lazy grids.
-            items(pagingItems.itemCount, key = { i -> pagingItems.peek(i)?.let { "${it.source.id}_${it.slug}_$i" } ?: "item_$i" }) { index ->
+            items(pagingItems.itemCount, key = { i -> pagingItems.peek(i)?.let { "${it.source.value}_${it.slug}_$i" } ?: "item_$i" }) { index ->
                 val manga = pagingItems[index] ?: return@items
                 if (uiState.isGridView) {
                     MangaCard(
                         manga = manga,
-                        onClick = { onMangaClick(manga.source.id, manga.slug) }
+                        onClick = { onMangaClick(manga.source.value, manga.slug) }
                     )
                 } else {
                     BrowseListItem(
                         manga = manga,
-                        onClick = { onMangaClick(manga.source.id, manga.slug) }
+                        onClick = { onMangaClick(manga.source.value, manga.slug) }
                     )
                 }
             }

@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.core.source.plugins
 
 import com.exapps.mangaworld.BuildConfig
+import com.exapps.mangaworld.R
 import com.exapps.mangaworld.core.data.remote.scraper.AreaScansScraper
 import com.exapps.mangaworld.core.data.remote.scraper.Asq3Scraper
 import com.exapps.mangaworld.core.data.remote.scraper.AzoraScraper
@@ -19,7 +20,6 @@ import com.exapps.mangaworld.core.data.remote.scraper.OlympusScraper
 import com.exapps.mangaworld.core.data.remote.scraper.ProComicScraper
 import com.exapps.mangaworld.core.data.remote.scraper.StarzScraper
 import com.exapps.mangaworld.core.data.remote.scraper.StellarSaberScraper
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import okhttp3.OkHttpClient
@@ -34,12 +34,14 @@ private const val BUILTIN_ISSUED_AT = "2026-09-24T00:00:00Z"
  * resolve through [SourceDisplayResolver] (descriptor `names` intentionally empty).
  */
 private fun builtinDescriptor(
-    source: MangaSource,
+    id: String,
+    baseUrl: String,
+    requiresVerification: Boolean,
     engine: SourceEngine,
     allowedHosts: Set<String> = emptySet(),
     config: Map<String, String> = emptyMap()
 ): PluginManifest = PluginManifest(
-    id = SourceId(source.id),
+    id = SourceId(id),
     version = 1,
     minAppVersion = BuildConfig.VERSION_NAME,
     issuedAt = BUILTIN_ISSUED_AT,
@@ -48,8 +50,8 @@ private fun builtinDescriptor(
     logo = null,
     engine = engine,
     engineApi = 1,
-    baseUrl = source.baseUrl,
-    requiresVerification = source.requiresVerification,
+    baseUrl = baseUrl,
+    requiresVerification = requiresVerification,
     enabledByDefault = true,
     requiresPermission = false,
     config = config,
@@ -61,8 +63,6 @@ private fun builtinDescriptor(
     signatureKeyId = "builtin"
 )
 
-private fun displayOf(source: MangaSource) = SourceDisplay(source.nameRes, source.logoRes)
-
 // ─── Original sources ───────────────────────────────────────────────────────
 
 @Singleton
@@ -71,9 +71,9 @@ class OlympusPlugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = OlympusScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.OLYMPUS)
+    override val display = SourceDisplay(R.string.source_olympus, R.drawable.olympustaff_com_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.OLYMPUS, SourceEngine.CUSTOM,
+        "olympus", "https://olympustaff.com", true, SourceEngine.CUSTOM,
         allowedHosts = setOf("olympustaff.com")
     )
 }
@@ -84,9 +84,9 @@ class AzoraPlugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = AzoraScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.AZORA)
+    override val display = SourceDisplay(R.string.source_azora, R.drawable.azoramoon_com_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.AZORA, SourceEngine.ASTRO,
+        "azora", "https://azorafly.com", false, SourceEngine.ASTRO,
         allowedHosts = setOf("azorafly.com", "api.azorafly.com", "storage.azorafly.com")
     )
 }
@@ -98,9 +98,9 @@ class StarzPlugin @Inject constructor(
 ) : SourcePlugin {
     // Live-verified working (metadata + chapters); the audit's 403s were egress-specific.
     override val scraper: MangaScraper = StarzScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.STARZ)
+    override val display = SourceDisplay(R.string.source_starz, R.drawable.manga_starz_net_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.STARZ, SourceEngine.MADARA,
+        "starz", "https://starzmanga.com", true, SourceEngine.MADARA,
         allowedHosts = setOf("starzmanga.com", "starz.starzmanga.com"),
         config = mapOf(PluginConfigKeys.CHAPTER_LIST_STRATEGY to ChapterListStrategy.EMBEDDED)
     )
@@ -112,9 +112,9 @@ class MangaSidPlugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = MangaSidScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.MANGASID)
+    override val display = SourceDisplay(R.string.source_mangasid, R.drawable.mangasid_com_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.MANGASID, SourceEngine.ASTRO,
+        "mangasid", "https://mangasid.com", false, SourceEngine.ASTRO,
         allowedHosts = setOf("mangasid.com", "api.mangasid.com", "img.mangasid.com")
     )
 }
@@ -125,9 +125,9 @@ class MeshmangaPlugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = MeshmangaScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.MESHMANGA)
+    override val display = SourceDisplay(R.string.source_meshmanga, R.drawable.meshmanga_com_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.MESHMANGA, SourceEngine.API,
+        "meshmanga", "https://meshmanga.com", false, SourceEngine.API,
         allowedHosts = setOf("meshmanga.com", "appswat.com")
     )
 }
@@ -140,9 +140,9 @@ class Asq3Plugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = Asq3Scraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.ASQ3)
+    override val display = SourceDisplay(R.string.source_asq3, R.drawable.asq3_org_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.ASQ3, SourceEngine.MADARA,
+        "asq3", "https://3asq.online", true, SourceEngine.MADARA,
         allowedHosts = setOf("3asq.online"),
         config = mapOf(
             PluginConfigKeys.CHAPTER_LIST_STRATEGY to ChapterListStrategy.SLUG_AJAX,
@@ -158,9 +158,9 @@ class LekMangaPlugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = LekMangaScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.LEKMANGA)
+    override val display = SourceDisplay(R.string.source_lekmanga, R.drawable.lek_manga_net_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.LEKMANGA, SourceEngine.MADARA,
+        "lekmanga", "https://mangalik.net", false, SourceEngine.MADARA,
         allowedHosts = setOf("mangalik.net", "io.mangalik.net", "tempsolo.mangalik.net"),
         config = mapOf(
             PluginConfigKeys.CHAPTER_LIST_STRATEGY to ChapterListStrategy.EMBEDDED,
@@ -176,9 +176,9 @@ class LekMangaOnlinePlugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = LekMangaOnlineScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.LEKMANGAONLINE)
+    override val display = SourceDisplay(R.string.source_lekmangaonline, R.drawable.lekmanga_online_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.LEKMANGAONLINE, SourceEngine.MADARA,
+        "lekmangaonline", "https://lekmanga.online", false, SourceEngine.MADARA,
         allowedHosts = setOf("lekmanga.online", "sky.lekmanga.online", "tempmore.lekmanga.online"),
         config = mapOf(
             PluginConfigKeys.CHAPTER_LIST_STRATEGY to ChapterListStrategy.EMBEDDED,
@@ -195,9 +195,9 @@ class LikeMangaPlugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = LikeMangaScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.LIKEMANGA)
+    override val display = SourceDisplay(R.string.source_likemanga, R.drawable.like_manga_net_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.LIKEMANGA, SourceEngine.MADARA,
+        "likemanga", "https://like-manga.net", false, SourceEngine.MADARA,
         allowedHosts = setOf("like-manga.net", "likehua.like-manga.net", "templikey.like-manga.net"),
         config = mapOf(
             PluginConfigKeys.CHAPTER_LIST_STRATEGY to ChapterListStrategy.EMBEDDED,
@@ -213,9 +213,9 @@ class LinkMangaPlugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = LinkMangaScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.LINKMANGA)
+    override val display = SourceDisplay(R.string.source_linkmanga, R.drawable.link_manga_net_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.LINKMANGA, SourceEngine.MADARA,
+        "linkmanga", "https://link-manga.net", false, SourceEngine.MADARA,
         allowedHosts = setOf("link-manga.net", "link.link-manga.net", "tempdarko.link-manga.net"),
         config = mapOf(
             PluginConfigKeys.CHAPTER_LIST_STRATEGY to ChapterListStrategy.EMBEDDED,
@@ -231,9 +231,9 @@ class MangaLekoPlugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = MangaLekoScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.MANGALEKO)
+    override val display = SourceDisplay(R.string.source_mangaleko, R.drawable.manga_leko_site_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.MANGALEKO, SourceEngine.MADARA,
+        "mangaleko", "https://manga-leko.site", false, SourceEngine.MADARA,
         allowedHosts = setOf("manga-leko.site", "moon.manga-leko.site", "templuner.manga-leko.site"),
         config = mapOf(
             PluginConfigKeys.CHAPTER_LIST_STRATEGY to ChapterListStrategy.NUMERIC_ACTION,
@@ -251,9 +251,9 @@ class MangaLionzPlugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = MangaLionzScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.MANGALIONZ)
+    override val display = SourceDisplay(R.string.source_mangalionz, R.drawable.manga_lionz_org_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.MANGALIONZ, SourceEngine.MADARA,
+        "mangalionz", "https://manga-lionz.org", false, SourceEngine.MADARA,
         allowedHosts = setOf("manga-lionz.org", "lionz.manga-lionz.org", "templeo.manga-lionz.org"),
         config = mapOf(
             PluginConfigKeys.CHAPTER_LIST_STRATEGY to ChapterListStrategy.NUMERIC_ACTION,
@@ -273,9 +273,9 @@ class AreaScansPlugin @Inject constructor(
     @ApplicationContext context: android.content.Context
 ) : SourcePlugin {
     override val scraper: MangaScraper = AreaScansScraper(client, settingsRepo, context)
-    override val display = displayOf(MangaSource.AREASCANS)
+    override val display = SourceDisplay(R.string.source_areascans, R.drawable.ar_kenmanga_com_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.AREASCANS, SourceEngine.CUSTOM,
+        "areascans", "https://ar.kenmanga.com", false, SourceEngine.CUSTOM,
         allowedHosts = setOf("ar.kenmanga.com", "i0.wp.com")
     )
 }
@@ -286,9 +286,9 @@ class HijalaPlugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = HijalaScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.HIJALA)
+    override val display = SourceDisplay(R.string.source_hijala, R.drawable.hijala_com_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.HIJALA, SourceEngine.MANGAREADER,
+        "hijala", "https://hijala.com", true, SourceEngine.MANGAREADER,
         allowedHosts = setOf("hijala.com", "blogger.googleusercontent.com"),
         config = mapOf(PluginConfigKeys.LIST_PATH to "/manga/")
     )
@@ -300,9 +300,9 @@ class LavaScansPlugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = LavaScansScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.LAVASCANS)
+    override val display = SourceDisplay(R.string.source_lavascans, R.drawable.lavascans_com_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.LAVASCANS, SourceEngine.MANGAREADER,
+        "lavascans", "https://lavascans.com", true, SourceEngine.MANGAREADER,
         allowedHosts = setOf("lavascans.com"),
         config = mapOf(PluginConfigKeys.LIST_PATH to "/browse-manga/")
     )
@@ -315,9 +315,9 @@ class StellarSaberPlugin @Inject constructor(
     keyStore: com.exapps.mangaworld.core.data.remote.scraper.StellarKeyStore
 ) : SourcePlugin {
     override val scraper: MangaScraper = StellarSaberScraper(client, settingsRepo, keyStore)
-    override val display = displayOf(MangaSource.STELLARSABER)
+    override val display = SourceDisplay(R.string.source_stellarsaber, R.drawable.stellarsaber_pro_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.STELLARSABER, SourceEngine.MANGAREADER,
+        "stellarsaber", "https://stellarsaber.pro", true, SourceEngine.MANGAREADER,
         allowedHosts = setOf("stellarsaber.pro", "cdn-stellarsaber.com")
     )
 }
@@ -328,9 +328,9 @@ class ProComicPlugin @Inject constructor(
     settingsRepo: SettingsRepository
 ) : SourcePlugin {
     override val scraper: MangaScraper = ProComicScraper(client, settingsRepo)
-    override val display = displayOf(MangaSource.PROCOMIC)
+    override val display = SourceDisplay(R.string.source_procomic, R.drawable.procomic_pro_logo)
     override val descriptor = builtinDescriptor(
-        MangaSource.PROCOMIC, SourceEngine.API,
+        "procomic", "https://procomic.pro", true, SourceEngine.API,
         allowedHosts = setOf(
             "procomic.pro", "app.procomic.pro", "app.prochan.net",
             "app.procomic.net", "cdn2.procomic.pro"

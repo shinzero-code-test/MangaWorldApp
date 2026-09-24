@@ -1,8 +1,8 @@
 package com.exapps.mangaworld.scrapers
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.core.data.remote.scraper.MangaReaderBaseScraper
 import com.exapps.mangaworld.domain.model.MangaItem
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import io.mockk.mockk
 import okhttp3.OkHttpClient
@@ -21,7 +21,7 @@ class MangaReaderThemeFixtureTest {
 
     private class ExposedScraper : MangaReaderBaseScraper(
         OkHttpClient(),
-        MangaSource.HIJALA,
+        SourceId("hijala"),
         mockk<SettingsRepository>(relaxed = true)
     ) {
         fun cards(doc: Document): List<MangaItem> = parseMangaCards(doc)
@@ -39,7 +39,7 @@ class MangaReaderThemeFixtureTest {
         val cards = scraper.cards(cardsDoc())
 
         assertEquals(2, cards.size)
-        assertTrue(cards.all { it.source == MangaSource.HIJALA })
+        assertTrue(cards.all { it.source == SourceId("hijala") })
     }
 
     @Test

@@ -65,9 +65,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.CacheManager
 import com.exapps.mangaworld.core.data.WidgetSnapshotStore
+import com.exapps.mangaworld.core.source.plugins.HostPolicy
+import com.exapps.mangaworld.core.source.plugins.SourceDomainOverrides
+import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
+import com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 import com.exapps.mangaworld.domain.model.AppSettings
-import com.exapps.mangaworld.domain.model.MangaSource
-import com.exapps.mangaworld.domain.model.effectiveHost
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import com.exapps.mangaworld.presentation.utils.formatDiagnosticBytes
@@ -88,7 +90,7 @@ import javax.inject.Inject
 // =====================================================================================
 
 data class SourceDiagnosticStatus(
-    val source: MangaSource,
+    val source: SourceUiEntry,
     val homeOk: Boolean,
     val searchResults: Int,
     val hasCookie: Boolean,
@@ -110,7 +112,8 @@ class DiagnosticsViewModel @Inject constructor(
     private val registry: com.exapps.mangaworld.core.source.plugins.SourceRegistry,
     private val settingsRepository: SettingsRepository,
     private val widgetSnapshotStore: WidgetSnapshotStore,
-    private val cacheManager: CacheManager
+    private val cacheManager: CacheManager,
+    private val sourceUiMapper: SourceUiMapper
 ) : ViewModel() {
     private val _state = MutableStateFlow(DiagnosticsUiState())
     val state: StateFlow<DiagnosticsUiState> = _state.asStateFlow()
@@ -124,24 +127,27 @@ class DiagnosticsViewModel @Inject constructor(
             val widgetUpdated = widgetSnapshotStore.lastUpdatedAt()
             val cacheSize = cacheManager.getImageCacheSizeBytes()
             val statuses = coroutineScope {
-                MangaSource.entries.map { source ->
+                registry.all().map { plugin ->
                     async {
-                        val scraper = registry.scraperFor(source.id)
-                        if (scraper == null) {
-                            SourceDiagnosticStatus(source, homeOk = false, searchResults = 0, hasCookie = false, error = "Scraper missing")
-                        } else {
-                            val home = scraper.getHomeData()
-                            val search = scraper.searchManga("solo", 1)
-                            SourceDiagnosticStatus(
-                                source = source,
-                                homeOk = home.isSuccess,
-                                searchResults = search.getOrDefault(emptyList()).size,
-                                hasCookie = settingsRepository.getCookies(source.effectiveHost()).first()?.isNotBlank() == true,
-                                error = home.exceptionOrNull()?.message ?: search.exceptionOrNull()?.message
-                            )
-                        }
+                        val descriptor = plugin.descriptor
+                        val entry = sourceUiMapper.entry(descriptor.id.value)
+                            ?: return@async null
+                        val scraper = plugin.scraper
+                        val home = scraper.getHomeData()
+                        val search = scraper.searchManga("solo", 1)
+                        SourceDiagnosticStatus(
+                            source = entry,
+                            homeOk = home.isSuccess,
+                            searchResults = search.getOrDefault(emptyList()).size,
+                            hasCookie = settingsRepository.getCookies(
+                                HostPolicy.hostOf(
+                                    SourceDomainOverrides.baseUrlFor(descriptor.id.value, descriptor.baseUrl)
+                                )
+                            ).first()?.isNotBlank() == true,
+                            error = home.exceptionOrNull()?.message ?: search.exceptionOrNull()?.message
+                        )
                     }
-                }.awaitAll()
+                }.awaitAll().filterNotNull()
             }
             _state.value = DiagnosticsUiState(
                 isLoading = false,
@@ -462,7 +468,7 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
             // Label column
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    stringResource(status.source.nameRes),
+                    status.source.name,
                     color = MangaColors.OnSurface,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleSmall,
@@ -489,7 +495,7 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
                 if (status.source.logoRes != 0) {
                     androidx.compose.foundation.Image(
                         painter = painterResource(status.source.logoRes),
-                        contentDescription = stringResource(status.source.nameRes),
+                        contentDescription = status.source.name,
                         modifier = Modifier
                             .size(32.dp)
                             .clip(RoundedCornerShape(8.dp)),
@@ -497,7 +503,7 @@ private fun SourceHealthCard(status: SourceDiagnosticStatus) {
                     )
                 } else {
                     Text(
-                        stringResource(status.source.nameRes).take(1).uppercase(),
+                        status.source.name.take(1).uppercase(),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium

@@ -30,9 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.exapps.mangaworld.domain.model.MangaSource
-import com.exapps.mangaworld.domain.model.effectiveBaseUrl
-import com.exapps.mangaworld.domain.model.effectiveHost
+import com.exapps.mangaworld.core.source.plugins.SourceEngine
+import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,7 +42,8 @@ fun SourcesScreen(
     viewModel: SourcesViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var selectedSource by remember { mutableStateOf<MangaSource?>(null) }
+    var selectedSourceId by remember { mutableStateOf<String?>(null) }
+    val entries by viewModel.entries.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = MangaColors.Background,
@@ -90,12 +90,12 @@ fun SourcesScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                items(MangaSource.entries) { source ->
+                items(entries, key = { it.id }) { source ->
                     SourceGridCard(
                         source = source,
                         isEnabled = state.enabledSources[source.id] != false,
                         onClick = { onSourceClick(source.id) },
-                        onLongClick = { selectedSource = source }
+                        onLongClick = { selectedSourceId = source.id }
                     )
                 }
             }
@@ -103,23 +103,26 @@ fun SourcesScreen(
     }
 
     // Source Settings Bottom Sheet
-    selectedSource?.let { source ->
-        SourceSettingsSheet(
-            source = source,
-            isEnabled = state.enabledSources[source.id] != false,
-            isNotificationEnabled = state.notificationStates[source.id] != false,
-            onToggleEnabled = { enabled -> viewModel.toggleSource(source.id, enabled) },
-            onToggleNotification = { enabled -> viewModel.toggleSourceNotification(source.id, enabled) },
-            onClearCookies = { viewModel.clearCookies(source) },
-            onDismiss = { selectedSource = null }
-        )
+    selectedSourceId?.let { sourceId ->
+        entries.firstOrNull { it.id == sourceId }?.let { source ->
+            SourceSettingsSheet(
+                source = source,
+                baseUrl = viewModel.baseUrlFor(sourceId),
+                isEnabled = state.enabledSources[sourceId] != false,
+                isNotificationEnabled = state.notificationStates[sourceId] != false,
+                onToggleEnabled = { enabled -> viewModel.toggleSource(sourceId, enabled) },
+                onToggleNotification = { enabled -> viewModel.toggleSourceNotification(sourceId, enabled) },
+                onClearCookies = { viewModel.clearCookies(sourceId) },
+                onDismiss = { selectedSourceId = null }
+            )
+        }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SourceGridCard(
-    source: MangaSource,
+    source: SourceUiEntry,
     isEnabled: Boolean = true,
     onClick: () -> Unit,
     onLongClick: () -> Unit
@@ -159,10 +162,10 @@ private fun SourceGridCard(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                if (source.logoDrawableRes != 0) {
+                if (source.logoRes != 0) {
                     Image(
-                        painter = painterResource(id = source.logoDrawableRes),
-                        contentDescription = stringResource(source.nameRes),
+                        painter = painterResource(id = source.logoRes),
+                        contentDescription = source.name,
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(8.dp))
@@ -171,7 +174,7 @@ private fun SourceGridCard(
                     )
                 } else {
                     Text(
-                        text = stringResource(source.nameRes).take(2),
+                        text = source.name.take(2),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = sourceColor
@@ -181,7 +184,7 @@ private fun SourceGridCard(
 
             // Source name
             Text(
-                text = stringResource(source.nameRes),
+                text = source.name,
                 style = MaterialTheme.typography.labelSmall,
                 color = if (isEnabled) MangaColors.OnSurface else MangaColors.Muted,
                 fontWeight = FontWeight.Medium,
@@ -193,7 +196,7 @@ private fun SourceGridCard(
 
             // Domain hint (effective — follows Remote Config overrides)
             Text(
-                text = source.effectiveHost().take(18),
+                text = source.hostHint.take(18),
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
                 color = MangaColors.Muted,
                 textAlign = TextAlign.Center,
@@ -226,12 +229,11 @@ private fun SourceGridCard(
     }
 }
 
-private fun getSourceColor(source: MangaSource): Color = when (source.themeType) {
-    MangaSource.ThemeType.MADARA -> MangaColors.Pink
-    MangaSource.ThemeType.MANGAREADER -> MangaColors.Cyan
-    MangaSource.ThemeType.ASTRO -> MangaColors.Primary
-    MangaSource.ThemeType.API -> MangaColors.Green
-    MangaSource.ThemeType.CUSTOM -> MangaColors.Yellow
-    MangaSource.ThemeType.MADARA_CUSTOM -> MangaColors.Orange
-    MangaSource.ThemeType.OTHER -> MangaColors.Muted
+private fun getSourceColor(source: SourceUiEntry): Color = when (source.engine) {
+    SourceEngine.MADARA -> MangaColors.Pink
+    SourceEngine.MANGAREADER -> MangaColors.Cyan
+    SourceEngine.ASTRO -> MangaColors.Primary
+    SourceEngine.API -> MangaColors.Green
+    SourceEngine.CUSTOM -> MangaColors.Yellow
+    SourceEngine.SCRIPT -> MangaColors.Orange
 }

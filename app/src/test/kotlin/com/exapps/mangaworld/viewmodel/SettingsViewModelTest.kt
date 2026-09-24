@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.viewmodel
 
+import com.exapps.mangaworld.core.source.SourceUiTestFixtures
 import com.exapps.mangaworld.core.data.CacheManager
 import com.exapps.mangaworld.core.data.LocalBackupManager
 import com.exapps.mangaworld.core.data.WidgetDataRepository
@@ -52,7 +53,9 @@ class SettingsViewModelTest {
         localBackupManager = localBackupManager,
         widgetDataRepository = widgetDataRepository,
         firebaseSyncManager = firebaseSyncManager,
-        widgetShortcutCoordinator = widgetShortcutCoordinator
+        widgetShortcutCoordinator = widgetShortcutCoordinator,
+        sourceUiMapper = SourceUiTestFixtures.mapper(),
+        sourceRegistry = SourceUiTestFixtures.registry()
     )
 
     @Test

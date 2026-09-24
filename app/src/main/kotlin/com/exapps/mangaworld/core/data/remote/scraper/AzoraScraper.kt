@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +41,7 @@ import javax.inject.Inject
 class AzoraScraper @Inject constructor(
     client: OkHttpClient,
     settingsRepo: SettingsRepository
-) : BaseScraperImpl(client, MangaSource.AZORA, settingsRepo) {
+) : BaseScraperImpl(client, "azora", "https://azorafly.com", settingsRepo) {
 
     // ─── Wire format decoder ──────────────────────────────────────────────────
 
@@ -107,7 +108,7 @@ class AzoraScraper @Inject constructor(
                 resp.body?.string() ?: ""
             }
         }.onFailure {
-            ScraperTelemetry.logFailure(source.id, "raw_html", it)
+            ScraperTelemetry.logFailure(sourceId, "raw_html", it)
         }.getOrDefault("")
     }
 
@@ -371,7 +372,7 @@ class AzoraScraper @Inject constructor(
                     slug = rslug,
                     title = decodeStr(obj["postTitle"]).cleanText().ifBlank { rslug },
                     coverUrl = decodeStr(obj["featuredImage"]),
-                    source = source,
+                    source = SourceId(sourceId),
                     genres = decodeList(obj["genres"]).mapNotNull { g -> (g as? Map<*, *>)?.let { gm -> decodeStr(gm["name"]).cleanText().ifBlank { null } } },
                     status = MangaStatus.from(decodeStr(obj["seriesStatus"])),
                     type = MangaType.from(decodeStr(obj["seriesType"])),

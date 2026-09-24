@@ -1,10 +1,10 @@
 package com.exapps.mangaworld.viewmodel
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.core.data.local.HomeCacheCodec
 import com.exapps.mangaworld.domain.model.HomeData
 import com.exapps.mangaworld.domain.model.LatestChapterItem
 import com.exapps.mangaworld.domain.model.MangaItem
-import com.exapps.mangaworld.domain.model.MangaSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -17,7 +17,7 @@ class HomeCacheCodecTest {
 
     private fun manga(id: String) = MangaItem(
         id = id, slug = "slug-$id", title = "Manga $id",
-        coverUrl = "https://example.com/c.jpg", source = MangaSource.AZORA,
+        coverUrl = "https://example.com/c.jpg", source = SourceId("azora"),
         rating = 4.5f, latestChapter = 12, totalChapters = 20,
         lastUpdated = 1_000L, isNew = true, url = "https://example.com/m"
     )
@@ -26,7 +26,7 @@ class HomeCacheCodecTest {
         mangaId = id, mangaSlug = "slug-$id", mangaTitle = "Manga $id",
         coverUrl = "https://example.com/c.jpg", chapterNumber = 3.5f,
         chapterTitle = "Ch title", chapterUrl = "https://example.com/ch",
-        timeAgo = "2h", publishedAt = 2_000L, source = MangaSource.OLYMPUS, isNew = true
+        timeAgo = "2h", publishedAt = 2_000L, source = SourceId("olympus"), isNew = true
     )
 
     @Test
@@ -42,14 +42,14 @@ class HomeCacheCodecTest {
         assertEquals(listOf("t1", "t2"), decoded.trending.map { it.id })
         val item = decoded.featured.first()
         assertEquals("Manga f1", item.title)
-        assertEquals(MangaSource.AZORA, item.source)
+        assertEquals(SourceId("azora"), item.source)
         assertEquals(4.5f, item.rating)
         assertEquals(12, item.latestChapter)
         assertEquals(true, item.isNew)
         val ch = decoded.latestChapters.first()
         assertEquals(3.5f, ch.chapterNumber)
         assertEquals("Ch title", ch.chapterTitle)
-        assertEquals(MangaSource.OLYMPUS, ch.source)
+        assertEquals(SourceId("olympus"), ch.source)
     }
 
     @Test

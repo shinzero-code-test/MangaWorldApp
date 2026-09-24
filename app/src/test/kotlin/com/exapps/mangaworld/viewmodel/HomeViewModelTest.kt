@@ -1,5 +1,7 @@
 package com.exapps.mangaworld.viewmodel
 
+import com.exapps.mangaworld.core.source.SourceUiTestFixtures
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
@@ -82,7 +84,8 @@ class HomeViewModelTest {
         firebaseTelemetry = firebaseTelemetry,
         sessionManager = sessionManager,
         communityRepo = communityRepo,
-        homeCacheDao = homeCacheDao
+        homeCacheDao = homeCacheDao,
+        sourceUiMapper = SourceUiTestFixtures.mapper()
     )
 
     @Test
@@ -105,7 +108,7 @@ class HomeViewModelTest {
         runTest(dispatcher) {
         Dispatchers.setMain(dispatcher)
         val vm = createViewModel()
-        vm.loadHome(MangaSource.AZORA)
+        vm.loadHome(SourceId("azora"))
         advanceUntilIdle()
         val state = vm.state.value
         assertFalse(state.isLoading)
@@ -126,9 +129,9 @@ class HomeViewModelTest {
         // leaves the winner scheduler-dependent (init's AZORA load may land
         // last, exactly like a cold start overwritten by a later tap).
         advanceUntilIdle()
-        vm.loadHome(MangaSource.OLYMPUS)
+        vm.loadHome(SourceId("olympus"))
         advanceUntilIdle()
-        assertEquals(MangaSource.OLYMPUS, vm.state.value.activeSource)
+        assertEquals(SourceId("olympus"), vm.state.value.activeSource)
     }
     }
 
@@ -139,7 +142,7 @@ class HomeViewModelTest {
         Dispatchers.setMain(dispatcher)
         coEvery { mangaRepo.getHomeData(any()) } returns Result.failure(Exception("Network error"))
         val vm = createViewModel()
-        vm.loadHome(MangaSource.AZORA)
+        vm.loadHome(SourceId("azora"))
         advanceUntilIdle()
         val state = vm.state.value
         assertFalse(state.isLoading)
@@ -156,10 +159,10 @@ class HomeViewModelTest {
         Dispatchers.setMain(dispatcher)
         val vm = createViewModel()
         advanceUntilIdle()
-        vm.selectSource(MangaSource.OLYMPUS)
+        vm.selectSource("olympus")
         advanceUntilIdle()
-        assertEquals(MangaSource.OLYMPUS, vm.state.value.activeSource)
-        coVerify { mangaRepo.getHomeData(MangaSource.OLYMPUS) }
+        assertEquals(SourceId("olympus"), vm.state.value.activeSource)
+        coVerify { mangaRepo.getHomeData(SourceId("olympus")) }
     }
     }
 
@@ -177,7 +180,7 @@ class HomeViewModelTest {
         )
         val vm = createViewModel()
         advanceUntilIdle()
-        vm.loadHome(MangaSource.AZORA, setOf("blocked"))
+        vm.loadHome(SourceId("azora"), setOf("blocked"))
         advanceUntilIdle()
         val ids = vm.state.value.featured.map { it.id }
         assertEquals(listOf("ok"), ids)
@@ -201,7 +204,7 @@ class HomeViewModelTest {
             )
         )
         val vm = createViewModel()
-        vm.loadHome(MangaSource.AZORA)
+        vm.loadHome(SourceId("azora"))
         advanceUntilIdle()
         val suggestedIds = vm.state.value.suggested.map { it.id }
         assertEquals(suggestedIds.distinct(), suggestedIds)
@@ -216,7 +219,7 @@ class HomeViewModelTest {
         Dispatchers.setMain(dispatcher)
         val vm = createViewModel()
         advanceUntilIdle()
-        vm.loadHome(MangaSource.AZORA)
+        vm.loadHome(SourceId("azora"))
         advanceUntilIdle()
         coVerify { homeCacheDao.upsert(match { it.sourceId == "azora" && it.payloadJson.contains("f1") }) }
     }
@@ -258,7 +261,7 @@ class HomeViewModelTest {
         )
         val vm = createViewModel()
         advanceUntilIdle()
-        assertEquals(MangaSource.OLYMPUS, vm.state.value.activeSource)
+        assertEquals(SourceId("olympus"), vm.state.value.activeSource)
         coVerify { settingsRepo.setLastSourceId("olympus") }
     }
     }
@@ -272,22 +275,22 @@ class HomeViewModelTest {
         runTest(dispatcher) {
         Dispatchers.setMain(dispatcher)
         val gate = CompletableDeferred<Unit>()
-        coEvery { mangaRepo.getHomeData(MangaSource.AZORA) } coAnswers {
+        coEvery { mangaRepo.getHomeData(SourceId("azora")) } coAnswers {
             gate.await()
             Result.success(HomeData(featured = listOf(testManga("a1"))))
         }
-        coEvery { mangaRepo.getHomeData(MangaSource.OLYMPUS) } returns
+        coEvery { mangaRepo.getHomeData(SourceId("olympus")) } returns
             Result.success(HomeData(featured = listOf(testManga("b1"))))
         val vm = createViewModel()
         advanceUntilIdle() // init AZORA load is now parked at the gate
-        vm.selectSource(MangaSource.OLYMPUS)
+        vm.selectSource("olympus")
         advanceUntilIdle()
-        assertEquals(MangaSource.OLYMPUS, vm.state.value.activeSource)
+        assertEquals(SourceId("olympus"), vm.state.value.activeSource)
         assertEquals(listOf("b1"), vm.state.value.featured.map { it.id })
         gate.complete(Unit)
         advanceUntilIdle()
         // The stale AZORA response lands last — it must be dropped.
-        assertEquals(MangaSource.OLYMPUS, vm.state.value.activeSource)
+        assertEquals(SourceId("olympus"), vm.state.value.activeSource)
         assertEquals(listOf("b1"), vm.state.value.featured.map { it.id })
         }
     }
@@ -306,25 +309,25 @@ class HomeViewModelTest {
         every { settingsRepo.getAppSettings() } returns settingsFlow
         val vm = createViewModel()
         advanceUntilIdle()
-        coVerify(exactly = 1) { mangaRepo.getHomeData(MangaSource.AZORA) }
+        coVerify(exactly = 1) { mangaRepo.getHomeData(SourceId("azora")) }
         settingsFlow.value = settingsFlow.value.copy(lastSourceId = "olympus")
         advanceUntilIdle()
         coVerify(exactly = 1) { mangaRepo.getHomeData(any()) }
-        assertEquals(MangaSource.AZORA, vm.state.value.activeSource)
+        assertEquals(SourceId("azora"), vm.state.value.activeSource)
         }
     }
 
     private fun testManga(id: String) = MangaItem(
         id = id, slug = "slug-$id", title = "Manga $id",
         coverUrl = "https://example.com/cover.jpg",
-        source = MangaSource.AZORA
+        source = SourceId("azora")
     )
 
     private fun testLatest(id: String) = LatestChapterItem(
         mangaId = id, mangaSlug = "slug-$id", mangaTitle = "Manga $id",
         coverUrl = "https://example.com/cover.jpg",
         chapterNumber = 1.0f, chapterUrl = "https://example.com/ch1",
-        timeAgo = "1h", source = MangaSource.AZORA
+        timeAgo = "1h", source = SourceId("azora")
     )
     @Test
     fun selectSource_emitsLoadedState() {
@@ -340,10 +343,10 @@ class HomeViewModelTest {
         assertFalse(vm.state.value.isLoading)
         vm.state.test {
             awaitItem() // current init-loaded state
-            vm.selectSource(MangaSource.OLYMPUS)
+            vm.selectSource("olympus")
             advanceUntilIdle()
             val final = expectMostRecentItem()
-            assertEquals(MangaSource.OLYMPUS, final.activeSource)
+            assertEquals(SourceId("olympus"), final.activeSource)
             assertFalse(final.isLoading)
             assertEquals(1, final.featured.size)
             assertNull(final.error)

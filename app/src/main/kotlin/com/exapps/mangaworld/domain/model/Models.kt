@@ -1,9 +1,18 @@
 package com.exapps.mangaworld.domain.model
 
 import com.exapps.mangaworld.R
+import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
+import com.exapps.mangaworld.core.source.plugins.SourceId
 
 // ─── Site Enum ───────────────────────────────────────────────────────────────
+// RETIRED (Phase 2-complete). Every reference outside this declaration is a
+// compile error by design — use SourceId + SourceRegistry/SourceUiMapper/
+// BuiltinSourceIds instead. Physical removal follows in v9.0.0.
 
+@Deprecated(
+    message = "Retired in Phase 2. Use SourceId with SourceRegistry/SourceUiMapper/BuiltinSourceIds.",
+    level = DeprecationLevel.ERROR
+)
 enum class MangaSource(
     val id: String,
     /** String resource for the localized source name — never hardcode (item 8). */
@@ -41,50 +50,8 @@ enum class MangaSource(
     // never resurrected via the AZORA fallback.
     PROCOMIC("procomic", R.string.source_procomic, "https://procomic.pro", true, ThemeType.CUSTOM, R.drawable.procomic_pro_logo);
 
-    /** Drawable resource ID for the site logo. Used in SourcesScreen grid. */
-    val logoDrawableRes: Int get() = logoRes
-
+    /** Retired with the enum (kept only so the declaration itself compiles). */
     enum class ThemeType { MADARA, MANGAREADER, ASTRO, API, OTHER, CUSTOM, MADARA_CUSTOM }
-
-    companion object {
-        /**
-         * Phase 2A: prefer [fromIdOrNull] (unknown ids stay unknown). This AZORA
-         * fallback exists only for legacy call sites that cannot represent "unknown"
-         * yet; every migrated path (registry, library filters, navigation guards) must
-         * use [fromIdOrNull] so dead/removed sources are never resurrected.
-         */
-        @Deprecated(
-            "AZORA-fallback hides unknown/dead sources; use fromIdOrNull + explicit handling. " +
-                "Will become ERROR at Phase 2-complete."
-        )
-        fun fromId(id: String): MangaSource {
-            val found = entries.find { it.id == id }
-            if (found == null) {
-                android.util.Log.w("MangaSource", "Unknown source ID '$id', falling back to AZORA")
-            }
-            return found ?: AZORA
-        }
-
-        /** Returns null for unknown source IDs instead of falling back. Use in navigation. */
-        fun fromIdOrNull(id: String): MangaSource? = entries.find { it.id == id }
-
-        /** Check if the sourceId represents a local/imported manga (not an online source) */
-        fun isLocalSource(id: String): Boolean = id == "imported" || id == "local"
-
-        /**
-         * Safe name resource for any stored sourceId without falling back to AZORA.
-         * Returns null for local/imported/unknown ids so callers can show the
-         * dedicated imported label (R.string.source_imported) instead.
-         */
-        fun nameResOrNull(id: String): Int? = entries.find { it.id == id }?.nameRes
-
-        /** All sources added in v4.0.0 — these appear on the Sources screen grid */
-        val NEW_SOURCES = setOf(
-            ASQ3, LEKMANGA, LEKMANGAONLINE, LIKEMANGA, LINKMANGA,
-            MANGALEKO, MANGALIONZ, AREASCANS, HIJALA, LAVASCANS,
-            STELLARSABER, PROCOMIC
-        )
-    }
 }
 
 // ─── Manga Type ───────────────────────────────────────────────────────────────
@@ -140,7 +107,7 @@ data class MangaItem(
     val slug: String,
     val title: String,
     val coverUrl: String,
-    val source: MangaSource,
+    val source: SourceId,
     val genres: List<String> = emptyList(),
     val status: MangaStatus = MangaStatus.UNKNOWN,
     val type: MangaType = MangaType.UNKNOWN,
@@ -158,7 +125,7 @@ data class MangaDetail(
     val slug: String,
     val title: String,
     val coverUrl: String,
-    val source: MangaSource,
+    val source: SourceId,
     val alternativeTitles: List<String> = emptyList(),
     val authorName: String? = null,
     val artistName: String? = null,
@@ -221,7 +188,7 @@ data class LatestChapterItem(
     val chapterUrl: String,
     val timeAgo: String,
     val publishedAt: Long? = null,
-    val source: MangaSource,
+    val source: SourceId,
     val isNew: Boolean = false
 )
 
@@ -233,8 +200,8 @@ data class SearchFilters(
     val status: MangaStatus? = null,
     val type: MangaType? = null,
     val sortBy: SortBy = SortBy.LATEST,
-    val source: MangaSource? = null,
-    val enabledSourceIds: Set<String> = MangaSource.entries.map { it.id }.toSet(),
+    val source: SourceId? = null,
+    val enabledSourceIds: Set<String> = BuiltinSourceIds.ALL,
     val blockedKeywords: Set<String> = emptySet()
 )
 
@@ -252,7 +219,7 @@ data class FavoriteManga(
     val slug: String,
     val title: String,
     val coverUrl: String,
-    val source: MangaSource,
+    val source: SourceId,
     val addedAt: Long = System.currentTimeMillis(),
     val readChapters: Int = 0,
     val totalChapters: Int = 0,
@@ -269,8 +236,8 @@ data class ReadingHistoryItem(
     val slug: String,
     val title: String,
     val coverUrl: String,
-    val source: MangaSource,
-    /** Raw stored source id — unlike [source], never falls back (keeps "imported"/"local"). */
+    val source: SourceId,
+    /** Raw stored source id — mirrors [source], kept for readers that need the plain string. */
     val sourceId: String = "",
     val lastChapterNumber: Float,
     val lastChapterUrl: String = "",
@@ -359,7 +326,7 @@ data class AppSettings(
     val notifyComments: Boolean = true,
     val notifyLikes: Boolean = true,
     val notifyFollowers: Boolean = true,
-    val enabledSources: Set<String> = MangaSource.entries.map { it.id }.toSet(),
+    val enabledSources: Set<String> = BuiltinSourceIds.ALL,
     val onboardingCompleted: Boolean = false,
     val useDynamicColors: Boolean = true,
     val biometricLockEnabled: Boolean = false,

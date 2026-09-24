@@ -18,14 +18,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.exapps.mangaworld.domain.model.MangaSource
-import com.exapps.mangaworld.domain.model.effectiveBaseUrl
+import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SourceSettingsSheet(
-    source: MangaSource,
+    source: SourceUiEntry,
+    baseUrl: String,
     isEnabled: Boolean,
     isNotificationEnabled: Boolean,
     onToggleEnabled: (Boolean) -> Unit,
@@ -50,22 +50,22 @@ fun SourceSettingsSheet(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (source.logoDrawableRes != 0) {
+                if (source.logoRes != 0) {
                     androidx.compose.foundation.Image(
-                        painter = androidx.compose.ui.res.painterResource(id = source.logoDrawableRes),
-                        contentDescription = stringResource(source.nameRes),
+                        painter = androidx.compose.ui.res.painterResource(id = source.logoRes),
+                        contentDescription = source.name,
                         modifier = Modifier.size(36.dp).padding(end = 12.dp)
                     )
                 }
                 Column {
                     Text(
-                        text = stringResource(source.nameRes),
+                        text = source.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MangaColors.OnSurface
                     )
                     Text(
-                        text = source.effectiveBaseUrl().removePrefix("https://"),
+                        text = baseUrl.removePrefix("https://"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MangaColors.Muted
                     )
@@ -98,12 +98,12 @@ fun SourceSettingsSheet(
             SourceSettingAction(
                 icon = Icons.Filled.Language,
                 label = LocalContext.current.getString(R.string.open_in_browser),
-                subtitle = source.effectiveBaseUrl(),
+                subtitle = baseUrl,
                 onClick = {
                     onDismiss()
                     // Devices without a browser must not crash here.
                     runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(source.effectiveBaseUrl())))
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(baseUrl)))
                     }
                 }
             )
@@ -138,7 +138,7 @@ fun SourceSettingsSheet(
             title = { Text(LocalContext.current.getString(R.string.clear_cookies), color = MangaColors.OnSurface) },
             text = {
                 Text(
-                    stringResource(R.string.str_296, stringResource(source.nameRes)) + LocalContext.current.getString(R.string.str_006),
+                    stringResource(R.string.str_296, source.name) + LocalContext.current.getString(R.string.str_006),
                     color = MangaColors.OnSurfaceVariant
                 )
             },
@@ -216,7 +216,7 @@ private fun SourceSettingAction(
     }
 }
 
-private fun createSourceShortcut(context: Context, source: MangaSource) {
+private fun createSourceShortcut(context: Context, source: SourceUiEntry) {
     try {
         val shortcutIntent = Intent(Intent.ACTION_VIEW).apply {
             data = Uri.parse("mangaworld://screen/source_browse/${source.id}")
@@ -225,15 +225,15 @@ private fun createSourceShortcut(context: Context, source: MangaSource) {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
 
-        val icon = if (source.logoDrawableRes != 0) {
-            androidx.core.graphics.drawable.IconCompat.createWithResource(context, source.logoDrawableRes)
+        val icon = if (source.logoRes != 0) {
+            androidx.core.graphics.drawable.IconCompat.createWithResource(context, source.logoRes)
         } else {
             androidx.core.graphics.drawable.IconCompat.createWithResource(context, android.R.drawable.ic_menu_search)
         }
 
         val shortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(context, "source_${source.id}")
-            .setShortLabel(context.getString(source.nameRes))
-            .setLongLabel(context.getString(source.nameRes))
+            .setShortLabel(source.name)
+            .setLongLabel(source.name)
             .setIcon(icon)
             .setIntent(shortcutIntent)
             .build()

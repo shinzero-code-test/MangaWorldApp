@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
 import com.exapps.mangaworld.core.data.CookieCache
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import okhttp3.OkHttpClient
@@ -49,7 +50,7 @@ import javax.inject.Inject
 class OlympusScraper @Inject constructor(
     client: OkHttpClient,
     settingsRepo: SettingsRepository
-) : BaseScraperImpl(client, MangaSource.OLYMPUS, settingsRepo) {
+) : BaseScraperImpl(client, "olympus", "https://olympustaff.com", settingsRepo) {
 
     // ─── Home ─────────────────────────────────────────────────────────────────
 
@@ -98,7 +99,7 @@ class OlympusScraper @Inject constructor(
                     chapterNumber = chapterNumber,
                     chapterUrl = chapterHref,
                     timeAgo = timeText,
-                    source = source,
+                    source = SourceId(sourceId),
                     isNew = timeText.contains("ساعة") || timeText.contains("hour")
                 )
             }
@@ -118,7 +119,7 @@ class OlympusScraper @Inject constructor(
                     slug = slug,
                     title = titleEl.text().cleanText(),
                     coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() }.encodeForUrl(),
-                    source = source,
+                    source = SourceId(sourceId),
                     url = href
                 )
             }
@@ -261,7 +262,7 @@ class OlympusScraper @Inject constructor(
             slug = slug,
             title = title,
             coverUrl = coverUrl,
-            source = source,
+            source = SourceId(sourceId),
             artistName = artistName,
             description = description,
             genres = genres,
@@ -359,7 +360,7 @@ class OlympusScraper @Inject constructor(
             MangaItem(
                 id = "olympus_$slug", slug = slug, title = titleEl.text().cleanText(),
                 coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() },
-                source = source, url = href
+                source = SourceId(sourceId), url = href
             )
         }
     }
@@ -394,7 +395,7 @@ class OlympusScraper @Inject constructor(
                 slug = slug,
                 title = title,
                 coverUrl = coverUrl,
-                source = source,
+                source = SourceId(sourceId),
                 status = MangaStatus.from(statusText),
                 type = MangaType.from(typeText),
                 url = href
@@ -423,7 +424,7 @@ class OlympusScraper @Inject constructor(
                 id = "olympus_$slug", slug = slug,
                 title = titleEl.text().cleanText(),
                 coverUrl = imgEl.attr("abs:src").ifEmpty { imgEl.attr("src").absoluteUrl() }.encodeForUrl(),
-                source = source,
+                source = SourceId(sourceId),
                 latestChapter = ScraperText.firstChapterNumber(chapterEl?.text())?.toInt(),
                 url = href
             )
@@ -449,7 +450,7 @@ class OlympusScraper @Inject constructor(
                 slug = slug,
                 title = title,
                 coverUrl = imgEl.attr("abs:src").ifEmpty { imgEl.attr("src").absoluteUrl() }.encodeForUrl(),
-                source = source,
+                source = SourceId(sourceId),
                 status = MangaStatus.from(statusText),
                 type = MangaType.from(typeText),
                 url = href

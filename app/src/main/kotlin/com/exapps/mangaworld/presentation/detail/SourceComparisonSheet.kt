@@ -23,13 +23,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.exapps.mangaworld.domain.model.MangaItem
-import com.exapps.mangaworld.domain.model.MangaSource
-import com.exapps.mangaworld.domain.model.effectiveBaseUrl
-import com.exapps.mangaworld.domain.model.effectiveHost
+import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
 data class SourceComparison(
-    val source: MangaSource,
+    val source: SourceUiEntry,
     val match: MangaItem?,
     val chapterCount: Int = 0,
     val isLoading: Boolean = false,
@@ -38,9 +36,9 @@ data class SourceComparison(
 
 @Composable
 fun SourceComparisonSheet(
-    currentSource: MangaSource,
+    currentSource: SourceUiEntry?,
     otherSources: List<SourceComparison>,
-    onSourceSelected: (MangaSource, String) -> Unit,
+    onSourceSelected: (String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
     com.exapps.mangaworld.presentation.components.GlassBottomSheet(
@@ -77,12 +75,14 @@ fun SourceComparisonSheet(
             )
 
             // Current source
-            SourceCard(
-                source = currentSource,
-                isCurrentSource = true,
-                chapterCount = null,
-                onClick = null
-            )
+            currentSource?.let {
+                SourceCard(
+                    source = it,
+                    isCurrentSource = true,
+                    chapterCount = null,
+                    onClick = null
+                )
+            }
 
             // Other sources
             otherSources.forEach { comparison ->
@@ -93,7 +93,7 @@ fun SourceComparisonSheet(
                     isLoading = comparison.isLoading,
                     error = comparison.error,
                     onClick = comparison.match?.let { match ->
-                        { onSourceSelected(comparison.source, match.slug) }
+                        { onSourceSelected(comparison.source.id, match.slug) }
                     }
                 )
             }
@@ -105,7 +105,7 @@ fun SourceComparisonSheet(
 
 @Composable
 private fun SourceCard(
-    source: MangaSource,
+    source: SourceUiEntry,
     isCurrentSource: Boolean,
     chapterCount: Int?,
     isLoading: Boolean = false,
@@ -138,7 +138,7 @@ private fun SourceCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        stringResource(source.nameRes),
+                        source.name,
                         style = MaterialTheme.typography.titleSmall,
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.Bold
@@ -152,7 +152,7 @@ private fun SourceCard(
                     }
                 }
                 Text(
-                    source.effectiveHost(),
+                    source.hostHint,
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.OnSurfaceVariant
                 )

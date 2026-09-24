@@ -526,7 +526,7 @@ class ProfileSettingsViewModel @Inject constructor(
                         if (mangaId.isBlank() || slug.isBlank()) continue
                         // Custom lists are online-manga only (Phase 1, item 7a).
                         val sourceId = it.optString("sourceId").trim()
-                        if (sourceId.isBlank() || com.exapps.mangaworld.domain.model.MangaSource.isLocalSource(sourceId)) continue
+                        if (sourceId.isBlank() || com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(sourceId)) continue
                         communityRepository.addMangaToList(
                             newId,
                             com.exapps.mangaworld.domain.model.CustomUserListItem(

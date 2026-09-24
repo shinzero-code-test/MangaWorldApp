@@ -8,6 +8,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
+import com.exapps.mangaworld.core.source.plugins.SourceId
+import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
+import com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -23,10 +27,11 @@ data class BrowseUiState(
     val selectedGenre: String? = null,
     val selectedStatus: MangaStatus? = null,
     val selectedType: MangaType? = null,
-    val selectedSource: MangaSource? = null,
+    val selectedSource: SourceId? = null,
+    val sourceEntries: List<SourceUiEntry> = emptyList(),
     val sortBy: SortBy = SortBy.LATEST,
     val isGridView: Boolean = true,
-    val enabledSourceIds: Set<String> = MangaSource.entries.map { it.id }.toSet(),
+    val enabledSourceIds: Set<String> = BuiltinSourceIds.ALL,
     val blockedKeywords: Set<String> = emptySet(),
     val genres: List<String> = emptyList()
 ) {
@@ -46,7 +51,8 @@ data class BrowseUiState(
 class BrowseViewModel @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
     private val repo: MangaRepository,
-    settingsRepo: SettingsRepository
+    settingsRepo: SettingsRepository,
+    private val sourceUiMapper: SourceUiMapper
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BrowseUiState())
@@ -68,7 +74,8 @@ class BrowseViewModel @Inject constructor(
                         it.copy(
                             enabledSourceIds = enabledSources,
                             blockedKeywords = blacklist,
-                            selectedSource = it.selectedSource?.takeIf { src -> src.id in enabledSources },
+                            selectedSource = it.selectedSource?.takeIf { src -> src.value in enabledSources },
+                            sourceEntries = sourceUiMapper.entries().filter { entry -> entry.id in enabledSources },
                             selectedGenre = it.selectedGenre?.takeIf { genre -> genre in loaded },
                             genres = availableGenres
                         )
@@ -81,7 +88,7 @@ class BrowseViewModel @Inject constructor(
     fun setGenre(g: String?) = _uiState.update { it.copy(selectedGenre = g) }
     fun setStatus(s: MangaStatus?) = _uiState.update { it.copy(selectedStatus = s) }
     fun setType(t: MangaType?) = _uiState.update { it.copy(selectedType = t) }
-    fun setSource(src: MangaSource?) = _uiState.update { it.copy(selectedSource = src) }
+    fun setSource(sourceId: String?) = _uiState.update { it.copy(selectedSource = sourceId?.let { SourceId(it) }) }
     fun setSortBy(sort: SortBy) = _uiState.update { it.copy(sortBy = sort) }
     fun toggleView() = _uiState.update { it.copy(isGridView = !it.isGridView) }
 }

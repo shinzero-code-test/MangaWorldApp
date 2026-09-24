@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -14,7 +15,7 @@ import javax.inject.Inject
 class MangaSidScraper @Inject constructor(
     client: OkHttpClient,
     settingsRepo: SettingsRepository
-) : BaseScraperImpl(client, MangaSource.MANGASID, settingsRepo) {
+) : BaseScraperImpl(client, "mangasid", "https://mangasid.com", settingsRepo) {
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
         val doc = fetchDocument("${resolvedBaseUrl}/manga-list")
@@ -127,7 +128,7 @@ class MangaSidScraper @Inject constructor(
                 slug = relatedSlug,
                 title = decodeStr(map["title"]).cleanText().ifBlank { relatedSlug },
                 coverUrl = decodeStr(map["cover_image"]).encodeForUrl(),
-                source = source,
+                source = SourceId(sourceId),
                 genres = emptyList(),
                 status = MangaStatus.from(decodeStr(map["status"])),
                 url = "${resolvedBaseUrl}/manga/$relatedSlug"
@@ -139,7 +140,7 @@ class MangaSidScraper @Inject constructor(
             slug = slug,
             title = title,
             coverUrl = coverUrl,
-            source = source,
+            source = SourceId(sourceId),
             alternativeTitles = altTitles,
             authorName = decodeStr(manga?.get("author")).cleanText().ifBlank { null },
             description = description,
@@ -285,7 +286,7 @@ class MangaSidScraper @Inject constructor(
                     chapterTitle = link.text().cleanText().ifBlank { null },
                     chapterUrl = chapterHref,
                     timeAgo = "",
-                    source = source
+                    source = SourceId(sourceId)
                 )
             }
 
@@ -294,7 +295,7 @@ class MangaSidScraper @Inject constructor(
                 slug = slug,
                 title = title,
                 coverUrl = coverUrl,
-                source = source,
+                source = SourceId(sourceId),
                 genres = genres,
                 status = MangaStatus.from(statusText),
                 rating = rating,

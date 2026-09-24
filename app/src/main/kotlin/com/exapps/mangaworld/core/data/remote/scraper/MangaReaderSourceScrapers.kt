@@ -10,7 +10,7 @@ import javax.inject.Inject
  *  Individual manga pages use direct slug URLs: /{slug}/ (not /manga/{slug}/).
  *  Browse page uses /manga/?order=..., search uses /?s=... */
 class HijalaScraper @Inject constructor(client: OkHttpClient, settingsRepo: SettingsRepository) :
-    MangaReaderBaseScraper(client, MangaSource.HIJALA, settingsRepo, pageSize = 30, searchPageSize = 10) {
+    MangaReaderBaseScraper(client, "hijala", "https://hijala.com", settingsRepo, pageSize = 30, searchPageSize = 10) {
     override val listPath: String = "/manga/"
 
     /**
@@ -34,7 +34,7 @@ internal fun hijalaOwnsChapter(seriesSlug: String, chapterUrl: String): Boolean 
 /** lavascans.com — MangaReader theme, Arabic, Cloudflare protected.
  *  Browse listing is at /browse-manga/ not /manga/. */
 class LavaScansScraper @Inject constructor(client: OkHttpClient, settingsRepo: SettingsRepository) :
-    MangaReaderBaseScraper(client, MangaSource.LAVASCANS, settingsRepo, pageSize = 32, searchPageSize = 10) {
+    MangaReaderBaseScraper(client, "lavascans", "https://lavascans.com", settingsRepo, pageSize = 32, searchPageSize = 10) {
     override val listPath: String = "/browse-manga/"
 }
 
@@ -52,7 +52,7 @@ class StellarSaberScraper @Inject constructor(
     client: OkHttpClient,
     settingsRepo: SettingsRepository,
     private val keyStore: com.exapps.mangaworld.core.data.remote.scraper.StellarKeyStore
-) : MangaReaderBaseScraper(client, MangaSource.STELLARSABER, settingsRepo, pageSize = 32, searchPageSize = 10) {
+) : MangaReaderBaseScraper(client, "stellarsaber", "https://stellarsaber.pro", settingsRepo, pageSize = 32, searchPageSize = 10) {
 
     override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
         val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to "$resolvedBaseUrl/"))

@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -13,7 +14,7 @@ import javax.inject.Inject
 class MeshmangaScraper @Inject constructor(
     client: OkHttpClient,
     settingsRepo: SettingsRepository
-) : BaseScraperImpl(client, MangaSource.MESHMANGA, settingsRepo) {
+) : BaseScraperImpl(client, "meshmanga", "https://meshmanga.com", settingsRepo) {
 
     private val apiBase = "https://appswat.com/v2/api/v2 // NOTE: hardcoded API host — NOT covered by source_<id>_base_url Remote Config overrides"
     @Volatile private var genreIdCache: Map<String, Int>? = null
@@ -45,7 +46,7 @@ class MeshmangaScraper @Inject constructor(
             slug = seriesId,
             title = series.optString("title").cleanText().ifBlank { seriesId },
             coverUrl = extractPosterUrl(series),
-            source = source,
+            source = SourceId(sourceId),
             alternativeTitles = series.optString("alternative").split("/", ",", "،").map { it.cleanText() }.filter { it.isNotBlank() },
             authorName = series.optString("author").cleanText().ifBlank { null },
             artistName = series.optString("artist").cleanText().ifBlank { null },
@@ -177,7 +178,7 @@ class MeshmangaScraper @Inject constructor(
             slug = seriesId,
             title = title,
             coverUrl = extractPosterUrl(obj),
-            source = source,
+            source = SourceId(sourceId),
             genres = extractGenres(obj),
             status = MangaStatus.from(obj.optJSONObject("status")?.optString("name")),
             type = MangaType.from(obj.optJSONObject("type")?.optString("name")),
@@ -207,7 +208,7 @@ runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() ?: Scrape
             chapterUrl = buildChapterUrl(seriesId, chapterId, chapterNumber),
             timeAgo = obj.optString("created_at_humanized"),
             publishedAt = publishedAt,
-            source = source,
+            source = SourceId(sourceId),
             isNew = obj.optString("created_at_humanized").contains("ساعة")
         )
     }

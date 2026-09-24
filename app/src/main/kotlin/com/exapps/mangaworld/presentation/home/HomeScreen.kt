@@ -44,6 +44,11 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val unknownSource = stringResource(R.string.unknown)
+    val sourceNameOf: (String) -> String = remember(state.availableSources, unknownSource) {
+        val names = state.availableSources.associate { it.id to it.name }
+        { id -> names[id] ?: unknownSource }
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(MangaColors.Background)) {
         if (state.isLoading) {
@@ -108,7 +113,8 @@ fun HomeScreen(
                     item {
                         FeaturedCarousel(
                             items = state.featured,
-                            onMangaClick = { m -> onMangaClick(m.source.id, m.slug) },
+                            sourceNameOf = sourceNameOf,
+                            onMangaClick = { m -> onMangaClick(m.source.value, m.slug) },
                             modifier = Modifier.padding(vertical = 12.dp)
                         )
                     }
@@ -127,7 +133,7 @@ fun HomeScreen(
                     item {
                         TrendingRow(
                             items = state.trending,
-                            onMangaClick = { m -> onMangaClick(m.source.id, m.slug) }
+                            onMangaClick = { m -> onMangaClick(m.source.value, m.slug) }
                         )
                     }
                 }
@@ -153,9 +159,10 @@ fun HomeScreen(
                 } else {
                     item {
                         LatestChapterGrid(
+                            sourceNameOf = sourceNameOf,
                             items = state.latestChapters.take(12),
                             favoriteIds = state.favoriteIds,
-                            onMangaClick = { item -> onMangaClick(item.source.id, item.mangaSlug) },
+                            onMangaClick = { item -> onMangaClick(item.source.value, item.mangaSlug) },
                             onToggleFavorite = viewModel::toggleFavorite,
                             onReadChapter = onReadChapter
                         )
@@ -174,7 +181,7 @@ fun HomeScreen(
                     item {
                         TrendingRow(
                             items = state.suggested,
-                            onMangaClick = { m -> onMangaClick(m.source.id, m.slug) }
+                            onMangaClick = { m -> onMangaClick(m.source.value, m.slug) }
                         )
                     }
                 }
@@ -192,7 +199,7 @@ fun HomeScreen(
                     item {
                         TrendingRow(
                             items = state.trending,
-                            onMangaClick = { m -> onMangaClick(m.source.id, m.slug) }
+                            onMangaClick = { m -> onMangaClick(m.source.value, m.slug) }
                         )
                     }
                 }
@@ -278,27 +285,27 @@ private fun HomeAvatarButton(avatarUrl: String?, initial: String, onClick: () ->
 
 @Composable
 private fun SourceSelectorRow(
-    sources: List<MangaSource>,
-    active: MangaSource,
-    onSelect: (MangaSource) -> Unit
+    sources: List<com.exapps.mangaworld.core.source.plugins.SourceUiEntry>,
+    active: com.exapps.mangaworld.core.source.plugins.SourceId,
+    onSelect: (String) -> Unit
 ) {
     LazyRow(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(sources, key = { it.id }) { source ->
-            val selected = source == active
+            val selected = source.id == active.value
             NeonGlassPanel(
                 modifier = Modifier
                     .heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(100.dp))
-                    .clickable { onSelect(source) },
+                    .clickable { onSelect(source.id) },
                 shape = RoundedCornerShape(100.dp),
                 cornerRadius = 100.dp,
                 glowColors = if (selected) MangaColors.GradientPurpleCyan else listOf(MangaColors.OutlineVariant, MangaColors.OutlineVariant)
             ) {
                 Text(
-                    stringResource(source.nameRes),
+                    source.name,
                     color = if (selected) Color.White else MangaColors.MutedLight,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
@@ -314,6 +321,7 @@ private fun SourceSelectorRow(
 @Composable
 private fun FeaturedCarousel(
     items: List<MangaItem>,
+    sourceNameOf: (String) -> String,
     onMangaClick: (MangaItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -351,6 +359,7 @@ private fun FeaturedCarousel(
         ) { page ->
             FeaturedCard(
                 manga = items[page],
+                sourceNameOf = sourceNameOf,
                 onClick = { onMangaClick(items[page]) }
             )
         }
@@ -378,7 +387,7 @@ private fun FeaturedCarousel(
 }
 
 @Composable
-private fun FeaturedCard(manga: MangaItem, onClick: () -> Unit) {
+private fun FeaturedCard(manga: MangaItem, sourceNameOf: (String) -> String, onClick: () -> Unit) {
     val ctx = LocalContext.current
     NeonGlassPanel(
         modifier = Modifier
@@ -416,7 +425,7 @@ private fun FeaturedCard(manga: MangaItem, onClick: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     TypeBadge(manga.type)
-                    SourceBadge(manga.source)
+                    SourceBadge(sourceNameOf(manga.source.value))
                 }
             }
             // Content
@@ -454,6 +463,7 @@ private fun FeaturedCard(manga: MangaItem, onClick: () -> Unit) {
 @Composable
 private fun LatestChapterGrid(
     items: List<LatestChapterItem>,
+    sourceNameOf: (String) -> String,
     favoriteIds: Set<String>,
     onMangaClick: (LatestChapterItem) -> Unit,
     onToggleFavorite: (LatestChapterItem) -> Unit,
@@ -477,10 +487,11 @@ private fun LatestChapterGrid(
                     rowItems.forEach { item ->
                         LatestChapterGridCard(
                             item = item,
-                            isFavorite = "${item.source.id}_${item.mangaSlug}" in favoriteIds,
+                            sourceNameOf = sourceNameOf,
+                            isFavorite = "${item.source.value}_${item.mangaSlug}" in favoriteIds,
                             onClick = { onMangaClick(item) },
                             onToggleFavorite = { onToggleFavorite(item) },
-                            onRead = { onReadChapter(item.source.id, "${item.source.id}_${item.mangaSlug}", item.chapterUrl) },
+                            onRead = { onReadChapter(item.source.value, "${item.source.value}_${item.mangaSlug}", item.chapterUrl) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -496,6 +507,7 @@ private fun LatestChapterGrid(
 @Composable
 private fun LatestChapterGridCard(
     item: LatestChapterItem,
+    sourceNameOf: (String) -> String,
     isFavorite: Boolean,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
@@ -549,7 +561,7 @@ private fun LatestChapterGridCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MangaColors.PrimaryLight
                 )
-                SourceBadge(item.source)
+                SourceBadge(sourceNameOf(item.source.value))
             }
             // v8 (#12): these were decorative dead icons — both are functional now.
             Row(

@@ -34,6 +34,8 @@ import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.core.firebase.withFirebaseTrace
+import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.theme.rememberDominantColor
@@ -42,9 +44,9 @@ import com.exapps.mangaworld.presentation.theme.MangaColors
 
 @Composable
 fun MangaDetailScreen(
-    source: MangaSource,
+    source: SourceId,
     slug: String,
-    rawSourceId: String = source.id,
+    rawSourceId: String = source.value,
     onChapterClick: (chapterUrl: String, mangaId: String) -> Unit,
     onOpenCommunity: (mangaId: String) -> Unit,
     onOpenChapterCommunity: (mangaId: String, chapterUrl: String) -> Unit,
@@ -55,7 +57,7 @@ fun MangaDetailScreen(
     LaunchedEffect(slug, source) { viewModel.load(slug, source, rawSourceId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
-    val communityEnabled = !MangaSource.isLocalSource(rawSourceId) && !slug.startsWith("imported_")
+    val communityEnabled = !BuiltinSourceIds.isLocal(rawSourceId) && !slug.startsWith("imported_")
 
     // Cache sorted chapters to avoid recomputation on every recomposition
     val sortedChapters = remember(state.manga, state.readChapters, state.readingProgress, state.downloadedChapters, state.chaptersReversed) {
@@ -117,7 +119,10 @@ fun MangaDetailScreen(
                 onShowDownloadDialog = viewModel::showDownloadDialog,
                 // Local mangaId IS the slug (imported_xxx) — prefixing with the
                 // placeholder AZORA id would corrupt it (azora_imported_xxx).
-                onOpenCommunity = { onOpenCommunity(if (communityEnabled.not()) slug else "${source.id}_$slug") },
+                onOpenCommunity = { onOpenCommunity(if (communityEnabled.not()) slug else "${source.value}_$slug") },
+                sourceNames = remember(state.sourceEntry) {
+                    state.sourceEntry?.let { mapOf(it.id to it.name) }.orEmpty()
+                },
                 onOpenChapterCommunity = onOpenChapterCommunity,
                 onOpenOtherSource = onOpenOtherSource,
                 onShowAddToList = viewModel::showAddToListDialog,
@@ -263,7 +268,7 @@ fun MangaDetailScreen(
     // Source comparison sheet
     if (state.showSourceComparison) {
         SourceComparisonSheet(
-            currentSource = source,
+            currentSource = state.sourceEntry,
             otherSources = state.sourceComparisons,
             onSourceSelected = { selectedSource, slug -> viewModel.switchSource(selectedSource, slug) },
             onDismiss = viewModel::hideSourceComparison
@@ -295,6 +300,7 @@ private fun DetailContent(
     onShowAddToList: () -> Unit,
     onShowComparison: () -> Unit,
     onChapterClick: (Chapter) -> Unit,
+    sourceNames: Map<String, String>,
     onChapterSearch: (String) -> Unit,
     onToggleChapterRead: (Chapter) -> Unit,
     onMarkAllRead: () -> Unit,
@@ -376,7 +382,7 @@ private fun DetailContent(
                             if (isLocalManga) {
                                 ImportedSourceBadge()
                             } else {
-                                SourceBadge(manga.source)
+                                SourceBadge(sourceNames[manga.source.value] ?: stringResource(R.string.unknown))
                             }
                             Spacer(Modifier.height(10.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -520,9 +526,9 @@ private fun DetailContent(
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    Text(stringResource(item.source.nameRes), color = MangaColors.OnSurfaceVariant)
+                                    Text(sourceNames[item.source.value] ?: stringResource(R.string.unknown), color = MangaColors.OnSurfaceVariant)
                                 }
-                                OutlinedButton(onClick = { onOpenOtherSource(item.source.id, item.slug) }) {
+                                OutlinedButton(onClick = { onOpenOtherSource(item.source.value, item.slug) }) {
                                     Text(stringResource(R.string.open))
                                 }
                             }
@@ -626,7 +632,7 @@ private fun DetailContent(
 
         // ── Chapters ─────────────────────────────────────────────────────────
         // Composite key per project rule — blank url+id duplicates must not crash.
-        items(filteredChapters, key = { "${manga.source.id}_${it.url.ifBlank { it.id }}_${it.number}" }) { chapter ->
+        items(filteredChapters, key = { "${manga.source.value}_${it.url.ifBlank { it.id }}_${it.number}" }) { chapter ->
             ChapterItem(
                 chapter = chapter,
                 isRead = readChapters.contains(chapter.number),
@@ -635,7 +641,7 @@ private fun DetailContent(
                 onLongClick = { onToggleChapterRead(chapter) },
                 onDownload = { onDownloadChapter(chapter) },
                 onOpenChapterComments = if (showCommunity) {
-                    { onOpenChapterCommunity("${manga.source.id}_${manga.slug}", chapter.url) }
+                    { onOpenChapterCommunity("${manga.source.value}_${manga.slug}", chapter.url) }
                 } else {
                     null
                 }

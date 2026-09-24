@@ -26,7 +26,9 @@ class SettingsViewModel @Inject constructor(
     private val localBackupManager: LocalBackupManager,
     private val widgetDataRepository: WidgetDataRepository,
     private val firebaseSyncManager: FirebaseSyncManager,
-    private val widgetShortcutCoordinator: WidgetShortcutCoordinator
+    private val widgetShortcutCoordinator: WidgetShortcutCoordinator,
+    private val sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper,
+    private val sourceRegistry: com.exapps.mangaworld.core.source.plugins.SourceRegistry
 ) : ViewModel() {
     val appSettings: StateFlow<AppSettings> = repo.getAppSettings()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettings())
@@ -38,6 +40,19 @@ class SettingsViewModel @Inject constructor(
     val backupMessage: StateFlow<String?> = _backupMessage.asStateFlow()
 
     init { refreshCacheStats() }
+
+    /** Registry-driven source rows (names via resolver, never hardcoded). */
+    val sourceEntries: StateFlow<List<com.exapps.mangaworld.core.source.plugins.SourceUiEntry>> =
+        flowOf(sourceUiMapper.entries())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Cloudflare-solver target (effective base URL + host) for a source id. */
+    fun solverTarget(sourceId: String): Pair<String, String>? {
+        val descriptor = sourceRegistry.descriptorFor(sourceId) ?: return null
+        val base = com.exapps.mangaworld.domain.model.SourceDomainOverrides.baseUrlFor(sourceId, descriptor.baseUrl)
+        val host = com.exapps.mangaworld.core.source.plugins.HostPolicy.hostOf(base)
+        return base to host
+    }
 
     fun setTheme(theme: AppTheme) = saveAndSync { repo.updateTheme(theme) }
     fun setDynamicColors(v: Boolean) = saveAndSync { repo.setDynamicColors(v) }

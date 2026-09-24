@@ -1,5 +1,7 @@
 package com.exapps.mangaworld.viewmodel
 
+import com.exapps.mangaworld.core.source.SourceUiTestFixtures
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import android.content.Context
 import com.exapps.mangaworld.core.data.AchievementManager
 import com.exapps.mangaworld.core.data.ImagePrefetcher
@@ -17,7 +19,6 @@ import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.Chapter
 import com.exapps.mangaworld.domain.model.FavoriteManga
 import com.exapps.mangaworld.domain.model.MangaDetail
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.ReaderMode
 import com.exapps.mangaworld.domain.model.ReaderSettings
 import com.exapps.mangaworld.domain.repository.CommunityRepository
@@ -144,7 +145,9 @@ class DetailReaderViewModelTest {
         firebaseTopicManager = firebaseTopicManager,
         widgetShortcutCoordinator = widgetShortcutCoordinator,
         analyticsManager = analyticsManager,
-        firebaseTelemetry = firebaseTelemetry
+        firebaseTelemetry = firebaseTelemetry,
+        sourceUiMapper = SourceUiTestFixtures.mapper(),
+        sourceRegistry = SourceUiTestFixtures.registry()
     )
 
     private fun createReaderViewModel(dispatcher: CoroutineDispatcher) = ReaderViewModel(
@@ -196,7 +199,7 @@ class DetailReaderViewModelTest {
         slug = "test-slug",
         title = "Test Manga",
         coverUrl = "https://example.com/cover.jpg",
-        source = MangaSource.AZORA,
+        source = SourceId("azora"),
         totalChapters = 3,
         chapters = listOf(testChapter(1f), testChapter(2f), testChapter(3f))
     )
@@ -211,14 +214,14 @@ class DetailReaderViewModelTest {
             stubDetailCommon()
             coEvery { mangaRepo.getMangaDetail(any(), any()) } returns Result.success(testDetail())
             val vm = createDetailViewModel()
-            vm.load("test-slug", MangaSource.AZORA)
+            vm.load("test-slug", SourceId("azora"))
             awaitUntil { vm.state.value.manga != null }
             val state = vm.state.value
             assertFalse(state.isLoading)
             assertEquals("Test Manga", state.manga?.title)
             assertEquals(3, state.manga?.chapters?.size)
             assertNull(state.error)
-            coVerify { mangaRepo.getMangaDetail("test-slug", MangaSource.AZORA) }
+            coVerify { mangaRepo.getMangaDetail("test-slug", SourceId("azora")) }
         }
     }
 
@@ -231,7 +234,7 @@ class DetailReaderViewModelTest {
             coEvery { mangaRepo.getMangaDetail(any(), any()) } returns
                 Result.failure(Exception("backend-boom-raw-9371"))
             val vm = createDetailViewModel()
-            vm.load("test-slug", MangaSource.AZORA)
+            vm.load("test-slug", SourceId("azora"))
             awaitUntil { !vm.state.value.isLoading }
             val state = vm.state.value
             assertNull(state.manga)
@@ -250,7 +253,7 @@ class DetailReaderViewModelTest {
             stubDetailCommon()
             coEvery { mangaRepo.getMangaDetail(any(), any()) } returns Result.success(testDetail())
             val vm = createDetailViewModel()
-            vm.load("test-slug", MangaSource.AZORA)
+            vm.load("test-slug", SourceId("azora"))
             awaitUntil { vm.state.value.manga != null }
             assertFalse(vm.state.value.isFavorite)
             vm.toggleFavorite()
@@ -271,13 +274,13 @@ class DetailReaderViewModelTest {
                     slug = "test-slug",
                     title = "Test Manga",
                     coverUrl = "https://example.com/cover.jpg",
-                    source = MangaSource.AZORA,
+                    source = SourceId("azora"),
                     isFavorite = true
                 )
             )
             coEvery { mangaRepo.getMangaDetail(any(), any()) } returns Result.success(testDetail())
             val vm = createDetailViewModel()
-            vm.load("test-slug", MangaSource.AZORA)
+            vm.load("test-slug", SourceId("azora"))
             awaitUntil { vm.state.value.isFavorite }
             vm.toggleFavorite()
             advanceUntilIdle()
@@ -293,7 +296,7 @@ class DetailReaderViewModelTest {
             stubDetailCommon()
             coEvery { mangaRepo.getMangaDetail(any(), any()) } returns Result.success(testDetail())
             val vm = createDetailViewModel()
-            vm.load("test-slug", MangaSource.AZORA)
+            vm.load("test-slug", SourceId("azora"))
             awaitUntil { vm.state.value.manga != null }
             // Default is newest-first.
             assertEquals(listOf(3f, 2f, 1f), vm.sortedChapters().map { it.number })
@@ -317,7 +320,7 @@ class DetailReaderViewModelTest {
             stubDetailCommon()
             coEvery { mangaRepo.getMangaDetail(any(), any()) } returns Result.success(testDetail())
             val vm = createDetailViewModel()
-            vm.load("test-slug", MangaSource.AZORA)
+            vm.load("test-slug", SourceId("azora"))
             awaitUntil { vm.state.value.manga != null }
             vm.markChapterAsRead(testChapter(2f))
             advanceUntilIdle()

@@ -25,6 +25,8 @@ import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
+import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.*
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -136,7 +138,7 @@ class ReaderViewModel @Inject constructor(
     private val _state = MutableStateFlow(ReaderUiState())
     val state: StateFlow<ReaderUiState> = _state.asStateFlow()
 
-    private var currentSource: MangaSource = MangaSource.STARZ
+    private var currentSource: SourceId = SourceId("starz")
     private var sessionCheckpointAt: Long? = null
     /** Bumped on every loadChapter so the UI can key scroll state per chapter load. */
     private var chapterLoadSeq = 0L
@@ -192,7 +194,7 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    fun loadChapter(chapterUrl: String, mangaId: String, source: MangaSource) {
+    fun loadChapter(chapterUrl: String, mangaId: String, source: SourceId) {
         if (_state.value.chapterUrl != chapterUrl) {
             finishSessionAsync()
             stopCommunityPresenceAsync(_state.value.mangaId, _state.value.chapterUrl)
@@ -223,7 +225,7 @@ class ReaderViewModel @Inject constructor(
 
         // Imported has no online source — read from disk only, no network.
         // Downloaded (local) keeps its real sourceId so it uses the online path.
-        val isImported = mangaId.startsWith("imported_") || source.id == "local" || source.id == "imported"
+        val isImported = mangaId.startsWith("imported_") || BuiltinSourceIds.isLocal(source.value)
         if (isImported) {
             viewModelScope.launch {
                 val localPages = withContext(ioDispatcher) {
@@ -488,7 +490,7 @@ class ReaderViewModel @Inject constructor(
                         lastReadAnalyticsKey = analyticsKey
                         analyticsManager.logChapterRead(
                             mangaId = st.mangaId,
-                            sourceId = currentSource.id,
+                            sourceId = currentSource.value,
                             chapterNumber = chNum,
                             totalPages = chapterTotal,
                             readerMode = st.readerMode.name
@@ -628,7 +630,7 @@ class ReaderViewModel @Inject constructor(
     }
 
     /** Full ordered chapter list for online manga (ASC = reading order). */
-    private suspend fun refreshAllChaptersOnline(mangaId: String, chapterUrl: String, source: MangaSource) {
+    private suspend fun refreshAllChaptersOnline(mangaId: String, chapterUrl: String, source: SourceId) {
         val detail = resolveDetailForChapter(mangaId, source) ?: return
         val ordered = detail.chapters.sortedBy { it.number }
         if (ordered.isEmpty()) return
@@ -851,7 +853,7 @@ class ReaderViewModel @Inject constructor(
                 communityRepository.postChapterComment(
                     mangaId = st.mangaId,
                     slug = slug,
-                    sourceId = currentSource.id,
+                    sourceId = currentSource.value,
                     chapterUrl = st.chapterUrl,
                     text = text,
                     spoiler = spoiler
@@ -1138,11 +1140,11 @@ class ReaderViewModel @Inject constructor(
         prefetchedNextChapterUrl = nextUrl
     }
 
-    private suspend fun resolveDetailForChapter(mangaId: String, source: MangaSource): MangaDetail? =
-        if (source.id == "local") null
+    private suspend fun resolveDetailForChapter(mangaId: String, source: SourceId): MangaDetail? =
+        if (BuiltinSourceIds.isLocal(source.value)) null
         else cacheDao.get(mangaId)?.toDetail(source) ?: mangaRepo.getMangaDetail(mangaId.substringAfter("_"), source).getOrNull()
 
-    private suspend fun resolveChapterMeta(mangaId: String, chapterUrl: String, source: MangaSource): Chapter? =
+    private suspend fun resolveChapterMeta(mangaId: String, chapterUrl: String, source: SourceId): Chapter? =
         resolveDetailForChapter(mangaId, source)?.chapters?.firstOrNull { it.url == chapterUrl }
 
     private fun parseFallbackChapterNumber(chapterUrl: String): Float =

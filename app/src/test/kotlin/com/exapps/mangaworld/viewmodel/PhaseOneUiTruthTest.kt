@@ -1,7 +1,8 @@
 package com.exapps.mangaworld.viewmodel
 
+import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.core.data.local.entity.ReadingHistoryEntity
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.ReadingHistoryItem
 import org.junit.Test
 import org.junit.Assert.assertEquals
@@ -17,10 +18,10 @@ class PhaseOneUiTruthTest {
 
     @Test
     fun `isLocalSource identifies imported and local ids`() {
-        assertTrue(MangaSource.isLocalSource("imported"))
-        assertTrue(MangaSource.isLocalSource("local"))
-        assertFalse(MangaSource.isLocalSource("azora"))
-        assertFalse(MangaSource.isLocalSource("olympus"))
+        assertTrue(BuiltinSourceIds.isLocal("imported"))
+        assertTrue(BuiltinSourceIds.isLocal("local"))
+        assertFalse(BuiltinSourceIds.isLocal("azora"))
+        assertFalse(BuiltinSourceIds.isLocal("olympus"))
     }
 
     @Test
@@ -35,7 +36,7 @@ class PhaseOneUiTruthTest {
             lastReadAt = 1_000L
         )
         assertEquals("imported", entity.sourceId)
-        assertTrue(MangaSource.isLocalSource(entity.sourceId))
+        assertTrue(BuiltinSourceIds.isLocal(entity.sourceId))
     }
 
     @Test
@@ -45,13 +46,13 @@ class PhaseOneUiTruthTest {
             slug = "x",
             title = "T",
             coverUrl = "",
-            source = MangaSource.AZORA,
+            source = SourceId("azora"),
             lastChapterNumber = 1f,
             lastReadAt = 0L
         )
         // Old call sites (positional args) keep compiling and stay non-local.
         assertEquals("", item.sourceId)
-        assertFalse(MangaSource.isLocalSource(item.sourceId.ifBlank { item.source.id }))
+        assertFalse(BuiltinSourceIds.isLocal(item.sourceId.ifBlank { item.source.value }))
         assertEquals("imported", item.copy(sourceId = "imported").sourceId)
     }
 

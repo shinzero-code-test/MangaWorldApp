@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +26,7 @@ import javax.inject.Inject
 class ProComicScraper @Inject constructor(
     client: OkHttpClient,
     settingsRepo: SettingsRepository
-) : BaseScraperImpl(client, MangaSource.PROCOMIC, settingsRepo) {
+) : BaseScraperImpl(client, "procomic", "https://procomic.pro", settingsRepo) {
 
     /** HTML fallbacks must trigger the WebView solver like apiGet does — a Turnstile
      * interstitial parses as content otherwise and surfaces as an "empty chapter". */
@@ -76,7 +77,7 @@ class ProComicScraper @Inject constructor(
             throw e
         } catch (e: Exception) {
             // API failure — scrape SSR HTML instead; CF propagates, rest are logged.
-            ScraperTelemetry.logFailure(source.id, "home_api", e)
+            ScraperTelemetry.logFailure(sourceId, "home_api", e)
             val doc = fetchDocument("${resolvedBaseUrl}/series")
             parseMangaGridFromHtml(doc)
         }
@@ -96,7 +97,7 @@ class ProComicScraper @Inject constructor(
             val allItems = parseApiResults(searchJson)
             allItems.find { it.slug == slug || it.url.endsWith("/$slug") }
         } catch (e: CloudflareChallengeException) { throw e }
-          catch (e: Exception) { ScraperTelemetry.logFailure(source.id, "detail_lookup", e); null }
+          catch (e: Exception) { ScraperTelemetry.logFailure(sourceId, "detail_lookup", e); null }
 
         if (matchedItem != null) {
             // Extract type and id from URL: /series/{type}/{id}/{slug}
@@ -109,7 +110,7 @@ class ProComicScraper @Inject constructor(
             val detailJson = try {
                 apiGet("${resolvedBaseUrl}/api/public/series/$seriesType/$seriesId/$slug")
             } catch (e: CloudflareChallengeException) { throw e }
-              catch (e: Exception) { ScraperTelemetry.logFailure(source.id, "detail_api", e); null }
+              catch (e: Exception) { ScraperTelemetry.logFailure(sourceId, "detail_api", e); null }
             val description = detailJson?.optString("description", "") ?: ""
             val cdnPath = detailJson?.optString("cdn_path", "cdn3") ?: "cdn3"
 
@@ -145,7 +146,7 @@ class ProComicScraper @Inject constructor(
                 slug = matchedItem.slug,
                 title = matchedItem.title,
                 coverUrl = matchedItem.coverUrl,
-                source = source,
+                source = SourceId(sourceId),
                 description = description,
                 genres = matchedItem.genres,
                 status = matchedItem.status,
@@ -195,7 +196,7 @@ class ProComicScraper @Inject constructor(
                         if (imgPath.isNotBlank()) "https://$cdnPath.procomic.pro$imgPath" else null
                     }
                 }
-            } catch (e: Exception) { ScraperTelemetry.logFailure(source.id, "pages_cdn", e) }
+            } catch (e: Exception) { ScraperTelemetry.logFailure(sourceId, "pages_cdn", e) }
         }
 
         if (cdnImages.isNotEmpty()) {
@@ -247,7 +248,7 @@ class ProComicScraper @Inject constructor(
             val items = parseApiResults(json)
             if (items.isNotEmpty()) return@runCatching items.distinctBy { it.id }
         } catch (e: CloudflareChallengeException) { throw e }
-          catch (e: Exception) { ScraperTelemetry.logFailure(source.id, "search_api", e) }
+          catch (e: Exception) { ScraperTelemetry.logFailure(sourceId, "search_api", e) }
         // Fallback: HTML scraping
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
         // Fallback must page too, or Paging loops on identical results (H-review).
@@ -267,7 +268,7 @@ class ProComicScraper @Inject constructor(
             val items = parseApiResults(json)
             if (items.isNotEmpty()) return@runCatching items.distinctBy { it.id }
         } catch (e: CloudflareChallengeException) { throw e }
-          catch (e: Exception) { ScraperTelemetry.logFailure(source.id, "popular_api", e) }
+          catch (e: Exception) { ScraperTelemetry.logFailure(sourceId, "popular_api", e) }
         val doc = fetchDocument("${resolvedBaseUrl}/series?sort=popular").also { throwIfTurnstile(it.outerHtml(), "${resolvedBaseUrl}/series") }
         parseMangaGridFromHtml(doc)
     }
@@ -289,7 +290,7 @@ class ProComicScraper @Inject constructor(
             val items = parseApiResults(json)
             if (items.isNotEmpty()) return@runCatching items.distinctBy { it.id }
         } catch (e: CloudflareChallengeException) { throw e }
-          catch (e: Exception) { ScraperTelemetry.logFailure(source.id, "browse_api", e) }
+          catch (e: Exception) { ScraperTelemetry.logFailure(sourceId, "browse_api", e) }
         // Fallback: HTML scraping (paged)
         val doc = fetchDocument("${resolvedBaseUrl}/series?page=$page").also { throwIfTurnstile(it.outerHtml(), "${resolvedBaseUrl}/series") }
         parseMangaGridFromHtml(doc)
@@ -324,7 +325,7 @@ class ProComicScraper @Inject constructor(
                 slug = slug,
                 title = title.cleanText(),
                 coverUrl = obj.optString("thumbnail", "").encodeForUrl(),
-                source = source,
+                source = SourceId(sourceId),
                 genres = metadata?.optJSONArray("genres")?.let { arr ->
                     (0 until arr.length()).map { arr.optString(it) }
                 } ?: emptyList(),
@@ -351,7 +352,7 @@ class ProComicScraper @Inject constructor(
             MangaItem(
                 id = "procomic_$slug", slug = slug, title = title,
                 coverUrl = coverUrl.encodeForUrl(),
-                source = source, url = href
+                source = SourceId(sourceId), url = href
             )
         }.distinctBy { it.id }
     }

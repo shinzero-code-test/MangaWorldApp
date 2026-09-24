@@ -83,6 +83,7 @@ import com.exapps.mangaworld.domain.model.ReadingListStatus
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.LibraryRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -106,8 +107,13 @@ class UserProfileViewModel @Inject constructor(
     private val readingStatsStore: ReadingStatsStore,
     private val achievementManager: com.exapps.mangaworld.core.data.AchievementManager,
     private val cloudinaryUploader: com.exapps.mangaworld.core.firebase.CloudinaryUploader,
-    private val sessionManager: com.exapps.mangaworld.core.firebase.FirebaseSessionManager
+    private val sessionManager: com.exapps.mangaworld.core.firebase.FirebaseSessionManager,
+    sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 ) : ViewModel() {
+    /** Resolved source display names (unknown ids absent — cards show R.string.unknown). */
+    val sourceNames: StateFlow<Map<String, String>> = flowOf(
+        sourceUiMapper.entries().associate { it.id to it.name }
+    ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -286,6 +292,7 @@ fun UserProfileScreen(
     val readingLists by viewModel.readingLists.collectAsStateWithLifecycle()
     val totalReadingTimeMs by viewModel.totalReadingTimeMs.collectAsStateWithLifecycle()
     val chaptersRead by viewModel.chaptersRead.collectAsStateWithLifecycle()
+    val sourceNames by viewModel.sourceNames.collectAsStateWithLifecycle()
     val currentStreak by viewModel.currentStreak.collectAsStateWithLifecycle()
     val achievementsUnlocked by viewModel.achievementsUnlocked.collectAsStateWithLifecycle()
     val avatarUri = viewModel.avatarUri
@@ -908,8 +915,9 @@ private fun LibraryReadingListsSection(
                         items(items.size, key = { i -> items[i].mangaId }) { index ->
                             val manga = items[index]
                             LibraryMangaCard(
+                                sourceNames = sourceNames,
                                 manga = manga,
-                                onClick = { onMangaClick(manga.source.id, manga.slug) }
+                                onClick = { onMangaClick(manga.source.value, manga.slug) }
                             )
                         }
                     }
@@ -921,7 +929,7 @@ private fun LibraryReadingListsSection(
 }
 
 @Composable
-private fun LibraryMangaCard(manga: FavoriteManga, onClick: () -> Unit) {
+private fun LibraryMangaCard(manga: FavoriteManga, sourceNames: Map<String, String>, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .width(110.dp)
@@ -961,7 +969,7 @@ private fun LibraryMangaCard(manga: FavoriteManga, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    stringResource(manga.source.nameRes),
+                    sourceNames[manga.source.value] ?: stringResource(R.string.unknown),
                     color = MangaColors.Muted,
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,

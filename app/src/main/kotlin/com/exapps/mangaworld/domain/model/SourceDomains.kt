@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.domain.model
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -47,14 +48,14 @@ object SourceDomainOverrides {
 }
 
 /**
- * Effective origin for this source: Remote Config override wins, enum default
+ * Effective origin for a source id: Remote Config override wins, descriptor default
  * otherwise. Always build entry-point URLs, Referers, Jsoup base URIs,
- * WebView-solver targets and trust checks from this — never the raw enum
- * `baseUrl` (which cannot follow domain moves).
+ * WebView-solver targets and trust checks from this — never a hardcoded base URL
+ * (which cannot follow domain moves).
  */
-fun MangaSource.effectiveBaseUrl(): String =
-    SourceDomainOverrides.baseUrlFor(id, baseUrl)
+fun SourceId.effectiveBaseUrl(defaultBaseUrl: String): String =
+    SourceDomainOverrides.baseUrlFor(value, defaultBaseUrl)
 
 /** Host of the effective base URL (cookie/WebView/interceptor matching). */
-fun MangaSource.effectiveHost(): String =
-    effectiveBaseUrl().removePrefix("https://").removePrefix("http://").substringBefore('/').lowercase()
+fun SourceId.effectiveHost(defaultBaseUrl: String): String =
+    effectiveBaseUrl(defaultBaseUrl).removePrefix("https://").removePrefix("http://").substringBefore('/').lowercase()

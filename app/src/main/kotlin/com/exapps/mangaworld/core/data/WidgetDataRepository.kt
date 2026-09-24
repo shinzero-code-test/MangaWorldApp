@@ -11,7 +11,11 @@ import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
 import com.exapps.mangaworld.domain.model.Chapter
 import com.exapps.mangaworld.domain.model.HomeData
 import com.exapps.mangaworld.domain.model.LatestChapterItem
-import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.R
+import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
+import com.exapps.mangaworld.core.source.plugins.SourceId
+import com.exapps.mangaworld.core.source.plugins.SourceRegistry
+import com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -38,6 +42,8 @@ class WidgetDataRepository @Inject constructor(
     private val snapshotStore: WidgetSnapshotStore,
     private val readingStatsStore: ReadingStatsStore,
     private val imageLoader: ImageLoader,
+    private val registry: SourceRegistry,
+    private val sourceUiMapper: SourceUiMapper,
     @com.exapps.mangaworld.core.di.IoDispatcher private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher
 ) {
 
@@ -100,14 +106,13 @@ class WidgetDataRepository @Inject constructor(
     suspend fun getRandomMangaTarget(): WidgetMangaEntry? {
         val cache = cacheDao.getRandom()
         if (cache != null) {
-            val source = MangaSource.fromId(cache.sourceId)
             return WidgetMangaEntry(
                 mangaId = cache.mangaId,
-                sourceId = source.id,
+                sourceId = cache.sourceId,
                 slug = cache.slug,
                 title = cache.title,
                 coverUrl = cache.coverUrl,
-                subtitle = context.getString(source.nameRes)
+                subtitle = sourceSubtitle(cache.sourceId)
             )
         }
 
@@ -119,7 +124,7 @@ class WidgetDataRepository @Inject constructor(
                 slug = favorite.slug,
                 title = favorite.title,
                 coverUrl = favorite.coverUrl,
-                subtitle = context.getString(MangaSource.fromId(favorite.sourceId).nameRes)
+                subtitle = sourceSubtitle(favorite.sourceId)
             )
         }
 
@@ -130,7 +135,7 @@ class WidgetDataRepository @Inject constructor(
             slug = history.slug,
             title = history.title,
             coverUrl = history.coverUrl,
-            subtitle = context.getString(MangaSource.fromId(history.sourceId).nameRes)
+            subtitle = sourceSubtitle(history.sourceId)
         )
     }
 
@@ -143,7 +148,9 @@ class WidgetDataRepository @Inject constructor(
     suspend fun refreshRemoteSnapshot(): RemoteWidgetsSnapshot = coroutineScope {
         val settings = settingsRepository.getAppSettings().first()
         val enabledSourceIds = settings.enabledSources
-        val sources = MangaSource.entries.filter { it.id in enabledSourceIds }
+        val sources = registry.scraperMap().keys
+            .filter { it in enabledSourceIds }
+            .map { SourceId(it) }
 
         val homeData = sources.map { source ->
             async { source to mangaRepository.getHomeData(source).getOrNull() }
@@ -196,7 +203,7 @@ class WidgetDataRepository @Inject constructor(
     }
 
     private suspend fun com.exapps.mangaworld.core.data.local.entity.ReadingHistoryEntity.toContinueReadingData(): ContinueReadingWidgetData? {
-        val source = MangaSource.fromId(sourceId)
+        val source = SourceId(sourceId)
         val chapterUrl = lastChapterUrl.ifBlank {
             resolveChapter(this, source)?.url.orEmpty()
         }
@@ -209,7 +216,7 @@ class WidgetDataRepository @Inject constructor(
 
         return ContinueReadingWidgetData(
             mangaId = mangaId,
-            sourceId = source.id,
+            sourceId = source.value,
             slug = slug,
             title = title,
             coverUrl = coverUrl,
@@ -221,7 +228,7 @@ class WidgetDataRepository @Inject constructor(
 
     private suspend fun resolveChapter(
         item: com.exapps.mangaworld.core.data.local.entity.ReadingHistoryEntity,
-        source: MangaSource
+        source: SourceId
     ): Chapter? {
         val detail = cacheDao.get(item.mangaId)?.toDetail(source)
             ?: mangaRepository.getMangaDetail(item.slug, source).getOrNull()
@@ -244,19 +251,19 @@ class WidgetDataRepository @Inject constructor(
         return streak
     }
 
-    private fun Pair<MangaSource, com.exapps.mangaworld.domain.model.MangaItem>.toWidgetMangaEntry(): WidgetMangaEntry =
+    private fun Pair<SourceId, com.exapps.mangaworld.domain.model.MangaItem>.toWidgetMangaEntry(): WidgetMangaEntry =
         WidgetMangaEntry(
             mangaId = second.id,
-            sourceId = first.id,
+            sourceId = first.value,
             slug = second.slug,
             title = second.title,
             coverUrl = second.coverUrl,
-            subtitle = context.getString(first.nameRes)
+            subtitle = sourceSubtitle(first.value)
         )
 
     private fun LatestChapterItem.toWidgetLatestUpdateEntry(): WidgetLatestUpdateEntry = WidgetLatestUpdateEntry(
         mangaId = mangaId,
-        sourceId = source.id,
+        sourceId = source.value,
         mangaSlug = mangaSlug,
         mangaTitle = mangaTitle,
         coverUrl = coverUrl,
@@ -265,6 +272,12 @@ class WidgetDataRepository @Inject constructor(
         publishedAt = publishedAt,
         timeAgo = timeAgo.ifBlank { null }
     )
+
+    /** Glance subtitle: imported label for local rows, resolved name, else unknown — never another source. */
+    private fun sourceSubtitle(sourceId: String): String = when {
+        BuiltinSourceIds.isLocal(sourceId) -> context.getString(R.string.source_imported)
+        else -> sourceUiMapper.displayName(sourceId) ?: context.getString(R.string.unknown)
+    }
 
     private fun formatChapterNumber(number: Float): String =
         if (number == number.toInt().toFloat()) number.toInt().toString() else number.toString()

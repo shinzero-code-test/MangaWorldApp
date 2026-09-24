@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import okhttp3.FormBody
@@ -12,7 +13,7 @@ import javax.inject.Inject
 /**
  * Scraper for starzmanga.com (Manga Starz, formerly manga-starz.net) —
  * WordPress + Madara Theme. The previous domain 301-redirects to the new one;
- * the default lives in [MangaSource.STARZ] and can be overridden at runtime
+ * the default lives in ["starz", "https://starzmanga.com"] and can be overridden at runtime
  * via Remote Config (`source_starz_base_url`).
  *
  * CSS Selectors (from HTML analysis):
@@ -56,7 +57,7 @@ import javax.inject.Inject
 class StarzScraper @Inject constructor(
     client: OkHttpClient,
     settingsRepo: SettingsRepository
-) : MadaraBaseScraper(client, MangaSource.STARZ, settingsRepo) {
+) : MadaraBaseScraper(client, "starz", "https://starzmanga.com", settingsRepo) {
 
     // ─── Home ─────────────────────────────────────────────────────────────────
 
@@ -84,7 +85,7 @@ class StarzScraper @Inject constructor(
             mangaCards.add(
                 MangaItem(
                     id = mangaId, slug = slug, title = title,
-                    coverUrl = coverUrl, source = source, url = href
+                    coverUrl = coverUrl, source = SourceId(sourceId), url = href
                 )
             )
 
@@ -101,7 +102,7 @@ class StarzScraper @Inject constructor(
                     LatestChapterItem(
                         mangaId = mangaId, mangaSlug = slug, mangaTitle = title,
                         coverUrl = coverUrl, chapterNumber = chNum, chapterUrl = chHref,
-                        timeAgo = "", source = source, isNew = isNew
+                        timeAgo = "", source = SourceId(sourceId), isNew = isNew
                     )
                 )
             }
@@ -118,7 +119,7 @@ class StarzScraper @Inject constructor(
             MangaItem(
                 id = "starz_$slug", slug = slug, title = title,
                 coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() },
-                source = source, url = href
+                source = SourceId(sourceId), url = href
             )
         }
 
@@ -295,7 +296,7 @@ class StarzScraper @Inject constructor(
                 }.takeIf { it.isNotEmpty() }
             } else null
         } catch (e: Exception) {
-            ScraperTelemetry.logFailure(source.id, "detail_chapters_ajax_primary", e)
+            ScraperTelemetry.logFailure(sourceId, "detail_chapters_ajax_primary", e)
             null
         }
         // Try AJAX for full chapter list (Madara admin-ajax endpoint)
@@ -362,7 +363,7 @@ class StarzScraper @Inject constructor(
                 chapters
             } else emptyList()
         } catch (e: Exception) {
-            ScraperTelemetry.logFailure(source.id, "detail_chapters_api", e)
+            ScraperTelemetry.logFailure(sourceId, "detail_chapters_api", e)
             emptyList()
         }
 
@@ -384,7 +385,7 @@ class StarzScraper @Inject constructor(
                     coverUrl = a.closest(".page-item-detail, .popular-item-wrap")?.selectFirst("img")?.attr("abs:src")
                         ?.ifBlank { a.closest(".page-item-detail, .popular-item-wrap")?.selectFirst("img")?.attr("src")?.absoluteUrl() }
                         .orEmpty(),
-                    source = source,
+                    source = SourceId(sourceId),
                     url = href
                 )
             }
@@ -395,7 +396,7 @@ class StarzScraper @Inject constructor(
             slug = slug,
             title = title,
             coverUrl = coverUrl,
-            source = source,
+            source = SourceId(sourceId),
             alternativeTitles = alternativeTitles,
             authorName = authorName,
             artistName = artistName,
@@ -516,7 +517,7 @@ class StarzScraper @Inject constructor(
                 coverUrl = imgEl.attr("abs:src").ifEmpty {
                     (imgEl.attr("data-src").ifEmpty { imgEl.attr("src") }).absoluteUrl()
                 },
-                source = source, url = href
+                source = SourceId(sourceId), url = href
             )
         }
     }

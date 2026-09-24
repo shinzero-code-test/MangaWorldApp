@@ -18,7 +18,6 @@ import com.exapps.mangaworld.core.data.local.entity.DownloadBatchEntity
 import com.exapps.mangaworld.core.data.local.entity.DownloadTaskEntity
 import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
 import com.exapps.mangaworld.domain.model.ChapterPage
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import kotlinx.coroutines.Dispatchers
@@ -660,9 +659,10 @@ class DownloadQueueManager @Inject constructor(
         // unreachable (Cloudflare challenge, network blip, source layout change),
         // falling back to the cached list still beats an instant identical fail.
         suspend fun fetchFresh(): List<ChapterPage> {
-            val source = MangaSource.fromIdOrNull(task.sourceId.ifBlank { task.mangaId.substringBefore('_') })
-                ?: return emptyList()
-            val slug = task.mangaSlug.ifBlank { task.mangaId.substringAfter("${source.id}_") }
+            val rawId = task.sourceId.ifBlank { task.mangaId.substringBefore('_') }
+            if (!com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isBuiltin(rawId)) return emptyList()
+            val source = com.exapps.mangaworld.core.source.plugins.SourceId(rawId)
+            val slug = task.mangaSlug.ifBlank { task.mangaId.substringAfter("${source.value}_") }
             return mangaRepository.getChapterPages(slug, task.chapterUrl, source).getOrDefault(emptyList())
         }
 

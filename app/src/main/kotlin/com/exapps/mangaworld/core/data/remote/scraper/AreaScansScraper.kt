@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +29,7 @@ class AreaScansScraper @Inject constructor(
     client: OkHttpClient,
     settingsRepo: SettingsRepository,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
-) : BaseScraperImpl(client, MangaSource.AREASCANS, settingsRepo) {
+) : BaseScraperImpl(client, "areascans", "https://ar.kenmanga.com", settingsRepo) {
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
         val doc = fetchDocument("${resolvedBaseUrl}/browse/")
@@ -108,7 +109,7 @@ class AreaScansScraper @Inject constructor(
                 val dateText = chLink.selectFirst(".chap-date")?.text()?.cleanText()
                 Chapter(
                     id = "${slug}_$chNum",
-                    mangaId = "${source.id}_$slug",
+                    mangaId = "${sourceId}_$slug",
                     number = chNum,
                     title = chLink.selectFirst(".chap-num")?.text()?.cleanText()?.replace("الفصل", "")?.trim()?.ifBlank { null },
                         // Null lets MangaDetailViewModel/ReaderScreen format at render time;
@@ -118,11 +119,11 @@ class AreaScansScraper @Inject constructor(
             }.distinctBy { it.url }.sortedByDescending { it.number }
 
         MangaDetail(
-            id = "${source.id}_$slug",
+            id = "${sourceId}_$slug",
             slug = slug,
             title = title,
             coverUrl = coverUrl,
-            source = source,
+            source = SourceId(sourceId),
             description = description,
             genres = genres,
             tags = genres,
@@ -229,7 +230,7 @@ class AreaScansScraper @Inject constructor(
                     } else null
                 }
             } catch (e: Exception) {
-                ScraperTelemetry.logFailure(source.id, "pages_ts_reader", e)
+                ScraperTelemetry.logFailure(sourceId, "pages_ts_reader", e)
                 images
             }
         } else images
@@ -267,7 +268,7 @@ class AreaScansScraper @Inject constructor(
             }
             if (!ajaxItems.isNullOrEmpty()) return@runCatching ajaxItems
         } catch (e: Exception) {
-            ScraperTelemetry.logFailure(source.id, "search_ajax_fallback", e)
+            ScraperTelemetry.logFailure(sourceId, "search_ajax_fallback", e)
         }
 
         results
@@ -342,11 +343,11 @@ class AreaScansScraper @Inject constructor(
             val type = MangaType.from(typeText)
 
             MangaItem(
-                id = "${source.id}_$slug",
+                id = "${sourceId}_$slug",
                 slug = slug,
                 title = title,
                 coverUrl = coverUrl,
-                source = source,
+                source = SourceId(sourceId),
                 type = type,
                 url = href
             )
@@ -374,11 +375,11 @@ class AreaScansScraper @Inject constructor(
                 val coverImg = Regex("""src="([^"]+)"""").find(postImage)?.groupValues?.get(1) ?: ""
                 results.add(
                     MangaItem(
-                        id = "${source.id}_$slug",
+                        id = "${sourceId}_$slug",
                         slug = slug,
                         title = postTitle.cleanText().ifBlank { slug },
                         coverUrl = coverImg.absoluteUrl(),
-                        source = source,
+                        source = SourceId(sourceId),
                         url = postLink.absoluteUrl()
                     )
                 )

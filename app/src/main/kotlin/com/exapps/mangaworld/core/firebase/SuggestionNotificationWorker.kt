@@ -18,7 +18,6 @@ import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import com.exapps.mangaworld.domain.model.MangaItem
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.NotificationDeliveryMode
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.assisted.Assisted
@@ -87,7 +86,7 @@ class SuggestionNotificationWorker @AssistedInject constructor(
                         slug = cache.slug,
                         title = cache.title,
                         coverUrl = cache.coverUrl,
-                        source = MangaSource.fromId(cache.sourceId),
+                        source = com.exapps.mangaworld.core.source.plugins.SourceId(cache.sourceId),
                         genres = try {
                             org.json.JSONArray(cache.genresJson).let { arr ->
                                 (0 until arr.length()).map { arr.getString(it) }
@@ -197,7 +196,7 @@ class SuggestionNotificationWorker @AssistedInject constructor(
             .ifBlank { ctx.getString(com.exapps.mangaworld.R.string.suggestion_notif_no_desc) }
 
         // Deep link straight to this manga's detail screen.
-        val detailIntent = AppLaunchIntents.detail(ctx, manga.source.id, manga.slug)
+        val detailIntent = AppLaunchIntents.detail(ctx, manga.source.value, manga.slug)
         val detailPendingIntent = PendingIntent.getActivity(
             ctx,
             notificationId,
@@ -215,7 +214,7 @@ class SuggestionNotificationWorker @AssistedInject constructor(
             action = NotificationActionReceiver.ACTION_ADD_FAVORITE
             putExtra(NotificationActionReceiver.EXTRA_MANGA_ID, manga.id)
             putExtra(NotificationActionReceiver.EXTRA_TITLE, manga.title)
-            putExtra(NotificationActionReceiver.EXTRA_SOURCE_ID, manga.source.id)
+            putExtra(NotificationActionReceiver.EXTRA_SOURCE_ID, manga.source.value)
             putExtra(NotificationActionReceiver.EXTRA_SLUG, manga.slug)
             putExtra(NotificationActionReceiver.EXTRA_COVER_URL, manga.coverUrl)
             putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notificationId)

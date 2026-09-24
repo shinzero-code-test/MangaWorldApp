@@ -20,7 +20,11 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class SourceBrowseUiState(
-    val source: MangaSource = MangaSource.AZORA,
+    val source: com.exapps.mangaworld.core.source.plugins.SourceId = com.exapps.mangaworld.core.source.plugins.SourceId("azora"),
+    val sourceEntry: com.exapps.mangaworld.core.source.plugins.SourceUiEntry? = null,
+    /** Effective solver target (follows domain overrides; empty when unknown). */
+    val solverBaseUrl: String = "",
+    val solverHost: String = "",
     val query: String = "",
     val mangaList: List<MangaItem> = emptyList(),
     val isLoading: Boolean = false,
@@ -40,12 +44,27 @@ class SourceBrowseViewModel @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
     private val mangaRepository: MangaRepository,
     private val settingsRepository: SettingsRepository,
-    savedStateHandle: SavedStateHandle
+    savedStateHandle: SavedStateHandle,
+    sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper,
+    sourceRegistry: com.exapps.mangaworld.core.source.plugins.SourceRegistry
 ) : ViewModel() {
 
     private val sourceId: String = savedStateHandle["sourceId"] ?: "azora"
 
-    private val _uiState = MutableStateFlow(SourceBrowseUiState(source = MangaSource.fromId(sourceId)))
+    private val _uiState = MutableStateFlow(
+        SourceBrowseUiState(
+            source = com.exapps.mangaworld.core.source.plugins.SourceId(sourceId),
+            sourceEntry = sourceUiMapper.entry(sourceId),
+            solverBaseUrl = sourceRegistry.descriptorFor(sourceId)?.let {
+                com.exapps.mangaworld.domain.model.SourceDomainOverrides.baseUrlFor(sourceId, it.baseUrl)
+            }.orEmpty(),
+            solverHost = sourceRegistry.descriptorFor(sourceId)?.let {
+                com.exapps.mangaworld.core.source.plugins.HostPolicy.hostOf(
+                    com.exapps.mangaworld.domain.model.SourceDomainOverrides.baseUrlFor(sourceId, it.baseUrl)
+                )
+            }.orEmpty()
+        )
+    )
     val uiState: StateFlow<SourceBrowseUiState> = _uiState.asStateFlow()
 
     init {

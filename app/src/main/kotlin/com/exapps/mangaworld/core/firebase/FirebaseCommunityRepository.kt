@@ -311,7 +311,7 @@ class FirebaseCommunityRepository @Inject constructor(
                         // Dead sources (removed plugins) stay hidden, never AZORA-fallback.
                         docs.mapNotNull { doc ->
                             FirebaseSyncMerge.favorite(doc)
-                                ?.takeIf { com.exapps.mangaworld.domain.model.MangaSource.fromIdOrNull(it.sourceId) != null }
+                                ?.takeIf { com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isBuiltin(it.sourceId) }
                                 ?.toLibraryDomain()
                         }
                     )
@@ -343,7 +343,7 @@ class FirebaseCommunityRepository @Inject constructor(
             .limit(200).get().await()
             .documents.mapNotNull { doc ->
                 FirebaseSyncMerge.favorite(doc)
-                    ?.takeIf { com.exapps.mangaworld.domain.model.MangaSource.fromIdOrNull(it.sourceId) != null }
+                    ?.takeIf { com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isBuiltin(it.sourceId) }
                     ?.toLibraryDomain()
             }
     }
@@ -1627,7 +1627,7 @@ class FirebaseCommunityRepository @Inject constructor(
             body = getString("body") ?: return null,
             mangaId = getString("mangaId") ?: return null,
             slug = getString("slug") ?: "",
-            sourceId = getString("sourceId")?.takeIf { id -> com.exapps.mangaworld.domain.model.MangaSource.entries.any { it.id == id } } ?: "azora",
+            sourceId = getString("sourceId")?.takeIf { id -> com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isBuiltin(id) } ?: "azora",
             chapterUrl = getString("chapterUrl"),
             commentId = getString("commentId"),
             targetUid = getString("targetUid"),
@@ -1657,7 +1657,7 @@ class FirebaseCommunityRepository @Inject constructor(
             slug = slug,
             title = title,
             coverUrl = coverUrl,
-            source = com.exapps.mangaworld.domain.model.MangaSource.fromId(sourceId),
+            source = com.exapps.mangaworld.core.source.plugins.SourceId(sourceId),
             addedAt = addedAt,
             readChapters = readChapters,
             totalChapters = totalChapters,

@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.viewmodel
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import android.content.Context
 import com.exapps.mangaworld.R
 import com.exapps.mangaworld.core.firebase.AccountMergeReason
@@ -7,7 +8,6 @@ import com.exapps.mangaworld.core.firebase.AccountMergeRequiredException
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.exapps.mangaworld.domain.UsernameRules
 import com.exapps.mangaworld.domain.model.LatestChapterItem
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.presentation.auth.LoginViewModel
 import com.exapps.mangaworld.presentation.utils.filterLatestUpdates
@@ -386,9 +386,9 @@ class LoginUtilsViewModelTest {
             chapterNumber = 1f,
             chapterUrl = "https://olympustaff.example/series/solo-leveling/1",
             timeAgo = "1h",
-            source = MangaSource.OLYMPUS
+            source = SourceId("olympus")
         )
-        val starz = olympus.copy(mangaId = "starz_solo", source = MangaSource.STARZ)
+        val starz = olympus.copy(mangaId = "starz_solo", source = SourceId("starz"))
         val readStates = mapOf(olympus.chapterUrl to true, starz.chapterUrl to true)
         assertEquals(2, filterLatestUpdates(listOf(olympus, starz), null, false, readStates).size)
         // Prefetch: overflow counts as past-halfway; negative never triggers;

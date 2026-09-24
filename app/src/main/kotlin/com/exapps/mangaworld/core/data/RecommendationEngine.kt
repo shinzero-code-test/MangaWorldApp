@@ -50,7 +50,7 @@ class RecommendationEngine @Inject constructor(
             .filterNot { it.id in readIds } // Exclude already read
             .map { manga ->
                 val genreScore = manga.genres.count { it in topGenres }
-                val sourceBonus = if (manga.source.id in favoriteSourceIds) 2 else 0
+                val sourceBonus = if (manga.source.value in favoriteSourceIds) 2 else 0
                 val ratingBonus = ((manga.rating ?: 0f) / 2f).toInt()
                 manga to (genreScore + sourceBonus + ratingBonus)
             }

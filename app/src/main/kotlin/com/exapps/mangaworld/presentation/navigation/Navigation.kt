@@ -13,8 +13,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.*
 import androidx.navigation.compose.*
-import com.exapps.mangaworld.domain.model.MangaSource
-import com.exapps.mangaworld.domain.model.effectiveBaseUrl
+import androidx.compose.runtime.remember
+import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
+import com.exapps.mangaworld.core.source.plugins.SourceDomainOverrides
+import com.exapps.mangaworld.core.source.plugins.SourceId
+import com.exapps.mangaworld.core.source.plugins.SourceRegistry
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import com.exapps.mangaworld.presentation.browse.BrowseScreen
 import com.exapps.mangaworld.presentation.cloud.CloudSyncScreen
 import com.exapps.mangaworld.presentation.community.CommunityChatScreen
@@ -185,7 +192,7 @@ fun MangaNavGraph(
                 // Imported history entries carry sourceId "imported"/"local" —
                 // they open the local detail screen, never an online source.
                 onMangaClick = { src, slug ->
-                    if (MangaSource.isLocalSource(src)) {
+                    if (BuiltinSourceIds.isLocal(src)) {
                         navController.navigate(Screen.LocalMangaDetail.createRoute(slug))
                     } else {
                         navController.navigate(Screen.Detail.createRoute(src, slug))
@@ -244,7 +251,7 @@ fun MangaNavGraph(
                         navController.navigate(Screen.Detail.createRoute("local", mangaId))
                     } else {
                         val prefix = mangaId.substringBefore("_")
-                        if (MangaSource.isLocalSource(prefix)) {
+                        if (BuiltinSourceIds.isLocal(prefix)) {
                             navController.navigate(Screen.Detail.createRoute("local", mangaId))
                         } else {
                             navController.navigate(
@@ -321,7 +328,7 @@ fun MangaNavGraph(
         composable(Screen.LocalStorage.route) {
             LocalStorageScreen(
                 onMangaClick = { src, slug ->
-                    if (MangaSource.isLocalSource(src)) {
+                    if (BuiltinSourceIds.isLocal(src)) {
                         // Imported manga → use the regular detail screen which loads from local disk
                         navController.navigate(Screen.Detail.createRoute("local", slug))
                     } else {
@@ -430,7 +437,7 @@ fun MangaNavGraph(
         ) {
             SuggestionsScreen(
                 onBack = { navController.popBackStack() },
-                onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src.id, slug)) }
+                onMangaClick = { src, slug -> navController.navigate(Screen.Detail.createRoute(src, slug)) }
             )
         }
         composable(Screen.Login.route) {
@@ -510,11 +517,12 @@ fun MangaNavGraph(
         ) { back ->
             val sourceId = back.arguments?.getString("sourceId") ?: return@composable
             val slug     = back.arguments?.getString("slug") ?: return@composable
-            // Local/imported manga has no online source entry — use a placeholder
-            // source for the `source` param but keep rawSourceId so the ViewModel
-            // loads from disk. Unknown online ids still blank (never Azora fallback).
-            val isLocalDetail = MangaSource.isLocalSource(sourceId) || slug.startsWith("imported_")
-            val source = if (isLocalDetail) MangaSource.AZORA else MangaSource.fromIdOrNull(sourceId) ?: return@composable
+            // Local/imported manga has no online source entry — the raw sourceId
+            // drives the disk path. Unknown online ids still blank (never fallback).
+            val registry = rememberSourceRegistry()
+            val isLocalDetail = BuiltinSourceIds.isLocal(sourceId) || slug.startsWith("imported_")
+            if (!isLocalDetail && !registry.isKnown(sourceId)) return@composable
+            val source = SourceId(sourceId)
             MangaDetailScreen(
                 source = source, slug = slug,
                 rawSourceId = if (isLocalDetail) "local" else sourceId,
@@ -546,8 +554,10 @@ fun MangaNavGraph(
             val chapterUrl = java.net.URLDecoder.decode(
                 back.arguments?.getString("chapterUrl") ?: "", "UTF-8"
             )
-            val isImported = mangaId.startsWith("imported_") || MangaSource.isLocalSource(sourceId)
-            val source = if (isImported) MangaSource.AZORA else MangaSource.fromIdOrNull(sourceId) ?: return@composable
+            val registry = rememberSourceRegistry()
+            val isImported = mangaId.startsWith("imported_") || BuiltinSourceIds.isLocal(sourceId)
+            if (!isImported && !registry.isKnown(sourceId)) return@composable
+            val source = SourceId(sourceId)
             val slug = if (isImported) mangaId else mangaId.substringAfter("${sourceId}_").ifBlank { mangaId }
             ReaderScreen(
                 source = source, mangaId = mangaId,
@@ -585,15 +595,19 @@ fun MangaNavGraph(
             val chapterUrl = java.net.URLDecoder.decode(
                 back.arguments?.getString("chapterUrl") ?: "", "UTF-8"
             )
-            val isImported = mangaId.startsWith("imported_") || MangaSource.isLocalSource(sourceId)
-            val source = if (isImported) MangaSource.AZORA else MangaSource.fromIdOrNull(sourceId) ?: return@composable
+            val registry = rememberSourceRegistry()
+            val isImported = mangaId.startsWith("imported_") || BuiltinSourceIds.isLocal(sourceId)
+            if (!isImported && !registry.isKnown(sourceId)) return@composable
+            val source = SourceId(sourceId)
             val slug = if (isImported) mangaId else mangaId.substringAfter("${sourceId}_").ifBlank { mangaId }
 
             // Deep links are exported — an attacker-supplied chapterUrl must not
             // make the app fetch arbitrary hosts through the scraper pipeline.
             // Imported chapters are local dir names (never absolute URLs) — skip
             // the host check for them.
-            if (!isImported && !isTrustedChapterHost(chapterUrl, source.effectiveBaseUrl())) {
+            val descriptor = registry.descriptorFor(sourceId)
+            val trustedBase = descriptor?.let { SourceDomainOverrides.baseUrlFor(sourceId, it.baseUrl) }
+            if (!isImported && (trustedBase == null || !isTrustedChapterHost(chapterUrl, trustedBase))) {
                 navController.navigate(Screen.Detail.createRoute(sourceId, slug)) {
                     popUpTo(Screen.Home.route)
                 }
@@ -748,4 +762,19 @@ private fun isTrustedChapterHost(chapterUrl: String, baseUrl: String): Boolean {
     val expectedHost = baseUrl.toHttpUrlOrNull()?.host
         ?: return false
     return linkHost.equals(expectedHost, ignoreCase = true)
+}
+
+/** Registry lookup for route guards (deep-link host checks, unknown-id blanks). */
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface NavRegistryEntryPoint {
+    fun sourceRegistry(): SourceRegistry
+}
+
+@Composable
+private fun rememberSourceRegistry(): SourceRegistry {
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    return remember {
+        EntryPointAccessors.fromApplication(appContext, NavRegistryEntryPoint::class.java).sourceRegistry()
+    }
 }

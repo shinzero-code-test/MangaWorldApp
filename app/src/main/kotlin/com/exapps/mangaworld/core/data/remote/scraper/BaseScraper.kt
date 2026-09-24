@@ -13,7 +13,8 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 
 interface MangaScraper {
-    val source: MangaSource
+    /** Stable source id (== stored sourceId, descriptor id, registry key). */
+    val sourceId: String
 
     /**
      * Phase 2A migration hook: the verified manifest driving this scraper, when the
@@ -64,20 +65,21 @@ class SourceHttpException(val code: Int, val url: String) :
 
 abstract class BaseScraperImpl(
     protected val client: OkHttpClient,
-    override val source: MangaSource,
+    override val sourceId: String,
+    protected val defaultBaseUrl: String,
     protected val settingsRepo: SettingsRepository,
     override val pluginDescriptor: com.exapps.mangaworld.core.source.plugins.PluginManifest? = null
 ) : MangaScraper {
 
     /**
      * Effective origin for this source: Remote Config override
-     * (`source_<id>_base_url`) wins, enum default otherwise. Domains move
+     * (`source_<id>_base_url`) wins, code default otherwise. Domains move
      * (starz: manga-starz.net → starzmanga.com) — always build entry-point
-     * URLs, Referers and Jsoup base URIs from this, never the raw enum
-     * `source.baseUrl` (which cannot follow domain moves).
+     * URLs, Referers and Jsoup base URIs from this, never the raw
+     * `defaultBaseUrl` (which cannot follow domain moves).
      */
     protected val resolvedBaseUrl: String
-        get() = source.effectiveBaseUrl()
+        get() = SourceDomainOverrides.baseUrlFor(sourceId, defaultBaseUrl)
 
     protected suspend fun fetchDocument(url: String, extraHeaders: Map<String, String> = emptyMap()): Document =
         withContext(Dispatchers.IO) {
@@ -196,5 +198,5 @@ abstract class BaseScraperImpl(
     }
 
     protected fun remoteSelector(key: String, default: String): String =
-        RemoteSelectorOverridesStore.selector(source.id, key, default)
+        RemoteSelectorOverridesStore.selector(sourceId, key, default)
 }

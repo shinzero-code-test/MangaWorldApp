@@ -13,6 +13,10 @@ import com.exapps.mangaworld.core.data.local.entity.HomeCacheEntity
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
+import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
+import com.exapps.mangaworld.core.source.plugins.SourceId
+import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
+import com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -28,8 +32,8 @@ data class HomeUiState(
     val latestChapters: List<LatestChapterItem> = emptyList(),
     val trending: List<MangaItem> = emptyList(),
     val suggested: List<MangaItem> = emptyList(),
-    val availableSources: List<MangaSource> = MangaSource.entries.toList(),
-    val activeSource: MangaSource = MangaSource.AZORA,
+    val availableSources: List<SourceUiEntry> = emptyList(),
+    val activeSource: SourceId = SourceId("azora"),
     /** True when showing a cached snapshot because the network failed (item 9). */
     val isOffline: Boolean = false,
     /** Library membership by mangaId — drives the bookmark state on chapter cards (#12). */
@@ -55,7 +59,8 @@ class HomeViewModel @Inject constructor(
     private val firebaseTelemetry: FirebaseTelemetry,
     private val sessionManager: com.exapps.mangaworld.core.firebase.FirebaseSessionManager,
     private val communityRepo: com.exapps.mangaworld.domain.repository.CommunityRepository,
-    private val homeCacheDao: com.exapps.mangaworld.core.data.local.dao.HomeCacheDao
+    private val homeCacheDao: com.exapps.mangaworld.core.data.local.dao.HomeCacheDao,
+    private val sourceUiMapper: SourceUiMapper
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -76,7 +81,10 @@ class HomeViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settingsRepo.getAppSettings()
-                .map { settings -> settings to MangaSource.entries.filter { it.id in settings.enabledSources } }
+                .map { settings ->
+                    val entries = sourceUiMapper.entries().filter { it.id in settings.enabledSources }
+                    settings to entries
+                }
                 // Key on content-affecting settings ONLY: loadHome persists
                 // lastSourceId on every load, and reacting to our own write
                 // re-fired a load of the stale activeSource that raced (and
@@ -88,19 +96,22 @@ class HomeViewModel @Inject constructor(
                 .collectLatest { (settings, enabledSources) ->
                     val current = _state.value.activeSource
                     _state.update { it.copy(availableSources = enabledSources) }
-                    val lastOpened = MangaSource.fromIdOrNull(settings.lastSourceId)
+                    val enabledIds = enabledSources.map { it.id }.toSet()
+                    val lastOpened = settings.lastSourceId.takeIf {
+                        BuiltinSourceIds.isBuiltin(it) && it in enabledIds
+                    }?.let { SourceId(it) }
+                    val currentKnown = current.takeIf { it.value in enabledIds }
                     val nextSource = when {
                         enabledSources.isEmpty() -> null
                         !restoredLastSource -> {
                             restoredLastSource = true
-                            lastOpened?.takeIf { it in enabledSources }
-                                ?: if (current in enabledSources) current else enabledSources.first()
+                            lastOpened ?: currentKnown ?: SourceId(enabledSources.first().id)
                         }
-                        current in enabledSources -> current
+                        currentKnown != null -> currentKnown
                         // Item 10: restore the last opened source instead of
                         // always falling back to the first enabled source.
-                        lastOpened != null && lastOpened in enabledSources -> lastOpened
-                        else -> enabledSources.first()
+                        lastOpened != null -> lastOpened
+                        else -> SourceId(enabledSources.first().id)
                     }
                     if (nextSource == null) {
                         homeLoadJob?.cancel()
@@ -185,7 +196,7 @@ class HomeViewModel @Inject constructor(
      */
     fun toggleFavorite(item: LatestChapterItem) {
         viewModelScope.launch {
-            val mangaId = "${item.source.id}_${item.mangaSlug}"
+            val mangaId = "${item.source.value}_${item.mangaSlug}"
             if (mangaId in _state.value.favoriteIds) {
                 libraryRepo.removeFavorite(mangaId)
             } else {
@@ -202,8 +213,8 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun loadHome(source: MangaSource = _state.value.activeSource, blockedKeywords: Set<String> = emptySet()) {
-        if (source !in _state.value.availableSources) return
+    fun loadHome(source: SourceId = _state.value.activeSource, blockedKeywords: Set<String> = emptySet()) {
+        if (_state.value.availableSources.none { it.id == source.value }) return
         // New generation first: any in-flight older load is obsolete, and its
         // late response must be ignored even if cancellation lands late.
         homeLoadJob?.cancel()
@@ -227,10 +238,10 @@ class HomeViewModel @Inject constructor(
             }
         }
         homeLoadJob = viewModelScope.launch {
-            runCatching { settingsRepo.setLastSourceId(source.id) }
+            runCatching { settingsRepo.setLastSourceId(source.value) }
             // Show the cached snapshot instantly (if any) so offline launches
             // still render content; the network refresh replaces it below.
-            val cached = runCatching { homeCacheDao.get(source.id) }.getOrNull()
+            val cached = runCatching { homeCacheDao.get(source.value) }.getOrNull()
             val cachedData = cached?.payloadJson?.let { HomeCacheCodec.decode(it) }
             if (cachedData != null && _state.value.featured.isEmpty()) {
                 if (seq == homeLoadSeq) applyHomeData(source, cachedData, blockedKeywords, offline = true, seq = seq)
@@ -245,17 +256,17 @@ class HomeViewModel @Inject constructor(
             repo.getHomeData(source)
                 .onSuccess { data ->
                     if (seq != homeLoadSeq) return@onSuccess
-                    firebaseTelemetry.setActiveSource(source.id)
+                    firebaseTelemetry.setActiveSource(source.value)
                     runCatching {
                         homeCacheDao.upsert(
                             HomeCacheEntity(
-                                sourceId = source.id,
+                                sourceId = source.value,
                                 payloadJson = HomeCacheCodec.encode(data)
                             )
                         )
                     }
                     applyHomeData(source, data, blockedKeywords, offline = false, seq = seq)
-                    analyticsManager.logHomeLayoutExposure(_state.value.homeLayoutVariant, source.id)
+                    analyticsManager.logHomeLayoutExposure(_state.value.homeLayoutVariant, source.value)
                 }
                 .onFailure {
                     if (seq != homeLoadSeq) return@onFailure
@@ -271,7 +282,7 @@ class HomeViewModel @Inject constructor(
 
     /** Shared filter + state write for fresh and cached payloads. Drops stale generations. */
     private suspend fun applyHomeData(
-        source: MangaSource,
+        source: SourceId,
         data: HomeData,
         blockedKeywords: Set<String>,
         offline: Boolean,
@@ -311,8 +322,9 @@ class HomeViewModel @Inject constructor(
         val blacklist = settingsRepo.getAppSettings().first().contentBlacklist
         loadHome(_state.value.activeSource, blacklist)
     }
-    fun selectSource(source: MangaSource) {
-        if (source in _state.value.availableSources) {
+    fun selectSource(sourceId: String) {
+        val source = SourceId(sourceId)
+        if (_state.value.availableSources.any { it.id == sourceId }) {
             viewModelScope.launch {
                 loadHome(source, settingsRepo.getAppSettings().first().contentBlacklist)
             }

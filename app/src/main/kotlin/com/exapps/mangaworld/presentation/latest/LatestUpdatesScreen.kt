@@ -48,7 +48,6 @@ import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.isBlockedBy
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
 import com.exapps.mangaworld.domain.model.LatestChapterItem
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.LibraryRepository
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -75,8 +74,8 @@ data class LatestUpdatesUiState(
     val allItems: List<LatestChapterItem> = emptyList(),
     val items: List<LatestChapterItem> = emptyList(),
     val readStates: Map<String, Boolean> = emptyMap(),
-    val availableSources: List<MangaSource> = MangaSource.entries.toList(),
-    val selectedSource: MangaSource? = null,
+    val availableSources: List<com.exapps.mangaworld.core.source.plugins.SourceUiEntry> = emptyList(),
+    val selectedSource: com.exapps.mangaworld.core.source.plugins.SourceId? = null,
     val unreadOnly: Boolean = false,
     val error: String? = null
 )
@@ -87,7 +86,8 @@ class LatestUpdatesViewModel @Inject constructor(
     private val mangaRepository: MangaRepository,
     private val settingsRepository: SettingsRepository,
     private val libraryRepository: LibraryRepository,
-    private val widgetShortcutCoordinator: WidgetShortcutCoordinator
+    private val widgetShortcutCoordinator: WidgetShortcutCoordinator,
+    private val sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 ) : ViewModel() {
     private val _state = MutableStateFlow(LatestUpdatesUiState())
     val state: StateFlow<LatestUpdatesUiState> = _state.asStateFlow()
@@ -100,10 +100,14 @@ class LatestUpdatesViewModel @Inject constructor(
             val result = runCatching {
                 val settings = settingsRepository.getAppSettings().first()
                 val enabled = settings.enabledSources
-                val sources = MangaSource.entries.filter { it.id in enabled }
+                val sources = sourceUiMapper.entries().filter { it.id in enabled }
                 coroutineScope {
-                    sources.map { source ->
-                        async { mangaRepository.getHomeData(source).getOrNull()?.latestChapters.orEmpty() }
+                    sources.map { entry ->
+                        async {
+                            mangaRepository.getHomeData(
+                                com.exapps.mangaworld.core.source.plugins.SourceId(entry.id)
+                            ).getOrNull()?.latestChapters.orEmpty()
+                        }
                     }.awaitAll().flatten()
                 }
                     .distinctBy { it.chapterUrl }
@@ -122,7 +126,7 @@ class LatestUpdatesViewModel @Inject constructor(
                         allItems = items,
                         readStates = readStates,
                         availableSources = sources,
-                        selectedSource = it.selectedSource?.takeIf { src -> src in sources },
+                        selectedSource = it.selectedSource?.takeIf { src -> sources.any { entry -> entry.id == src.value } },
                         error = null
                     )
                     next.copy(items = filterItems(next))
@@ -137,7 +141,8 @@ class LatestUpdatesViewModel @Inject constructor(
         }
     }
 
-    fun setSource(source: MangaSource?) {
+    fun setSource(sourceId: String?) {
+        val source = sourceId?.let { com.exapps.mangaworld.core.source.plugins.SourceId(it) }
         _state.update { current ->
             val next = current.copy(selectedSource = source)
             next.copy(items = filterItems(next))
@@ -207,9 +212,9 @@ fun LatestUpdatesScreen(
             )
             state.availableSources.forEach { src ->
                 FilterChip(
-                    selected = state.selectedSource == src,
-                    onClick = { viewModel.setSource(src) },
-                    label = { Text(stringResource(src.nameRes)) }
+                    selected = state.selectedSource?.value == src.id,
+                    onClick = { viewModel.setSource(src.id) },
+                    label = { Text(src.name) }
                 )
             }
             FilterChip(
@@ -237,12 +242,12 @@ fun LatestUpdatesScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                items(state.items, key = { "${it.source.id}_${it.chapterUrl}" }) { item ->
+                items(state.items, key = { "${it.source.value}_${it.chapterUrl}" }) { item ->
                     // v8 glass row.
                     com.exapps.mangaworld.presentation.components.GlassCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onOpenChapter(item.source.id, item.mangaId, item.chapterUrl) },
+                            .clickable { onOpenChapter(item.source.value, item.mangaId, item.chapterUrl) },
                         cornerRadius = 14.dp,
                         glowColors = listOf(MangaColors.Cyan, MangaColors.Primary)
                     ) {

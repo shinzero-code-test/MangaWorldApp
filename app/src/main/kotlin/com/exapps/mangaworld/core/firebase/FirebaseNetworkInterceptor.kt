@@ -1,7 +1,7 @@
 package com.exapps.mangaworld.core.firebase
 
-import com.exapps.mangaworld.domain.model.MangaSource
-import com.exapps.mangaworld.domain.model.effectiveHost
+import com.exapps.mangaworld.core.source.plugins.HostPolicy
+import com.exapps.mangaworld.core.source.plugins.SourceDomainOverrides
 import com.google.firebase.perf.FirebasePerformance
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -22,25 +22,25 @@ import javax.inject.Singleton
 @Singleton
 class FirebaseNetworkInterceptor @Inject constructor(
     private val remoteConfigManager: FirebaseRemoteConfigManager,
-    private val firebaseTelemetry: FirebaseTelemetry
+    private val firebaseTelemetry: FirebaseTelemetry,
+    /** Provider (not direct): the registry's scrapers need the OkHttp client this interceptor belongs to. */
+    private val registryProvider: javax.inject.Provider<com.exapps.mangaworld.core.source.plugins.SourceRegistry>
 ) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val runtimeConfig = remoteConfigManager.currentScraperRuntimeConfig()
         val request = chain.request()
         val host = request.url.host.lowercase(Locale.US)
-        val sourceId = MangaSource.entries.firstOrNull { source ->
-            // Effective host first (Remote Config override), then the enum
+        val sourceId = runCatching { registryProvider.get().all() }.getOrDefault(emptyList())
+            .firstOrNull { plugin ->
+            // Effective host first (Remote Config override), then the descriptor
             // default so traffic is still attributed right after a domain move.
-            val resolved = source.effectiveHost()
-            val bundled = source.baseUrl
-                .removePrefix("https://")
-                .removePrefix("http://")
-                .substringBefore('/')
-                .lowercase(Locale.US)
+            val id = plugin.descriptor.id.value
+            val resolved = HostPolicy.hostOf(SourceDomainOverrides.baseUrlFor(id, plugin.descriptor.baseUrl))
+            val bundled = HostPolicy.hostOf(plugin.descriptor.baseUrl)
             host == resolved || host.endsWith(".$resolved") ||
                 host == bundled || host.endsWith(".$bundled")
-        }?.id
+        }?.descriptor?.id?.value
 
         val tunedChain = chain
             .withConnectTimeout(runtimeConfig.connectTimeoutSeconds, TimeUnit.SECONDS)

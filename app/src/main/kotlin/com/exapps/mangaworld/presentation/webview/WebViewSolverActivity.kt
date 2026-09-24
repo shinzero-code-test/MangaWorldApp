@@ -24,8 +24,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.exapps.mangaworld.core.data.remote.scraper.BaseScraperImpl
-import com.exapps.mangaworld.domain.model.MangaSource
-import com.exapps.mangaworld.domain.model.SourceDomainOverrides
+import com.exapps.mangaworld.core.source.plugins.HostPolicy
+import com.exapps.mangaworld.core.source.plugins.SourceDomainOverrides
+import com.exapps.mangaworld.core.source.plugins.SourceRegistry
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import com.exapps.mangaworld.domain.model.effectiveHost
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import com.exapps.mangaworld.presentation.theme.MangaWorldTheme
@@ -42,12 +47,16 @@ class WebViewSolverActivity : ComponentActivity() {
          * load after process start, so a snapshot taken at class-load time
          * would permanently miss them.
          */
-        private fun isAllowedDomain(domain: String): Boolean {
+        private fun isAllowedDomain(
+            domain: String,
+            effectiveHosts: Set<String>,
+            defaultHosts: Set<String>
+        ): Boolean {
             val lower = domain.lowercase()
-            if (MangaSource.entries.any { it.effectiveHost() == lower }) return true
+            if (lower in effectiveHosts) return true
             // Previous default hosts stay solvable after a domain move (cookies
             // saved under the old host must remain clearable/solvable).
-            if (MangaSource.entries.any { it.baseUrl.removePrefix("https://").removePrefix("http://").substringBefore('/').lowercase() == lower }) return true
+            if (lower in defaultHosts) return true
             return SourceDomainOverrides.snapshot().values.any {
                 it.removePrefix("https://").removePrefix("http://").substringBefore('/').lowercase() == lower
             }
@@ -60,7 +69,15 @@ class WebViewSolverActivity : ComponentActivity() {
         val url    = intent.getStringExtra(EXTRA_URL) ?: run { finish(); return }
         val domain = intent.getStringExtra(EXTRA_DOMAIN) ?: run { finish(); return }
 
-        if (!isAllowedDomain(domain) || !url.startsWith("https://")) {
+        val registry = EntryPointAccessors.fromApplication(
+            applicationContext, WebViewRegistryEntryPoint::class.java
+        ).sourceRegistry()
+        val descriptors = registry.allDescriptors()
+        val effectiveHosts = descriptors.map {
+            HostPolicy.hostOf(SourceDomainOverrides.baseUrlFor(it.id.value, it.baseUrl))
+        }.toSet()
+        val defaultHosts = descriptors.map { HostPolicy.hostOf(it.baseUrl) }.toSet()
+        if (!isAllowedDomain(domain, effectiveHosts, defaultHosts) || !url.startsWith("https://")) {
             finish()
             return
         }
@@ -224,4 +241,11 @@ private fun CloudflareWebView(
             modifier = Modifier.fillMaxSize()
         )
     }
+}
+
+/** Hilt entry point: the solver activity is not an @AndroidEntryPoint (no VM), so the registry arrives via lookup. */
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface WebViewRegistryEntryPoint {
+    fun sourceRegistry(): SourceRegistry
 }

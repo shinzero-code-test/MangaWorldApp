@@ -10,7 +10,6 @@ import com.exapps.mangaworld.core.data.remote.scraper.*
 import com.exapps.mangaworld.core.firebase.FirebaseCommunityRepository
 import com.exapps.mangaworld.core.firebase.FirebaseSecurityRepository
 import com.exapps.mangaworld.core.firebase.FavoriteDigestScheduler
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.domain.repository.*
 import dagger.Binds

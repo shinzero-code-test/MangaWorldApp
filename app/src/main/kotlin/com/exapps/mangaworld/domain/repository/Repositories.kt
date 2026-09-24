@@ -1,35 +1,36 @@
 package com.exapps.mangaworld.domain.repository
 
 import androidx.paging.PagingData
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import kotlinx.coroutines.flow.Flow
 
 interface MangaRepository {
     // Home
-    suspend fun getHomeData(source: MangaSource): Result<HomeData>
+    suspend fun getHomeData(source: SourceId): Result<HomeData>
 
     // Browse / Search
     fun searchManga(filters: SearchFilters): Flow<PagingData<MangaItem>>
-    suspend fun searchMangaDirect(query: String, source: MangaSource, page: Int = 1): Result<List<MangaItem>>
+    suspend fun searchMangaDirect(query: String, source: SourceId, page: Int = 1): Result<List<MangaItem>>
     suspend fun browseMangaDirect(
-        source: MangaSource, page: Int = 1,
+        source: SourceId, page: Int = 1,
         genre: String? = null, status: MangaStatus? = null,
         type: MangaType? = null, sortBy: SortBy = SortBy.LATEST
     ): Result<List<MangaItem>>
-    suspend fun getMangaByGenre(genre: String, source: MangaSource, page: Int): Result<List<MangaItem>>
+    suspend fun getMangaByGenre(genre: String, source: SourceId, page: Int): Result<List<MangaItem>>
 
     // Detail
-    suspend fun getMangaDetail(slug: String, source: MangaSource): Result<MangaDetail>
+    suspend fun getMangaDetail(slug: String, source: SourceId): Result<MangaDetail>
 
     // Chapters
-    suspend fun getChapterPages(mangaSlug: String, chapterUrl: String, source: MangaSource): Result<List<ChapterPage>>
+    suspend fun getChapterPages(mangaSlug: String, chapterUrl: String, source: SourceId): Result<List<ChapterPage>>
 
     // Popular / Featured
-    suspend fun getPopularManga(source: MangaSource): Result<List<MangaItem>>
+    suspend fun getPopularManga(source: SourceId): Result<List<MangaItem>>
     suspend fun getSuggestedManga(candidates: List<MangaItem>, limit: Int = 12): List<MangaItem>
 
     // Genres
-    suspend fun getGenres(source: MangaSource? = null, enabledSourceIds: Set<String>? = null): List<String>
+    suspend fun getGenres(source: SourceId? = null, enabledSourceIds: Set<String>? = null): List<String>
 }
 
 interface LibraryRepository {

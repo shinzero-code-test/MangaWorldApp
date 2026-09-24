@@ -7,7 +7,6 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.assisted.Assisted
@@ -37,9 +36,10 @@ class AutoDownloadWorker @AssistedInject constructor(
 
         for (favorite in favorites) {
             // Imported/local entries live on disk — no scraper to query.
-            if (MangaSource.isLocalSource(favorite.sourceId) || favorite.mangaId.startsWith("imported_")) continue
+            if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(favorite.sourceId) || favorite.mangaId.startsWith("imported_")) continue
             try {
-                val source = MangaSource.fromIdOrNull(favorite.sourceId) ?: continue
+                if (!com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isBuiltin(favorite.sourceId)) continue
+                val source = com.exapps.mangaworld.core.source.plugins.SourceId(favorite.sourceId)
                 val detail = mangaRepository.getMangaDetail(favorite.slug, source).getOrNull() ?: continue
                 val readChapters = readChapterDao.getReadChapters(favorite.mangaId).first().toSet()
 

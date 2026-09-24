@@ -35,7 +35,6 @@ import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.withFirebaseTrace
 import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.components.GradientDivider
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -51,8 +50,13 @@ class LocalStorageViewModel @Inject constructor(
     private val manager: DownloadQueueManager,
     private val remoteConfigManager: FirebaseRemoteConfigManager,
     private val analyticsManager: FirebaseAnalyticsManager,
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
+    private val sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 ) : ViewModel() {
+    /** Resolved source display names (unknown ids absent — callers show R.string.unknown). */
+    val sourceNames: StateFlow<Map<String, String>> = kotlinx.coroutines.flow.flowOf(
+        sourceUiMapper.entries().associate { it.id to it.name }
+    ).stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     val downloadedMangas = manager.observeDownloadedMangas()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -75,10 +79,10 @@ class LocalStorageViewModel @Inject constructor(
                     val tagsList = mutableListOf<String>()
                     // Source tag — local/imported must show the imported label,
                     // never fall back to AZORA via fromId().
-                    val sourceName = if (MangaSource.isLocalSource(manga.sourceId)) {
+                    val sourceName = if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(manga.sourceId)) {
                         context.getString(com.exapps.mangaworld.R.string.source_imported)
                     } else {
-                        MangaSource.nameResOrNull(manga.sourceId)?.let { context.getString(it) }
+                        sourceUiMapper.displayName(manga.sourceId)
                             ?: context.getString(com.exapps.mangaworld.R.string.unknown)
                     }
                     if (sourceName.isNotBlank()) tagsList.add(sourceName)
@@ -123,6 +127,7 @@ fun LocalStorageScreen(
     val mangas by viewModel.downloadedMangas.collectAsStateWithLifecycle()
     val confirmDelete by viewModel.confirmDelete.collectAsStateWithLifecycle()
     val autoTags by viewModel.autoTags.collectAsStateWithLifecycle()
+    val sourceNames by viewModel.sourceNames.collectAsStateWithLifecycle()
 
     Box(Modifier.fillMaxSize().background(MangaColors.Background)) {
         Column(Modifier.fillMaxSize()) {
@@ -262,11 +267,10 @@ private fun LocalMangaCard(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    val sourceLabel = if (MangaSource.isLocalSource(manga.sourceId)) {
+                    val sourceLabel = if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(manga.sourceId)) {
                         stringResource(R.string.source_imported)
                     } else {
-                        MangaSource.nameResOrNull(manga.sourceId)?.let { stringResource(it) }
-                            ?: stringResource(R.string.unknown)
+                        sourceNames[manga.sourceId] ?: stringResource(R.string.unknown)
                     }
                     TagChip(sourceLabel, highlighted = true)
                     autoTags.forEach { tag -> TagChip(tag) }

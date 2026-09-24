@@ -3,7 +3,8 @@ package com.exapps.mangaworld.core.data.local
 import com.exapps.mangaworld.domain.model.HomeData
 import com.exapps.mangaworld.domain.model.LatestChapterItem
 import com.exapps.mangaworld.domain.model.MangaItem
-import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.MangaStatus
 import com.exapps.mangaworld.domain.model.MangaType
 import org.json.JSONArray
@@ -13,7 +14,7 @@ import org.json.JSONObject
  * org.json codec for the home-screen offline cache (item 9).
  *
  * Pure functions (no Android, no Room) so the round-trip is JVM-testable.
- * Unknown source ids decode via [MangaSource.fromIdOrNull] and are dropped —
+ * Unknown/dead source ids are dropped (never resurrected under another source) —
  * a corrupt row must not plant phantom sources (backup-convention).
  */
 object HomeCacheCodec {
@@ -40,7 +41,7 @@ object HomeCacheCodec {
         .put("slug", slug.take(256))
         .put("title", title.take(300))
         .put("coverUrl", coverUrl.take(2048))
-        .put("sourceId", source.id)
+        .put("sourceId", source.value)
         .put("genres", JSONArray(genres.take(20)))
         .put("status", status.name)
         .put("type", type.name)
@@ -61,13 +62,15 @@ object HomeCacheCodec {
         .put("chapterUrl", chapterUrl.take(2048))
         .put("timeAgo", timeAgo.take(64))
         .put("publishedAt", publishedAt)
-        .put("sourceId", source.id)
+        .put("sourceId", source.value)
         .put("isNew", isNew)
 
     private fun JSONArray.toMangaItems(): List<MangaItem> =
         (0 until length()).mapNotNull { i ->
             val o = optJSONObject(i) ?: return@mapNotNull null
-            val source = MangaSource.fromIdOrNull(o.optString("sourceId")) ?: return@mapNotNull null
+            val rawId = o.optString("sourceId").ifBlank { return@mapNotNull null }
+            if (!BuiltinSourceIds.isBuiltin(rawId) && !BuiltinSourceIds.isLocal(rawId)) return@mapNotNull null
+            val source = SourceId(rawId)
             MangaItem(
                 id = o.optString("id"),
                 slug = o.optString("slug"),
@@ -89,7 +92,9 @@ object HomeCacheCodec {
     private fun JSONArray.toLatestItems(): List<LatestChapterItem> =
         (0 until length()).mapNotNull { i ->
             val o = optJSONObject(i) ?: return@mapNotNull null
-            val source = MangaSource.fromIdOrNull(o.optString("sourceId")) ?: return@mapNotNull null
+            val rawId = o.optString("sourceId").ifBlank { return@mapNotNull null }
+            if (!BuiltinSourceIds.isBuiltin(rawId) && !BuiltinSourceIds.isLocal(rawId)) return@mapNotNull null
+            val source = SourceId(rawId)
             LatestChapterItem(
                 mangaId = o.optString("mangaId"),
                 mangaSlug = o.optString("mangaSlug"),

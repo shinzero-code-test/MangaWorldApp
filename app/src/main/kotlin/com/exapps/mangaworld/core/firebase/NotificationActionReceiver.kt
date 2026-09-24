@@ -44,7 +44,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     pendingResult.finish()
                     return
                 }
-                if (com.exapps.mangaworld.domain.model.MangaSource.entries.none { it.id == sourceId }) {
+                if (!com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isBuiltin(sourceId)) {
                     Log.w(TAG, "Unknown sourceId in intent: $sourceId")
                     pendingResult.finish()
                     return

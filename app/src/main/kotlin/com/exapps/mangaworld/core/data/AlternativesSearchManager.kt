@@ -1,7 +1,8 @@
 package com.exapps.mangaworld.core.data
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
+import com.exapps.mangaworld.core.source.plugins.SourceRegistry
 import com.exapps.mangaworld.domain.model.MangaItem
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -11,17 +12,18 @@ import javax.inject.Singleton
 
 @Singleton
 class AlternativesSearchManager @Inject constructor(
-    private val mangaRepository: MangaRepository
+    private val mangaRepository: MangaRepository,
+    private val registry: SourceRegistry
 ) {
     suspend fun findAlternatives(
         title: String,
-        currentSource: MangaSource,
+        currentSource: SourceId,
         enabledSources: Set<String>,
         limit: Int = 10
     ): List<MangaItem> = coroutineScope {
-        val sources = MangaSource.entries.filter { 
-            it.id in enabledSources && it != currentSource 
-        }
+        val sources = registry.scraperMap().keys.filter {
+            it in enabledSources && it != currentSource.value
+        }.map { SourceId(it) }
 
         val deferredResults = sources.map { source ->
             async {

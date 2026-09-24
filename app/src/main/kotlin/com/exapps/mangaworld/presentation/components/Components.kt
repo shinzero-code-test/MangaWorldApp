@@ -212,10 +212,11 @@ fun StatusBadge(status: MangaStatus, modifier: Modifier = Modifier) {
 // ─── Source Badge ─────────────────────────────────────────────────────────────
 
 @Composable
-fun SourceBadge(source: MangaSource, modifier: Modifier = Modifier) {
+fun SourceBadge(sourceName: String, modifier: Modifier = Modifier) {
     // Glass pill (v8): translucent fill + hairline border instead of opaque chip.
+    // Takes a resolved display name — callers resolve via SourceUiMapper (never hardcode).
     Text(
-        stringResource(source.nameRes),
+        sourceName,
         style = MaterialTheme.typography.labelSmall,
         color = MangaColors.MutedLight,
         modifier = modifier

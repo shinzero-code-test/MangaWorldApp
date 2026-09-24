@@ -26,7 +26,8 @@ class MigrationChainTest {
         MangaDatabase.MIGRATION_11_12,
         MangaDatabase.MIGRATION_12_13,
         MangaDatabase.MIGRATION_13_14,
-        MangaDatabase.MIGRATION_14_15
+        MangaDatabase.MIGRATION_14_15,
+        MangaDatabase.MIGRATION_15_16
     )
 
     private val dbVersion: Int = CURRENT_VERSION
@@ -40,7 +41,7 @@ class MigrationChainTest {
          * alongside `@Database version` AND add the matching Migration above;
          * the tests below fail loudly if the three drift apart.
          */
-        const val CURRENT_VERSION = 15
+        const val CURRENT_VERSION = 16
     }
 
     @Test

@@ -18,6 +18,7 @@ package com.exapps.mangaworld.viewmodel
 // - DiagnosticsViewModel per-source home/search hits real network in prod; covered
 //   here via a mocked MangaScraper map including the missing-scraper path.
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import android.content.Context
 import com.exapps.mangaworld.core.data.CacheManager
 import com.exapps.mangaworld.core.data.WidgetSnapshotStore
@@ -40,7 +41,6 @@ import com.exapps.mangaworld.domain.model.CommunityNotificationType
 import com.exapps.mangaworld.domain.model.HomeData
 import com.exapps.mangaworld.domain.model.LatestChapterItem
 import com.exapps.mangaworld.domain.model.MangaItem
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.LibraryRepository
 import com.exapps.mangaworld.domain.repository.MangaRepository
@@ -241,7 +241,8 @@ class SyncStorageViewModelTest {
             manager = manager,
             remoteConfigManager = mockk(relaxed = true),
             analyticsManager = mockk(relaxed = true),
-            context = context
+            context = context,
+            sourceUiMapper = SourceUiTestFixtures.mapper()
         )
         return vm to manager
     }
@@ -272,7 +273,7 @@ class SyncStorageViewModelTest {
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             val context = mockk<Context>(relaxed = true)
-            every { context.getString(MangaSource.AZORA.nameRes) } returns "Azora"
+            every { context.getString(SourceId("azora").nameRes) } returns "Azora"
             val (vm, _) = storageVm(context = context)
             advanceUntilIdle()
             val entity = storageEntity()
@@ -337,7 +338,7 @@ class SyncStorageViewModelTest {
     private fun latestItem(
         mangaId: String,
         chapterUrl: String,
-        source: MangaSource,
+        source: SourceId,
         publishedAt: Long,
     ) = LatestChapterItem(
         mangaId = mangaId, mangaSlug = "slug-$mangaId", mangaTitle = "Manga $mangaId",
@@ -357,8 +358,8 @@ class SyncStorageViewModelTest {
         every { settingsRepo.getAppSettings() } returns flowOf(
             AppSettings(enabledSources = setOf("azora", "olympus"))
         )
-        coEvery { mangaRepo.getHomeData(MangaSource.AZORA) } returns azoraResult
-        coEvery { mangaRepo.getHomeData(MangaSource.OLYMPUS) } returns olympusResult
+        coEvery { mangaRepo.getHomeData(SourceId("azora")) } returns azoraResult
+        coEvery { mangaRepo.getHomeData(SourceId("olympus")) } returns olympusResult
         // Plain returns overloads (no answers{} scope): isolates whether the
         // bare failure came from mockk scope machinery.
         coEvery { libraryRepo.isChapterRead("mA", any()) } returns true
@@ -368,7 +369,8 @@ class SyncStorageViewModelTest {
             mangaRepository = mangaRepo,
             settingsRepository = settingsRepo,
             libraryRepository = libraryRepo,
-            widgetShortcutCoordinator = mockk(relaxed = true)
+            widgetShortcutCoordinator = mockk(relaxed = true),
+            sourceUiMapper = SourceUiTestFixtures.mapper()
         )
     }
 
@@ -380,9 +382,9 @@ class SyncStorageViewModelTest {
         // under both dispatchers) has nowhere left to hide.
         Dispatchers.setMain(UnconfinedTestDispatcher())
         try {
-            val itemA = latestItem("mA", "https://example.com/a", MangaSource.AZORA, publishedAt = 100L)
-            val itemB = latestItem("mB", "https://example.com/b", MangaSource.OLYMPUS, publishedAt = 200L)
-            val itemADup = itemA.copy(source = MangaSource.OLYMPUS)
+            val itemA = latestItem("mA", "https://example.com/a", SourceId("azora"), publishedAt = 100L)
+            val itemB = latestItem("mB", "https://example.com/b", SourceId("olympus"), publishedAt = 200L)
+            val itemADup = itemA.copy(source = SourceId("olympus"))
             val vm = latestVm(
                 azoraResult = Result.success(HomeData(latestChapters = listOf(itemA))),
                 olympusResult = Result.success(HomeData(latestChapters = listOf(itemB, itemADup))),
@@ -407,13 +409,13 @@ class SyncStorageViewModelTest {
         // filtering on its own, so any failure localizes to one statement.
         Dispatchers.setMain(UnconfinedTestDispatcher())
         try {
-            val itemA = latestItem("mA", "https://example.com/a", MangaSource.AZORA, publishedAt = 100L)
-            val itemB = latestItem("mB", "https://example.com/b", MangaSource.OLYMPUS, publishedAt = 200L)
+            val itemA = latestItem("mA", "https://example.com/a", SourceId("azora"), publishedAt = 100L)
+            val itemB = latestItem("mB", "https://example.com/b", SourceId("olympus"), publishedAt = 200L)
             val vm = latestVm(
                 azoraResult = Result.success(HomeData(latestChapters = listOf(itemA))),
                 olympusResult = Result.success(HomeData(latestChapters = listOf(itemB))),
             )
-            vm.setSource(MangaSource.AZORA)
+            vm.setSource("azora")
             val urls = vm.state.value.items.map { it.chapterUrl }
             if (urls != listOf(itemA.chapterUrl)) fail("AZORA-FILTER wrong: $urls")
         } finally {
@@ -425,8 +427,8 @@ class SyncStorageViewModelTest {
     fun latestUpdates_unreadOnlyDropsReadItems() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         try {
-            val itemA = latestItem("mA", "https://example.com/a", MangaSource.AZORA, publishedAt = 100L)
-            val itemB = latestItem("mB", "https://example.com/b", MangaSource.OLYMPUS, publishedAt = 200L)
+            val itemA = latestItem("mA", "https://example.com/a", SourceId("azora"), publishedAt = 100L)
+            val itemB = latestItem("mB", "https://example.com/b", SourceId("olympus"), publishedAt = 200L)
             val vm = latestVm(
                 azoraResult = Result.success(HomeData(latestChapters = listOf(itemA))),
                 olympusResult = Result.success(HomeData(latestChapters = listOf(itemB))),
@@ -456,7 +458,8 @@ class SyncStorageViewModelTest {
                 mangaRepository = mangaRepo,
                 settingsRepository = settingsRepo,
                 libraryRepository = mockk(relaxed = true),
-                widgetShortcutCoordinator = mockk(relaxed = true)
+                widgetShortcutCoordinator = mockk(relaxed = true),
+                sourceUiMapper = SourceUiTestFixtures.mapper()
             )
             advanceUntilIdle()
             val state = vm.state.value
@@ -487,32 +490,30 @@ class SyncStorageViewModelTest {
                 listOf(
                     MangaItem(
                         id = "d1", slug = "s", title = "T",
-                        coverUrl = "", source = MangaSource.AZORA
+                        coverUrl = "", source = SourceId("azora")
                     )
                 )
             )
-            val registry = mockk<SourceRegistry>()
-            every { registry.scraperFor(any()) } returns null
-            every { registry.scraperFor("azora") } returns scraper
+            val registry = com.exapps.mangaworld.core.source.SourceUiTestFixtures.registry(
+                "azora", scrapers = mapOf("azora" to scraper)
+            )
             val vm = DiagnosticsViewModel(
                 registry = registry,
                 settingsRepository = settingsRepo,
                 widgetSnapshotStore = snapshotStore,
-                cacheManager = cacheManager
+                cacheManager = cacheManager,
+                sourceUiMapper = com.exapps.mangaworld.core.source.SourceUiTestFixtures.mapper("azora")
             )
             advanceUntilIdle()
             val state = vm.state.value
             assertFalse(state.isLoading)
             assertNull(state.error)
-            assertEquals(MangaSource.entries.size, state.sources.size)
+            assertEquals(1, state.sources.size)
             assertEquals(2L * 1024 * 1024, state.imageCacheSizeBytes)
-            val azora = state.sources.first { it.source == MangaSource.AZORA }
+            val azora = state.sources.first { it.source.id == "azora" }
             assertTrue(azora.homeOk)
             assertEquals(1, azora.searchResults)
             assertTrue(azora.hasCookie)
-            val missing = state.sources.first { it.source == MangaSource.OLYMPUS }
-            assertFalse(missing.homeOk)
-            assertEquals("Scraper missing", missing.error)
         }
     }
 

@@ -16,6 +16,11 @@ import com.exapps.mangaworld.core.firebase.FirebaseTopicManager
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
 import kotlinx.coroutines.flow.first
+import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
+import com.exapps.mangaworld.core.source.plugins.SourceId
+import com.exapps.mangaworld.core.source.plugins.SourceRegistry
+import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
+import com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.*
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -52,7 +57,9 @@ data class DetailUiState(
     /** Name of the list the manga was just added to; empty hides the banner (v8 #9). */
     val lastAddedListName: String = "",
     val listAddFailed: Boolean = false,
-    val chapterSearchQuery: String = ""
+    val chapterSearchQuery: String = "",
+    /** Resolved display entry for the loaded source (null for local rows). */
+    val sourceEntry: SourceUiEntry? = null
 )
 
 @HiltViewModel
@@ -67,14 +74,16 @@ class MangaDetailViewModel @Inject constructor(
     private val firebaseTopicManager: FirebaseTopicManager,
     private val widgetShortcutCoordinator: WidgetShortcutCoordinator,
     private val analyticsManager: FirebaseAnalyticsManager,
-    private val firebaseTelemetry: FirebaseTelemetry
+    private val firebaseTelemetry: FirebaseTelemetry,
+    private val sourceUiMapper: SourceUiMapper,
+    private val sourceRegistry: SourceRegistry
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DetailUiState())
     val state: StateFlow<DetailUiState> = _state.asStateFlow()
 
     private var currentMangaId: String = ""
-    private var currentSource: MangaSource = MangaSource.AZORA
+    private var currentSource: SourceId = SourceId("azora")
     private var currentSlug: String = ""
     private var currentRawSourceId: String = ""
 
@@ -83,7 +92,7 @@ class MangaDetailViewModel @Inject constructor(
     private var observersJob: Job? = null
     private var batchPreparationJob: Job? = null
 
-    fun load(slug: String, source: MangaSource, rawSourceId: String = source.id) {
+    fun load(slug: String, source: SourceId, rawSourceId: String = source.value) {
         // Skip if already loaded and nothing changed
         if (slug == currentSlug && source == currentSource
             && !_state.value.isLoading
@@ -94,7 +103,8 @@ class MangaDetailViewModel @Inject constructor(
         currentSlug = slug
         currentSource = source
         currentRawSourceId = rawSourceId        // For imported/downloaded manga, the slug IS the mangaId (starts with "imported_")
-        currentMangaId = if (slug.startsWith("imported_")) slug else "${source.id}_$slug"
+        currentMangaId = if (slug.startsWith("imported_")) slug else "${source.value}_$slug"
+        _state.update { it.copy(sourceEntry = sourceUiMapper.entry(rawSourceId)) }
 
         // Cancel previous work (including infinite collectors)
         observersJob?.cancel()
@@ -117,7 +127,7 @@ class MangaDetailViewModel @Inject constructor(
 
             mangaRepo.getMangaDetail(slug, source)
                 .onSuccess { detail ->
-                    firebaseTelemetry.setActiveSource(detail.source.id)
+                    firebaseTelemetry.setActiveSource(detail.source.value)
                     // Preserve cached chapters when network returns empty
                     val cachedChapters = _state.value.manga?.chapters
                     val chapters = if (detail.chapters.isEmpty() && !cachedChapters.isNullOrEmpty()
@@ -128,7 +138,7 @@ class MangaDetailViewModel @Inject constructor(
                     }
                     analyticsManager.logMangaViewed(
                         mangaId = currentMangaId,
-                        sourceId = detail.source.id,
+                        sourceId = detail.source.value,
                         genres = detail.genres,
                         chapterCount = detail.totalChapters
                     )
@@ -230,7 +240,7 @@ class MangaDetailViewModel @Inject constructor(
      * Load a manga from the local filesystem (metadata.json + chapter dirs).
      * Used for imported manga and downloaded manga that already exist on disk.
      */
-    private fun loadFromLocalDisk(slug: String, source: MangaSource) {
+    private fun loadFromLocalDisk(slug: String, source: SourceId) {
         loadJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             // Metadata read + recursive directory scans belong on IO (M-review).
@@ -416,7 +426,7 @@ class MangaDetailViewModel @Inject constructor(
     fun addCurrentMangaToList(listId: String) {
         // UI hides the entry point for local/imported manga; stay silent here
         // too so a stale dialog callback can never write a disk-only id.
-        if (MangaSource.isLocalSource(currentRawSourceId) || currentMangaId.startsWith("imported_")) return
+        if (BuiltinSourceIds.isLocal(currentRawSourceId) || currentMangaId.startsWith("imported_")) return
         val manga = _state.value.manga ?: return
         viewModelScope.launch {
             val result = runCatching {
@@ -424,7 +434,7 @@ class MangaDetailViewModel @Inject constructor(
                     listId,
                     CustomUserListItem(
                         mangaId = currentMangaId,
-                        sourceId = manga.source.id,
+                        sourceId = manga.source.value,
                         slug = manga.slug,
                         title = manga.title,
                         coverUrl = manga.coverUrl
@@ -457,7 +467,8 @@ class MangaDetailViewModel @Inject constructor(
 
     fun hideSourceComparison() = _state.update { it.copy(showSourceComparison = false) }
 
-    fun switchSource(source: MangaSource, slug: String) {
+    fun switchSource(sourceId: String, slug: String) {
+        val source = SourceId(sourceId)
         _state.update { it.copy(showSourceComparison = false) }
         load(slug, source)
     }
@@ -465,12 +476,22 @@ class MangaDetailViewModel @Inject constructor(
     private fun loadSourceComparisons(manga: MangaDetail) {
         viewModelScope.launch {
             // Limit to top 10 sources to avoid overwhelming the network
-            val sourcesToCheck = MangaSource.entries
-                .filter { it != currentSource }
+            val sourcesToCheck = sourceRegistry.scraperMap().keys
+                .filter { it != currentSource.value }
                 .take(MAX_SOURCE_COMPARISONS)
+                .map { SourceId(it) }
 
             val comparisons = sourcesToCheck.map { source ->
-                SourceComparison(source = source, match = null, isLoading = true)
+                SourceComparison(
+                    source = sourceUiMapper.entry(source.value)
+                        ?: SourceUiEntry(
+                            id = source.value, name = source.value,
+                            logoRes = 0,
+                            engine = com.exapps.mangaworld.core.source.plugins.SourceEngine.CUSTOM,
+                            requiresVerification = false, hostHint = ""
+                        ),
+                    match = null, isLoading = true
+                )
             }
             _state.update { it.copy(sourceComparisons = comparisons) }
 
@@ -511,14 +532,14 @@ class MangaDetailViewModel @Inject constructor(
         val title = detail.title.trim()
         if (title.length < 2) return@coroutineScope emptyList()
         val normalizedTarget = normalizeTitle(title)
-        val results = MangaSource.entries.filter { it != detail.source }.map { source ->
+        val results = sourceRegistry.scraperMap().keys.filter { it != detail.source.value }.map { SourceId(it) }.map { source ->
             async {
                 mangaRepo.searchMangaDirect(title, source).getOrDefault(emptyList())
                     .filter { normalizeTitle(it.title) == normalizedTarget || normalizeTitle(it.title).contains(normalizedTarget) || normalizedTarget.contains(normalizeTitle(it.title)) }
                     .firstOrNull()
             }
         }.awaitAll().filterNotNull()
-        results.distinctBy { it.source.id }.take(5)
+        results.distinctBy { it.source.value }.take(5)
     }
 
     fun sortedChapters(): List<Chapter> {
@@ -561,7 +582,7 @@ class MangaDetailViewModel @Inject constructor(
     fun downloadChapter(chapter: Chapter) {
         // Imported has no online source and already lives on disk — downloading
         // would query the AZORA placeholder scraper with a local dir name.
-        if (MangaSource.isLocalSource(currentRawSourceId) || currentMangaId.startsWith("imported_")) return
+        if (BuiltinSourceIds.isLocal(currentRawSourceId) || currentMangaId.startsWith("imported_")) return
         if (_state.value.downloadingChapters.contains(chapter.number)) return
         _state.update { it.copy(downloadingChapters = it.downloadingChapters + chapter.number) }
 
@@ -584,7 +605,7 @@ class MangaDetailViewModel @Inject constructor(
                         slug = m?.slug ?: currentSlug,
                         title = m?.title ?: currentSlug,
                         coverUrl = m?.coverUrl ?: "",
-                        sourceId = m?.source?.id ?: currentSource.id,
+                        sourceId = m?.source?.value ?: currentSource.value,
                         totalChapters = m?.totalChapters ?: 0,
                         genresJson = m?.let { org.json.JSONArray(it.genres).toString() } ?: "[]",
                         statusStr = m?.status?.name ?: "UNKNOWN",
@@ -617,7 +638,7 @@ class MangaDetailViewModel @Inject constructor(
      */
     fun downloadChapters(chapters: List<Chapter>) {
         // Imported already lives on disk — no online pages to resolve.
-        if (MangaSource.isLocalSource(currentRawSourceId) || currentMangaId.startsWith("imported_")) return
+        if (BuiltinSourceIds.isLocal(currentRawSourceId) || currentMangaId.startsWith("imported_")) return
         if (batchPreparationJob?.isActive == true) return
         val manga = _state.value.manga ?: return
         val mangaId = currentMangaId
@@ -666,7 +687,7 @@ class MangaDetailViewModel @Inject constructor(
                     slug = manga.slug,
                     title = manga.title,
                     coverUrl = manga.coverUrl,
-                    sourceId = source.id,
+                    sourceId = source.value,
                     totalChapters = manga.totalChapters,
                     genresJson = org.json.JSONArray(manga.genres).toString(),
                     statusStr = manga.status.name,
@@ -677,7 +698,7 @@ class MangaDetailViewModel @Inject constructor(
                     mangaId = mangaId,
                     mangaTitle = manga.title,
                     mangaSlug = mangaSlug,
-                    sourceId = source.id,
+                    sourceId = source.value,
                     ready = ready,
                     failed = failed,
                     wifiOnly = wifiOnly,

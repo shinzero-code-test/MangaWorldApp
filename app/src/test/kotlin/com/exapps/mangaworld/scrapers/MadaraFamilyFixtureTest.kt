@@ -1,7 +1,7 @@
 package com.exapps.mangaworld.scrapers
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.core.data.remote.scraper.MadaraBaseScraper
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import io.mockk.mockk
 import okhttp3.OkHttpClient
@@ -25,7 +25,7 @@ class MadaraFamilyFixtureTest {
 
     private val scraper = MadaraBaseScraper(
         OkHttpClient(),
-        MangaSource.LEKMANGA,
+        SourceId("lekmanga"),
         mockk<SettingsRepository>(relaxed = true)
     )
 

@@ -83,7 +83,7 @@ private fun android.content.Context.announceForAccessibility(text: String) {    
 
 @Composable
 fun ReaderScreen(
-    source: MangaSource,
+    source: com.exapps.mangaworld.core.source.plugins.SourceId,
     mangaId: String,
     chapterUrl: String,
     onBack: () -> Unit,

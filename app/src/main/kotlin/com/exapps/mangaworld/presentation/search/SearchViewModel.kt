@@ -7,6 +7,9 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
+import com.exapps.mangaworld.core.source.plugins.SourceId
+import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
+import com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -18,7 +21,7 @@ import javax.inject.Inject
 
 data class AdvancedSearchFilters(
     val query: String = "",
-    val source: MangaSource? = null,
+    val source: SourceId? = null,
     val genre: String? = null,
     val status: MangaStatus? = null,
     val type: MangaType? = null,
@@ -34,11 +37,12 @@ class SearchViewModel @Inject constructor(
     private val settingsRepo: SettingsRepository,
     private val analyticsManager: FirebaseAnalyticsManager,
     @ApplicationContext private val context: Context,
-    private val savedStateHandle: androidx.lifecycle.SavedStateHandle
+    private val savedStateHandle: androidx.lifecycle.SavedStateHandle,
+    private val sourceUiMapper: SourceUiMapper
 ) : ViewModel() {
 
     private val _query = savedStateHandle.getStateFlow("search_query", "")
-    private val _source = MutableStateFlow<MangaSource?>(null)
+    private val _source = MutableStateFlow<SourceId?>(null)
     private val _reloadToken = MutableStateFlow(0)
     private val _filters = MutableStateFlow(AdvancedSearchFilters())
     private val _showAdvancedFilters = MutableStateFlow(false)
@@ -47,12 +51,12 @@ class SearchViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
     val query: StateFlow<String> = _query
-    val source: StateFlow<MangaSource?> = _source.asStateFlow()
+    val source: StateFlow<SourceId?> = _source.asStateFlow()
     val filters: StateFlow<AdvancedSearchFilters> = _filters.asStateFlow()
     val showAdvancedFilters: StateFlow<Boolean> = _showAdvancedFilters.asStateFlow()
-    val enabledSources: StateFlow<List<MangaSource>> = appSettings
-        .map { settings -> MangaSource.entries.filter { it.id in settings.enabledSources } }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, MangaSource.entries.toList())
+    val enabledSources: StateFlow<List<SourceUiEntry>> = appSettings
+        .map { settings -> sourceUiMapper.entries().filter { it.id in settings.enabledSources } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // Search history
     private val _searchHistory = MutableStateFlow<List<String>>(emptyList())
@@ -68,7 +72,8 @@ class SearchViewModel @Inject constructor(
 
         viewModelScope.launch {
             enabledSources.collect { enabled ->
-                if (_source.value != null && _source.value !in enabled) {
+                val current = _source.value
+                if (current != null && enabled.none { it.id == current.value }) {
                     _source.value = null
                 }
             }
@@ -83,7 +88,7 @@ class SearchViewModel @Inject constructor(
                 .collect { (query, source, enabled) ->
                     analyticsManager.logSearchQuery(
                         query = query,
-                        sourceId = source?.id,
+                        sourceId = source?.value,
                         enabledSources = enabled.size
                     )
                 }
@@ -91,7 +96,7 @@ class SearchViewModel @Inject constructor(
     }
 
     val selectedSourceRequiresVerification: StateFlow<Boolean> =
-        _source.map { it?.requiresVerification == true }.stateIn(
+        _source.map { id -> id?.let { sourceUiMapper.entry(it.value)?.requiresVerification } == true }.stateIn(
             viewModelScope, SharingStarted.Eagerly, false
         )
 
@@ -105,7 +110,7 @@ class SearchViewModel @Inject constructor(
             .debounce(400)
             .filter { it.query.length >= 2 || it.advancedFilters.genre != null }
             .flatMapLatest { request ->
-                val selectedSource = request.source?.takeIf { it in request.enabledSources }
+                val selectedSource = request.source?.takeIf { s -> request.enabledSources.any { it.id == s.value } }
                 val filters = request.advancedFilters
                 repo.searchManga(
                     SearchFilters(
@@ -127,7 +132,7 @@ class SearchViewModel @Inject constructor(
         _filters.update { it.copy(query = q) }
     }
 
-    fun setSource(source: MangaSource?) = _source.update { source }
+    fun setSource(sourceId: String?) = _source.update { sourceId?.let { SourceId(it) } }
 
     fun setAdvancedFilter(genre: String? = null, status: MangaStatus? = null, type: MangaType? = null, sortBy: SortBy? = null) {
         _filters.update { current ->
@@ -180,7 +185,7 @@ class SearchViewModel @Inject constructor(
     }
 
     fun shouldShowCloudflareBanner(): Boolean =
-        _source.value?.requiresVerification == true
+        _source.value?.let { sourceUiMapper.entry(it.value)?.requiresVerification } == true
 
     private fun loadSearchHistory() {
         viewModelScope.launch {
@@ -225,8 +230,8 @@ class SearchViewModel @Inject constructor(
 
 private data class SearchRequest(
     val query: String,
-    val source: MangaSource?,
-    val enabledSources: List<MangaSource>,
+    val source: SourceId?,
+    val enabledSources: List<SourceUiEntry>,
     val appSettings: AppSettings,
     val reloadToken: Int,
     val advancedFilters: AdvancedSearchFilters

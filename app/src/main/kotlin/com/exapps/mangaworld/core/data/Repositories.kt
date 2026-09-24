@@ -59,7 +59,7 @@ private fun String.toChapterList(): List<Chapter> = runCatching {
 
 // ─── Cache entity conversions ─────────────────────────────────────────────────
 
-internal fun MangaCacheEntity.toDetail(source: MangaSource): MangaDetail {
+internal fun MangaCacheEntity.toDetail(source: com.exapps.mangaworld.core.source.plugins.SourceId): MangaDetail {
     val parsedGenres = runCatching {
         val a = JSONArray(genresJson); (0 until a.length()).map { a.getString(it) }
     }.getOrDefault(emptyList())
@@ -78,7 +78,7 @@ internal fun MangaCacheEntity.toDetail(source: MangaSource): MangaDetail {
 
 internal fun MangaDetail.toCacheEntity() = MangaCacheEntity(
     mangaId = id, slug = slug, title = title, coverUrl = coverUrl,
-    sourceId = source.id, description = description,
+    sourceId = source.value, description = description,
     totalChapters = totalChapters, url = url,
     genresJson = JSONArray(genres).toString(),
     statusStr = status.name, typeStr = type.name, rating = rating,
@@ -96,13 +96,13 @@ class MangaRepositoryImpl @Inject constructor(
     private val recommendationEngine: RecommendationEngine
 ) : MangaRepository {
 
-    private fun scraper(source: MangaSource): MangaScraper =
-        registry.scraperFor(source.id) ?: error("No scraper for ${source.id}. This source does not support online operations.")
+    private fun scraper(source: com.exapps.mangaworld.core.source.plugins.SourceId): MangaScraper =
+        registry.scraperFor(source.value) ?: error("No scraper for ${source.value}. This source does not support online operations.")
 
-    override suspend fun getHomeData(source: MangaSource) =
+    override suspend fun getHomeData(source: com.exapps.mangaworld.core.source.plugins.SourceId) =
         runCatching {
-            if (source.id == "local") return@runCatching com.exapps.mangaworld.domain.model.HomeData()
-            firebaseTelemetry.traceSuspend("home_${source.id}") { scraper(source).getHomeData().getOrThrow() }
+            if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return@runCatching com.exapps.mangaworld.domain.model.HomeData()
+            firebaseTelemetry.traceSuspend("home_${source.value}") { scraper(source).getHomeData().getOrThrow() }
         }
 
     override fun searchManga(filters: SearchFilters): Flow<PagingData<MangaItem>> = Pager(
@@ -111,22 +111,22 @@ class MangaRepositoryImpl @Inject constructor(
         MangaPagingSource(registry.scraperMap(), filters)
     }.flow
 
-    override suspend fun searchMangaDirect(query: String, source: MangaSource, page: Int): Result<List<MangaItem>> {
-        if (source.id == "local") return Result.success(emptyList())
+    override suspend fun searchMangaDirect(query: String, source: com.exapps.mangaworld.core.source.plugins.SourceId, page: Int): Result<List<MangaItem>> {
+        if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
         return scraper(source).searchManga(query, page)
     }
 
     override suspend fun browseMangaDirect(
-        source: MangaSource, page: Int,
+        source: com.exapps.mangaworld.core.source.plugins.SourceId, page: Int,
         genre: String?, status: MangaStatus?,
         type: MangaType?, sortBy: SortBy
     ): Result<List<MangaItem>> {
-        if (source.id == "local") return Result.success(emptyList())
+        if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
         return scraper(source).browseManga(page, genre, status, type, sortBy)
     }
 
-    override suspend fun getMangaByGenre(genre: String, source: MangaSource, page: Int): Result<List<MangaItem>> {
-        if (source.id == "local") return Result.success(emptyList())
+    override suspend fun getMangaByGenre(genre: String, source: com.exapps.mangaworld.core.source.plugins.SourceId, page: Int): Result<List<MangaItem>> {
+        if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
         return scraper(source).getMangaByGenre(genre, page)
     }
 
@@ -136,9 +136,9 @@ class MangaRepositoryImpl @Inject constructor(
      *  2. Fetch fresh from network and update cache.
      *  3. If network returns empty chapters but cache had some, keep cached chapters.
      */
-    override suspend fun getMangaDetail(slug: String, source: MangaSource): Result<MangaDetail> {
-        if (source.id == "local") return Result.failure(IllegalStateException("Cannot fetch detail for local manga"))
-        val mangaId = "${source.id}_$slug"
+    override suspend fun getMangaDetail(slug: String, source: com.exapps.mangaworld.core.source.plugins.SourceId): Result<MangaDetail> {
+        if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.failure(IllegalStateException("Cannot fetch detail for local manga"))
+        val mangaId = "${source.value}_$slug"
 
         // Load cached version (with chapters) to return as immediate fallback
         val cached = runCatching { cacheDao.get(mangaId)?.toDetail(source) }.getOrNull()
@@ -161,19 +161,19 @@ class MangaRepositoryImpl @Inject constructor(
                 runCatching { cacheDao.insert(detail.toCacheEntity()) }
             }
             .recoverCatching { e ->
-                firebaseTelemetry.logScraperFailure(source.id, "detail", e)
+                firebaseTelemetry.logScraperFailure(source.value, "detail", e)
                 // Network failed — return cache if available, else re-throw
                 cached ?: throw e
             }
     }
 
-    override suspend fun getChapterPages(mangaSlug: String, chapterUrl: String, source: MangaSource): Result<List<ChapterPage>> {
-        if (source.id == "local") return Result.success(emptyList())
+    override suspend fun getChapterPages(mangaSlug: String, chapterUrl: String, source: com.exapps.mangaworld.core.source.plugins.SourceId): Result<List<ChapterPage>> {
+        if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
         return scraper(source).getChapterPages(chapterUrl)
     }
 
-    override suspend fun getPopularManga(source: MangaSource): Result<List<MangaItem>> {
-        if (source.id == "local") return Result.success(emptyList())
+    override suspend fun getPopularManga(source: com.exapps.mangaworld.core.source.plugins.SourceId): Result<List<MangaItem>> {
+        if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
         return scraper(source).getPopularManga()
     }
 
@@ -181,12 +181,12 @@ class MangaRepositoryImpl @Inject constructor(
         return recommendationEngine.getSmartRecommendations(candidates, limit)
     }
 
-    override suspend fun getGenres(source: MangaSource?, enabledSourceIds: Set<String>?): List<String> {
-        val allowed = enabledSourceIds ?: MangaSource.entries.map { it.id }.toSet()
-        val sources = if (source != null) listOf(source) else MangaSource.entries.toList()
-        return sources.flatMap { s ->
-            if (s.id !in allowed) return@flatMap emptyList()
-            val sc = registry.scraperFor(s.id) ?: return@flatMap emptyList()
+    override suspend fun getGenres(source: com.exapps.mangaworld.core.source.plugins.SourceId?, enabledSourceIds: Set<String>?): List<String> {
+        val allowed = enabledSourceIds ?: com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.ALL
+        val ids = if (source != null) listOf(source.value) else registry.scraperMap().keys.toList()
+        return ids.flatMap { id ->
+            if (id !in allowed) return@flatMap emptyList()
+            val sc = registry.scraperFor(id) ?: return@flatMap emptyList()
             sc.getGenres().getOrDefault(emptyList())
         }.distinct().sorted()
     }
@@ -223,16 +223,16 @@ class MangaPagingSource(
         return try {
             val allowedSourceIds = filters.enabledSourceIds
             val sources = if (filters.source != null) {
-                listOfNotNull(filters.source.takeIf { it.id in allowedSourceIds })
+                listOfNotNull(filters.source.takeIf { it.value in allowedSourceIds })
             } else {
-                MangaSource.entries.filter { it.id in allowedSourceIds }
+                scrapers.keys.filter { it in allowedSourceIds }.map { com.exapps.mangaworld.core.source.plugins.SourceId(it) }
             }
 
             // Run all source queries in parallel, tolerate CF errors per-source
             val rawResults: List<MangaItem> = coroutineScope {
                 val deferred: List<kotlinx.coroutines.Deferred<List<MangaItem>>> = sources.map { source ->
                     async {
-                        val scraper = scrapers[source.id] ?: return@async emptyList<MangaItem>()
+                        val scraper = scrapers[source.value] ?: return@async emptyList<MangaItem>()
                         val fetched = if (needsLocalFiltering) {
                             val aggregate = mutableListOf<MangaItem>()
                             for (subPage in page until page + 3) {
@@ -310,7 +310,7 @@ class LibraryRepositoryImpl @Inject constructor(
         // Dead sources (removed plugins, e.g. rockmanga) are hidden, never resurrected
         // under another source via the AZORA fallback.
         favoriteDao.getAllFavorites().map { list ->
-            list.filter { MangaSource.fromIdOrNull(it.sourceId) != null }.map { it.toDomain() }
+            list.filter { com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isBuiltin(it.sourceId) }.map { it.toDomain() }
         }
 
     override suspend fun addFavorite(manga: FavoriteManga) {
@@ -340,7 +340,7 @@ class LibraryRepositoryImpl @Inject constructor(
     }
     override suspend fun getFavoritesByStatus(status: String): List<FavoriteManga> =
         favoriteDao.getByStatus(status)
-            .filter { MangaSource.fromIdOrNull(it.sourceId) != null }
+            .filter { com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isBuiltin(it.sourceId) }
             .map { it.toDomain() }
     override suspend fun updateReadingStatus(mangaId: String, status: String?) {
         // Metadata belongs to the caller that creates the entry through ensureLibraryEntry().
@@ -352,7 +352,7 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override fun getReadingHistory(): Flow<List<ReadingHistoryItem>> =
         historyDao.getAllHistory().map { list ->
-            list.filter { MangaSource.fromIdOrNull(it.sourceId) != null }.map { it.toDomain() }
+            list.filter { com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isBuiltin(it.sourceId) }.map { it.toDomain() }
         }
 
     override suspend fun updateReadingHistory(

@@ -1,7 +1,7 @@
 package com.exapps.mangaworld.presentation.utils
 
 import com.exapps.mangaworld.domain.model.LatestChapterItem
-import com.exapps.mangaworld.domain.model.MangaSource
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import java.util.Locale
 
 fun shouldTriggerSmartPrefetch(currentPage: Int, totalPages: Int): Boolean =
@@ -9,7 +9,7 @@ fun shouldTriggerSmartPrefetch(currentPage: Int, totalPages: Int): Boolean =
 
 fun filterLatestUpdates(
     items: List<LatestChapterItem>,
-    selectedSource: MangaSource?,
+    selectedSource: SourceId?,
     unreadOnly: Boolean,
     readStates: Map<String, Boolean>
 ): List<LatestChapterItem> = items.filter { item ->

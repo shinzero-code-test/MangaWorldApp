@@ -1,7 +1,7 @@
 package com.exapps.mangaworld.features
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.LatestChapterItem
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.utils.filterLatestUpdates
 import com.exapps.mangaworld.presentation.utils.formatDiagnosticBytes
 import com.exapps.mangaworld.presentation.utils.normalizeBlacklistInput
@@ -30,23 +30,23 @@ class PhaseOneFeatureLogicTest {
             chapterNumber = 1f,
             chapterUrl = "https://olympustaff.com/series/solo-leveling/1",
             timeAgo = "1h",
-            source = MangaSource.OLYMPUS
+            source = SourceId("olympus")
         )
         val starz = olympus.copy(
             mangaId = "starz_solo",
-            source = MangaSource.STARZ,
+            source = SourceId("starz"),
             chapterUrl = "https://manga-starz.net/manga/solo/1"
         )
 
         val unreadFiltered = filterLatestUpdates(
             items = listOf(olympus, starz),
-            selectedSource = MangaSource.OLYMPUS,
+            selectedSource = SourceId("olympus"),
             unreadOnly = true,
             readStates = mapOf(olympus.chapterUrl to false, starz.chapterUrl to true)
         )
 
         assertEquals(1, unreadFiltered.size)
-        assertEquals(MangaSource.OLYMPUS, unreadFiltered.first().source)
+        assertEquals(SourceId("olympus"), unreadFiltered.first().source)
     }
 
     @Test
@@ -81,7 +81,7 @@ class PhaseOneFeatureLogicTest {
             chapterNumber = 1f,
             chapterUrl = "https://olympustaff.com/series/solo-leveling/1",
             timeAgo = "1h",
-            source = MangaSource.OLYMPUS
+            source = SourceId("olympus")
         )
         // Null source = no filtering; unknown read state = treated as unread.
         assertEquals(1, filterLatestUpdates(listOf(item), null, false, emptyMap()).size)

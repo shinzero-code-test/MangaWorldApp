@@ -3,6 +3,7 @@ package com.exapps.mangaworld.core.data.local.entity
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 
 @Entity(tableName = "favorites")
@@ -20,7 +21,7 @@ data class FavoriteEntity(
 ) {
     fun toDomain() = FavoriteManga(
         mangaId = mangaId, slug = slug, title = title, coverUrl = coverUrl,
-        source = MangaSource.fromId(sourceId), addedAt = addedAt,
+        source = SourceId(sourceId), addedAt = addedAt,
         readChapters = readChapters, totalChapters = totalChapters,
         readingStatus = readingStatus, isFavorite = isFavorite
     )
@@ -28,7 +29,7 @@ data class FavoriteEntity(
 
 fun FavoriteManga.toEntity() = FavoriteEntity(
     mangaId = mangaId, slug = slug, title = title, coverUrl = coverUrl,
-    sourceId = source.id, addedAt = addedAt, readChapters = readChapters,
+    sourceId = source.value, addedAt = addedAt, readChapters = readChapters,
     totalChapters = totalChapters, readingStatus = readingStatus, isFavorite = isFavorite
 )
 
@@ -49,7 +50,7 @@ data class ReadingHistoryEntity(
 ) {
     fun toDomain() = ReadingHistoryItem(
         mangaId = mangaId, slug = slug, title = title, coverUrl = coverUrl,
-        source = MangaSource.fromId(sourceId), sourceId = sourceId,
+        source = SourceId(sourceId), sourceId = sourceId,
         lastChapterNumber = lastChapterNumber,
         lastChapterUrl = lastChapterUrl,
         lastReadAt = lastReadAt, readChapters = readChapters, totalChapters = totalChapters

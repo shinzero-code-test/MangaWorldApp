@@ -100,7 +100,8 @@ data class PublicProfileUiState(
     val listItems: List<CustomUserListItem> = emptyList(),
     val readingLists: Map<String, List<FavoriteManga>> = emptyMap(),
     /** Visitor library query definitively failed — show "unavailable", not empty. */
-    val libraryFailed: Boolean = false
+    val libraryFailed: Boolean = false,
+    val sourceNames: Map<String, String> = emptyMap()
 )
 
 @HiltViewModel
@@ -108,9 +109,14 @@ class PublicProfileViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val communityRepository: CommunityRepository,
     private val libraryRepository: LibraryRepository,
-    sessionManager: com.exapps.mangaworld.core.firebase.FirebaseSessionManager
+    sessionManager: com.exapps.mangaworld.core.firebase.FirebaseSessionManager,
+    sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 ) : ViewModel() {
     private val userId: String = savedStateHandle["userId"] ?: ""
+
+    /** Resolved display names (unknown ids stay absent — callers show R.string.unknown). */
+    private val sourceNames: Map<String, String> =
+        sourceUiMapper.entries().associate { entry -> entry.id to entry.name }
 
     // Reactive session (RA-6): a cold-start deep link into your own profile
     // must flip to the owner path once the session resolves, instead of
@@ -170,7 +176,8 @@ class PublicProfileViewModel @Inject constructor(
             selectedListId = selectedId,
             listItems = items,
             readingLists = if (profile?.showLibraryPublic == true) readingLists else emptyMap(),
-            libraryFailed = profile?.showLibraryPublic == true && libraryFailed
+            libraryFailed = profile?.showLibraryPublic == true && libraryFailed,
+            sourceNames = sourceNames
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, PublicProfileUiState())
 
@@ -805,7 +812,7 @@ private fun PublicLibrarySection(
                                 val manga = items[index]
                                 PublicLibraryMangaCard(
                                     manga = manga,
-                                    onClick = { onItemClick(manga.source.id, manga.slug) }
+                                    onClick = { onItemClick(manga.source.value, manga.slug) }
                                 )
                             }
                         }
@@ -882,7 +889,7 @@ private fun PublicLibraryMangaCard(manga: FavoriteManga, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    stringResource(manga.source.nameRes),
+                    state.sourceNames[manga.source.value] ?: stringResource(R.string.unknown),
                     color = MangaColors.Muted,
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,

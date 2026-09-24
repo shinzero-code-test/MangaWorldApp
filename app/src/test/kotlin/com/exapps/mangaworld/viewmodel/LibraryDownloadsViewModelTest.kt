@@ -17,6 +17,7 @@ package com.exapps.mangaworld.viewmodel
 //   SharingStarted.WhileSubscribed, so flow-population tests must collect (Turbine);
 //   plain .value reads without subscribers only see the initial value.
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import android.content.Context
 import com.exapps.mangaworld.core.data.DailyStat
 import com.exapps.mangaworld.core.data.ReadingStatsStore
@@ -26,7 +27,6 @@ import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
 import com.exapps.mangaworld.core.firebase.FirebaseTopicManager
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
 import com.exapps.mangaworld.domain.model.FavoriteManga
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.ReadingHistoryItem
 import com.exapps.mangaworld.domain.repository.LibraryRepository
 import com.exapps.mangaworld.presentation.downloads.DownloadsViewModel
@@ -329,13 +329,13 @@ class LibraryDownloadsViewModelTest {
     private fun testFavorite(id: String) = FavoriteManga(
         mangaId = id, slug = "slug-$id", title = "Title $id",
         coverUrl = "https://example.com/cover.jpg",
-        source = MangaSource.AZORA
+        source = SourceId("azora")
     )
 
     private fun testHistory(id: String) = ReadingHistoryItem(
         mangaId = id, slug = "slug-$id", title = "Title $id",
         coverUrl = "https://example.com/cover.jpg",
-        source = MangaSource.AZORA,
+        source = SourceId("azora"),
         lastChapterNumber = 5f,
         lastReadAt = 123L
     )

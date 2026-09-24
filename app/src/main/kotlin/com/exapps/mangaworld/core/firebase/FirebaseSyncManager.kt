@@ -519,7 +519,7 @@ class FirebaseSyncManager @Inject constructor(
         }
         (profile.get("enabledSources") as? List<*>)?.mapNotNull { it?.toString() }?.toSet()?.let { sourceIds ->
             // Drop unknown IDs (hijacked/corrupt docs must not plant phantom sources).
-            val known = com.exapps.mangaworld.domain.model.MangaSource.entries.map { it.id }.toSet()
+            val known = com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.ALL
             settingsRepository.setEnabledSources(sourceIds.intersect(known))
         }
         profile.getBoolean("useDynamicColors")?.let { settingsRepository.setDynamicColors(it) }

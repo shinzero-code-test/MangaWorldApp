@@ -75,8 +75,8 @@ fun SourceBrowseScreen(
     LaunchedEffect(uiState.needsCloudflare, uiState.cfAutoTriggerDisabled) {
         if (uiState.needsCloudflare && !uiState.cfAutoTriggerDisabled) {
             val intent = Intent(context, WebViewSolverActivity::class.java).apply {
-                putExtra(WebViewSolverActivity.EXTRA_URL, uiState.source.effectiveBaseUrl())
-                putExtra(WebViewSolverActivity.EXTRA_DOMAIN, uiState.source.effectiveHost())
+                putExtra(WebViewSolverActivity.EXTRA_URL, uiState.solverBaseUrl)
+                putExtra(WebViewSolverActivity.EXTRA_DOMAIN, uiState.solverHost)
             }
             cfLauncher.launch(intent)
         }
@@ -89,13 +89,13 @@ fun SourceBrowseScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AsyncImage(
-                            model = uiState.source.logoDrawableRes,
-                            contentDescription = stringResource(uiState.source.nameRes),
+                            model = uiState.sourceEntry?.logoRes ?: 0,
+                            contentDescription = uiState.sourceEntry?.name ?: uiState.source.value,
                             modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)),
                             contentScale = ContentScale.Crop
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text(stringResource(uiState.source.nameRes), color = MangaColors.OnSurface)
+                        Text(uiState.sourceEntry?.name ?: stringResource(R.string.unknown), color = MangaColors.OnSurface)
                     }
                 },
                 navigationIcon = {
@@ -131,7 +131,7 @@ fun SourceBrowseScreen(
                 onValueChange = viewModel::setQuery,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                 placeholder = {
-                    Text(stringResource(R.string.fmt_047, stringResource(uiState.source.nameRes)), color = MangaColors.Muted,
+                    Text(stringResource(R.string.fmt_047, uiState.sourceEntry?.name ?: uiState.source.value), color = MangaColors.Muted,
                         style = MaterialTheme.typography.bodyMedium)
                 },
                 leadingIcon = { Icon(Icons.Filled.Search, null, tint = MangaColors.Primary) },
@@ -189,8 +189,8 @@ fun SourceBrowseScreen(
                     Row(
                         Modifier.padding(12.dp).clickable {
                             val intent = Intent(context, WebViewSolverActivity::class.java).apply {
-                                putExtra(WebViewSolverActivity.EXTRA_URL, uiState.source.effectiveBaseUrl())
-                                putExtra(WebViewSolverActivity.EXTRA_DOMAIN, uiState.source.effectiveHost())
+                                putExtra(WebViewSolverActivity.EXTRA_URL, uiState.solverBaseUrl)
+                                putExtra(WebViewSolverActivity.EXTRA_DOMAIN, uiState.solverHost)
                             }
                             cfLauncher.launch(intent)
                         },
@@ -252,7 +252,7 @@ fun SourceBrowseScreen(
                     items(uiState.mangaList, key = { it.id }) { manga ->
                         SourceMangaCard(
                             manga = manga,
-                            onClick = { onMangaClick(uiState.source.id, manga.slug) }
+                            onClick = { onMangaClick(uiState.source.value, manga.slug) }
                         )
                     }
 

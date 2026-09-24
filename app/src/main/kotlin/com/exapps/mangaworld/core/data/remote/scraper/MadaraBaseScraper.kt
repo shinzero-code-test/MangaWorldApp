@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -23,12 +24,13 @@ import org.jsoup.Jsoup
  */
 open class MadaraBaseScraper(
     client: OkHttpClient,
-    source: MangaSource,
+    sourceId: String,
+    defaultBaseUrl: String,
     settingsRepo: SettingsRepository,
     protected val datePattern: String = "d MMMM، yyyy",
     protected val ajaxSearchAction: String = "madara_load_more",
     pluginDescriptor: com.exapps.mangaworld.core.source.plugins.PluginManifest? = null
-) : BaseScraperImpl(client, source, settingsRepo, pluginDescriptor) {
+) : BaseScraperImpl(client, sourceId, defaultBaseUrl, settingsRepo, pluginDescriptor) {
 
     protected open val listPath: String = "/manga/"
 
@@ -155,11 +157,11 @@ open class MadaraBaseScraper(
         val viewsText = ScraperText.extractViews(doc.body().text())?.toString()
 
         MangaDetail(
-            id = "${source.id}_$slug",
+            id = "${sourceId}_$slug",
             slug = slug,
             title = title,
             coverUrl = coverUrl,
-            source = source,
+            source = SourceId(sourceId),
             alternativeTitles = alternativeTitles,
             authorName = authorName,
             artistName = artistName,
@@ -296,7 +298,7 @@ open class MadaraBaseScraper(
                 (imgEl.attr("data-src").ifEmpty { imgEl.attr("src") }).absoluteUrl()
             }
             val title = titleEl?.text()?.cleanText() ?: slug
-            val mangaId = "${source.id}_$slug"
+            val mangaId = "${sourceId}_$slug"
 
             card.select("a.btn-link[href*='/manga/'], .chapter-item a, a.btn-link").take(2).forEach chLoop@{ chLink ->
                 val chHref = chLink.attr("abs:href").ifEmpty { chLink.attr("href").absoluteUrl() }
@@ -317,7 +319,7 @@ open class MadaraBaseScraper(
                         chapterNumber = chNum,
                         chapterUrl = chHref,
                         timeAgo = timeText,
-                        source = source,
+                        source = SourceId(sourceId),
                         isNew = timeText.contains("ساعة") || timeText.contains("hour") ||
                                 timeText.contains("دقيقة") || timeText.contains("minute") ||
                                 timeText.contains("ثانية") || timeText.contains("second") ||
@@ -342,11 +344,11 @@ open class MadaraBaseScraper(
             val slug = href.substringBefore("?").trimEnd('/').substringAfterLast('/').trimEnd('/')
             if (slug.isBlank()) return@mapNotNull null
             MangaItem(
-                id = "${source.id}_$slug",
+                id = "${sourceId}_$slug",
                 slug = slug,
                 title = title,
                 coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() },
-                source = source,
+                source = SourceId(sourceId),
                 url = href
             )
         }
@@ -372,13 +374,13 @@ open class MadaraBaseScraper(
                 ?: linkEl.attr("title").cleanText().ifBlank { slug }
             if (title.isBlank()) return@mapNotNull null
             MangaItem(
-                id = "${source.id}_$slug",
+                id = "${sourceId}_$slug",
                 slug = slug,
                 title = title,
                 coverUrl = imgEl.attr("abs:src").ifEmpty {
                     (imgEl.attr("data-src").ifEmpty { imgEl.attr("src") }).absoluteUrl()
                 },
-                source = source,
+                source = SourceId(sourceId),
                 url = href
             )
         }
@@ -427,7 +429,7 @@ open class MadaraBaseScraper(
                 }
             }
         } catch (e: Exception) {
-            ScraperTelemetry.logFailure(source.id, "chapters_ajax", e)
+            ScraperTelemetry.logFailure(sourceId, "chapters_ajax", e)
         }
 
         // Fallback: try wp-admin AJAX (some Madara sites use this instead)
@@ -473,7 +475,7 @@ open class MadaraBaseScraper(
                     }
                 }
             } catch (e: Exception) {
-                ScraperTelemetry.logFailure(source.id, "chapters_admin_ajax", e)
+                ScraperTelemetry.logFailure(sourceId, "chapters_admin_ajax", e)
             }
         }
 
@@ -493,7 +495,7 @@ open class MadaraBaseScraper(
         val dateLong = dateText?.let { parseArabicDate(it) }
         return Chapter(
             id = "${slug}_$chNum",
-            mangaId = "${source.id}_$slug",
+            mangaId = "${sourceId}_$slug",
             number = chNum,
             title = chText.replace(Regex("الفصل\\s*[0-9.,]+\\s*[:.]*\\s*"), "").trim().ifBlank { null },
             url = chHref,

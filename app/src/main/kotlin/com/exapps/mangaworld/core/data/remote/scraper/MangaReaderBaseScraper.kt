@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import okhttp3.OkHttpClient
@@ -21,12 +22,13 @@ import org.json.JSONObject
  */
 open class MangaReaderBaseScraper(
     client: OkHttpClient,
-    source: MangaSource,
+    sourceId: String,
+    defaultBaseUrl: String,
     settingsRepo: SettingsRepository,
     protected val pageSize: Int = 24,
     protected val searchPageSize: Int = 10,
     pluginDescriptor: com.exapps.mangaworld.core.source.plugins.PluginManifest? = null
-) : BaseScraperImpl(client, source, settingsRepo, pluginDescriptor) {
+) : BaseScraperImpl(client, sourceId, defaultBaseUrl, settingsRepo, pluginDescriptor) {
 
     protected open val listPath: String = "/manga/"
 
@@ -161,7 +163,7 @@ open class MangaReaderBaseScraper(
             val dateText = el.selectFirst(".chapterdate, .ch-date, .dt a")?.text()?.cleanText()
             Chapter(
                 id = "${slug}_$chNum",
-                mangaId = "${source.id}_$slug",
+                mangaId = "${sourceId}_$slug",
                 number = chNum,
                 title = chLink.selectFirst(".chapternum, .ch-num")?.text()?.cleanText()?.replace("الفصل", "")?.trim()?.ifBlank { null },
                 url = chHref,
@@ -178,11 +180,11 @@ open class MangaReaderBaseScraper(
         }
 
         MangaDetail(
-            id = "${source.id}_$slug",
+            id = "${sourceId}_$slug",
             slug = slug,
             title = title,
             coverUrl = coverUrl,
-            source = source,
+            source = SourceId(sourceId),
             description = description,
             genres = genres,
             tags = genres,
@@ -248,7 +250,7 @@ open class MangaReaderBaseScraper(
                             } else null
                         }
                     } catch (e: Exception) {
-                        ScraperTelemetry.logFailure(source.id, "pages_ts_reader", e)
+                        ScraperTelemetry.logFailure(sourceId, "pages_ts_reader", e)
                         emptyList()
                     }
                 } else emptyList()
@@ -349,14 +351,14 @@ open class MangaReaderBaseScraper(
 
             latestItems.add(
                 LatestChapterItem(
-                    mangaId = "${source.id}_$slug",
+                    mangaId = "${sourceId}_$slug",
                     mangaSlug = slug,
                     mangaTitle = title,
                     coverUrl = coverUrl,
                     chapterNumber = chapterNumber,
                     chapterUrl = chapterUrl,
                     timeAgo = "",
-                    source = source
+                    source = SourceId(sourceId)
                 )
             )
         }
@@ -379,11 +381,11 @@ open class MangaReaderBaseScraper(
             }.trimEnd('/')
             if (slug.isBlank()) return@mapNotNull null
             MangaItem(
-                id = "${source.id}_$slug",
+                id = "${sourceId}_$slug",
                 slug = slug,
                 title = title,
                 coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() },
-                source = source,
+                source = SourceId(sourceId),
                 url = href
             )
         }.distinctBy { it.id }
@@ -418,11 +420,11 @@ open class MangaReaderBaseScraper(
             val coverUrl = imgEl?.preferredImageUrl()?.absoluteUrl().orEmpty()
             results.add(
                 MangaItem(
-                    id = "${source.id}_$slug",
+                    id = "${sourceId}_$slug",
                     slug = slug,
                     title = title,
                     coverUrl = coverUrl,
-                    source = source,
+                    source = SourceId(sourceId),
                     url = href
                 )
             )
@@ -442,11 +444,11 @@ open class MangaReaderBaseScraper(
                 val coverUrl = imgEl?.preferredImageUrl()?.absoluteUrl().orEmpty().orEmpty()
                 results.add(
                     MangaItem(
-                        id = "${source.id}_$slug",
+                        id = "${sourceId}_$slug",
                         slug = slug,
                         title = title,
                         coverUrl = coverUrl,
-                        source = source,
+                        source = SourceId(sourceId),
                         url = href
                     )
                 )
@@ -467,11 +469,11 @@ open class MangaReaderBaseScraper(
                 val coverUrl = imgEl?.preferredImageUrl()?.absoluteUrl().orEmpty().orEmpty()
                 results.add(
                     MangaItem(
-                        id = "${source.id}_$slug",
+                        id = "${sourceId}_$slug",
                         slug = slug,
                         title = title,
                         coverUrl = coverUrl,
-                        source = source,
+                        source = SourceId(sourceId),
                         url = href
                     )
                 )

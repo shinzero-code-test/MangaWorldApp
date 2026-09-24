@@ -96,7 +96,7 @@ class AppPreferences @Inject constructor(
                 notifyFollowers = prefs[KEY_NOTIFY_FOLLOWERS] ?: true,
                 enabledSources = prefs[KEY_ENABLED_SOURCES]
                     ?.split(",")?.toSet()
-                    ?: MangaSource.entries.map { it.id }.toSet(),
+                    ?: com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.ALL,
                 onboardingCompleted = prefs[KEY_ONBOARDING_DONE] ?: false,
                 useDynamicColors = prefs[KEY_DYNAMIC_COLORS] ?: true,
                 biometricLockEnabled = prefs[KEY_BIOMETRIC_LOCK] ?: false,
@@ -292,7 +292,7 @@ class AppPreferences @Inject constructor(
 
     suspend fun toggleSource(sourceId: String, enabled: Boolean) = dataStore.edit { prefs ->
         val current = prefs[KEY_ENABLED_SOURCES]?.split(",")?.toMutableSet()
-            ?: MangaSource.entries.map { it.id }.toMutableSet()
+            ?: com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.ALL.toMutableSet()
         if (enabled) current.add(sourceId) else current.remove(sourceId)
         prefs[KEY_ENABLED_SOURCES] = current.joinToString(",")
     }

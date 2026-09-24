@@ -260,16 +260,17 @@ fun SettingsScreen(
 
         // ── Sources ───────────────────────────────────────────────────────────
         SettingsSection(stringResource(R.string.more_sources)) {
-            MangaSource.entries.forEachIndexed { i, source ->
+            val entries = viewModel.sourceEntries.collectAsStateWithLifecycle().value
+            entries.forEachIndexed { i, source ->
                 val enabled = app.enabledSources.contains(source.id)
                 SwitchItem(
                     icon = Icons.Filled.Language,
-                    title = stringResource(source.nameRes),
-                    subtitle = source.effectiveBaseUrl(),
+                    title = source.name,
+                    subtitle = viewModel.solverTarget(source.id)?.first ?: source.id,
                     checked = enabled,
                     onCheckedChange = { viewModel.toggleSource(source.id, it) }
                 )
-                if (i < MangaSource.entries.size - 1)
+                if (i < entries.size - 1)
                     GradientDivider(Modifier.padding(horizontal = 16.dp))
             }
             GradientDivider(Modifier.padding(horizontal = 16.dp))
@@ -284,8 +285,8 @@ fun SettingsScreen(
                             Intent(
                                 context,
                                 WebViewSolverActivity::class.java
-                            ).putExtra(WebViewSolverActivity.EXTRA_URL, MangaSource.OLYMPUS.effectiveBaseUrl())
-                                .putExtra(WebViewSolverActivity.EXTRA_DOMAIN, MangaSource.OLYMPUS.effectiveHost())
+                            ).putExtra(WebViewSolverActivity.EXTRA_URL, viewModel.solverTarget("olympus")?.first ?: "https://olympustaff.com")
+                                .putExtra(WebViewSolverActivity.EXTRA_DOMAIN, viewModel.solverTarget("olympus")?.second ?: "olympustaff.com")
                         )
                     }) { Text("Olympus") }
                     OutlinedButton(onClick = {
@@ -293,8 +294,8 @@ fun SettingsScreen(
                             Intent(
                                 context,
                                 WebViewSolverActivity::class.java
-                            ).putExtra(WebViewSolverActivity.EXTRA_URL, MangaSource.STARZ.effectiveBaseUrl())
-                                .putExtra(WebViewSolverActivity.EXTRA_DOMAIN, MangaSource.STARZ.effectiveHost())
+                            ).putExtra(WebViewSolverActivity.EXTRA_URL, viewModel.solverTarget("starz")?.first ?: "https://starzmanga.com")
+                                .putExtra(WebViewSolverActivity.EXTRA_DOMAIN, viewModel.solverTarget("starz")?.second ?: "starzmanga.com")
                         )
                     }) { Text("Starz") }
                 }

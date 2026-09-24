@@ -19,7 +19,6 @@ import com.exapps.mangaworld.MangaWorldApp
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -100,13 +99,14 @@ class ChapterUpdateCheckerCore @Inject constructor(
                 // Imported has no online source; downloaded (local) keeps its real
                 // sourceId so it IS checked. Skip imported by sourceId AND by
                 // mangaId prefix (imported favorites may carry a placeholder source).
-                if (MangaSource.isLocalSource(sourceId)) continue
+                if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(sourceId)) continue
                 val onlineFavorites = sourceFavorites.filterNot { it.mangaId.startsWith("imported_") }
                 if (onlineFavorites.isEmpty()) continue
                 if (sourceId !in settings.enabledSources) continue
 
                 try {
-                    val source = MangaSource.fromIdOrNull(sourceId) ?: continue
+                    if (!com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isBuiltin(sourceId)) continue
+                    val source = com.exapps.mangaworld.core.source.plugins.SourceId(sourceId)
                     val homeData = mangaRepository.getHomeData(source).getOrDefault(
                         com.exapps.mangaworld.domain.model.HomeData()
                     )

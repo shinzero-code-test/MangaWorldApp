@@ -13,13 +13,14 @@ package com.exapps.mangaworld.viewmodel
  * - handleFailure used to surface raw backend e.message; hardened to the
  *   generic download_error string (HomeViewModel parity) — asserted below.
  */
+import com.exapps.mangaworld.core.source.SourceUiTestFixtures
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.domain.model.AppSettings
 import com.exapps.mangaworld.domain.model.MangaItem
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.MangaStatus
 import com.exapps.mangaworld.domain.model.MangaType
 import com.exapps.mangaworld.domain.model.SortBy
@@ -83,7 +84,8 @@ class BrowseSearchViewModelTest {
     private fun browseVm() = BrowseViewModel(
         context = context,
         repo = mangaRepo,
-        settingsRepo = settingsRepo
+        settingsRepo = settingsRepo,
+        sourceUiMapper = SourceUiTestFixtures.mapper()
     )
 
     private fun searchVm() = SearchViewModel(
@@ -91,16 +93,23 @@ class BrowseSearchViewModelTest {
         settingsRepo = settingsRepo,
         analyticsManager = analyticsManager,
         context = context,
-        savedStateHandle = SavedStateHandle()
+        savedStateHandle = SavedStateHandle(),
+        sourceUiMapper = SourceUiTestFixtures.mapper()
     )
 
-    private fun sourcesVm() = SourcesViewModel(settingsRepository = settingsRepo)
+    private fun sourcesVm() = SourcesViewModel(
+        settingsRepository = settingsRepo,
+        sourceUiMapper = SourceUiTestFixtures.mapper(),
+        sourceRegistry = SourceUiTestFixtures.registry()
+    )
 
     private fun sourceBrowseVm(sourceId: String = "azora") = SourceBrowseViewModel(
         context = context,
         mangaRepository = mangaRepo,
         settingsRepository = settingsRepo,
-        savedStateHandle = SavedStateHandle(mapOf("sourceId" to sourceId))
+        savedStateHandle = SavedStateHandle(mapOf("sourceId" to sourceId)),
+        sourceUiMapper = SourceUiTestFixtures.mapper(),
+        sourceRegistry = SourceUiTestFixtures.registry()
     )
 
     // ─── BrowseViewModel ────────────────────────────────────────────────────
@@ -132,7 +141,7 @@ class BrowseSearchViewModelTest {
             advanceUntilIdle()
             vm.setQuery("one piece")
             vm.setGenre("Action")
-            vm.setSource(MangaSource.OLYMPUS)
+            vm.setSource("olympus")
             vm.setStatus(MangaStatus.COMPLETED)
             vm.setType(MangaType.MANHWA)
             vm.setSortBy(SortBy.POPULARITY)
@@ -141,7 +150,7 @@ class BrowseSearchViewModelTest {
             val s = vm.uiState.value
             assertEquals("one piece", s.query)
             assertEquals("Action", s.selectedGenre)
-            assertEquals(MangaSource.OLYMPUS, s.selectedSource)
+            assertEquals(SourceId("olympus"), s.selectedSource)
             assertEquals(MangaStatus.COMPLETED, s.selectedStatus)
             assertEquals(MangaType.MANHWA, s.selectedType)
             assertEquals(SortBy.POPULARITY, s.sortBy)
@@ -150,7 +159,7 @@ class BrowseSearchViewModelTest {
             val f = s.filters
             assertEquals("one piece", f.query)
             assertEquals("Action", f.genre)
-            assertEquals(MangaSource.OLYMPUS, f.source)
+            assertEquals(SourceId("olympus"), f.source)
         }
     }
 
@@ -216,16 +225,16 @@ class BrowseSearchViewModelTest {
             val vm = searchVm()
             advanceUntilIdle()
             // Enabled source sticks + verification-gated banner shows.
-            vm.setSource(MangaSource.OLYMPUS)
-            assertEquals(MangaSource.OLYMPUS, vm.source.value)
+            vm.setSource("olympus")
+            assertEquals(SourceId("olympus"), vm.source.value)
             assertTrue(vm.shouldShowCloudflareBanner())
             // Non-gated source: no banner.
-            vm.setSource(MangaSource.AZORA)
+            vm.setSource("azora")
             assertFalse(vm.shouldShowCloudflareBanner())
             // Selecting a source does NOT reset it by itself…
-            vm.setSource(MangaSource.STARZ)
+            vm.setSource("starz")
             advanceUntilIdle()
-            assertEquals(MangaSource.STARZ, vm.source.value)
+            assertEquals(SourceId("starz"), vm.source.value)
             // …but disabling it upstream does.
             settingsFlow.value = AppSettings(enabledSources = setOf("azora"))
             advanceUntilIdle()
@@ -306,7 +315,7 @@ class BrowseSearchViewModelTest {
             val vm = sourceBrowseVm()
             advanceUntilIdle()
             var s = vm.uiState.value
-            assertEquals(MangaSource.AZORA, s.source)
+            assertEquals(SourceId("azora"), s.source)
             assertFalse(s.isLoading)
             assertNull(s.errorText)
             assertEquals(listOf("b1"), s.mangaList.map { it.id })
@@ -377,6 +386,6 @@ class BrowseSearchViewModelTest {
     private fun testManga(id: String) = MangaItem(
         id = id, slug = "slug-$id", title = "Manga $id",
         coverUrl = "https://example.com/cover.jpg",
-        source = MangaSource.AZORA
+        source = SourceId("azora")
     )
 }

@@ -20,6 +20,8 @@ package com.exapps.mangaworld.viewmodel
 // - Blank-name guard on list/collection/goal creation dialogs is UI-side
 //   (button enabled = name.isNotBlank()); VMs forward whatever they receive.
 
+import com.exapps.mangaworld.core.source.SourceUiTestFixtures
+import com.exapps.mangaworld.core.source.plugins.SourceId
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
@@ -42,7 +44,6 @@ import com.exapps.mangaworld.domain.model.CommunityComment
 import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.CustomUserList
 import com.exapps.mangaworld.domain.model.FavoriteManga
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.LibraryRepository
 import com.exapps.mangaworld.domain.repository.ProfilePrivacyFlag
@@ -138,7 +139,8 @@ class ProfileCollectionsViewModelTest {
         readingStatsStore = readingStatsStore,
         achievementManager = achievementManager,
         cloudinaryUploader = cloudinaryUploader,
-        sessionManager = sessionManager
+        sessionManager = sessionManager,
+        sourceUiMapper = SourceUiTestFixtures.mapper()
     )
 
     private fun createProfileSettingsVm() = ProfileSettingsViewModel(
@@ -598,7 +600,7 @@ class ProfileCollectionsViewModelTest {
         slug = "slug-$id",
         title = "Manga $id",
         coverUrl = "https://example.com/cover.jpg",
-        source = MangaSource.AZORA
+        source = SourceId("azora")
     )
 
     private fun testList() = CustomUserList(

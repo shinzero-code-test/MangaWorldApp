@@ -31,7 +31,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.exapps.mangaworld.core.data.CookieCache
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.domain.model.effectiveBaseUrl
 import com.exapps.mangaworld.domain.model.effectiveHost
 import com.exapps.mangaworld.presentation.components.*
@@ -112,7 +111,7 @@ fun SearchScreen(
         ) {
             var expanded by remember { mutableStateOf(false) }
             TextButton(onClick = { expanded = true }) {
-                Text(source?.let { stringResource(it.nameRes) } ?: stringResource(R.string.search_all_sources), color = MangaColors.Cyan)
+                Text(enabledSources.firstOrNull { it.id == source?.value }?.name ?: stringResource(R.string.search_all_sources), color = MangaColors.Cyan)
                 Icon(Icons.Filled.ArrowDropDown, null, tint = MangaColors.Cyan)
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -125,7 +124,7 @@ fun SearchScreen(
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(stringResource(src.nameRes))
+                                Text(src.name)
                                 if (src.requiresVerification) {
                                     Icon(
                                         Icons.Filled.Shield, null,
@@ -135,7 +134,7 @@ fun SearchScreen(
                                 }
                             }
                         },
-                        onClick = { viewModel.setSource(src); expanded = false }
+                        onClick = { viewModel.setSource(src.id); expanded = false }
                     )
                 }
             }
@@ -162,16 +161,20 @@ fun SearchScreen(
                     modifier = Modifier.weight(1f)
                 )
                 source?.let { selectedSource ->
-                    TextButton(onClick = {
-                        cfLauncher.launch(
-                            Intent(context, WebViewSolverActivity::class.java)
-                                .putExtra(WebViewSolverActivity.EXTRA_URL, selectedSource.effectiveBaseUrl())
-                                .putExtra(
-                                    WebViewSolverActivity.EXTRA_DOMAIN,
-                                    selectedSource.effectiveHost()
-                                )
-                        )
-                    }) {
+                    val solverHost = enabledSources.firstOrNull { it.id == selectedSource.value }?.hostHint
+                    TextButton(
+                        onClick = {
+                            // Effective host hint (follows domain overrides); the solver
+                            // re-validates the domain against the registry on entry.
+                            val host = solverHost?.takeIf { it.isNotBlank() } ?: return@TextButton
+                            cfLauncher.launch(
+                                Intent(context, WebViewSolverActivity::class.java)
+                                    .putExtra(WebViewSolverActivity.EXTRA_URL, "https://$host")
+                                    .putExtra(WebViewSolverActivity.EXTRA_DOMAIN, host)
+                            )
+                        },
+                        enabled = solverHost?.isNotBlank() == true
+                    ) {
                         Text(stringResource(R.string.search_cloudflare_button), color = MangaColors.Yellow)
                     }
                 }
@@ -309,7 +312,7 @@ private fun SearchResults(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(pagingItems.itemCount, key = { i -> pagingItems.peek(i)?.let { "${it.source.id}_${it.slug}" } ?: "item_$i" }) { i ->
+                items(pagingItems.itemCount, key = { i -> pagingItems.peek(i)?.let { "${it.source.value}_${it.slug}" } ?: "item_$i" }) { i ->
                     val manga = pagingItems[i] ?: return@items
                     SearchResultItem(
                         title = manga.title,
@@ -317,8 +320,9 @@ private fun SearchResults(
                         type = manga.type,
                         status = manga.status,
                         genres = manga.genres,
-                        source = manga.source,
-                        onClick = { onMangaClick(manga.source.id, manga.slug) }
+                        sourceName = enabledSources.firstOrNull { it.id == manga.source.value }?.name
+                            ?: stringResource(R.string.unknown),
+                        onClick = { onMangaClick(manga.source.value, manga.slug) }
                     )
                 }
                 if (pagingItems.loadState.append is LoadState.Loading) {
@@ -336,7 +340,7 @@ private fun SearchResultItem(
     type: com.exapps.mangaworld.domain.model.MangaType,
     status: com.exapps.mangaworld.domain.model.MangaStatus,
     genres: List<String>,
-    source: com.exapps.mangaworld.domain.model.MangaSource,
+    sourceName: String,
     onClick: () -> Unit
 ) {
     // v8 glass result row.
@@ -373,7 +377,7 @@ private fun SearchResultItem(
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.height(4.dp))
-            SourceBadge(source)
+            SourceBadge(sourceName)
         }
         Icon(Icons.Filled.ChevronRight, null, tint = MangaColors.OutlineVariant)
     }

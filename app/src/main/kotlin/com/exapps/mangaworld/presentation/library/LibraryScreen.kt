@@ -84,7 +84,7 @@ fun LibraryScreen(
         when (state.activeTab) {
             LibraryTab.FAVORITES -> FavoritesContent(
                 favorites = state.favorites,
-                onMangaClick = { fav -> onMangaClick(fav.source.id, fav.slug) },
+                onMangaClick = { fav -> onMangaClick(fav.source.value, fav.slug) },
                 onRemove = { viewModel.removeFavorite(it.mangaId) },
                 onBrowse = onBrowseClick
             )
@@ -93,7 +93,7 @@ fun LibraryScreen(
                 // sourceId (not the AZORA-fallback source) so imported entries
                 // keep their "imported"/"local" identity for routing.
                 onMangaClick = { h ->
-                    val realId = h.sourceId.takeIf { it.isNotBlank() } ?: h.source.id
+                    val realId = h.sourceId.takeIf { it.isNotBlank() } ?: h.source.value
                     onMangaClick(realId, h.slug)
                 },
                 onRemove = { viewModel.removeHistory(it.mangaId) },

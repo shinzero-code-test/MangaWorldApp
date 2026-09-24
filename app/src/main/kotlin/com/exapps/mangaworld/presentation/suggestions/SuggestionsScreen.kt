@@ -32,7 +32,6 @@ import com.exapps.mangaworld.core.data.RecommendationEngine
 import com.exapps.mangaworld.core.data.SuggestionsManager
 import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 import com.exapps.mangaworld.domain.model.MangaItem
-import com.exapps.mangaworld.domain.model.MangaSource
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -43,7 +42,8 @@ class SuggestionsViewModel @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val recommendationEngine: RecommendationEngine,
     private val suggestionsManager: SuggestionsManager,
-    private val cacheDao: MangaCacheDao
+    private val cacheDao: MangaCacheDao,
+    private val sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 ) : ViewModel() {
 
     private val _suggestions = kotlinx.coroutines.flow.MutableStateFlow<List<MangaItem>>(emptyList())
@@ -52,6 +52,8 @@ class SuggestionsViewModel @Inject constructor(
     val isLoading: kotlinx.coroutines.flow.StateFlow<Boolean> = _isLoading
     private val _errorMessage = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     val errorMessage: kotlinx.coroutines.flow.StateFlow<String?> = _errorMessage
+    private val _sourceNames = kotlinx.coroutines.flow.MutableStateFlow<Map<String, String>>(emptyMap())
+    val sourceNames: kotlinx.coroutines.flow.StateFlow<Map<String, String>> = _sourceNames
 
     fun loadSuggestions() {
         viewModelScope.launch {
@@ -66,7 +68,7 @@ class SuggestionsViewModel @Inject constructor(
                             slug = cache.slug,
                             title = cache.title,
                             coverUrl = cache.coverUrl,
-                            source = MangaSource.fromId(cache.sourceId),
+                            source = com.exapps.mangaworld.core.source.plugins.SourceId(cache.sourceId),
                             genres = try {
                                 org.json.JSONArray(cache.genresJson).let { arr ->
                                     (0 until arr.length()).map { arr.getString(it) }
@@ -100,7 +102,7 @@ class SuggestionsViewModel @Inject constructor(
                     com.exapps.mangaworld.core.data.MangaSuggestion(
                         mangaId = manga.id,
                         title = manga.title,
-                        sourceId = manga.source.id,
+                        sourceId = manga.source.value,
                         relevance = 0.5f
                     )
                 }
@@ -115,6 +117,7 @@ class SuggestionsViewModel @Inject constructor(
     }
 
     init {
+        _sourceNames.value = sourceUiMapper.entries().associate { it.id to it.name }
         loadSuggestions()
     }
 }
@@ -123,12 +126,13 @@ class SuggestionsViewModel @Inject constructor(
 @Composable
 fun SuggestionsScreen(
     onBack: () -> Unit,
-    onMangaClick: (source: MangaSource, slug: String) -> Unit,
+    onMangaClick: (sourceId: String, slug: String) -> Unit,
     viewModel: SuggestionsViewModel = hiltViewModel()
 ) {
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+    val sourceNames by viewModel.sourceNames.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = MangaColors.Background,
@@ -206,7 +210,7 @@ fun SuggestionsScreen(
                         }
                         items(suggestions) { manga ->
                             SuggestionCard(manga = manga) {
-                                onMangaClick(manga.source, manga.slug)
+                                onMangaClick(manga.source.value, manga.slug)
                             }
                         }
                     }
@@ -277,7 +281,7 @@ private fun SuggestionCard(manga: MangaItem, onClick: () -> Unit) {
                     )
                 }
                 Text(
-                    stringResource(manga.source.nameRes),
+                    sourceNames[manga.source.value] ?: stringResource(R.string.unknown),
                     style = MaterialTheme.typography.labelSmall,
                     color = MangaColors.Muted
                 )
