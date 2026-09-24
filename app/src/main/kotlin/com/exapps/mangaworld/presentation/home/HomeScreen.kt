@@ -113,7 +113,7 @@ fun HomeScreen(
                     item {
                         FeaturedCarousel(
                             items = state.featured,
-                            sourceNameOf = sourceNameOf,
+                            sourceNameOf = ::sourceNameOf,
                             onMangaClick = { m -> onMangaClick(m.source.value, m.slug) },
                             modifier = Modifier.padding(vertical = 12.dp)
                         )
@@ -159,7 +159,7 @@ fun HomeScreen(
                 } else {
                     item {
                         LatestChapterGrid(
-                            sourceNameOf = sourceNameOf,
+                            sourceNameOf = ::sourceNameOf,
                             items = state.latestChapters.take(12),
                             favoriteIds = state.favoriteIds,
                             onMangaClick = { item -> onMangaClick(item.source.value, item.mangaSlug) },
