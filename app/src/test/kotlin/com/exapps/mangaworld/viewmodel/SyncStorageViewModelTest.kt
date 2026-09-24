@@ -25,6 +25,7 @@ import com.exapps.mangaworld.core.data.download.DownloadQueueManager
 import com.exapps.mangaworld.core.data.local.dao.DownloadedMangaDao
 import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
 import com.exapps.mangaworld.core.data.remote.scraper.MangaScraper
+import com.exapps.mangaworld.core.source.plugins.SourceRegistry
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
@@ -490,8 +491,11 @@ class SyncStorageViewModelTest {
                     )
                 )
             )
+            val registry = mockk<SourceRegistry>()
+            every { registry.scraperFor(any()) } returns null
+            every { registry.scraperFor("azora") } returns scraper
             val vm = DiagnosticsViewModel(
-                scrapers = mapOf("azora" to scraper),
+                registry = registry,
                 settingsRepository = settingsRepo,
                 widgetSnapshotStore = snapshotStore,
                 cacheManager = cacheManager
