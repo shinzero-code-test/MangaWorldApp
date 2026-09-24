@@ -64,7 +64,16 @@ class AreaScansScraper @Inject constructor(
 
         val statusText = doc.selectFirst(".meta-tag:contains(مستمرة), .meta-tag:contains(مكتملة), .badge.status")
             ?.text()?.cleanText()
+        // Audit 2026-09-24: canonical metadata lives in `.info-row` label/value pairs
+        // (author, artist, status, publication year, views). Tolerant parse — labels
+        // vary, values may be literal `Unknown`.
+        val infoMap = parseInfoRows(doc)
+        fun infoContains(vararg keys: String): String? =
+            infoMap.entries.firstOrNull { (k, _) -> keys.any { key -> k.contains(key, true) } }
+                ?.value?.takeIf { it.isNotBlank() && !it.equals("Unknown", true) }
         val status = MangaStatus.from(statusText)
+            .takeUnless { it == MangaStatus.UNKNOWN }
+            ?: MangaStatus.from(infoContains("status", "الحالة"))
 
         val genres = doc.select(".filter-tag, .meta-tag:not(:contains(مستمرة)):not(:contains(مكتملة))")
             .map { it.text().cleanText() }
@@ -81,8 +90,10 @@ class AreaScansScraper @Inject constructor(
             }
         )
 
-        // Try to get chapters from the chapters-list
-        val chapters = doc.select(".chapters-list .chapter-item.ch-item, .chapters-list a.chapter-item, .chapters-list a[href], .chapters-list .chapter-row")
+        // Try to get chapters from the chapters-list (audit 2026-09-24: canonical rows
+        // are `#chapters-list-container .chapter-item.ch-item` with `data-id`/`data-ch`;
+        // numbers collide across scanlation parts, so every unique URL is preserved).
+        val chapters = doc.select("#chapters-list-container .chapter-item.ch-item, .chapters-list .chapter-item.ch-item, .chapters-list a.chapter-item, .chapters-list a[href], .chapters-list .chapter-row")
             .mapNotNull { el ->
                 val chLink = el.takeIf { el.tagName() == "a" }
                     ?: el.selectFirst("a[href]")
@@ -117,6 +128,8 @@ class AreaScansScraper @Inject constructor(
             tags = genres,
             status = status,
             type = type,
+            authorName = infoContains("author", "المؤلف"),
+            artistName = infoContains("artist", "الرسام"),
             totalChapters = chapters.size,
             chapters = chapters,
             url = url
@@ -154,7 +167,11 @@ class AreaScansScraper @Inject constructor(
             val body = response.use { it.body?.string() ?: "{}" }
             val json = if (body.trimStart().startsWith("{")) org.json.JSONObject(body) else org.json.JSONObject()
             if (json.optBoolean("success", false)) {
-                val html = json.optJSONObject("data")?.optString("content", "") ?: ""
+                val data = json.optJSONObject("data")
+                // Locked branch (audit 2026-09-24): `status:"locked"` (possibly with a
+                // shortlink) — store nothing, stop here, never automate an unlock.
+                if (data != null && isSecureChapterLocked(data)) throw ChapterLockedException()
+                val html = data?.optString("content", "") ?: ""
                 if (html.isNotBlank()) {
                     val imgDoc = Jsoup.parse(html, resolvedBaseUrl)
                     val ajaxImages = imgDoc.select("img[src]").mapNotNull { img ->
@@ -256,8 +273,7 @@ class AreaScansScraper @Inject constructor(
         results
     }
 
-    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
-        val url = "${resolvedBaseUrl}/browse/?genre[]=${java.net.URLEncoder.encode(genre, "UTF-8")}&page=$page"
+    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {        val url = "${resolvedBaseUrl}/browse/?genre[]=${java.net.URLEncoder.encode(genre, "UTF-8")}&page=$page"
         val doc = fetchDocument(url)
         parseMangaCards(doc)
     }
@@ -289,6 +305,18 @@ class AreaScansScraper @Inject constructor(
             .filter { it.length in 2..20 }
             .distinct()
     }
+
+    /**
+     * Canonical `.info-row` label/value parser (audit 2026-09-24). Internal for
+     * fixture-driven tests: feed it captured series HTML, assert the map.
+     */
+    internal fun parseInfoRows(doc: org.jsoup.nodes.Document): Map<String, String> =
+        doc.select(".info-row").associate { row ->
+            val cells = row.select("div, span, dd, li, td")
+            val label = cells.firstOrNull()?.text()?.cleanText().orEmpty()
+            val value = cells.drop(1).joinToString(" ") { it.text().cleanText() }.cleanText()
+            label to value
+        }
 
     private fun parseMangaCards(doc: org.jsoup.nodes.Document): List<MangaItem> {
         return doc.select("div.manga-card").mapNotNull { card ->
@@ -355,3 +383,11 @@ class AreaScansScraper @Inject constructor(
         return results.distinctBy { it.id }
     }
 }
+
+/**
+ * Locked-chapter predicate for secure-chapter AJAX payloads (audit 2026-09-24):
+ * `status:"locked"` (possibly with a shortlink) means metadata-only — stop,
+ * never automate an unlock. Top-level and pure for unit tests.
+ */
+internal fun isSecureChapterLocked(data: org.json.JSONObject): Boolean =
+    data.optString("status") == "locked"

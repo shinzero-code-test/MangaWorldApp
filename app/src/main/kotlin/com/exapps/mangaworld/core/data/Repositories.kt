@@ -232,7 +232,7 @@ class MangaPagingSource(
             val rawResults: List<MangaItem> = coroutineScope {
                 val deferred: List<kotlinx.coroutines.Deferred<List<MangaItem>>> = sources.map { source ->
                     async {
-                        val scraper = registry.scraperFor(source.id) ?: return@async emptyList<MangaItem>()
+                        val scraper = scrapers[source.id] ?: return@async emptyList<MangaItem>()
                         val fetched = if (needsLocalFiltering) {
                             val aggregate = mutableListOf<MangaItem>()
                             for (subPage in page until page + 3) {

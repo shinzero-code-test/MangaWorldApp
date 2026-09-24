@@ -269,6 +269,7 @@
     <string name="reader_live_readers">%d قارئ</string>
     <string name="reader_chapter">الفصل %s</string>
     <string name="reader_save_page">حفظ الصفحة</string>
+    <string name="reader_chapter_locked">هذا الفصل مقفل</string>
     <string name="reader_page_saved">تم حفظ الصفحة</string>
     <string name="reader_image_saved">تم حفظ الصورة في المعرض</string>
     <string name="reader_screenshot_blocked">حماية القارئ من اللقطات</string>

@@ -31,6 +31,13 @@ open class MangaReaderBaseScraper(
 
     protected fun parseArabicDate(text: String): Long? = ScraperText.parseArabicDate(text)
 
+    /**
+     * Chapter-ownership gate for sites with cross-series chapter rows (Hijala audit:
+     * a series page listed another title's chapter). Default accepts everything;
+     * override to enforce site-specific URL shape. Applied with empty-fallback.
+     */
+    protected open fun isValidChapterUrl(seriesSlug: String, chapterUrl: String): Boolean = true
+
     // ─── Home ─────────────────────────────────────────────────────────────────
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
@@ -75,9 +82,11 @@ open class MangaReaderBaseScraper(
         }
         val doc = resolvedDoc ?: error("Could not load manga detail for $slug")
 
-        // Cover: multiple patterns for different MangaReader variants
+        // Cover: multiple patterns for different MangaReader variants.
+        // `.manga-info .thumb` first: on Hijala-family sites `.bigcover img` is absent
+        // and generic fallbacks can grab unrelated thumbnails (audit 2026-09-24).
         val coverUrl = doc.selectFirst(
-            ".imgseries img, .postbody img, .thumb img, .sorthumb img, " +
+            ".manga-info .thumb img, .imgseries img, .postbody img, .thumb img, .sorthumb img, " +
             ".lh-poster img, .manga-poster img, img.wp-post-image, .bigcover img, " +
             ".manga-cover img, .sb-cover img, .hero-cover-area img, .manga-cover-wrap img"
         )?.let { img ->
@@ -158,7 +167,14 @@ open class MangaReaderBaseScraper(
                 date = dateText?.let { parseArabicDate(it) },
                 dateText = dateText
             )
-        }.distinctBy { it.url }.sortedByDescending { it.number }
+        }.let { rows ->
+            // Ownership filter (default: accept all). Hijala-family sites have served
+            // chapter rows belonging to a DIFFERENT series — accepting them attaches
+            // another title's chapters to this manga. The empty-fallback keeps a
+            // misfiring rule from nuking a healthy list.
+            val kept = rows.filter { isValidChapterUrl(slug, it.url) }
+            (if (kept.isNotEmpty()) kept else rows).distinctBy { it.url }.sortedByDescending { it.number }
+        }
 
         MangaDetail(
             id = "${source.id}_$slug",

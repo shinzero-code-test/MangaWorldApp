@@ -393,6 +393,8 @@ class ReaderViewModel @Inject constructor(
                 .onFailure { e ->
                     val msg = if (e is CloudflareChallengeException) {
                         "CLOUDFLARE_REQUIRED|${e.domain}|${e.targetUrl}"
+                    } else if (e is com.exapps.mangaworld.core.data.remote.scraper.ChapterLockedException) {
+                        context.getString(R.string.reader_chapter_locked)
                     } else context.getString(R.string.download_error)
                     _state.update { it.copy(isLoading = false, error = msg) }
                 }

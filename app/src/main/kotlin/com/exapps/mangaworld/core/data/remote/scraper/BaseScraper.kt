@@ -41,6 +41,13 @@ class CloudflareChallengeException(
     message: String = "Cloudflare challenge required for $domain"
 ) : RuntimeException(message)
 
+/**
+ * Server-gated chapter (coin lock, shortlink wall, `status:"locked"` chapter payload).
+ * Stable token message, translated at render time like download error codes — readers
+ * must stop at the lock UI, never attempt purchase/unlock flows.
+ */
+class ChapterLockedException : RuntimeException("locked")
+
 /** Non-Cloudflare HTTP failure from a source (4xx/5xx) — surfaced instead of parsed-as-content. */
 class SourceHttpException(val code: Int, val url: String) :
     RuntimeException("HTTP $code from $url")

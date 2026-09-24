@@ -311,9 +311,10 @@ class LavaScansPlugin @Inject constructor(
 @Singleton
 class StellarSaberPlugin @Inject constructor(
     client: OkHttpClient,
-    settingsRepo: SettingsRepository
+    settingsRepo: SettingsRepository,
+    keyStore: com.exapps.mangaworld.core.data.remote.scraper.StellarKeyStore
 ) : SourcePlugin {
-    override val scraper: MangaScraper = StellarSaberScraper(client, settingsRepo)
+    override val scraper: MangaScraper = StellarSaberScraper(client, settingsRepo, keyStore)
     override val display = displayOf(MangaSource.STELLARSABER)
     override val descriptor = builtinDescriptor(
         MangaSource.STELLARSABER, SourceEngine.MANGAREADER,
