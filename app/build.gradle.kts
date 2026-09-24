@@ -202,6 +202,12 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.jsoup)
+    // Source-plugin contract (Phase 0): signature verification + strict manifest
+    // parsing + JCS canonicalization. Pure Java — safe for JVM unit tests and R8
+    // (Tink bundles consumer rules; Jackson is tree-model-only, no reflection).
+    implementation(libs.tink)
+    implementation(libs.jackson.databind)
+    implementation(libs.json.canonicalization)
     implementation(libs.play.services.base)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 

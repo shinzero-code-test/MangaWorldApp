@@ -18,6 +18,9 @@ paging = "3.3.5"
 work = "2.10.0"
 mockk = "1.13.13"
 turbine = "1.2.0"
+tink = "1.18.0"
+jackson = "2.18.3"
+jcs = "1.1"
 glance = "1.1.1"
 biometric = "1.1.0"
 palette = "1.0.0"
@@ -76,6 +79,12 @@ hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", v
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
+# Source-plugin contract (Phase 0): pure-Java, JVM-test-safe, R8-safe.
+# Tink ships consumer ProGuard rules; Jackson is used tree-model-only (no reflection);
+# JCS has zero transitive deps.
+tink = { group = "com.google.crypto.tink", name = "tink", version.ref = "tink" }
+jackson-databind = { group = "com.fasterxml.jackson.core", name = "jackson-databind", version.ref = "jackson" }
+json-canonicalization = { group = "io.github.erdtman", name = "java-json-canonicalization", version.ref = "jcs" }
 play-services-base = { group = "com.google.android.gms", name = "play-services-base", version.ref = "play-services-base" }
 
 # Coroutines

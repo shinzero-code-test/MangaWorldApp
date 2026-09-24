@@ -9,13 +9,14 @@
 - Never build the app locally. Always use CI/CD.
 - git, gh, vercel, Firebase, gcloud CLIs are already installed and authenticated — use them directly.
 - Always use skills, tools, and MCPs for better results.
+- Always update AGENTS.md
 - When doing code reviews, parallelize with sub-agents, each saving to its own MD file in `tmp/review/`. Sub-agents must not write over each other's results.
 
 ## Project Overview
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 8.6.5 (versionCode 227)
+- **Current version**: 8.7.5 (versionCode 233)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 36 · **Compile SDK**: 36
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -59,10 +60,13 @@ All Kotlin source is under `app/src/main/kotlin/com/exapps/mangaworld/`:
 
 Dashboard: `dashboard/src/` (Next.js App Router) with `dashboard/vercel.json`, `dashboard/.env.example`
 
+`tmp/analysis/` — point-in-time, Chromium/DevTools-verified source reviews. Treat HTTP/WAF behavior and API details as dated evidence; every report must distinguish live-browser evidence from historical or extension-derived claims.
+
 ## Key Architecture Facts
 
 - **DI**: Hilt multibindings for scrapers (`@IntoMap @StringKey("sourceId")`) — 18 sources, all match enum ↔ DI ↔ logo drawables
 - **Base scrapers**: `BaseScraperImpl`, `MadaraBaseScraper` (Madara WordPress), `MangaReaderBaseScraper` (MangaReader theme), plus custom scrapers. Shared parsing: `ScraperText.firstChapterNumber()` / `.slugFromHref()` / `.extractViews()`
+- **Source plugins (Phase 0, v8.8.0 train)**: contract package `core/source/plugins/` — pure Kotlin, zero Android deps, JVM-CI-safe. Frozen schema v1 (`PluginManifest`), JCS (RFC 8785) canonicalization minus `signature`, strict duplicate-key rejection, closed engine vocab, literal-host allow-lists, compat-gate-before-schema. Deps: Tink 1.18.0 (raw Ed25519 verify), Jackson tree-model-only (no reflection/R8 rules), erdtman JCS 1.1. Contract tests: 11 suites under `core/source/` tests. Full plan: `tmp/source-plugin-plan-v3.md`. Not wired into production flows yet (Phase 1).
 - **Room v15**: schemas exported to `app/schemas/` via KSP `room.schemaLocation`. Migrations 8→15 hand-written in `MangaDatabase.kt`. `exportSchema = true`
 - **Favourites vs Reading List**: `FavoriteEntity.isFavorite` boolean separate from `readingStatus` string. `removeFavorite` sets `isFavorite=false` — does NOT delete entity row
 - **Public library intent (RA-7)**: the visitor library is the *reading-status* list, not favourites — `users/{uid}/favorites` public reads match `readingStatus in [...]` with no `isFavorite` check, so a deselected favourite that keeps a status still shows publicly until status-cleared. By design, not a leak.
