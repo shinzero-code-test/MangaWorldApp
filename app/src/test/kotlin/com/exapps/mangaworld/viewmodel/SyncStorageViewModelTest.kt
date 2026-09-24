@@ -18,6 +18,7 @@ package com.exapps.mangaworld.viewmodel
 // - DiagnosticsViewModel per-source home/search hits real network in prod; covered
 //   here via a mocked MangaScraper map including the missing-scraper path.
 
+import com.exapps.mangaworld.core.source.SourceUiTestFixtures
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import android.content.Context
 import com.exapps.mangaworld.core.data.CacheManager
@@ -273,14 +274,13 @@ class SyncStorageViewModelTest {
         runTest(dispatcher) {
             Dispatchers.setMain(dispatcher)
             val context = mockk<Context>(relaxed = true)
-            every { context.getString(SourceId("azora").nameRes) } returns "Azora"
             val (vm, _) = storageVm(context = context)
             advanceUntilIdle()
             val entity = storageEntity()
             assertEquals(7, vm.chapterCount(entity))
             val tags = vm.tagsFor(entity)
             assertTrue(tags.contains("ONGOING"))
-            assertTrue(tags.contains("Azora"))
+            assertTrue(tags.contains("azora"))
         }
     }
 

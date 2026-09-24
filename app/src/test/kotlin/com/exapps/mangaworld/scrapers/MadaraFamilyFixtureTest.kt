@@ -25,7 +25,8 @@ class MadaraFamilyFixtureTest {
 
     private val scraper = MadaraBaseScraper(
         OkHttpClient(),
-        SourceId("lekmanga"),
+        "lekmanga",
+        "https://mangalik.net",
         mockk<SettingsRepository>(relaxed = true)
     )
 

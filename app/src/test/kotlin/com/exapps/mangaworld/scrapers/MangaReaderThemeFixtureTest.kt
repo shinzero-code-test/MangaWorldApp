@@ -21,7 +21,8 @@ class MangaReaderThemeFixtureTest {
 
     private class ExposedScraper : MangaReaderBaseScraper(
         OkHttpClient(),
-        SourceId("hijala"),
+        "hijala",
+        "https://hijala.com",
         mockk<SettingsRepository>(relaxed = true)
     ) {
         fun cards(doc: Document): List<MangaItem> = parseMangaCards(doc)

@@ -302,7 +302,8 @@ class ProfileCollectionsViewModelTest {
             SavedStateHandle(mapOf("userId" to "u2")),
             communityRepo,
             libraryRepo,
-            sessionManager
+            sessionManager,
+            SourceUiTestFixtures.mapper()
         )
         advanceUntilIdle()
         assertFalse(vm.isOwnProfile.value)
@@ -341,7 +342,8 @@ class ProfileCollectionsViewModelTest {
             SavedStateHandle(mapOf("userId" to "u2")),
             communityRepo,
             libraryRepo,
-            sessionManager
+            sessionManager,
+            SourceUiTestFixtures.mapper()
         )
         advanceUntilIdle()
         assertFalse(vm.isOwnProfile.value)
@@ -371,7 +373,8 @@ class ProfileCollectionsViewModelTest {
             SavedStateHandle(mapOf("userId" to "u2")),
             communityRepo,
             libraryRepo,
-            sessionManager
+            sessionManager,
+            SourceUiTestFixtures.mapper()
         )
         advanceUntilIdle()
         assertTrue(vm.state.value.readingLists.isEmpty())
@@ -396,7 +399,8 @@ class ProfileCollectionsViewModelTest {
             SavedStateHandle(mapOf("userId" to "u2")),
             communityRepo,
             libraryRepo,
-            sessionManager
+            sessionManager,
+            SourceUiTestFixtures.mapper()
         )
         advanceUntilIdle()
         assertTrue(vm.state.value.libraryFailed)
@@ -420,7 +424,8 @@ class ProfileCollectionsViewModelTest {
             SavedStateHandle(mapOf("userId" to "u2")),
             communityRepo,
             libraryRepo,
-            sessionManager
+            sessionManager,
+            SourceUiTestFixtures.mapper()
         )
         advanceUntilIdle()
         // Button truth comes from the observed relationships doc, never a local flip.

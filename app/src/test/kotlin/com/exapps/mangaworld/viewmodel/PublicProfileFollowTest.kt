@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.viewmodel
 
+import com.exapps.mangaworld.core.source.SourceUiTestFixtures
 import androidx.lifecycle.SavedStateHandle
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.exapps.mangaworld.domain.repository.CommunityRepository
@@ -64,7 +65,8 @@ class PublicProfileFollowTest {
         savedStateHandle = SavedStateHandle(mapOf("userId" to userId)),
         communityRepository = communityRepo,
         libraryRepository = libraryRepo,
-        sessionManager = sessionManager
+        sessionManager = sessionManager,
+        sourceUiMapper = SourceUiTestFixtures.mapper()
     )
 
     @Test
