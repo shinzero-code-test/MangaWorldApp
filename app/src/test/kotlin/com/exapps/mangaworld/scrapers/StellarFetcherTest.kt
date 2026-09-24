@@ -80,7 +80,7 @@ class StellarCdnFetcherTest {
         val fetcher = StellarCdnFetcher(binUrl, headers(), Call.Factory { fakeCall(encryptedBin(plain)) }, store)
         val result = fetcher.fetch() as coil.fetch.SourceResult
         val out = Buffer()
-        result.source.readAll(out)
+        result.source.source.readAll(out)
         assertArrayEquals(plain, out.readByteArray())
         assertEquals("image/webp", result.mimeType)
     }

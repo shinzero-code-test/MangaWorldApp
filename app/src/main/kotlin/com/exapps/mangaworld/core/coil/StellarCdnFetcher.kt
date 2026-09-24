@@ -1,6 +1,8 @@
 package com.exapps.mangaworld.core.coil
 
 import coil.ImageLoader
+import coil.decode.DataSource
+import coil.decode.ImageSource
 import coil.fetch.FetchResult
 import coil.fetch.Fetcher
 import coil.fetch.SourceResult
@@ -59,9 +61,13 @@ class StellarCdnFetcher(
                 throw IOException("stellar: decrypt failed", e)
             }
             return SourceResult(
-                source = Buffer().write(plain),
-                fileSystem = FileSystem.SYSTEM,
-                mimeType = sniffMime(plain)
+                source = ImageSource(
+                    source = Buffer().write(plain),
+                    fileSystem = FileSystem.SYSTEM,
+                    diskCacheKey = null
+                ),
+                mimeType = sniffMime(plain),
+                dataSource = DataSource.NETWORK
             )
         }
     }
