@@ -291,6 +291,7 @@ fun PublicProfileScreen(onBack: () -> Unit, onItemClick: (sourceId: String, slug
                 } else {
                     PublicLibrarySection(
                         readingLists = state.readingLists,
+                        sourceNames = state.sourceNames,
                         isOwnProfile = isOwnProfile,
                         onItemClick = onItemClick
                     )
@@ -770,6 +771,7 @@ private fun LibraryUnavailableSection() {
 @Composable
 private fun PublicLibrarySection(
     readingLists: Map<String, List<FavoriteManga>>,
+    sourceNames: Map<String, String>,
     isOwnProfile: Boolean,
     onItemClick: (sourceId: String, slug: String) -> Unit
 ) {
@@ -812,6 +814,7 @@ private fun PublicLibrarySection(
                                 val manga = items[index]
                                 PublicLibraryMangaCard(
                                     manga = manga,
+                                    sourceNames = sourceNames,
                                     onClick = { onItemClick(manga.source.value, manga.slug) }
                                 )
                             }
@@ -849,7 +852,11 @@ private fun PublicLibrarySection(
 }
 
 @Composable
-private fun PublicLibraryMangaCard(manga: FavoriteManga, onClick: () -> Unit) {
+private fun PublicLibraryMangaCard(
+    manga: FavoriteManga,
+    sourceNames: Map<String, String>,
+    onClick: () -> Unit
+) {
     Box(
         modifier = Modifier
             .width(110.dp)
@@ -889,7 +896,7 @@ private fun PublicLibraryMangaCard(manga: FavoriteManga, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    state.sourceNames[manga.source.value] ?: stringResource(R.string.unknown),
+                    sourceNames[manga.source.value] ?: stringResource(R.string.unknown),
                     color = MangaColors.Muted,
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,

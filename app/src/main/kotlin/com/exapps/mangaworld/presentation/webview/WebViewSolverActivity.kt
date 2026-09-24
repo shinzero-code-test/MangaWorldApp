@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.exapps.mangaworld.core.data.remote.scraper.BaseScraperImpl
 import com.exapps.mangaworld.core.source.plugins.HostPolicy
-import com.exapps.mangaworld.core.source.plugins.SourceDomainOverrides
+import com.exapps.mangaworld.domain.model.SourceDomainOverrides
 import com.exapps.mangaworld.core.source.plugins.SourceRegistry
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn

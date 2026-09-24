@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
 import com.exapps.mangaworld.core.source.plugins.HostPolicy
-import com.exapps.mangaworld.core.source.plugins.SourceDomainOverrides
+import com.exapps.mangaworld.domain.model.SourceDomainOverrides
 import com.exapps.mangaworld.core.source.plugins.SourceRegistry
 import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
 import com.exapps.mangaworld.core.source.plugins.SourceUiMapper

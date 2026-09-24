@@ -282,6 +282,7 @@ private fun SearchResults(
     viewModel: SearchViewModel
 ) {
     val pagingItems = viewModel.results.collectAsLazyPagingItems()
+    val enabledSources by viewModel.enabledSources.collectAsStateWithLifecycle()
 
     when (pagingItems.loadState.refresh) {
         is LoadState.Loading -> MangaLoadingIndicator(Modifier.padding(32.dp))

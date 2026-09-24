@@ -209,7 +209,10 @@ fun SuggestionsScreen(
                             )
                         }
                         items(suggestions) { manga ->
-                            SuggestionCard(manga = manga) {
+                            SuggestionCard(
+                                manga = manga,
+                                sourceNames = sourceNames
+                            ) {
                                 onMangaClick(manga.source.value, manga.slug)
                             }
                         }
@@ -221,7 +224,11 @@ fun SuggestionsScreen(
 }
 
 @Composable
-private fun SuggestionCard(manga: MangaItem, onClick: () -> Unit) {
+private fun SuggestionCard(
+    manga: MangaItem,
+    sourceNames: Map<String, String>,
+    onClick: () -> Unit
+) {
     // v8 glass with a warm suggestion glow.
     com.exapps.mangaworld.presentation.components.GlassCard(
         modifier = Modifier.fillMaxWidth(),

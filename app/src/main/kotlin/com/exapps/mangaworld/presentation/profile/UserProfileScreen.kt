@@ -353,6 +353,7 @@ fun UserProfileScreen(
 
         LibraryReadingListsSection(
             readingLists = readingLists,
+            sourceNames = sourceNames,
             onMangaClick = onMangaClick
         )
 
@@ -878,6 +879,7 @@ private fun ListCardItem(list: CustomUserList, onClick: () -> Unit) {
 @Composable
 private fun LibraryReadingListsSection(
     readingLists: Map<String, List<FavoriteManga>>,
+    sourceNames: Map<String, String>,
     onMangaClick: (sourceId: String, slug: String) -> Unit
 ) {
     val statusLabels = mapOf(
