@@ -385,7 +385,10 @@ class PluginScriptSyncTest {
         assertTrue(!registry.isKnown("fragile"))
         assertTrue(index.get("fragile") == null)
     }
-}        val manifestUrl = "https://cdn.example/plugins/hijala/v2/plugin.json"
+
+    @Test
+    fun engineChangeOnOverrideHeldForConsent() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/hijala/v2/plugin.json"
         val bodies = mutableMapOf(
             "https://cdn.example/plugins/index.json" to
                 indexJson(Triple("hijala", 2, manifestUrl)),
