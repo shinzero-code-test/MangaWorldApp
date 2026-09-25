@@ -13,6 +13,8 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Timeout
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -433,6 +435,29 @@ class PluginHttpFetcherTest {
             // Expected to fail (for now); we only care what the double saw.
         }
         assertEquals(1, factory.seen.size)
+    }
+
+    @Test
+    fun probeMockkDoubleThroughGet() = runTest {
+        val body = "hi".toByteArray(Charsets.UTF_8)
+        val req = Request.Builder().url("https://cdn.example/a").build()
+        val resp = Response.Builder()
+            .request(req)
+            .protocol(Protocol.HTTP_1_1)
+            .code(200)
+            .message("stub")
+            .body(body.toResponseBody("application/octet-stream".toMediaType()))
+            .build()
+        val call = io.mockk.mockk<Call>()
+        io.mockk.every { call.execute() } returns resp
+        io.mockk.every { call.request() } returns req
+        val factory = io.mockk.mockk<Call.Factory>()
+        io.mockk.every { factory.newCall(any()) } returns call
+        val f = OkHttpPluginFetcher(
+            factory, kotlinx.coroutines.Dispatchers.Unconfined, false, null
+        )
+        val out = f.get(url("/a"), hosts, maxBytes = 1024)
+        assertEquals("hi", out.body.toString(Charsets.UTF_8))
     }
 
     @Test
