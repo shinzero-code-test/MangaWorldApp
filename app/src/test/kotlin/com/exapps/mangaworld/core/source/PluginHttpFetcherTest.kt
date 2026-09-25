@@ -14,6 +14,7 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Timeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -154,6 +155,18 @@ class PluginHttpFetcherTest {
             result!!
         }
         assertEquals("hi", out.toString(Charsets.UTF_8))
+    }
+
+    @Test
+    fun probeCookieInvoke() = runTest {
+        val cookies = emptyMap<String, String>()
+        val cookieHeader: (suspend (String) -> String?)? = { url ->
+            cookies.entries.firstOrNull { (prefix, _) -> url.startsWith(prefix) }?.value
+        }
+        val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) {
+            cookieHeader?.invoke("https://cdn.example/a")
+        }
+        assertNull(out)
     }
 
     @Test
