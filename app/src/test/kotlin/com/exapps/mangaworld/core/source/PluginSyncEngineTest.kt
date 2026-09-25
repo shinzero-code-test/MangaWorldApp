@@ -169,7 +169,6 @@ class PluginSyncEngineTest {
                     .add("starzmanga.com").add("cdn.starzmanga.com").add("hijala-moved.example")
             }
         )
-        engine.log = { } // JVM: android Log stubs throw
         val index = FakeIndex()
         index.put(PluginIndexRecord("hijala", 1, null, PluginOrigin.OFFICIAL, PluginStatus.ENABLED, null))
         val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
@@ -178,7 +177,8 @@ class PluginSyncEngineTest {
         val engine = PluginSyncEngine(
             index, store, registry, fetcher, FakeEtag(), kotlinx.coroutines.Dispatchers.Unconfined
         )
-        engine.log = { } // JVM: android Log stubs throw
+        val logs = mutableListOf<String>()
+        engine.log = { logs += it }
         val scraperBefore = registry.scraperFor("hijala")
         val result = engine.sync(
             trustedKeys = trust, host = host,
@@ -187,7 +187,7 @@ class PluginSyncEngineTest {
         )
         assertEquals(PluginSyncEngine.EntryOutcome.Updated(hostsExpanded = true), result.outcomes["hijala"])
         // Plan §8.9 non-blocking notice is logged and reported.
-        assertTrue(h.logs.any { it.contains("expands host set") })
+        assertTrue(logs.any { it.contains("expands host set") })
         // Domain moved with no APK: descriptor carries the new base, scraper untouched.
         assertEquals("https://hijala-moved.example", registry.descriptorFor("hijala")!!.baseUrl)
         assertTrue(registry.scraperFor("hijala") === scraperBefore)
@@ -473,6 +473,6 @@ class PluginSyncEngineTest {
         val result = h.sync()
         // Manifest (madara) wins over the stale "script" hint; update proceeds.
         assertTrue(result.outcomes["hijala"] is PluginSyncEngine.EntryOutcome.Updated)
-        assertTrue(h.logs.any { it.contains("manifest wins") })
+        assertTrue(logs.any { it.contains("manifest wins") })
     }
 }
