@@ -265,8 +265,9 @@ class PluginSyncEngineTest {
         val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
         val fetcher = FakeFetcher(bodies)
+        val etags = FakeEtag()
         val engine = PluginSyncEngine(
-            index, store, registry, fetcher, FakeEtag(), kotlinx.coroutines.Dispatchers.Unconfined
+            index, store, registry, fetcher, etags, kotlinx.coroutines.Dispatchers.Unconfined
         )
         engine.log = { } // JVM: android Log stubs throw
         suspend fun runSync() = engine.sync(
@@ -278,6 +279,9 @@ class PluginSyncEngineTest {
         // Index rewinds to v1: refused, v2 keeps serving.
         bodies["https://cdn.example/plugins/index.json"] = indexJson(Triple("hijala", 1, v1Url))
         bodies[v1Url] = manifestBytes("hijala", 1)
+        // Drop the stored validator so the rewound index is actually re-read
+        // (otherwise 304 ends the sync before the downgrade is evaluated).
+        etags.set(null)
         val second = runSync()
         assertEquals(PluginSyncEngine.EntryOutcome.DowngradeRefused, second.outcomes["hijala"])
         assertEquals("https://hijala-v2.example", registry.descriptorFor("hijala")!!.baseUrl)
@@ -323,8 +327,9 @@ class PluginSyncEngineTest {
         index.put(PluginIndexRecord("hijala", 1, null, PluginOrigin.OFFICIAL, PluginStatus.ENABLED, null))
         val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
+        val etags = FakeEtag()
         val engine = PluginSyncEngine(
-            index, store, registry, FakeFetcher(bodies), FakeEtag(),
+            index, store, registry, FakeFetcher(bodies), etags,
             kotlinx.coroutines.Dispatchers.Unconfined
         )
         engine.log = { } // JVM: android Log stubs throw
@@ -336,6 +341,8 @@ class PluginSyncEngineTest {
         )
         assertTrue(runSync(null).outcomes["hijala"] is PluginSyncEngine.EntryOutcome.Updated)
         assertTrue(registry.isOverridden("hijala"))
+        // Re-read the index under the kill policy (no 304 shortcut).
+        etags.set(null)
         val killed = runSync("""{"revoked":[{"id":"hijala","version":2}]}""")
         assertEquals(PluginSyncEngine.EntryOutcome.Revoked, killed.outcomes["hijala"])
         assertTrue(killed.revocationsApplied.contains("hijala"))
