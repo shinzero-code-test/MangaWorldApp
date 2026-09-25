@@ -424,6 +424,18 @@ class PluginHttpFetcherTest {
     }
 
     @Test
+    fun probeSeenAfterFail() = runTest {
+        val factory = ScriptCallFactory()
+        factory.enqueue(200, body = "hi")
+        try {
+            fetcher(factory).get(url("/a"), hosts, maxBytes = 1024)
+        } catch (_: Exception) {
+            // Expected to fail (for now); we only care what the double saw.
+        }
+        assertEquals(1, factory.seen.size)
+    }
+
+    @Test
     fun probeUnconfinedWithContext() = runTest {
         val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) { "ok" }
         assertEquals("ok", out)
