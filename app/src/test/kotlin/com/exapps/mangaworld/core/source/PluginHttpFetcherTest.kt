@@ -136,6 +136,27 @@ class PluginHttpFetcherTest {
     }
 
     @Test
+    fun probeGetVerbatim() = runTest {
+        val factory = ScriptCallFactory()
+        factory.enqueue(200, body = "hi")
+        val url = "https://cdn.example/a"
+        val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) {
+            val first = java.net.URI(url.trim())
+            if (!first.scheme.equals("https", ignoreCase = true)) throw IllegalStateException("scheme")
+            val current = first.toASCIIString()
+            val builder = okhttp3.Request.Builder().url(current).get()
+            val request = builder.build()
+            val response = factory.newCall(request).execute()
+            var result: ByteArray? = null
+            response.use { res ->
+                result = res.body!!.bytes()
+            }
+            result!!
+        }
+        assertEquals("hi", out.toString(Charsets.UTF_8))
+    }
+
+    @Test
     fun probeUnconfinedWithContext() = runTest {
         val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) { "ok" }
         assertEquals("ok", out)
