@@ -45,7 +45,15 @@ class OkHttpPluginFetcher(
         var current = first.toASCIIString()
         var hops = 0
         while (true) {
-            val request = buildRequest(current, headers)
+            // TEMPORARY DEBUG (revert): inlined buildRequest.
+            val requestBuilder = Request.Builder().url(current).get()
+            headers.forEach { (k, v) ->
+                if (!k.equals("Cookie", ignoreCase = true)) requestBuilder.header(k, v)
+            }
+            cookieHeader?.invoke(current)?.takeIf { it.isNotBlank() }?.let {
+                requestBuilder.header("Cookie", it)
+            }
+            val request = requestBuilder.build()
             // TEMPORARY DEBUG (revert): stage-tag the newCall/execute boundary.
             val call = try {
                 callFactory.newCall(request)
@@ -85,8 +93,12 @@ class OkHttpPluginFetcher(
                         throw PluginFetcher.FetchFailure.Http(res.code, current.safeLog())
                     }
                     responseEtag = res.header("ETag")?.takeIf { it.isNotBlank() }
+                    // TEMPORARY DEBUG (revert): inlined readCapped.
+                    val cappedBody = res.body
+                        ?: throw PluginFetcher.FetchFailure.Http(res.code, current.safeLog())
+                    val inlineBytes = cappedBody.bytes()
                     result = PluginFetcher.FetchResult(
-                        body = readCapped(res, maxBytes),
+                        body = inlineBytes,
                         finalUrl = current,
                         etag = responseEtag
                     )
