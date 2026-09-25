@@ -49,6 +49,7 @@ class PluginHttpFetcherTest {
     ) : Call {
         override fun request(): Request = request
         override fun execute(): Response {
+            if (System.getProperty("probe.execentry") == "1") throw UnsupportedOperationException("EXECUTE-RAN")
             Trace.calls += "execute"
             return Response.Builder()
                 .request(request)
@@ -458,6 +459,23 @@ class PluginHttpFetcherTest {
         )
         val out = f.get(url("/a"), hosts, maxBytes = 1024)
         assertEquals("hi", out.body.toString(Charsets.UTF_8))
+    }
+
+    @Test
+    fun probeExecuteEntryReached() = runTest {
+        System.setProperty("probe.execentry", "1")
+        try {
+            val factory = ScriptCallFactory()
+            factory.enqueue(200, body = "hi")
+            try {
+                fetcher(factory).get(url("/a"), hosts, maxBytes = 1024)
+                fail("expected EXECUTE-RAN")
+            } catch (e: UnsupportedOperationException) {
+                assertTrue((e.message ?: "").contains("EXECUTE-RAN"))
+            }
+        } finally {
+            System.clearProperty("probe.execentry")
+        }
     }
 
     @Test
