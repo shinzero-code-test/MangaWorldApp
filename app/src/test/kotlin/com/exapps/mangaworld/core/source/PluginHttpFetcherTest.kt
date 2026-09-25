@@ -88,6 +88,22 @@ class PluginHttpFetcherTest {
     private fun url(path: String) = "https://cdn.example$path"
 
     @Test
+    fun probeDoubleBuildsResponse() = runTest {
+        val factory = ScriptCallFactory()
+        factory.enqueue(200, body = "hi")
+        val req = Request.Builder().url("https://cdn.example/a").build()
+        val resp = factory.newCall(req).execute()
+        assertEquals(200, resp.code)
+        assertEquals("hi", resp.body!!.string())
+    }
+
+    @Test
+    fun probeUnconfinedWithContext() = runTest {
+        val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) { "ok" }
+        assertEquals("ok", out)
+    }
+
+    @Test
     fun happyChainFollowsSameHostHops() = runTest {
         val factory = ScriptCallFactory()
         factory.enqueue(302, mapOf("Location" to "/b"))
