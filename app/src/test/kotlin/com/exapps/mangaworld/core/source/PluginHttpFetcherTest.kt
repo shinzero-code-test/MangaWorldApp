@@ -107,6 +107,23 @@ class PluginHttpFetcherTest {
     }
 
     @Test
+    fun probeGetSteps() = runTest {
+        val factory = ScriptCallFactory()
+        factory.enqueue(200, body = "hi")
+        val first = java.net.URI("https://cdn.example/a".trim())
+        assertEquals("https", first.scheme)
+        val current = first.toASCIIString()
+        val builder = okhttp3.Request.Builder().url(current).get()
+        val request = builder.build()
+        val response = factory.newCall(request).execute()
+        assertEquals(200, response.code)
+        response.use { res ->
+            val b = res.body!!.bytes()
+            assertEquals("hi", b.toString(Charsets.UTF_8))
+        }
+    }
+
+    @Test
     fun probeUnconfinedWithContext() = runTest {
         val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) { "ok" }
         assertEquals("ok", out)
