@@ -47,14 +47,20 @@ class PluginHttpFetcherTest {
         private val next: ScriptedResponse
     ) : Call {
         override fun request(): Request = request
-        override fun execute(): Response = Response.Builder()
-            .request(request)
-            .protocol(Protocol.HTTP_1_1)
-            .code(next.code)
-            .message("stub")
-            .headers(okhttp3.Headers.headersOf(*next.headers.flatMap { (k, v) -> listOf(k, v) }.toTypedArray()))
-            .body(next.body.toResponseBody("application/octet-stream".toMediaType()))
-            .build()
+        override fun execute(): Response {
+            val builder = Response.Builder()
+                .request(request)
+                .protocol(Protocol.HTTP_1_1)
+                .code(next.code)
+                .message("stub")
+                .headers(okhttp3.Headers.headersOf(*next.headers.flatMap { (k, v) -> listOf(k, v) }.toTypedArray()))
+            // OkHttp forbids bodies on 204/304 (Builder.build() throws) —
+            // real 304s never carry one either.
+            if (next.code != 204 && next.code != 304) {
+                builder.body(next.body.toResponseBody("application/octet-stream".toMediaType()))
+            }
+            return builder.build()
+        }
         override fun enqueue(responseCallback: Callback) = throw UnsupportedOperationException()
         override fun cancel() = Unit
         override fun isExecuted(): Boolean = false
