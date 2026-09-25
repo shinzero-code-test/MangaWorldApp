@@ -41,6 +41,30 @@ class PluginHttpFetcherTest {
         val calls = mutableListOf<String>()
     }
 
+    private class ScriptCall(
+        private val request: Request,
+        private val next: ScriptedResponse
+    ) : Call {
+        override fun request(): Request = request
+        override fun execute(): Response {
+            Trace.calls += "execute"
+            return Response.Builder()
+                .request(request)
+                .protocol(Protocol.HTTP_1_1)
+                .code(next.code)
+                .message("stub")
+                .headers(okhttp3.Headers.headersOf(*next.headers.flatMap { (k, v) -> listOf(k, v) }.toTypedArray()))
+                .body(next.body.toResponseBody("application/octet-stream".toMediaType()))
+                .build()
+        }
+        override fun enqueue(responseCallback: Callback) = throw UnsupportedOperationException()
+        override fun cancel() = Unit
+        override fun isExecuted(): Boolean = false
+        override fun isCanceled(): Boolean = false
+        override fun clone(): Call = throw UnsupportedOperationException("clone-unused")
+        override fun timeout(): Timeout = Timeout.NONE
+    }
+
     private class ScriptCallFactory : Call.Factory {
         val script = ArrayDeque<ScriptedResponse>()
         val seen = mutableListOf<Request>()
@@ -59,26 +83,7 @@ class PluginHttpFetcherTest {
             val next = script.removeFirstOrNull()
                 ?: ScriptedResponse(500, emptyMap(), ByteArray(0))
             Trace.calls += "newCall-popped"
-            val call = object : Call {
-                override fun request(): Request = request
-                override fun execute(): Response {
-                    Trace.calls += "execute"
-                    return Response.Builder()
-                    .request(request)
-                    .protocol(Protocol.HTTP_1_1)
-                    .code(next.code)
-                    .message("stub")
-                    .headers(okhttp3.Headers.headersOf(*next.headers.flatMap { (k, v) -> listOf(k, v) }.toTypedArray()))
-                    .body(next.body.toResponseBody("application/octet-stream".toMediaType()))
-                    .build()
-                }
-                override fun enqueue(responseCallback: Callback) = throw UnsupportedOperationException()
-                override fun cancel() = Unit
-                override fun isExecuted(): Boolean = false
-                override fun isCanceled(): Boolean = false
-                override fun clone(): Call = newCall(request)
-                override fun timeout(): Timeout = Timeout.NONE
-            }
+            val call = ScriptCall(request, next)
             Trace.calls += "newCall-built"
             return call
         }
