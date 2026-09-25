@@ -36,6 +36,8 @@ class OkHttpPluginFetcher(
         maxBytes: Long,
         headers: Map<String, String>
     ): PluginFetcher.FetchResult = withContext(io) {
+        // TEMPORARY DEBUG (revert): prove which get() body executes.
+        if (System.getProperty("probe.fresh") == "1") throw IllegalArgumentException("FRESH-PROBE")
         val first = java.net.URI(url.trim())
         if (!first.scheme.equals("https", ignoreCase = true) && !allowInsecure) {
             throw PluginFetcher.FetchFailure.Insecure(url)

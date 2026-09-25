@@ -393,6 +393,21 @@ class PluginHttpFetcherTest {
     }
 
     @Test
+    fun probeFreshnessMarker() = runTest {
+        System.setProperty("probe.fresh", "1")
+        try {
+            val factory = ScriptCallFactory()
+            factory.enqueue(200, body = "hi")
+            fetcher(factory).get(url("/a"), hosts, maxBytes = 1024)
+            fail("expected freshness marker")
+        } catch (e: IllegalArgumentException) {
+            assertTrue((e.message ?: "").contains("FRESH-PROBE"))
+        } finally {
+            System.clearProperty("probe.fresh")
+        }
+    }
+
+    @Test
     fun probeUnconfinedWithContext() = runTest {
         val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) { "ok" }
         assertEquals("ok", out)
