@@ -447,13 +447,11 @@ class ScriptRunnerFactory @Inject constructor(
             return Result.failure(ScriptCompileException("source.js is not UTF-8"))
         }
         // Compile once, execute per call with a fresh scope (stateless scripts
-        // stay safe across mid-session swaps).
+        // stay safe across mid-session swaps). Rhino compiles scope-free; the
+        // scope binds at exec time inside each call.
         val compiled = try {
             sandbox.run { cx ->
-                // compileString takes ScriptableObject (not the interface):
-                // cast once at the single compile site.
-                val scope = cx.initStandardObjects() as ScriptableObject
-                cx.compileString(scope, source, "<source.js>", 1, null)
+                cx.compileString(source, "<source.js>", 1, null)
             }
         } catch (e: ScriptException) {
             return Result.failure(e)
