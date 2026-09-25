@@ -408,6 +408,17 @@ class PluginHttpFetcherTest {
     }
 
     @Test
+    fun probeEmptyScriptGivesHttpNotNetwork() = runTest {
+        val factory = ScriptCallFactory()
+        try {
+            fetcher(factory).get(url("/a"), hosts, maxBytes = 1024)
+            fail("expected Http")
+        } catch (e: PluginFetcher.FetchFailure.Http) {
+            assertEquals(500, e.code)
+        }
+    }
+
+    @Test
     fun probeUnconfinedWithContext() = runTest {
         val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) { "ok" }
         assertEquals("ok", out)
