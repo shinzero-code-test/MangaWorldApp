@@ -5,8 +5,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Request
 import okhttp3.Response
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Phase 2B redirect-safe HTTP fetcher (plan §4 implementation rules).
@@ -21,10 +19,11 @@ import javax.inject.Singleton
  * - Initial URL must be https unless [allowInsecure] (JVM tests against
  *   MockWebServer only; never true in production).
  *
- * No Android APIs (OkHttp + coroutines only) — JVM-testable.
+ * No Android APIs (OkHttp + coroutines only) — JVM-testable. Constructed by
+ * `PluginSyncModule` (the redirect-disabled client and cookie resolver are
+ * assembly concerns); tests build it directly.
  */
-@Singleton
-class OkHttpPluginFetcher @Inject constructor(
+class OkHttpPluginFetcher(
     private val callFactory: Call.Factory,
     private val io: kotlinx.coroutines.CoroutineDispatcher,
     private val allowInsecure: Boolean = false,
@@ -57,8 +56,12 @@ class OkHttpPluginFetcher @Inject constructor(
             var result: PluginFetcher.FetchResult? = null
             var responseEtag: String? = null
             response.use { res ->
-                if (res.isRedirect) {
-                    redirectLocation = res.header("Location")
+                // NOTE: okhttp3.Response has its own `isRedirect` member (any 3xx);
+                // the distribution rule needs Location-bearing 301..308 only, so the
+                // check is spelled out — a shadowed extension would route 304s here.
+                val location = if (res.code in 301..308) res.header("Location") else null
+                if (res.code in 301..308) {
+                    redirectLocation = location
                     redirectCode = res.code
                 } else {
                     if (!res.isSuccessful) {
@@ -131,6 +134,3 @@ class OkHttpPluginFetcher @Inject constructor(
 
     private fun String.safeLog(): String = takeWhile { it != '?' }
 }
-
-private val Response.isRedirect: Boolean
-    get() = code in 301..308 && header("Location") != null

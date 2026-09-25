@@ -92,7 +92,7 @@ class PluginSyncEngine @Inject constructor(
     private val registry: SourceRegistry,
     private val fetcher: PluginFetcher,
     private val etags: EtagStore,
-    private val io: kotlinx.coroutines.CoroutineDispatcher
+    @com.exapps.mangaworld.core.di.IoDispatcher private val io: kotlinx.coroutines.CoroutineDispatcher
 ) {
 
     sealed interface EntryOutcome {
