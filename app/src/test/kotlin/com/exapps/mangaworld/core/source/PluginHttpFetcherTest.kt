@@ -37,6 +37,10 @@ class PluginHttpFetcherTest {
         val body: ByteArray = ByteArray(0)
     )
 
+    private object Trace {
+        val calls = mutableListOf<String>()
+    }
+
     private class ScriptCallFactory : Call.Factory {
         val script = ArrayDeque<ScriptedResponse>()
         val seen = mutableListOf<Request>()
@@ -51,11 +55,14 @@ class PluginHttpFetcherTest {
 
         override fun newCall(request: Request): Call {
             seen += request
+            Trace.calls += "newCall"
             val next = script.removeFirstOrNull()
                 ?: ScriptedResponse(500, emptyMap(), ByteArray(0))
             return object : Call {
                 override fun request(): Request = request
-                override fun execute(): Response = Response.Builder()
+                override fun execute(): Response {
+                    Trace.calls += "execute"
+                    return Response.Builder()
                     .request(request)
                     .protocol(Protocol.HTTP_1_1)
                     .code(next.code)
@@ -63,6 +70,7 @@ class PluginHttpFetcherTest {
                     .headers(okhttp3.Headers.headersOf(*next.headers.flatMap { (k, v) -> listOf(k, v) }.toTypedArray()))
                     .body(next.body.toResponseBody("application/octet-stream".toMediaType()))
                     .build()
+                }
                 override fun enqueue(responseCallback: Callback) = throw UnsupportedOperationException()
                 override fun cancel() = Unit
                 override fun isExecuted(): Boolean = false
@@ -323,6 +331,20 @@ class PluginHttpFetcherTest {
         val call = factory.newCall(req)
         val resp = call.execute()
         assertEquals(200, resp.code)
+    }
+
+    @Test
+    fun probeTraceGetReachesDouble() = runTest {
+        Trace.calls.clear()
+        val factory = ScriptCallFactory()
+        factory.enqueue(200, body = "hi")
+        try {
+            fetcher(factory).get(url("/a"), hosts, maxBytes = 1024)
+        } catch (_: Exception) {
+            // Swallowed on purpose: reachability is what we assert below.
+        }
+        assertTrue(Trace.calls.contains("newCall"))
+        assertTrue(Trace.calls.contains("execute"))
     }
 
     @Test
