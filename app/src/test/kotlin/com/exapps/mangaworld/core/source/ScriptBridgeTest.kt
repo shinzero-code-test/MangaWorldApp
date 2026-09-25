@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.source
 
+import com.exapps.mangaworld.core.source.script.ScriptBridgeSession
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
