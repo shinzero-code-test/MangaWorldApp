@@ -124,7 +124,9 @@ class PluginSyncEngineTest {
         val registry: com.exapps.mangaworld.core.source.plugins.SourceRegistry,
         val trust: Map<String, ByteArray>,
         val host: HostCapabilities,
-        val baseDir: java.io.File
+        val baseDir: java.io.File,
+        /** Collects engine log notices (host-expansion, skew, rollback). */
+        val logs: MutableList<String> = mutableListOf()
     ) {
         suspend fun sync(
             kill: String? = null,
@@ -149,7 +151,9 @@ class PluginSyncEngineTest {
         val registry = SourceUiTestFixtures.registry(*registryIds)
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
         val engine = PluginSyncEngine(index, store, registry, fetcher, etags, kotlinx.coroutines.Dispatchers.Unconfined)
-        return Harness(engine, index, fetcher, registry, trust, host, tmp.root)
+        val logs = mutableListOf<String>()
+        engine.log = { logs += it }
+        return Harness(engine, index, fetcher, registry, trust, host, tmp.root, logs)
     }
 
     // ─── Drills ─────────────────────────────────────────────────────────────
@@ -165,6 +169,7 @@ class PluginSyncEngineTest {
                     .add("starzmanga.com").add("cdn.starzmanga.com").add("hijala-moved.example")
             }
         )
+        engine.log = { } // JVM: android Log stubs throw
         val index = FakeIndex()
         index.put(PluginIndexRecord("hijala", 1, null, PluginOrigin.OFFICIAL, PluginStatus.ENABLED, null))
         val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
@@ -173,13 +178,16 @@ class PluginSyncEngineTest {
         val engine = PluginSyncEngine(
             index, store, registry, fetcher, FakeEtag(), kotlinx.coroutines.Dispatchers.Unconfined
         )
+        engine.log = { } // JVM: android Log stubs throw
         val scraperBefore = registry.scraperFor("hijala")
         val result = engine.sync(
             trustedKeys = trust, host = host,
             indexUrl = "https://cdn.example/plugins/index.json",
             postSmoke = PostSmoke.Custom({ true }), baseDir = tmp.root
         )
-        assertEquals(PluginSyncEngine.EntryOutcome.Updated(hostsExpanded = false), result.outcomes["hijala"])
+        assertEquals(PluginSyncEngine.EntryOutcome.Updated(hostsExpanded = true), result.outcomes["hijala"])
+        // Plan §8.9 non-blocking notice is logged and reported.
+        assertTrue(h.logs.any { it.contains("expands host set") })
         // Domain moved with no APK: descriptor carries the new base, scraper untouched.
         assertEquals("https://hijala-moved.example", registry.descriptorFor("hijala")!!.baseUrl)
         assertTrue(registry.scraperFor("hijala") === scraperBefore)
@@ -260,6 +268,7 @@ class PluginSyncEngineTest {
         val engine = PluginSyncEngine(
             index, store, registry, fetcher, FakeEtag(), kotlinx.coroutines.Dispatchers.Unconfined
         )
+        engine.log = { } // JVM: android Log stubs throw
         suspend fun runSync() = engine.sync(
             trustedKeys = trust, host = host,
             indexUrl = "https://cdn.example/plugins/index.json",
@@ -290,6 +299,7 @@ class PluginSyncEngineTest {
             index, store, registry, FakeFetcher(bodies), FakeEtag(),
             kotlinx.coroutines.Dispatchers.Unconfined
         )
+        engine.log = { } // JVM: android Log stubs throw
         val result = engine.sync(
             trustedKeys = trust, host = host,
             indexUrl = "https://cdn.example/plugins/index.json",
@@ -317,6 +327,7 @@ class PluginSyncEngineTest {
             index, store, registry, FakeFetcher(bodies), FakeEtag(),
             kotlinx.coroutines.Dispatchers.Unconfined
         )
+        engine.log = { } // JVM: android Log stubs throw
         suspend fun runSync(kill: String?) = engine.sync(
             trustedKeys = trust, host = host,
             indexUrl = "https://cdn.example/plugins/index.json",
@@ -362,6 +373,7 @@ class PluginSyncEngineTest {
             index, store, registry, FakeFetcher(bodies), FakeEtag(),
             kotlinx.coroutines.Dispatchers.Unconfined
         )
+        engine.log = { } // JVM: android Log stubs throw
         val result = engine.sync(
             trustedKeys = trust, host = host,
             indexUrl = "https://cdn.example/plugins/index.json",
@@ -387,6 +399,7 @@ class PluginSyncEngineTest {
         val engine = PluginSyncEngine(
             index, store, registry, fetcher, etags, kotlinx.coroutines.Dispatchers.Unconfined
         )
+        engine.log = { } // JVM: android Log stubs throw
         suspend fun runSync() = engine.sync(
             trustedKeys = trust, host = host,
             indexUrl = "https://cdn.example/plugins/index.json",
@@ -435,6 +448,7 @@ class PluginSyncEngineTest {
             index, store, registry, FakeFetcher(bodies), FakeEtag(),
             kotlinx.coroutines.Dispatchers.Unconfined
         )
+        engine.log = { } // JVM: android Log stubs throw
         val result = engine.sync(
             trustedKeys = trust, host = host,
             indexUrl = "https://cdn.example/plugins/index.json",
@@ -459,5 +473,6 @@ class PluginSyncEngineTest {
         val result = h.sync()
         // Manifest (madara) wins over the stale "script" hint; update proceeds.
         assertTrue(result.outcomes["hijala"] is PluginSyncEngine.EntryOutcome.Updated)
+        assertTrue(h.logs.any { it.contains("manifest wins") })
     }
 }

@@ -95,6 +95,14 @@ class PluginSyncEngine @Inject constructor(
     @com.exapps.mangaworld.core.di.IoDispatcher private val io: kotlinx.coroutines.CoroutineDispatcher
 ) {
 
+    /**
+     * Log sink. Defaults to logcat; tests replace it with a collector (raw
+     * `android.util.Log` throws on plain JVM — the android.jar stubs are not
+     * mocked — so production code in this package must never call it directly).
+     * Internal for test access; production never reassigns.
+     */
+    internal var log: (String) -> Unit = { android.util.Log.w(TAG, it) }
+
     sealed interface EntryOutcome {
         data object UpToDate : EntryOutcome
         data class Updated(val hostsExpanded: Boolean) : EntryOutcome
@@ -175,7 +183,7 @@ class PluginSyncEngine @Inject constructor(
                     baseDir = baseDir
                 )
             }.getOrElse { e ->
-                Log.w(TAG, "sync ${entry.id} failed: ${e.message}")
+                log("sync ${entry.id} failed: ${e.message}")
                 EntryOutcome.Failed(e.message?.take(160) ?: "unknown")
             }
         }
@@ -198,7 +206,7 @@ class PluginSyncEngine @Inject constructor(
             registry.unregisterRemote(rev.id)
             indexStore.put(record.copy(status = PluginStatus.REVOKED))
             applied += rev.id
-            Log.w(TAG, "kill-switch revoked ${rev.id} (was v$active)")
+            log("kill-switch revoked ${rev.id} (was v$active)")
         }
         if (policy.disableAllCustoms) {
             for (record in indexStore.getAll()) {
@@ -247,7 +255,7 @@ class PluginSyncEngine @Inject constructor(
             // Downgrades ride the explicit rollback path (previously-signed
             // version re-point), never the forward sync.
             if (entry.version < current) {
-                Log.w(TAG, "sync ${entry.id}: index v${entry.version} < active v$current — refused")
+                log("sync ${entry.id}: index v${entry.version} < active v$current — refused")
                 return EntryOutcome.DowngradeRefused
             }
         }
@@ -283,7 +291,7 @@ class PluginSyncEngine @Inject constructor(
         }
         val manifest = valid.manifest
         if (PluginDistribution.kindEngineSkew(entry.kind, manifest.engine)) {
-            Log.w(TAG, "sync ${entry.id}: index kind '${entry.kind}' vs engine '${manifest.engine.serialName}' — manifest wins")
+            log("sync ${entry.id}: index kind '${entry.kind}' vs engine '${manifest.engine.serialName}' — manifest wins")
         }
         if (manifest.engine in policy.disabledEngines) {
             return EntryOutcome.Rejected("engine ${manifest.engine.serialName} disabled by kill-switch")
@@ -299,7 +307,7 @@ class PluginSyncEngine @Inject constructor(
             // 2B has no generic theme runners yet: retain the verified payload
             // DISABLED for a future runner, register nothing (no phantom source).
             persistQuietly(baseDir, entry, manifest, manifestBytes, enabled = false)
-            Log.w(TAG, "sync ${entry.id}: no builtin runner — payload retained, registration deferred")
+            log("sync ${entry.id}: no builtin runner — payload retained, registration deferred")
             return EntryOutcome.NewSourceDeferred
         }
         when (
@@ -327,7 +335,7 @@ class PluginSyncEngine @Inject constructor(
         val expanded = (outcome as? SourceRegistry.RegisterOutcome.Superseded)?.hostsExpanded == true
         if (expanded) {
             // Plan §8.9 non-blocking notice: logged + reported; UI surfacing follows.
-            Log.w(TAG, "sync ${entry.id}: official update expands host set — notice")
+            log("sync ${entry.id}: official update expands host set — notice")
         }
         indexStore.get(entry.id)?.let { rec ->
             indexStore.put(rec.copy(status = PluginStatus.ENABLED))
@@ -339,7 +347,7 @@ class PluginSyncEngine @Inject constructor(
             indexStore.get(entry.id)?.let { rec ->
                 indexStore.put(rec.copy(status = PluginStatus.QUARANTINED))
             }
-            Log.w(TAG, "sync ${entry.id}: post-activation smoke failed — rolled back")
+            log("sync ${entry.id}: post-activation smoke failed — rolled back")
             return EntryOutcome.RolledBack
         }
         return EntryOutcome.Updated(hostsExpanded = expanded)
