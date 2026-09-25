@@ -99,6 +99,14 @@ class PluginHttpFetcherTest {
     }
 
     @Test
+    fun probeGetSingle200() = runTest {
+        val factory = ScriptCallFactory()
+        factory.enqueue(200, body = "hi")
+        val out = fetcher(factory).get(url("/a"), hosts, maxBytes = 1024)
+        assertEquals("hi", out.body.toString(Charsets.UTF_8))
+    }
+
+    @Test
     fun probeUnconfinedWithContext() = runTest {
         val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) { "ok" }
         assertEquals("ok", out)
