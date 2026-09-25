@@ -353,6 +353,46 @@ class PluginHttpFetcherTest {
     }
 
     @Test
+    fun probeRealServerThroughGet() = runTest {
+        val server = java.net.ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1"))
+        val port = server.localPort
+        val t = kotlin.concurrent.thread(isDaemon = true, name = "probe-http") {
+            val sock = runCatching { server.accept() }.getOrNull() ?: return@thread
+            try {
+                val reader = java.io.InputStreamReader(sock.getInputStream()).buffered()
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    if (line.isEmpty()) break
+                }
+                val body = "real".toByteArray(Charsets.UTF_8)
+                val head = "HTTP/1.1 200 OK\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+                sock.getOutputStream().write(head.toByteArray(Charsets.UTF_8))
+                sock.getOutputStream().write(body)
+                sock.getOutputStream().flush()
+            } catch (_: Exception) {
+            } finally {
+                runCatching { sock.close() }
+            }
+        }
+        try {
+            val client = okhttp3.OkHttpClient.Builder()
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .build()
+            val f = OkHttpPluginFetcher(
+                client, kotlinx.coroutines.Dispatchers.Unconfined, true, null
+            )
+            val out = f.get(
+                "http://127.0.0.1:$port/a", setOf("127.0.0.1"), maxBytes = 1024
+            )
+            assertEquals("real", out.body.toString(Charsets.UTF_8))
+        } finally {
+            runCatching { server.close() }
+            t.join(2000)
+        }
+    }
+
+    @Test
     fun probeUnconfinedWithContext() = runTest {
         val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) { "ok" }
         assertEquals("ok", out)
