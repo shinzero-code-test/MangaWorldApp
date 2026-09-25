@@ -170,6 +170,8 @@ class OkHttpScriptFetcher @Inject constructor(
                     throw ScriptHttpException("redirect refused (${decision.reason.name})")
             }
         }
+        // Unreachable: every non-Follow hop throws or returns above.
+        throw IllegalStateException("script fetch escaped its redirect loop")
     }
 
     companion object {

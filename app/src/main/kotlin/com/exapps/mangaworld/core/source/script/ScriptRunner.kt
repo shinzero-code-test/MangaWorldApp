@@ -275,7 +275,7 @@ class ScriptScraper internal constructor(
             status = MangaStatus.from(m.optString("status")),
             type = MangaType.from(m.optString("type")),
             rating = m.optFinite("rating")?.toFloat(),
-            latestChapter = m.optFinite("latestChapter")?.toFloat(),
+            latestChapter = m.optFinite("latestChapter")?.toInt(),
             totalChapters = m.optFinite("totalChapters")?.toInt(),
             lastUpdated = m.optFinite("lastUpdated")?.toLong(),
             isNew = m.optBool("isNew"),

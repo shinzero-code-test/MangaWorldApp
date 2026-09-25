@@ -38,7 +38,9 @@ class ScriptContextFactory : ContextFactory() {
         super.onContextCreated(cx)
         cx.optimizationLevel = -1
         cx.languageVersion = Context.VERSION_ES6
-        cx.instructionThreshold = ScriptContract.INSTRUCTION_OBSERVATION_THRESHOLD
+        // NOTE: the field-style property does NOT resolve here (Rhino keeps the
+        // threshold behind the explicit setter name) — call it directly.
+        cx.setInstructionObserverThreshold(ScriptContract.INSTRUCTION_OBSERVATION_THRESHOLD)
         cx.maximumInterpreterStackDepth = ScriptContract.MAX_INTERPRETER_STACK_DEPTH
         lastOptimizationLevel = cx.optimizationLevel
     }

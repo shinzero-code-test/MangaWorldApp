@@ -3,7 +3,6 @@ package com.exapps.mangaworld.core.source.plugins
 import com.exapps.mangaworld.R
 import com.exapps.mangaworld.core.data.remote.scraper.DescriptorScraper
 import com.exapps.mangaworld.core.data.remote.scraper.MangaScraper
-import com.exapps.mangaworld.core.source.script.ScriptPluginLoader
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import okhttp3.OkHttpClient
 import javax.inject.Inject

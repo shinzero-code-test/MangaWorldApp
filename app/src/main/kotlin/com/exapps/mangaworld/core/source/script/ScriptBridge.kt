@@ -78,9 +78,16 @@ object ScriptBridge {
         putFn(scope, ScriptContract.FN_LOG, LogFn(session))
         // The actual containment: without these names script code has no path
         // to Java at all (verified by ScriptContainmentTest escape vectors).
-        // Instance-method delete (not reflection): removes the slot if present.
+        // Shadowing (not deletion): sets each host root to `undefined`, then
+        // READS BACK to prove it — a silently surviving root fails closed and
+        // loud instead of breaching quietly. `typeof` reports "undefined" and
+        // any dereference throws a TypeError either way.
         ScriptContract.REMOVED_HOST_NAMES.forEach { name ->
-            runCatching { scope.delete(name, scope) }
+            ScriptableObject.putProperty(scope, name, Undefined.instance)
+            val check = scope.get(name, scope)
+            if (check !== Undefined.instance && check != null && check !== Scriptable.NOT_FOUND) {
+                throw ScriptException("cannot secure scope ($name)")
+            }
         }
     }
 
@@ -137,7 +144,7 @@ object ScriptBridge {
     internal fun capItems(items: List<String>): List<String> =
         items.take(ScriptContract.MAX_SELECT_RESULTS).map { it.take(ScriptContract.MAX_ITEM_CHARS) }
 
-    internal fun toNativeArray(cx: Context, scope: Scriptable, items: List<String>): NativeArray {
+    internal fun toNativeArray(cx: Context, scope: Scriptable, items: List<String>): Scriptable {
         val arr = cx.newArray(scope, items.size)
         items.forEachIndexed { i, s -> arr.put(i, arr, s) }
         return arr
@@ -265,35 +272,35 @@ object ScriptBridge {
         }
     }
 
-    companion object {
-        private val ATTR_NAME_REGEX = Regex("^[A-Za-z][A-Za-z0-9_:.-]{0,63}$")
-        private val LOG_LEVELS = setOf("debug", "info", "warn", "error")
+    // ─── Shared URL helpers (object-level: no companion inside an object) ────
 
-        private val URL_ATTRS = setOf("href", "src", "data-src", "data-lazy-src", "action")
+    private val ATTR_NAME_REGEX = Regex("^[A-Za-z][A-Za-z0-9_:.-]{0,63}$")
+    private val LOG_LEVELS = setOf("debug", "info", "warn", "error")
 
-        internal fun absolutize(el: org.jsoup.nodes.Element, attr: String): String {
-            val raw = el.attr(attr)
-            if (raw.isBlank()) return ""
-            if (attr.lowercase() !in URL_ATTRS) return raw
-            return absolutizeHref(el.ownerDocument() ?: return raw, raw)
+    private val URL_ATTRS = setOf("href", "src", "data-src", "data-lazy-src", "action")
+
+    internal fun absolutize(el: org.jsoup.nodes.Element, attr: String): String {
+        val raw = el.attr(attr)
+        if (raw.isBlank()) return ""
+        if (attr.lowercase() !in URL_ATTRS) return raw
+        return absolutizeHref(el.ownerDocument() ?: return raw, raw)
+    }
+
+    internal fun absolutizeHref(doc: org.jsoup.nodes.Document, href: String): String {
+        val t = href.trim()
+        if (t.isEmpty()) return ""
+        val lower = t.lowercase()
+        // Non-navigable schemes pass through untouched (engine validation
+        // downstream only accepts https for page/chapter/cover URLs).
+        if (lower.startsWith("data:") || lower.startsWith("javascript:") ||
+            lower.startsWith("mailto:") || lower.startsWith("blob:")
+        ) {
+            return t
         }
-
-        internal fun absolutizeHref(doc: org.jsoup.nodes.Document, href: String): String {
-            val t = href.trim()
-            if (t.isEmpty()) return ""
-            val lower = t.lowercase()
-            // Non-navigable schemes pass through untouched (engine validation
-            // downstream only accepts https for page/chapter/cover URLs).
-            if (lower.startsWith("data:") || lower.startsWith("javascript:") ||
-                lower.startsWith("mailto:") || lower.startsWith("blob:")
-            ) {
-                return t
-            }
-            return runCatching {
-                val base = doc.baseUri().takeIf { it.isNotBlank() }
-                    ?: return t
-                java.net.URI(base).resolve(t).toASCIIString()
-            }.getOrDefault(t)
-        }
+        return runCatching {
+            val base = doc.baseUri().takeIf { it.isNotBlank() }
+                ?: return t
+            java.net.URI(base).resolve(t).toASCIIString()
+        }.getOrDefault(t)
     }
 }

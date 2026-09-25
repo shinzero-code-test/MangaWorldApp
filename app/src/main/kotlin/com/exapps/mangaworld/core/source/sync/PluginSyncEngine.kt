@@ -11,7 +11,7 @@ import com.exapps.mangaworld.core.source.plugins.PluginIndexStore
 import com.exapps.mangaworld.core.source.plugins.PluginKillSwitch
 import com.exapps.mangaworld.core.source.plugins.PluginManifest
 import com.exapps.mangaworld.core.source.plugins.PluginOrigin
-import com.exapps.mangaworld.core.source.plugins.PluginRunnerFactory
+import com.exapps.mangaworld.core.data.remote.scraper.MangaScraperimport com.exapps.mangaworld.core.source.plugins.PluginRunnerFactory
 import com.exapps.mangaworld.core.source.plugins.PluginStatus
 import com.exapps.mangaworld.core.source.plugins.PluginStorage
 import com.exapps.mangaworld.core.source.plugins.PluginStore
@@ -354,6 +354,9 @@ class PluginSyncEngine @Inject constructor(
             log("sync ${entry.id}: no runner for ${manifest.engine.serialName} — payload retained, registration deferred")
             return EntryOutcome.NewSourceDeferred
         }
+        // Explicit type: smart-cast does not survive capture into the registry
+        // plugin below, so bind the non-null runner once, by name.
+        val runner: MangaScraper = scraper
         when (
             val persisted = pluginStore.persistVerified(
                 baseDir = baseDir,
@@ -371,7 +374,7 @@ class PluginSyncEngine @Inject constructor(
         val plugin = object : SourcePlugin {
             override val descriptor: PluginManifest = manifest
             override val display = runnerFactory.remoteDisplay()
-            override val scraper = scraper
+            override val scraper = runner
         }
         val outcome = registry.registerVerified(plugin, PluginOrigin.OFFICIAL)
         if (outcome is SourceRegistry.RegisterOutcome.Refused) {
