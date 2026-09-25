@@ -136,7 +136,8 @@ class BundledPluginLoader @Inject constructor(
             PluginStorage.versionDir(File(context.filesDir, "plugins").path, id, version),
             "plugin.json"
         )
-        val bytes = if (file.isFile) runCatching { file.readBytes() }.getOrNull() else null
+        if (!file.isFile) return Outcome.Skipped(id, "payload missing")
+        val bytes = runCatching { file.readBytes() }.getOrNull()
             ?: return Outcome.Skipped(id, "payload missing")
         val valid = when (
             val v = store.verify(

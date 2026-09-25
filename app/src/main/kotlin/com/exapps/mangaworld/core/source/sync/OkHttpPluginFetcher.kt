@@ -84,6 +84,7 @@ class OkHttpPluginFetcher @Inject constructor(
                 is HostPolicy.RedirectDecision.Follow -> {
                     current = decision.url
                     hops++
+                    continue
                 }
                 is HostPolicy.RedirectDecision.NoRedirect ->
                     throw PluginFetcher.FetchFailure.RedirectRejected(
@@ -93,6 +94,8 @@ class OkHttpPluginFetcher @Inject constructor(
                     throw PluginFetcher.FetchFailure.RedirectRejected(decision.reason.name)
             }
         }
+        // Unreachable: every non-Follow hop throws or returns above.
+        throw IllegalStateException("plugin fetch escaped its redirect loop")
     }
 
     private suspend fun buildRequest(url: String, headers: Map<String, String>): Request {
