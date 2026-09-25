@@ -69,6 +69,12 @@ class OkHttpPluginFetcher(
             // the distribution rule needs 301..308 only, so the check is spelled
             // out — a shadowed extension would route 304s into the redirect arm.
             val code = response.code
+            // 304 sits inside 301..308 but is NOT a redirect — check it before
+            // the redirect arm, otherwise every ETag hit becomes a rejection.
+            if (code == 304) {
+                runCatching { response.close() }
+                throw NotModified()
+            }
             if (code in 301..308) {
                 redirectLocation = response.header("Location")
                 redirectCode = code
@@ -76,7 +82,6 @@ class OkHttpPluginFetcher(
             } else {
                 if (!response.isSuccessful) {
                     runCatching { response.close() }
-                    if (code == 304) throw NotModified()
                     throw PluginFetcher.FetchFailure.Http(code, current.safeLog())
                 }
                 if (response.body == null) {
