@@ -54,8 +54,16 @@ class OkHttpPluginFetcher(
             }
             val response = try {
                 call.execute()
+            } catch (e: AbstractMethodError) {
+                throw UnsupportedOperationException("STAGE-abstract", e)
+            } catch (e: NoSuchMethodError) {
+                throw UnsupportedOperationException("STAGE-nosuchmethod", e)
+            } catch (e: LinkageError) {
+                throw UnsupportedOperationException("STAGE-linkage", e)
+            } catch (e: RuntimeException) {
+                throw IllegalStateException("STAGE-runtime", e)
             } catch (e: Throwable) {
-                throw IllegalStateException("STAGE-execute", e)
+                throw IllegalArgumentException("STAGE-other", e)
             }
             // Drain the decision out of the closed response, then act: the next
             // hop is issued only after this response is closed and validated.
