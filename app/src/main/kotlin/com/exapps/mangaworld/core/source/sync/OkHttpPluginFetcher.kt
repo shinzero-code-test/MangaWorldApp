@@ -44,10 +44,16 @@ class OkHttpPluginFetcher(
         var hops = 0
         while (true) {
             val request = buildRequest(current, headers)
-            val response = runCatching {
-                callFactory.newCall(request).execute()
-            }.getOrElse { e ->
-                throw PluginFetcher.FetchFailure.Network(e)
+            // TEMPORARY DEBUG (revert): stage-tag the newCall/execute boundary.
+            val call = try {
+                callFactory.newCall(request)
+            } catch (e: Throwable) {
+                throw IllegalArgumentException("STAGE-newCall", e)
+            }
+            val response = try {
+                call.execute()
+            } catch (e: Throwable) {
+                throw IllegalStateException("STAGE-execute", e)
             }
             // Drain the decision out of the closed response, then act: the next
             // hop is issued only after this response is closed and validated.
