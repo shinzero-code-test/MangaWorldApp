@@ -54,26 +54,40 @@ class OkHttpPluginFetcher(
             }.getOrElse { e ->
                 throw PluginFetcher.FetchFailure.Network(e)
             }
-            // Drain the decision out of the closed response, then act: the next
-            // hop is issued only after this response is closed and validated.
+            // Drain the decision out of the response, then act: the next hop is
+            // issued only after this response is validated. Close discipline
+            // matters: OkHttp's close() THROWS on responses not eligible for a
+            // body (1xx/204/304), so control responses are closed quietly and
+            // only body-carrying 2xx go through `use`. A 304 closed via `use`
+            // would mask NotModified with IllegalStateException — i.e. every
+            // ETag short-circuit would crash instead of ending the sync early.
             var redirectLocation: String? = null
             var redirectCode = 0
             var result: PluginFetcher.FetchResult? = null
             var responseEtag: String? = null
-            response.use { res ->
-                // NOTE: okhttp3.Response has its own `isRedirect` member (any 3xx);
-                // the distribution rule needs Location-bearing 301..308 only, so the
-                // check is spelled out — a shadowed extension would route 304s here.
-                val location = if (res.code in 301..308) res.header("Location") else null
-                if (res.code in 301..308) {
-                    redirectLocation = location
-                    redirectCode = res.code
-                } else {
-                    if (!res.isSuccessful) {
-                        if (res.code == 304) throw NotModified()
-                        throw PluginFetcher.FetchFailure.Http(res.code, current.safeLog())
-                    }
-                    responseEtag = res.header("ETag")?.takeIf { it.isNotBlank() }
+            // NOTE: okhttp3.Response has its own `isRedirect` member (any 3xx);
+            // the distribution rule needs 301..308 only, so the check is spelled
+            // out — a shadowed extension would route 304s into the redirect arm.
+            val code = response.code
+            if (code in 301..308) {
+                redirectLocation = response.header("Location")
+                redirectCode = code
+                runCatching { response.close() }
+            } else {
+                if (!response.isSuccessful) {
+                    runCatching { response.close() }
+                    if (code == 304) throw NotModified()
+                    throw PluginFetcher.FetchFailure.Http(code, current.safeLog())
+                }
+                if (response.body == null) {
+                    // e.g. 204: successful yet bodiless — close() would throw.
+                    runCatching { response.close() }
+                    throw PluginFetcher.FetchFailure.Network(
+                        IllegalStateException("empty body")
+                    )
+                }
+                responseEtag = response.header("ETag")?.takeIf { it.isNotBlank() }
+                response.use { res ->
                     result = PluginFetcher.FetchResult(
                         body = readCapped(res, maxBytes),
                         finalUrl = current,
