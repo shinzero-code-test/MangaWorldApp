@@ -1,5 +1,7 @@
 import java.util.Base64
 
+import com.google.firebase.perf.plugin.FirebasePerfExtension
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -83,6 +85,16 @@ android {
     buildTypes {
         debug {
             isDebuggable = true
+            // Firebase Perf bytecode instrumentation rewrites every
+            // okhttp3.Call.execute() call site in main to
+            // FirebasePerfOkHttpClient.execute(), which touches
+            // android.os.Bundle and crashes JVM unit tests ("not mocked").
+            // Unit tests run on the debug variant, so instrumentation stays
+            // OFF here; release keeps automatic HTTP/S network tracing.
+            // Do NOT re-enable for debug — see PluginHttpFetcherTest KDoc.
+            configure<FirebasePerfExtension> {
+                setInstrumentationEnabled(false)
+            }
         }
         release {
             isMinifyEnabled   = true

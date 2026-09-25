@@ -16,8 +16,8 @@ import okhttp3.Response
  * - Cookies are re-resolved per hop via [cookieHeader] and attached only AFTER
  *   hop validation — the previous hop's `Cookie` header is never forwarded to a
  *   new host (otherwise the allow-list cannot stop cross-host exfiltration).
- * - Initial URL must be https unless [allowInsecure] (JVM tests against
- *   MockWebServer only; never true in production).
+ * - Initial URL must be https unless [allowInsecure] (test-only flag for
+ *   scripted doubles; never true in production).
  *
  * No Android APIs (OkHttp + coroutines only) — JVM-testable. Constructed by
  * `PluginSyncModule` (the redirect-disabled client and cookie resolver are
@@ -36,8 +36,6 @@ class OkHttpPluginFetcher(
         maxBytes: Long,
         headers: Map<String, String>
     ): PluginFetcher.FetchResult = withContext(io) {
-        // TEMPORARY DEBUG (revert): prove which get() body executes.
-        if (System.getProperty("probe.fresh") == "1") throw IllegalArgumentException("FRESH-PROBE")
         val first = java.net.URI(url.trim())
         if (!first.scheme.equals("https", ignoreCase = true) && !allowInsecure) {
             throw PluginFetcher.FetchFailure.Insecure(url)
@@ -45,39 +43,16 @@ class OkHttpPluginFetcher(
         var current = first.toASCIIString()
         var hops = 0
         while (true) {
-            // TEMPORARY DEBUG (revert): inlined buildRequest.
-            val requestBuilder = Request.Builder().url(current).get()
-            headers.forEach { (k, v) ->
-                if (!k.equals("Cookie", ignoreCase = true)) requestBuilder.header(k, v)
-            }
-            cookieHeader?.invoke(current)?.takeIf { it.isNotBlank() }?.let {
-                requestBuilder.header("Cookie", it)
-            }
-            val request = requestBuilder.build()
-            // TEMPORARY DEBUG (revert): stage-tag the newCall/execute boundary.
-            val call = try {
-                callFactory.newCall(request)
-            } catch (e: Throwable) {
-                throw IllegalArgumentException("STAGE-newCall", e)
-            }
-            // TEMPORARY DEBUG (revert): is virtual dispatch itself broken?
-            try {
-                call.request()
-            } catch (e: Throwable) {
-                throw IllegalArgumentException("RECEIVER-BROKEN", e)
-            }
-            val response = try {
-                call.execute()
-            } catch (e: AbstractMethodError) {
-                throw UnsupportedOperationException("STAGE-abstract", e)
-            } catch (e: NoSuchMethodError) {
-                throw UnsupportedOperationException("STAGE-nosuchmethod", e)
-            } catch (e: LinkageError) {
-                throw UnsupportedOperationException("STAGE-linkage", e)
-            } catch (e: RuntimeException) {
-                throw IllegalStateException("STAGE-runtime", e)
-            } catch (e: Throwable) {
-                throw IllegalArgumentException("STAGE-other", e)
+            val request = buildRequest(current, headers)
+            // NOTE: on release builds the Firebase Perf plugin rewrites this
+            // call to FirebasePerfOkHttpClient.execute() (auto network tracing).
+            // Instrumentation stays disabled for debug builds (app/build.gradle.kts)
+            // so JVM unit tests reach the double directly — without that flag every
+            // test here dies inside android.os.Bundle.clone ("not mocked").
+            val response = runCatching {
+                callFactory.newCall(request).execute()
+            }.getOrElse { e ->
+                throw PluginFetcher.FetchFailure.Network(e)
             }
             // Drain the decision out of the closed response, then act: the next
             // hop is issued only after this response is closed and validated.
@@ -99,12 +74,8 @@ class OkHttpPluginFetcher(
                         throw PluginFetcher.FetchFailure.Http(res.code, current.safeLog())
                     }
                     responseEtag = res.header("ETag")?.takeIf { it.isNotBlank() }
-                    // TEMPORARY DEBUG (revert): inlined readCapped.
-                    val cappedBody = res.body
-                        ?: throw PluginFetcher.FetchFailure.Http(res.code, current.safeLog())
-                    val inlineBytes = cappedBody.bytes()
                     result = PluginFetcher.FetchResult(
-                        body = inlineBytes,
+                        body = readCapped(res, maxBytes),
                         finalUrl = current,
                         etag = responseEtag
                     )

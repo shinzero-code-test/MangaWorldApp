@@ -158,6 +158,7 @@ Each scraper must:
 
 ## Common Pitfalls
 
+- **Firebase Perf vs JVM unit tests**: the Perf Gradle plugin rewrites every `okhttp3.Call.execute()` call site in main to `FirebasePerfOkHttpClient.execute()`, which touches `android.os.Bundle` and crashes JVM unit tests (`Method clone in android.os.Bundle not mocked`). Instrumentation is disabled for `debug` via `FirebasePerfExtension` in `app/build.gradle.kts` (unit tests run on the debug variant; release keeps auto network tracing). If that stack reappears, the flag was lost — restore it, never work around it in product code
 - **ReaderViewModel.loadChapter in unit tests**: FORBIDDEN — calling it wedges the test worker until the 30-min step timeout (cut in v8.3.4, reproduced in v8.7.5; mechanism never isolated). Cover that path with instrumentation/emulator tests, never unit tests. `onPageChanged`/tap/viewport events are safe (no load).
 - **Kotlin suspend method references**: `list.forEach(::suspendFun)` fails. Use explicit lambda `forEach { suspendFun(it) }`
 - **Sequence + suspend**: `asSequence().filter { suspendCall() }` fails — Sequence lambdas defer past coroutine scope. Use eager `.filter{}`
