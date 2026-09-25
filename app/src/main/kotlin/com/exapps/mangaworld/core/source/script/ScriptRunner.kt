@@ -506,7 +506,7 @@ class ScriptRunnerFactory @Inject constructor(
         // the loader (S-review). Mirrors the loader's canonical hex helper.
         val expected = manifest.scriptSha256
             ?: return Result.failure(ScriptException("manifest pins no script hash"))
-        if (!sha256Hex(scriptBytes).equals(expected, ignoreCase = true)) {
+        if (!ScriptScraper.sha256Hex(scriptBytes).equals(expected, ignoreCase = true)) {
             return Result.failure(ScriptException("script hash mismatch"))
         }
         val source = try {

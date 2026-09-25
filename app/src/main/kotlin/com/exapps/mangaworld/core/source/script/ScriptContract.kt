@@ -1,5 +1,7 @@
 package com.exapps.mangaworld.core.source.script
 
+import kotlinx.coroutines.CancellationException
+
 /**
  * Phase 3 script-plugin contract (bridge API v1).
  *

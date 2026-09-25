@@ -143,16 +143,21 @@ class PrefsHealthStore @Inject constructor(
     }
 
     private fun loadLocked(id: String): SourceHealthPolicy.Observation {
-        val raw = prefs().getString(key(id), null) ?: return SourceHealthPolicy.initial()
-        runCatching {
+        val raw: String = prefs().getString(key(id), null) ?: return SourceHealthPolicy.initial()
+        return try {
             val o = JSONObject(raw)
             SourceHealthPolicy.Observation(
                 anomalies = o.optInt("a", 0).coerceIn(0, 1_000_000),
-                state = runCatching { HealthState.valueOf(o.optString("s", "OK")) }
-                    .getOrDefault(HealthState.OK),
+                state = try {
+                    HealthState.valueOf(o.optString("s", "OK"))
+                } catch (_: Exception) {
+                    HealthState.OK
+                },
                 lastQuarantinedAt = o.optLong("q", 0L).coerceAtLeast(0L)
             )
-        }.getOrDefault(SourceHealthPolicy.initial())
+        } catch (_: Exception) {
+            SourceHealthPolicy.initial()
+        }
     }
 
     private fun saveLocked(id: String, observation: SourceHealthPolicy.Observation) {
