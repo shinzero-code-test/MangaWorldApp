@@ -170,6 +170,31 @@ class PluginHttpFetcherTest {
     }
 
     @Test
+    fun probeBuilderGet() = runTest {
+        val req = okhttp3.Request.Builder().url("https://cdn.example/a").get().build()
+        assertEquals("GET", req.method)
+    }
+
+    @Test
+    fun probeContentLength() = runTest {
+        val body = "hi".toByteArray(Charsets.UTF_8)
+            .toResponseBody("application/octet-stream".toMediaType())
+        assertEquals(2, body.contentLength())
+        assertEquals("hi", body.bytes().toString(Charsets.UTF_8))
+    }
+
+    @Test
+    fun probeGetNoCookieLambda() = runTest {
+        val factory = ScriptCallFactory()
+        factory.enqueue(200, body = "hi")
+        val f = OkHttpPluginFetcher(
+            factory, kotlinx.coroutines.Dispatchers.Unconfined, false, null
+        )
+        val out = f.get(url("/a"), hosts, maxBytes = 1024)
+        assertEquals("hi", out.body.toString(Charsets.UTF_8))
+    }
+
+    @Test
     fun probeUnconfinedWithContext() = runTest {
         val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) { "ok" }
         assertEquals("ok", out)
