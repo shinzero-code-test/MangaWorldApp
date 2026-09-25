@@ -13,4 +13,8 @@ abstract class PluginStoreModule {
 
     @Binds @Singleton
     abstract fun bindPluginIndexStore(impl: RoomPluginIndexStore): PluginIndexStore
+
+    /** Phase 3 health counters port → SharedPreferences implementation. */
+    @Binds @Singleton
+    abstract fun bindHealthStore(impl: PrefsHealthStore): HealthStore
 }
