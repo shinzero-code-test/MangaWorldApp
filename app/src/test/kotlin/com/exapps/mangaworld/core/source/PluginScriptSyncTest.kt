@@ -313,8 +313,9 @@ class PluginScriptSyncTest {
         val h = engine(bodies, index)
         val result = h.sync()
         assertEquals(PluginSyncEngine.EntryOutcome.HeldForConsent, result.outcomes["hijala"])
-        // v1 keeps serving; candidate retained DISABLED for review.
-        assertEquals(1, h.second.get("hijala")!!.activeVersion)
+        // Pointer advances to the verified bytes (retained for review) while the
+        // registry keeps serving v1 — status DISABLED marks the hold.
+        assertEquals(2, h.second.get("hijala")!!.activeVersion)
         assertEquals(PluginStatus.DISABLED, h.second.get("hijala")!!.status)
     }
 }
