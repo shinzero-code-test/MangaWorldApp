@@ -11,7 +11,8 @@ import com.exapps.mangaworld.core.source.plugins.PluginIndexStore
 import com.exapps.mangaworld.core.source.plugins.PluginKillSwitch
 import com.exapps.mangaworld.core.source.plugins.PluginManifest
 import com.exapps.mangaworld.core.source.plugins.PluginOrigin
-import com.exapps.mangaworld.core.data.remote.scraper.MangaScraperimport com.exapps.mangaworld.core.source.plugins.PluginRunnerFactory
+import com.exapps.mangaworld.core.data.remote.scraper.MangaScraper
+import com.exapps.mangaworld.core.source.plugins.PluginRunnerFactory
 import com.exapps.mangaworld.core.source.plugins.PluginStatus
 import com.exapps.mangaworld.core.source.plugins.PluginStorage
 import com.exapps.mangaworld.core.source.plugins.PluginStore
