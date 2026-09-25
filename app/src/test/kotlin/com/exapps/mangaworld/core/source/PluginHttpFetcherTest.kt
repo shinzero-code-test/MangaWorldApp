@@ -252,6 +252,16 @@ class PluginHttpFetcherTest {
     }
 
     @Test
+    fun probeGetStyleRequest() = runTest {
+        val factory = ScriptCallFactory()
+        factory.enqueue(200, body = "hi")
+        val req = Request.Builder().url("https://cdn.example/a").get().build()
+        val resp = factory.newCall(req).execute()
+        assertEquals(200, resp.code)
+        assertEquals("hi", resp.body!!.string())
+    }
+
+    @Test
     fun probeUnconfinedWithContext() = runTest {
         val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) { "ok" }
         assertEquals("ok", out)
