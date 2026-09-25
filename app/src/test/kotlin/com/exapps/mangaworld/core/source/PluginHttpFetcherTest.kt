@@ -297,6 +297,25 @@ class PluginHttpFetcherTest {
     }
 
     @Test
+    fun probeReplicationThenGet() = runTest {
+        // Manual replication first (proven to pass)...
+        val f1 = ScriptCallFactory()
+        f1.enqueue(200, body = "hi")
+        val manual = f1.newCall(
+            okhttp3.Request.Builder().url("https://cdn.example/a").build()
+        ).execute()
+        assertEquals(200, manual.code)
+        // ...then the real get() with a fresh double in the SAME test.
+        val f2 = ScriptCallFactory()
+        f2.enqueue(200, body = "hi")
+        val f = OkHttpPluginFetcher(
+            f2, kotlinx.coroutines.Dispatchers.Unconfined, false, null
+        )
+        val out = f.get(url("/a"), hosts, maxBytes = 1024)
+        assertEquals("hi", out.body.toString(Charsets.UTF_8))
+    }
+
+    @Test
     fun probeUnconfinedWithContext() = runTest {
         val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) { "ok" }
         assertEquals("ok", out)
