@@ -76,7 +76,8 @@ object SourceHealthPolicy {
             // Quarantine lifts only via explicit re-smoke, never via traffic.
             return Decision.Hold(current.anomalies, HealthState.QUARANTINED)
         }
-        if (!failed && !emptyPrimary) return Decision.Reset        val anomalies = current.anomalies + 1
+        if (!failed && !emptyPrimary) return Decision.Reset
+        val anomalies = current.anomalies + 1
         if (anomalies >= QUARANTINE_AT &&
             (current.lastQuarantinedAt == 0L ||
                 nowMs - current.lastQuarantinedAt >= QUARANTINE_COOLDOWN_MS)
