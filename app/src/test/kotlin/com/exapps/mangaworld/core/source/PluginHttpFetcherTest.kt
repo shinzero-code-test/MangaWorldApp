@@ -58,7 +58,8 @@ class PluginHttpFetcherTest {
             Trace.calls += "newCall"
             val next = script.removeFirstOrNull()
                 ?: ScriptedResponse(500, emptyMap(), ByteArray(0))
-            return object : Call {
+            Trace.calls += "newCall-popped"
+            val call = object : Call {
                 override fun request(): Request = request
                 override fun execute(): Response {
                     Trace.calls += "execute"
@@ -78,6 +79,8 @@ class PluginHttpFetcherTest {
                 override fun clone(): Call = newCall(request)
                 override fun timeout(): Timeout = Timeout.NONE
             }
+            Trace.calls += "newCall-built"
+            return call
         }
     }
 
@@ -344,6 +347,8 @@ class PluginHttpFetcherTest {
             // Swallowed on purpose: reachability is what we assert below.
         }
         assertTrue(Trace.calls.contains("newCall"))
+        assertTrue(Trace.calls.contains("newCall-popped"))
+        assertTrue(Trace.calls.contains("newCall-built"))
         assertTrue(Trace.calls.contains("execute"))
     }
 
