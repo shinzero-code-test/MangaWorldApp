@@ -473,6 +473,6 @@ class PluginSyncEngineTest {
         val result = h.sync()
         // Manifest (madara) wins over the stale "script" hint; update proceeds.
         assertTrue(result.outcomes["hijala"] is PluginSyncEngine.EntryOutcome.Updated)
-        assertTrue(logs.any { it.contains("manifest wins") })
+        assertTrue(h.logs.any { it.contains("manifest wins") })
     }
 }
