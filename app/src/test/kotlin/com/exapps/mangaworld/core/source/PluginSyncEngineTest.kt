@@ -300,7 +300,7 @@ class PluginSyncEngineTest {
     }
 
     @Test
-    fun postSmokeFailureRollsBackAndQuarantines() = runTest {
+    fun postSmokeFailureRollsBackPointer() = runTest {
         val manifestUrl = "https://cdn.example/plugins/hijala/v2/plugin.json"
         val bodies = mutableMapOf(
             "https://cdn.example/plugins/index.json" to indexJson(Triple("hijala", 2, manifestUrl)),
@@ -321,9 +321,12 @@ class PluginSyncEngineTest {
             postSmoke = PostSmoke.Custom({ false }), baseDir = tmp.root
         )
         assertEquals(PluginSyncEngine.EntryOutcome.RolledBack, result.outcomes["hijala"])
-        // Builtin resumes; candidate quarantined with bytes retained.
+        // Builtin resumes via override removal; the POINTER rolls back to v1
+        // (status INSTALLED) so the next sweep retries instead of wedging on
+        // UpToDate — failed v2 bytes stay staged for forensics/quota.
         assertFalse(registry.isOverridden("hijala"))
-        assertEquals(PluginStatus.QUARANTINED, index.get("hijala")!!.status)
+        assertEquals(1, index.get("hijala")!!.activeVersion)
+        assertEquals(PluginStatus.INSTALLED, index.get("hijala")!!.status)
         assertTrue(File(tmp.root, "hijala/versions/2/plugin.json").isFile)
     }
 
@@ -492,5 +495,53 @@ class PluginSyncEngineTest {
         // Manifest (madara) wins over the stale "script" hint; update proceeds.
         assertTrue(result.outcomes["hijala"] is PluginSyncEngine.EntryOutcome.Updated)
         assertTrue(h.logs.any { it.contains("manifest wins") })
+    }
+
+    @Test
+    fun engineKillRevokesActiveOverride() = runTest {
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson()
+        )
+        val index = FakeIndex()
+        index.put(
+            PluginIndexRecord(
+                "hijala", 2, 1, PluginOrigin.OFFICIAL, PluginStatus.ENABLED,
+                """{"engine":"madara"}"""
+            )
+        )
+        val h = harness(bodies, index = index)
+        // Serving override (as a previous sync would have installed it).
+        val scraper: com.exapps.mangaworld.core.data.remote.scraper.MangaScraper =
+            mockk(relaxed = true)
+        val override = object : com.exapps.mangaworld.core.source.plugins.SourcePlugin {
+            override val descriptor = h.registry.descriptorFor("hijala")!!
+            override val display = com.exapps.mangaworld.core.source.plugins.SourceDisplay(0, 0)
+            override val scraper = scraper
+        }
+        h.registry.registerVerified(override, PluginOrigin.OFFICIAL)
+        assertTrue(h.registry.isOverridden("hijala"))
+        // Engine kill applies to ACTIVES, not just candidates: UpToDate can no
+        // longer shield a killed engine.
+        val result = h.sync(kill = """{"disabledEngines":["madara"]}""")
+        assertTrue(result.revocationsApplied.any { it.startsWith("hijala") })
+        assertFalse(h.registry.isOverridden("hijala"))
+        assertEquals(PluginStatus.REVOKED, h.index.get("hijala")!!.status)
+    }
+
+    @Test
+    fun incompatibleCandidateLeavesMarkerRecord() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/futurex/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson(Triple("futurex", 1, manifestUrl)),
+            manifestUrl to manifestBytes("futurex", 1) { it.put("engineApi", 999) }
+        )
+        val h = harness(bodies)
+        val result = h.sync()
+        assertTrue(result.outcomes["futurex"] is PluginSyncEngine.EntryOutcome.Rejected)
+        // Marker for the upgrade reconciler: no pointer, no registration.
+        val rec = h.index.get("futurex")!!
+        assertEquals(PluginStatus.INCOMPATIBLE, rec.status)
+        assertEquals(null, rec.activeVersion)
+        assertFalse(h.registry.isKnown("futurex"))
     }
 }

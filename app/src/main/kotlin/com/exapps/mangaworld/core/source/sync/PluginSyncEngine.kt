@@ -3,6 +3,7 @@ package com.exapps.mangaworld.core.source.sync
 import android.content.Context
 import android.util.Log
 import com.exapps.mangaworld.core.source.plugins.HostCapabilities
+import com.exapps.mangaworld.core.source.plugins.ManifestInvalidReason
 import com.exapps.mangaworld.core.source.plugins.ManifestResult
 import com.exapps.mangaworld.core.source.plugins.PluginDistribution
 import com.exapps.mangaworld.core.source.plugins.PluginIndexEntry
@@ -157,7 +158,10 @@ class PluginSyncEngine @Inject constructor(
         baseDir: File
     ): SyncResult = withContext(io) {
         val policy = PluginKillSwitch.parse(killSwitchJson)
-        val revocations = applyKillSwitch(policy)
+        // Revocations first (cheap, local, fail-closed), then engine kills on
+        // actives: an UpToDate short-circuit must never let a killed engine
+        // keep serving until the next version bump (F-review).
+        val revocations = applyKillSwitch(policy) + enforceEngineKills(policy)
 
         val indexHost = hostOf(indexUrl)
             ?: throw PluginFetcher.FetchFailure.Insecure(indexUrl)
@@ -244,6 +248,42 @@ class PluginSyncEngine @Inject constructor(
         return applied
     }
 
+    /**
+     * Engine-level kill-switch on ACTIVES (F-review: the candidate gate in
+     * `syncEntry` never sees UpToDate records). Any served remote payload whose
+     * manifest engine is disabled is unregistered and marked REVOKED — the same
+     * removal primitives as revocation. Pure builtins (no index record) keep
+     * their existing per-source `source_<id>_enabled` kill-switch; an engine
+     * kill never disables APK-shipped scrapers (that path stays an app release).
+     */
+    private suspend fun enforceEngineKills(policy: PluginKillSwitch.Policy): List<String> {
+        if (policy.disabledEngines.isEmpty()) return emptyList()
+        val applied = mutableListOf<String>()
+        for (record in indexStore.getAll()) {
+            if (record.activeVersion == null) continue
+            if (record.status != PluginStatus.ENABLED && record.status != PluginStatus.INSTALLED) continue
+            val engine = record.manifestJson?.let(::parseManifestEngine) ?: continue
+            if (engine !in policy.disabledEngines) continue
+            if (registry.isOverridden(record.id)) {
+                registry.clearOverride(record.id)
+            }
+            registry.unregisterRemote(record.id)
+            indexStore.put(record.copy(status = PluginStatus.REVOKED))
+            applied += "${record.id} (engine ${engine.serialName})"
+            log("kill-switch disabled engine ${engine.serialName}: revoked ${record.id} (was v${record.activeVersion})")
+        }
+        return applied
+    }
+
+    /** Lenient engine read for enforcement (bytes were verified at install). */
+    private fun parseManifestEngine(manifestJson: String): SourceEngine? = runCatching {
+        jsonMapper.readTree(manifestJson).get("engine")
+            ?.takeIf { it.isTextual }?.asText()
+            ?.let { SourceEngine.fromSerialName(it) }
+    }.getOrNull()
+
+    private val jsonMapper = com.fasterxml.jackson.databind.ObjectMapper()
+
     // ─── Per-entry sync ─────────────────────────────────────────────────────
 
     private suspend fun syncEntry(
@@ -306,7 +346,27 @@ class PluginSyncEngine @Inject constructor(
                 enforceFreshness = true
             )
         ) {
-            is ManifestResult.Invalid -> return EntryOutcome.Rejected("${v.reason}: ${v.message.take(120)}")
+            is ManifestResult.Invalid -> {
+                // Incompatible-but-signed manifests leave a marker (F-review):
+                // without a record the upgrade reconciler has nothing to revive
+                // (a daily re-download of the declined candidate is the price —
+                // small manifests, bounded by the parser cap). Only written when
+                // no record exists — a serving record is never touched by a
+                // declined candidate.
+                if (v.reason == ManifestInvalidReason.INCOMPATIBLE && indexStore.get(entry.id) == null) {
+                    indexStore.put(
+                        com.exapps.mangaworld.core.source.plugins.PluginIndexRecord(
+                            id = entry.id,
+                            activeVersion = null,
+                            previousVersion = null,
+                            origin = PluginOrigin.OFFICIAL,
+                            status = PluginStatus.INCOMPATIBLE,
+                            manifestJson = manifestBytes.toString(Charsets.UTF_8)
+                        )
+                    )
+                }
+                return EntryOutcome.Rejected("${v.reason}: ${v.message.take(120)}")
+            }
             is ManifestResult.Valid -> v
         }
         // Defense in depth: the manifest must bind to the hint that found it.
@@ -382,20 +442,26 @@ class PluginSyncEngine @Inject constructor(
             return EntryOutcome.Rejected(outcome.reason)
         }
         val expanded = (outcome as? SourceRegistry.RegisterOutcome.Superseded)?.hostsExpanded == true
-        // Fresh arrivals honor enabledByDefault; previously-serving records keep
-        // their state (an explicit DISABLED survives an update).
-        val enable = record?.status == PluginStatus.ENABLED || manifest.enabledByDefault
-        if (enable) {
+        // Fresh arrivals honor enabledByDefault exactly once (first install);
+        // every later update retains the serving state — an explicit DISABLED
+        // survives even a flag flip to true (F-review: the alternative silently
+        // re-enables sources the user opted out of).
+        val enable = record?.status == PluginStatus.ENABLED ||
+            (record == null && manifest.enabledByDefault)
+        if (enable && record?.status != PluginStatus.ENABLED) {
             runCatching { settingsRepo.toggleSource(entry.id, true) }
         }
         indexStore.get(entry.id)?.let { rec ->
             indexStore.put(rec.copy(status = if (enable) PluginStatus.ENABLED else PluginStatus.DISABLED))
         }
         if (!runPostSmoke(plugin, postSmoke)) {
+            // New ids have no previous version to roll back TO (rollback() is a
+            // no-op without one, which would wedge the record at INSTALLED and
+            // read UpToDate forever). Remove the record instead: the next sweep
+            // re-runs the full flow and self-heals when the payload is fixed.
+            // Orphaned bytes are quota-collected (no record protects them).
             registry.clearOverride(entry.id)
-            indexStore.get(entry.id)?.let { rec ->
-                indexStore.put(rec.copy(status = PluginStatus.QUARANTINED))
-            }
+            runCatching { indexStore.remove(entry.id) }
             log("sync ${entry.id}: post-activation smoke failed — rolled back")
             return EntryOutcome.RolledBack
         }
@@ -459,12 +525,13 @@ class PluginSyncEngine @Inject constructor(
             indexStore.put(rec.copy(status = if (enable) PluginStatus.ENABLED else PluginStatus.DISABLED))
         }
         if (!runPostSmoke(plugin, postSmoke)) {
-            // Previous verified version retained by construction: clear the
-            // override (builtin resumes) and quarantine the candidate.
+            // Previous verified version retained by construction: roll the
+            // pointer back so the next sweep retries the candidate instead of
+            // reading UpToDate on a failed version forever (F-review: the old
+            // registry-only rollback stranded the pointer). rollback() also
+            // gives PluginStore.rollback its first production caller.
             registry.clearOverride(entry.id)
-            indexStore.get(entry.id)?.let { rec ->
-                indexStore.put(rec.copy(status = PluginStatus.QUARANTINED))
-            }
+            runCatching { pluginStore.rollback(entry.id) }
             log("sync ${entry.id}: post-activation smoke failed — rolled back")
             return EntryOutcome.RolledBack
         }

@@ -296,8 +296,96 @@ class PluginScriptSyncTest {
     }
 
     @Test
-    fun engineChangeOnOverrideHeldForConsent() = runTest {
-        val manifestUrl = "https://cdn.example/plugins/hijala/v2/plugin.json"
+    fun oversizedScriptDownloadFails() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/bigscript/v1/plugin.json"
+        val scriptUrl = "https://cdn.example/plugins/bigscript/v1/source.js"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to
+                indexJson(Triple("bigscript", 1, manifestUrl)),
+            manifestUrl to manifestBytes("bigscript", 1) {
+                it.put("engine", "script")
+                it.put("bridgeApi", 1)
+                it.put("scriptSha256", "0".repeat(64))
+                it.put("baseUrl", "https://bigscript.example")
+                it.remove("config")
+            },
+            // Over the 512 KB script cap: the download gate refuses first.
+            scriptUrl to ByteArray(600 * 1024) { 'x'.code.toByte() }
+        )
+        val h = engine(bodies)
+        val result = h.sync()
+        val outcome = result.outcomes["bigscript"]!!
+        assertTrue(outcome is PluginSyncEngine.EntryOutcome.Failed)
+        assertTrue((outcome as PluginSyncEngine.EntryOutcome.Failed).reason.contains("script fetch"))
+        assertTrue(h.second.get("bigscript") == null)
+    }
+
+    @Test
+    fun explicitOptOutSurvivesFlagFlip() = runTest {
+        // F-review regression: a DISABLED record (fresh opt-out) updated with
+        // enabledByDefault=true must NOT re-enable — first-install honors the
+        // flag exactly once, updates retain state.
+        val manifestUrl = "https://cdn.example/plugins/quieter/v2/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to
+                indexJson(Triple("quieter", 2, manifestUrl)),
+            manifestUrl to manifestBytes("quieter", 2) {
+                it.put("engine", "madara")
+                it.put("baseUrl", "https://quieter.example")
+                it.put("enabledByDefault", true)
+            }
+        )
+        val index = FakeIndex()
+        // v1 installed fresh with the flag off → DISABLED by policy.
+        index.put(PluginIndexRecord("quieter", 1, null, PluginOrigin.OFFICIAL, PluginStatus.DISABLED, null))
+        val h = engine(bodies, index)
+        val result = h.sync()
+        assertTrue(result.outcomes["quieter"] is PluginSyncEngine.EntryOutcome.Updated)
+        assertEquals(PluginStatus.DISABLED, h.second.get("quieter")!!.status)
+        coVerify(exactly = 0) { settings.toggleSource("quieter", any()) }
+    }
+
+    @Test
+    fun newIdSmokeFailureRemovesRecord() = runTest {
+        // New ids have no previous version to roll back TO: the record is
+        // removed so the next sweep re-runs the full flow (self-healing)
+        // instead of wedging on UpToDate.
+        val manifestUrl = "https://cdn.example/plugins/fragile/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to
+                indexJson(Triple("fragile", 1, manifestUrl)),
+            manifestUrl to manifestBytes("fragile", 1) {
+                it.put("engine", "madara")
+                it.put("baseUrl", "https://fragile.example")
+            }
+        )
+        val index = FakeIndex()
+        val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+        val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
+        val runners = PluginRunnerFactory(
+            OkHttpClient(), settings,
+            ScriptPluginLoader(
+                ScriptRunnerFactory(
+                    ScriptTestSupport.sandbox, ScriptTestSupport.FakeFetcher(),
+                    ScriptTestSupport.logger, kotlinx.coroutines.Dispatchers.Unconfined
+                )
+            )
+        )
+        val e = PluginSyncEngine(
+            index, store, registry, FakeFetcher(bodies), FakeEtag(),
+            runners, settings, kotlinx.coroutines.Dispatchers.Unconfined
+        )
+        e.log = { }
+        val result = e.sync(
+            trustedKeys = trust, host = host,
+            indexUrl = "https://cdn.example/plugins/index.json",
+            postSmoke = PostSmoke.Custom({ false }), baseDir = tmp.root
+        )
+        assertEquals(PluginSyncEngine.EntryOutcome.RolledBack, result.outcomes["fragile"])
+        assertTrue(!registry.isKnown("fragile"))
+        assertTrue(index.get("fragile") == null)
+    }
+}        val manifestUrl = "https://cdn.example/plugins/hijala/v2/plugin.json"
         val bodies = mutableMapOf(
             "https://cdn.example/plugins/index.json" to
                 indexJson(Triple("hijala", 2, manifestUrl)),

@@ -55,7 +55,17 @@ class ScriptBridgeSession(
     private val documents = HashMap<Int, org.jsoup.nodes.Document>()
     private var nextHandle = 1
 
+    // Per-call consumption quotas (S-review: instruction counting cannot see
+    // RAM/network accumulation — these bound what it cannot).
+    private var fetchCount = 0
+    private var fetchedBytes = 0L
+
     fun store(doc: org.jsoup.nodes.Document): Int {
+        if (documents.size >= ScriptContract.MAX_DOCS_PER_CALL) {
+            throw ScriptQuotaExceededException(
+                "too many parsed documents (${ScriptContract.MAX_DOCS_PER_CALL})"
+            )
+        }
         val h = nextHandle++
         documents[h] = doc
         return h
@@ -63,6 +73,19 @@ class ScriptBridgeSession(
 
     fun lookup(handle: Int): org.jsoup.nodes.Document =
         documents[handle] ?: throw ScriptBridgeException("unknown document handle")
+
+    /** Charges one fetch + its bytes against the per-call quotas. */
+    fun chargeFetch(bytes: Int) {
+        if (++fetchCount > ScriptContract.MAX_FETCHES_PER_CALL) {
+            throw ScriptQuotaExceededException(
+                "too many fetches (${ScriptContract.MAX_FETCHES_PER_CALL})"
+            )
+        }
+        fetchedBytes += bytes
+        if (fetchedBytes > ScriptContract.MAX_CALL_BYTES) {
+            throw ScriptQuotaExceededException("fetch volume exceeds per-call budget")
+        }
+    }
 }
 
 /** Installs the seven bridge globals into a fresh scope. Call once per scope. */
@@ -189,6 +212,7 @@ object ScriptBridge {
             if (res.status !in 200..299) {
                 throw ScriptHttpException("HTTP ${res.status}")
             }
+            session.chargeFetch(res.body.size)
             return res.body.toString(Charsets.UTF_8)
         }
     }

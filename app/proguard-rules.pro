@@ -7,6 +7,13 @@
 -keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase
 -keep class okhttp3.** { *; }
 
+# ── Rhino (Phase 3 script sandbox) ─────────────────────────────────────────────
+# java.beans is referenced by JavaToJSONConverters but never reached: no Java
+# object crosses the bridge (results are validated primitives; a leaked host
+# object is a hard failure). Interpreter-only operation generates no classes,
+# so no keeps are needed — just silence the missing platform types.
+-dontwarn java.beans.**
+
 # ── Kotlin coroutines ──────────────────────────────────────────────────────────
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}

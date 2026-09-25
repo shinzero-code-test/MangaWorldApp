@@ -89,9 +89,12 @@ class DescriptorSchemaTest {
     @Test
     fun scriptEngineRequiresHash() {
         // bridgeApi present so the compat gate passes and the hash rule itself is exercised.
+        // (config removed: the script whitelist is empty, and its violation would
+        // fire before the hash rule under test.)
         expectViolation {
             it.put("engine", "script")
             it.put("bridgeApi", 1)
+            it.remove("config")
         }
     }
 

@@ -18,7 +18,6 @@ object ScriptContract {
 
     /** Current bridge level. Manifests declaring any other `bridgeApi` fail closed. */
     const val BRIDGE_API_V1 = 1
-
     // ─── Entry points (fixed; the runner calls these by name) ────────────────
 
     const val ENTRY_HOME = "home"
@@ -83,8 +82,27 @@ object ScriptContract {
 
     /** Host-object names deleted from every scope before the script runs. */
     val REMOVED_HOST_NAMES = listOf(
-        "Packages", "java", "org", "JavaAdapter", "JavaImporter", "JavaArray"
+        "Packages", "java", "javax", "org", "com", "edu", "net",
+        "JavaAdapter", "JavaImporter", "JavaArray"
     )
+
+    // ─── Per-call quotas (fail the single call, never the app) ───────────────
+
+    /**
+     * Parsed documents retained per call. A script parsing in a loop cannot
+     * accumulate Jsoup DOMs past this (RAM bound the instruction budget cannot
+     * see — node counting is not instruction counting).
+     */
+    const val MAX_DOCS_PER_CALL = 100
+
+    /** Bridge `fetch` calls per script call (pagination stays far below this). */
+    const val MAX_FETCHES_PER_CALL = 25
+
+    /** Cumulative fetched bytes per script call across all fetches. */
+    const val MAX_CALL_BYTES = 100L * 1024 * 1024
+
+    /** Total converted result nodes per call (breadth the depth cap misses). */
+    const val MAX_RESULT_NODES = 200_000
 }
 
 /** Base for every script failure: per-call quarantine, full message, no app crash. */
@@ -94,8 +112,12 @@ open class ScriptException(message: String, cause: Throwable? = null) :
 /** Wall-clock or instruction budget exhausted. */
 class ScriptQuotaExceededException(message: String) : ScriptException(message)
 
-/** The awaiting coroutine was cancelled (timeout): abort promptly. */
-internal class ScriptCancelledException : ScriptException("cancelled")
+/**
+ * The awaiting coroutine was cancelled (timeout): abort promptly.
+ * Extends [CancellationException] (not [ScriptException]) so aborts cooperate
+ * with structured concurrency instead of being swallowed into results.
+ */
+internal class ScriptCancelledException : CancellationException("cancelled")
 
 /** Bridge misuse or policy refusal (bad args, off-allowlist host, oversize). */
 class ScriptBridgeException(message: String) : ScriptException(message)

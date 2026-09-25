@@ -212,6 +212,24 @@ class SourceHealthTest {
     }
 
     @Test
+    fun pagesBranchesCounted() = runTest {
+        // Empty page list: a chapter with no renderable pages is broken output.
+        val m = monitor()
+        repeat(5) { m.observePages("hijala", Result.success(emptyList<Any>())) }
+        assertEquals(HealthState.DEGRADED, m.snapshot("hijala"))
+        // Non-empty success resets.
+        val m2 = monitor()
+        repeat(4) { m2.observePages("hijala", Result.success(listOf("p1"))) }
+        m2.observePages("hijala", Result.success(listOf("p1")))
+        m2.observePages("hijala", Result.success(emptyList<Any>()))
+        assertEquals(HealthState.OK, m2.snapshot("hijala"))
+        // Failures count like anywhere else.
+        val m3 = monitor()
+        repeat(5) { m3.observePages("hijala", failure()) }
+        assertEquals(HealthState.DEGRADED, m3.snapshot("hijala"))
+    }
+
+    @Test
     fun reverifyResetsAfterCleanSmoke() = runTest {
         val health = FakeHealth()
         val index = FakeIndex()

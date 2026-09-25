@@ -76,8 +76,7 @@ object SourceHealthPolicy {
             // Quarantine lifts only via explicit re-smoke, never via traffic.
             return Decision.Hold(current.anomalies, HealthState.QUARANTINED)
         }
-        if (!failed && !emptyPrimary) return Decision.Reset
-        val anomalies = current.anomalies + 1
+        if (!failed && !emptyPrimary) return Decision.Reset        val anomalies = current.anomalies + 1
         if (anomalies >= QUARANTINE_AT &&
             (current.lastQuarantinedAt == 0L ||
                 nowMs - current.lastQuarantinedAt >= QUARANTINE_COOLDOWN_MS)
@@ -93,6 +92,21 @@ object SourceHealthPolicy {
 interface HealthStore {
     suspend fun load(id: String): SourceHealthPolicy.Observation
     suspend fun save(id: String, observation: SourceHealthPolicy.Observation)
+
+    /**
+     * Atomic read-modify-write (F-review: separate load/save races lost
+     * increments under concurrent reads). Skips the write when [f] returns its
+     * input — clean-traffic reads must not churn storage on every home load.
+     */
+    suspend fun <R> update(
+        id: String,
+        f: (SourceHealthPolicy.Observation) -> Pair<SourceHealthPolicy.Observation, R>
+    ): R {
+        val current = load(id)
+        val (next, result) = f(current)
+        if (next != current) save(id, next)
+        return result
+    }
 }
 
 /**
@@ -107,6 +121,27 @@ class PrefsHealthStore @Inject constructor(
     private val mutex = Mutex()
 
     override suspend fun load(id: String): SourceHealthPolicy.Observation = mutex.withLock {
+        loadLocked(id)
+    }
+
+    override suspend fun save(id: String, observation: SourceHealthPolicy.Observation) {
+        mutex.withLock {
+            saveLocked(id, observation)
+        }
+    }
+
+    /** Single-mutex read-modify-write: concurrent readers cannot interleave. */
+    override suspend fun <R> update(
+        id: String,
+        f: (SourceHealthPolicy.Observation) -> Pair<SourceHealthPolicy.Observation, R>
+    ): R = mutex.withLock {
+        val current = loadLocked(id)
+        val (next, result) = f(current)
+        if (next != current) saveLocked(id, next)
+        result
+    }
+
+    private fun loadLocked(id: String): SourceHealthPolicy.Observation {
         val raw = prefs().getString(key(id), null) ?: return SourceHealthPolicy.initial()
         runCatching {
             val o = JSONObject(raw)
@@ -119,14 +154,12 @@ class PrefsHealthStore @Inject constructor(
         }.getOrDefault(SourceHealthPolicy.initial())
     }
 
-    override suspend fun save(id: String, observation: SourceHealthPolicy.Observation) {
-        mutex.withLock {
-            val o = JSONObject()
-                .put("a", observation.anomalies)
-                .put("s", observation.state.name)
-                .put("q", observation.lastQuarantinedAt)
-            prefs().edit().putString(key(id), o.toString()).apply()
-        }
+    private fun saveLocked(id: String, observation: SourceHealthPolicy.Observation) {
+        val o = JSONObject()
+            .put("a", observation.anomalies)
+            .put("s", observation.state.name)
+            .put("q", observation.lastQuarantinedAt)
+        prefs().edit().putString(key(id), o.toString()).apply()
     }
 
     private fun prefs() = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)

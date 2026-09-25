@@ -119,4 +119,22 @@ class PluginUpgradeReconcilerTest {
         assertEquals(0, reconciler(index).reconcile("8.10.0"))
         assertEquals(PluginStatus.INCOMPATIBLE, index.get("upg")!!.status)
     }
+
+    @Test
+    fun staleTrustAnchorStaysIncompatible() = runTest {
+        val index = FakeIndex()
+        // Signed correctly but issued long ago: the freshness gate (downloaded
+        // trust data) refuses resurrection on upgrade, same as on sync.
+        val node = PluginTestFixtures.manifestTree {
+            it.put("id", "upg")
+            it.put("version", 2)
+            it.put("engineApi", 1)
+            it.put("minAppVersion", "9.0.0")
+            it.put("issuedAt", "2020-01-01T00:00:00Z")
+        }
+        val stale = PluginTestFixtures.signManifest(node, "k1", kp.private).toString(Charsets.UTF_8)
+        index.put(record(PluginStatus.INCOMPATIBLE, stale))
+        assertEquals(0, reconciler(index).reconcile("9.0.0"))
+        assertEquals(PluginStatus.INCOMPATIBLE, index.get("upg")!!.status)
+    }
 }

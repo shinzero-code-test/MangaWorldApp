@@ -9,6 +9,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 /**
@@ -250,10 +251,97 @@ class ScriptRunnerTest {
     }
 
     @Test
+    fun instructionBudgetBackstopsAStuckCall() = runTest {
+        // Virtual time never advances while the test thread is parked inside
+        // the sandbox, so the wall clock CANNOT fire here by construction —
+        // the instruction budget must stop the loop instead (failure, not hang).
+        val script = """
+            function home(ctx){ while(true){ var x = 1 + 1; } }
+            function detail(ctx){ return {id:'a', slug:'a', title:'A'}; }
+            function pages(ctx){ return []; }
+            function search(ctx){ return []; }
+            function browse(ctx){ return []; }
+        """.trimIndent()
+        val r = ScriptRunnerFactory(
+            ScriptTestSupport.sandbox,
+            ScriptTestSupport.FakeFetcher(),
+            ScriptTestSupport.logger,
+            Dispatchers.Unconfined
+        ).create(ScriptTestSupport.manifest(timeoutMs = 200), script.toByteArray(Charsets.UTF_8)).getOrThrow()
+        val result = r.getHomeData()
+        assertTrue(result.isFailure)
+        assertTrue(
+            result.exceptionOrNull() is com.exapps.mangaworld.core.source.script.ScriptQuotaExceededException
+        )
+    }
+
+    @Test
+    fun wallClockTimeoutPropagatesAsCancellation() {
+        // Real time, blocked fetch: the ONLY thing that can stop this call is
+        // the wall clock — and it must surface as CancellationException
+        // (structured concurrency), never be swallowed into a Result.
+        val gate = kotlinx.coroutines.CompletableDeferred<ByteArray>()
+        val fetcher = object : com.exapps.mangaworld.core.source.script.ScriptFetcher {
+            override suspend fun fetch(
+                url: String,
+                headers: Map<String, String>,
+                maxBytes: Long,
+                timeoutMs: Int,
+                allowedHosts: Set<String>
+            ): com.exapps.mangaworld.core.source.script.ScriptFetcher.Response {
+                gate.await()
+                error("unreachable")
+            }
+        }
+        val exec = java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable).apply { isDaemon = true }
+        }
+        try {
+            val script = """
+                function home(ctx){ fetch('https://script.example/'); return {featured: [], latest: [], trending: []}; }
+                function detail(ctx){ return {id:'a', slug:'a', title:'A'}; }
+                function pages(ctx){ return []; }
+                function search(ctx){ return []; }
+                function browse(ctx){ return []; }
+            """.trimIndent()
+            val r = ScriptRunnerFactory(
+                ScriptTestSupport.sandbox,
+                fetcher,
+                ScriptTestSupport.logger,
+                exec.asCoroutineDispatcher()
+            ).create(ScriptTestSupport.manifest(timeoutMs = 200), script.toByteArray(Charsets.UTF_8)).getOrThrow()
+            kotlinx.coroutines.runBlocking { r.getHomeData() }
+            fail("expected cancellation")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Expected: TimeoutCancellationException propagates.
+        } finally {
+            exec.shutdownNow()
+        }
+    }
+
+    @Test
+    fun executionHonorsInjectedDispatcher() = runTest {
+        // The runner must execute on the dedicated pool, never the caller's
+        // thread by accident: a counting dispatcher proves the wiring.
+        var dispatched = 0
+        val counting = object : kotlinx.coroutines.CoroutineDispatcher() {
+            override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+                dispatched++
+                block.run()
+            }
+        }
+        val r = ScriptRunnerFactory(
+            ScriptTestSupport.sandbox,
+            ScriptTestSupport.FakeFetcher(),
+            ScriptTestSupport.logger,
+            counting
+        ).create(ScriptTestSupport.manifest(), source.toByteArray(Charsets.UTF_8)).getOrThrow()
+        assertTrue(r.getHomeData().isSuccess)
+        assertTrue("script never ran on the injected dispatcher", dispatched > 0)
+    }
+
+    @Test
     fun coldAndWarmCallTimingsLogged() = runTest {
-        // Non-asserting probe (shared runners are noisy): prints the shape the
-        // perf budget doc (§phase3-script-perf) is calibrated from. Correctness
-        // is asserted; wall time is observed.
         val factory = ScriptRunnerFactory(
             ScriptTestSupport.sandbox,
             ScriptTestSupport.FakeFetcher(),

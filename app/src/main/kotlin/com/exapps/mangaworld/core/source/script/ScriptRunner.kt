@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.core.source.script
 
 import com.exapps.mangaworld.core.source.plugins.PluginManifest
+import com.exapps.mangaworld.core.source.plugins.HostPolicy
 import com.exapps.mangaworld.core.data.remote.scraper.MangaScraper
 import com.exapps.mangaworld.domain.model.Chapter
 import com.exapps.mangaworld.domain.model.ChapterPage
@@ -129,7 +130,11 @@ class ScriptScraper internal constructor(
         return withTimeout(manifest.timeoutMs.toLong()) {
             withContext(dispatcher) {
                 sandbox.run(ScriptContract.INSTRUCTION_BUDGET, cancelled) { cx ->
-                    val scope = cx.initStandardObjects()
+                    // Sandboxed like any call: top-level script code executes at
+                    // exec time, so the bridge MUST be installed here too —
+                    // an uninstalled probe scope would run page-level code with
+                    // full host roots (S-review blocker).
+                    val (scope, _) = freshScope(cx)
                     script.exec(cx, scope)
                     val fn = scope.get(entry, scope)
                     fn !== Scriptable.NOT_FOUND && fn is Function
@@ -166,9 +171,7 @@ class ScriptScraper internal constructor(
     }
 
     private fun execute(cx: Context, entry: String, ctx: Map<String, Any?>): Any? {
-        val scope = cx.initStandardObjects()
-        val session = ScriptBridgeSession(manifest, fetcher, logger)
-        ScriptBridge.install(cx, scope, session)
+        val (scope, _) = freshScope(cx)
         script.exec(cx, scope)
         val fn = scope.get(entry, scope)
         if (fn === Scriptable.NOT_FOUND || fn !is Function) {
@@ -176,13 +179,28 @@ class ScriptScraper internal constructor(
         }
         val ctxObj = cx.newObject(scope)
         ctx.forEach { (k, v) -> ScriptableObject.putProperty(ctxObj, k, v) }
-        return toKotlin(fn.call(cx, scope, scope, arrayOf(ctxObj)), depth = 0)
+        return toKotlin(fn.call(cx, scope, scope, arrayOf(ctxObj)), depth = 0, budget = intArrayOf(MAX_RESULT_NODES))
+    }
+
+    /**
+     * Fresh scope + per-call bridge session. The ONLY scope-construction path:
+     * both entry dispatch and entry probing funnel here so top-level script
+     * code can never execute outside the sandbox.
+     */
+    private fun freshScope(cx: Context): Pair<Scriptable, ScriptBridgeSession> {
+        val scope = cx.initStandardObjects()
+        val session = ScriptBridgeSession(manifest, fetcher, logger)
+        ScriptBridge.install(cx, scope, session)
+        return scope to session
     }
 
     // ─── JS → Kotlin conversion (plain data only) ────────────────────────────
 
-    internal fun toKotlin(value: Any?, depth: Int): Any? {
+    internal fun toKotlin(value: Any?, depth: Int, budget: IntArray = intArrayOf(MAX_RESULT_NODES)): Any? {
         if (depth > MAX_DEPTH) throw ScriptResultException("result too deep")
+        // Breadth the depth cap misses: every node spends from one budget.
+        budget[0]--
+        if (budget[0] < 0) throw ScriptResultException("result too large")
         return when {
             value == null || value === Undefined.instance || value === Scriptable.NOT_FOUND -> null
             value is String -> value
@@ -192,7 +210,7 @@ class ScriptScraper internal constructor(
             value is NativeArray -> {
                 val n = value.length
                 if (n > MAX_ARRAY) throw ScriptResultException("result array too large")
-                (0 until n).map { toKotlin(value.get(it.toInt(), value), depth + 1) }
+                (0 until n).map { toKotlin(value.get(it.toInt(), value), depth + 1, budget) }
             }
             value is NativeObject -> {
                 value.ids.associate { id ->
@@ -203,7 +221,7 @@ class ScriptScraper internal constructor(
                         is Int -> value.get(id, value)
                         else -> value.get(key, value)
                     }
-                    key to toKotlin(prop, depth + 1)
+                    key to toKotlin(prop, depth + 1, budget)
                 }
             }
             // Anything else (functions, host objects, Map/Set, Dates) must never
@@ -252,6 +270,8 @@ class ScriptScraper internal constructor(
     private fun httpsOrBlank(url: String?, what: String): String {
         if (url.isNullOrBlank()) return ""
         if (!url.startsWith("https://")) throw ScriptResultException("$what must be https")
+        if (url.any { it < ' ' }) throw ScriptResultException("$what carries control chars")
+        confineToAllowlist(url, what)
         return url.take(MAX_URL)
     }
 
@@ -259,7 +279,26 @@ class ScriptScraper internal constructor(
         val s = (url as? String)?.takeIf { it.isNotBlank() }
             ?: throw ScriptResultException("$what must be a non-blank string")
         if (!s.startsWith("https://")) throw ScriptResultException("$what must be https")
+        if (s.any { it < ' ' }) throw ScriptResultException("$what carries control chars")
+        confineToAllowlist(s, what)
         return s.take(MAX_URL)
+    }
+
+    /**
+     * Result-URL confinement (S-review): fetched content (pages, chapters,
+     * covers) may only point at the manifest's own host set. The manifest MUST
+     * list every image CDN (plan §4) — an off-allowlist URL is a packaging
+     * error (or a compromised script), and failing loudly at smoke keeps it
+     * out of distribution instead of pointing the reader at a stranger.
+     * Opaque navigation strings (slugs, detail urls) are NOT confined here —
+     * they re-enter through the bridge, which gates every fetch.
+     */
+    private fun confineToAllowlist(url: String, what: String) {
+        val host = runCatching { java.net.URI(url).host }
+            .getOrNull()?.lowercase()?.trimEnd('.').orEmpty()
+        if (!HostPolicy.isHostAllowed(host, manifest.effectiveHosts)) {
+            throw ScriptResultException("$what host not allowed")
+        }
     }
 
     private fun mapManga(m: Map<String, Any?>): MangaItem {
@@ -389,6 +428,11 @@ class ScriptScraper internal constructor(
             if (k.length > MAX_HEADER || '\r' in k || '\n' in k) {
                 throw ScriptResultException("bad page header name")
             }
+            // Credential/transport headers stay bridge-managed: a script may set
+            // Referer/User-Agent-shaped literals, never identity or framing.
+            if (k.lowercase() in DENIED_PAGE_HEADERS) {
+                throw ScriptResultException("page header not allowed: $k")
+            }
             val value = (v as? String) ?: throw ScriptResultException("page header must be strings")
             if (value.length > MAX_HEADER || '\r' in value || '\n' in value) {
                 throw ScriptResultException("bad page header value")
@@ -419,6 +463,22 @@ class ScriptScraper internal constructor(
         private const val MAX_GENRES = 100
         private const val MAX_HEADER = 1_024
         private const val MAX_PAGE_HEADERS = 20
+        private const val MAX_RESULT_NODES = 200_000
+
+        /**
+         * Never script-settable on result page headers: identity stays with the
+         * solver store, framing with the HTTP stack.
+         */
+        private val DENIED_PAGE_HEADERS = setOf(
+            "cookie", "authorization", "proxy-authenticate", "proxy-authorization",
+            "host", "content-length", "transfer-encoding", "connection"
+        )
+
+        /** Local mirror of the loader's pin helper (see create()). */
+        internal fun sha256Hex(bytes: ByteArray): String {
+            val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+            return digest.joinToString("") { "%02x".format(it) }
+        }
     }
 }
 
@@ -440,6 +500,14 @@ class ScriptRunnerFactory @Inject constructor(
         }
         if (scriptBytes.size > ScriptContract.SCRIPT_MAX_BYTES) {
             return Result.failure(ScriptException("source.js exceeds ${ScriptContract.SCRIPT_MAX_BYTES} bytes"))
+        }
+        // Hash pin, checked here AND in ScriptPluginLoader (the install gate):
+        // factory-level callers must not be able to bypass the pin by skipping
+        // the loader (S-review). Mirrors the loader's canonical hex helper.
+        val expected = manifest.scriptSha256
+            ?: return Result.failure(ScriptException("manifest pins no script hash"))
+        if (!sha256Hex(scriptBytes).equals(expected, ignoreCase = true)) {
+            return Result.failure(ScriptException("script hash mismatch"))
         }
         val source = try {
             scriptBytes.toString(Charsets.UTF_8)

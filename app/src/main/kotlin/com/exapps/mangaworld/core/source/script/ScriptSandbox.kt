@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.source.script
 
+import org.mozilla.javascript.ClassShutter
 import org.mozilla.javascript.Context
 import org.mozilla.javascript.ContextAction
 import org.mozilla.javascript.ContextFactory
@@ -38,6 +39,11 @@ class ScriptContextFactory : ContextFactory() {
         super.onContextCreated(cx)
         cx.optimizationLevel = -1
         cx.languageVersion = Context.VERSION_ES6
+        // Backstop behind the deleted host-root names: even if a future Rhino
+        // exposes a new path to Java, no class resolves through it. Our bridge
+        // passes pre-instantiated function objects (never name-resolved), so
+        // legitimate scripts are unaffected.
+        cx.setClassShutter(ClassShutter { false })
         // NOTE: the field-style property does NOT resolve here (Rhino keeps the
         // threshold behind the explicit setter name) — call it directly.
         cx.setInstructionObserverThreshold(ScriptContract.INSTRUCTION_OBSERVATION_THRESHOLD)

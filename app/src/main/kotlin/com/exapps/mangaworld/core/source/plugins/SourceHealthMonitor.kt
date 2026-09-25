@@ -62,7 +62,17 @@ class SourceHealthMonitor @Inject constructor(
             .map { !it.isHomeEmpty() }
             .getOrDefault(false)
         if (!ok) return@withContext false
-        store.save(id, SourceHealthPolicy.initial())
+        val current = store.load(id)
+        store.save(
+            id,
+            SourceHealthPolicy.Observation(
+                anomalies = 0,
+                state = HealthState.OK,
+                // Preserve quarantine memory (F-review): the cooldown must still
+                // apply to the NEXT quarantine after a recovery.
+                lastQuarantinedAt = current.lastQuarantinedAt
+            )
+        )
         index.get(id)?.let { rec ->
             if (rec.status == PluginStatus.QUARANTINED) {
                 index.put(rec.copy(status = PluginStatus.INSTALLED))
@@ -76,27 +86,31 @@ class SourceHealthMonitor @Inject constructor(
 
     private suspend fun observe(id: String, failed: Boolean, emptyPrimary: Boolean): HealthState =
         kotlinx.coroutines.withContext(io) {
-            val current = store.load(id)
-            when (val d = SourceHealthPolicy.observe(current, failed, emptyPrimary, nowMs())) {
-                is SourceHealthPolicy.Decision.Reset -> {
-                    if (current.anomalies != 0 || current.state != HealthState.OK) {
-                        store.save(id, SourceHealthPolicy.initial())
-                    }
-                    HealthState.OK
-                }
-                is SourceHealthPolicy.Decision.Hold -> {
-                    store.save(id, SourceHealthPolicy.Observation(d.anomalies, d.state, current.lastQuarantinedAt))
-                    d.state
-                }
-                is SourceHealthPolicy.Decision.Quarantine -> {
-                    store.save(
-                        id,
-                        SourceHealthPolicy.Observation(d.anomalies, HealthState.QUARANTINED, nowMs())
-                    )
-                    applyQuarantine(id)
-                    HealthState.QUARANTINED
+            // One atomic transition (F-review: the decision reads the same
+            // value it writes). Quarantine application runs AFTER the store
+            // write, outside any store lock — re-running it is idempotent, so
+            // a crash between write and apply self-heals on the next anomaly.
+            val now = nowMs()
+            val (state, quarantined) = store.update(id) { current ->
+                when (val d = SourceHealthPolicy.observe(current, failed, emptyPrimary, now)) {
+                    is SourceHealthPolicy.Decision.Reset ->
+                        SourceHealthPolicy.Observation(
+                            anomalies = 0,
+                            state = HealthState.OK,
+                            lastQuarantinedAt = current.lastQuarantinedAt
+                        ) to (HealthState.OK to false)
+                    is SourceHealthPolicy.Decision.Hold ->
+                        SourceHealthPolicy.Observation(
+                            d.anomalies, d.state, current.lastQuarantinedAt
+                        ) to (d.state to false)
+                    is SourceHealthPolicy.Decision.Quarantine ->
+                        SourceHealthPolicy.Observation(
+                            d.anomalies, HealthState.QUARANTINED, now
+                        ) to (HealthState.QUARANTINED to true)
                 }
             }
+            if (quarantined) applyQuarantine(id)
+            state
         }
 
     private suspend fun applyQuarantine(id: String) {

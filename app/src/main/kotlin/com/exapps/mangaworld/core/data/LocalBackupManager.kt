@@ -106,6 +106,14 @@ class LocalBackupManager @Inject constructor(
                     JSONArray(
                         pluginIndex.getAll()
                             .filter { it.activeVersion != null }
+                            // Revoked/quarantined/invalid installs must not
+                            // resurrect through restore (F-review): the sync
+                            // engine re-derives those states from live policy.
+                            .filter {
+                                it.status != com.exapps.mangaworld.core.source.plugins.PluginStatus.REVOKED &&
+                                    it.status != com.exapps.mangaworld.core.source.plugins.PluginStatus.QUARANTINED &&
+                                    it.status != com.exapps.mangaworld.core.source.plugins.PluginStatus.INVALID
+                            }
                             .map { pluginRefToJson(it) }
                     )
                 )
