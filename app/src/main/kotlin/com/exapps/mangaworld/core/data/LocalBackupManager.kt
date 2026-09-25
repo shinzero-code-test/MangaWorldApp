@@ -548,8 +548,12 @@ internal fun pluginRefToJson(
 }
 
 internal fun org.json.JSONObject.toPluginRef(): PluginRef {
-    val id = optString("id").take(64)
-    if (!PLUGIN_REF_ID_REGEX.matches(id)) throw IllegalArgumentException("bad plugin ref id")
+    // Overlong ids are rejected, never truncated: a truncated id would point
+    // the restore at the WRONG source.
+    val id = optString("id")
+    if (id.length > 64 || !PLUGIN_REF_ID_REGEX.matches(id)) {
+        throw IllegalArgumentException("bad plugin ref id")
+    }
     val version = optInt("version", 0)
     if (version < 1) throw IllegalArgumentException("bad plugin ref version")
     val origin = runCatching {

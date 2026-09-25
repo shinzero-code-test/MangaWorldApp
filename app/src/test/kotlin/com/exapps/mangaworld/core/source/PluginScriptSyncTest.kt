@@ -302,8 +302,9 @@ class PluginScriptSyncTest {
             "https://cdn.example/plugins/index.json" to
                 indexJson(Triple("hijala", 2, manifestUrl)),
             manifestUrl to manifestBytes("hijala", 2) {
-                // Builtin hijala is MANGAREADER; v2 claims MADARA.
-                it.put("engine", "madara")
+                // Fixture hijala is MADARA; v2 claims MANGAREADER (as the real
+                // hijala is) — an engine change on override.
+                it.put("engine", "mangareader")
                 it.put("baseUrl", "https://hijala.example")
             }
         )

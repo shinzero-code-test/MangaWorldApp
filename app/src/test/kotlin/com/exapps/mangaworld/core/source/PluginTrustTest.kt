@@ -139,8 +139,9 @@ class PluginTrustTest {
 
     @Test
     fun productionCapabilitiesGateScriptAndFutureApis() {
-        val host = PluginTrust.productionCapabilities("8.9.0")
-        // Script engine has no production contract yet → incompatible, not schema error.
+        val host = PluginTrust.productionCapabilities("9.0.0")
+        // Phase 3: the script engine holds a production contract (bridge v1) —
+        // a well-formed script manifest verifies (compat gate passes).
         val kp = PluginTestFixtures.generateKeyPair()
         val parser2 = ManifestParser(
             trustedKeys = mapOf("k1" to PluginTestFixtures.rawPublicKey(kp.public)),
@@ -148,14 +149,26 @@ class PluginTrustTest {
         )
         val script = PluginTestFixtures.manifestTree {
             it.put("engine", "script")
+            it.put("engineApi", 1)
             it.put("bridgeApi", 1)
             it.put("scriptSha256", "a".repeat(64))
+            it.remove("config")
         }
         val scriptResult = parser2.parseAndVerify(PluginTestFixtures.signManifest(script, "k1", kp.private))
-        assertTrue(scriptResult is ManifestResult.Invalid)
+        assertTrue(scriptResult is ManifestResult.Valid)
+        // Unknown bridge levels still fail closed as incompatible.
+        val badBridge = PluginTestFixtures.manifestTree {
+            it.put("engine", "script")
+            it.put("engineApi", 1)
+            it.put("bridgeApi", 9)
+            it.put("scriptSha256", "a".repeat(64))
+            it.remove("config")
+        }
+        val badBridgeResult = parser2.parseAndVerify(PluginTestFixtures.signManifest(badBridge, "k1", kp.private))
+        assertTrue(badBridgeResult is ManifestResult.Invalid)
         assertEquals(
             com.exapps.mangaworld.core.source.plugins.ManifestInvalidReason.INCOMPATIBLE,
-            (scriptResult as ManifestResult.Invalid).reason
+            (badBridgeResult as ManifestResult.Invalid).reason
         )
         // Future engineApi fails closed as incompatible.
         val future = PluginTestFixtures.manifestTree { it.put("engineApi", 9) }
@@ -165,11 +178,11 @@ class PluginTrustTest {
             com.exapps.mangaworld.core.source.plugins.ManifestInvalidReason.INCOMPATIBLE,
             (futureResult as ManifestResult.Invalid).reason
         )
-        // Supported engines map covers exactly the theme/API set.
+        // Supported engines map covers the theme/API set plus scripts.
         assertEquals(
-            setOf(SourceEngine.MADARA, SourceEngine.MANGAREADER, SourceEngine.ASTRO, SourceEngine.API),
+            setOf(SourceEngine.MADARA, SourceEngine.MANGAREADER, SourceEngine.ASTRO, SourceEngine.API, SourceEngine.SCRIPT),
             host.supportedEngines.keys
         )
-        assertTrue(SourceEngine.SCRIPT !in host.supportedEngines)
+        assertEquals(1, host.supportedBridgeApi)
     }
 }

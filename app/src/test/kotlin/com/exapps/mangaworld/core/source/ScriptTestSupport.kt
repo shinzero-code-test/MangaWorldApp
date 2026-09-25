@@ -10,6 +10,8 @@ import com.exapps.mangaworld.core.source.script.ScriptFetcher
 import com.exapps.mangaworld.core.source.script.ScriptLogger
 import org.mozilla.javascript.Context
 import org.mozilla.javascript.Scriptable
+import org.mozilla.javascript.ScriptableObject
+import org.mozilla.javascript.Undefined
 
 /**
  * Shared scaffolding for the Phase 3 script-sandbox tests (bridge, containment,
@@ -84,13 +86,20 @@ object ScriptTestSupport {
         logger: ScriptLogger = this.logger
     ) = ScriptBridgeSession(manifest, fetcher, logger)
 
-    /** Evaluates [source] and returns its JSON-stringified completion value. */
+    /**
+     * Evaluates [source] as STATEMENTS (any script shape, not just expressions)
+     * and returns the JSON-stringified completion value, or null for
+     * `undefined`/empty completion. Non-terminating scripts surface as the
+     * sandbox refusal (budget/cancellation), never a hang.
+     */
     fun evalJson(source: String, session: ScriptBridgeSession = session()): String? =
         sandbox.run { cx ->
             val scope = cx.initStandardObjects()
             ScriptBridge.install(cx, scope, session)
-            val wrapped = "JSON.stringify((function(){ return ($source); })())"
-            val raw = cx.evaluateString(scope, wrapped, "<test>", 1, null)
-            Context.toString(raw).takeIf { it != "undefined" }
+            val raw = cx.evaluateString(scope, source, "<test>", 1, null)
+            if (raw == null || raw === Undefined.instance) return@run null
+            ScriptableObject.putProperty(scope, "__result__", raw)
+            val json = cx.evaluateString(scope, "JSON.stringify(__result__)", "<test>", 1, null)
+            Context.toString(json).takeIf { it != "undefined" }
         }
 }

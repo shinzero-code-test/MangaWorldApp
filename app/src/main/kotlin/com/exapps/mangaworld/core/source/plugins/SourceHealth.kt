@@ -79,7 +79,8 @@ object SourceHealthPolicy {
         if (!failed && !emptyPrimary) return Decision.Reset
         val anomalies = current.anomalies + 1
         if (anomalies >= QUARANTINE_AT &&
-            nowMs - current.lastQuarantinedAt >= QUARANTINE_COOLDOWN_MS
+            (current.lastQuarantinedAt == 0L ||
+                nowMs - current.lastQuarantinedAt >= QUARANTINE_COOLDOWN_MS)
         ) {
             return Decision.Quarantine(anomalies)
         }
