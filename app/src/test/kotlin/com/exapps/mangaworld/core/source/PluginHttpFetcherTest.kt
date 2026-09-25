@@ -184,6 +184,41 @@ class PluginHttpFetcherTest {
     }
 
     @Test
+    fun probeDeltaFetchResult() = runTest {
+        val factory = ScriptCallFactory()
+        factory.enqueue(200, body = "hi")
+        val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) {
+            val response = factory.newCall(
+                okhttp3.Request.Builder().url("https://cdn.example/a").build()
+            ).execute()
+            var result: ByteArray? = null
+            response.use { res -> result = res.body!!.bytes() }
+            PluginFetcher.FetchResult(body = result!!, finalUrl = "https://cdn.example/a", etag = null)
+        }
+        assertEquals("hi", out.body.toString(Charsets.UTF_8))
+    }
+
+    @Test
+    fun probeDeltaLetReturn() = runTest {
+        val factory = ScriptCallFactory()
+        factory.enqueue(200, body = "hi")
+        val out: PluginFetcher.FetchResult = withContext(kotlinx.coroutines.Dispatchers.Unconfined) {
+            val response = factory.newCall(
+                okhttp3.Request.Builder().url("https://cdn.example/a").build()
+            ).execute()
+            var result: PluginFetcher.FetchResult? = null
+            response.use { res ->
+                result = PluginFetcher.FetchResult(
+                    body = res.body!!.bytes(), finalUrl = "https://cdn.example/a", etag = null
+                )
+            }
+            result?.let { return@withContext it }
+            throw IllegalStateException("unreachable")
+        }
+        assertEquals("hi", out.body.toString(Charsets.UTF_8))
+    }
+
+    @Test
     fun probeGetNoCookieLambda() = runTest {
         val factory = ScriptCallFactory()
         factory.enqueue(200, body = "hi")
