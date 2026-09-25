@@ -10,8 +10,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Phase 2A pilot bootstrap: verifies APK-bundled signed descriptors (hijala,
- * lavascans) and registers them as verified official overrides.
+ * Phase 2A pilot bootstrap (+ Phase 2B installed-active resume): verifies APK-bundled
+ * signed descriptors (hijala, lavascans) and registers them as verified official
+ * overrides, then re-verifies and resumes index-recorded active versions from
+ * previous syncs (overrides are in-memory; without this a restart would silently
+ * drop a synced update and serve the builtin while the index claims vN).
  *
  * Each pilot pairs a signed manifest (identity, hosts, policy from JSON) with the
  * existing Kotlin scraper + display bindings — behavior is identical to the builtin,
@@ -28,6 +31,7 @@ class BundledPluginLoader @Inject constructor(
     private val registry: SourceRegistry,
     private val store: PluginStore,
     private val index: PluginIndexStore,
+    private val trustKeys: PluginTrustKeys,
     @com.exapps.mangaworld.core.di.IoDispatcher private val io: kotlinx.coroutines.CoroutineDispatcher
 ) {
 
@@ -37,10 +41,17 @@ class BundledPluginLoader @Inject constructor(
     }
 
     suspend fun bootstrap(): List<Outcome> = withContext(io) {
-        PILOT_IDS.map { id -> runCatching { bootstrapOne(id) }.getOrElse { e ->
+        val pilots = PILOT_IDS.map { id -> runCatching { bootstrapOne(id) }.getOrElse { e ->
             Log.w(TAG, "pilot $id failed closed: ${e.message}")
             Outcome.Skipped(id, "exception")
         } }
+        val installed = index.getAll()
+            .filter { it.origin == PluginOrigin.OFFICIAL && it.activeVersion != null }
+            .map { record -> runCatching { resumeInstalled(record) }.getOrElse { e ->
+                Log.w(TAG, "resume ${record.id} failed closed: ${e.message}")
+                Outcome.Skipped(record.id, "exception")
+            } }
+        pilots + installed
     }
 
     private suspend fun bootstrapOne(id: String): Outcome {
@@ -105,6 +116,53 @@ class BundledPluginLoader @Inject constructor(
     private suspend fun markEnabled(id: String) {
         index.get(id)?.let { rec ->
             index.put(rec.copy(status = PluginStatus.ENABLED))
+        }
+    }
+
+    /**
+     * Phase 2B resume: re-verify the on-disk active version (downloaded trust data
+     * IS freshness-gated, unlike bundled assets) and re-register the override.
+     * QUARANTINED/REVOKED/DISABLED records are never resurrected — only
+     * INSTALLED/ENABLED actives resume.
+     */
+    private suspend fun resumeInstalled(record: PluginIndexRecord): Outcome {
+        val id = record.id
+        if (record.status != PluginStatus.INSTALLED && record.status != PluginStatus.ENABLED) {
+            return Outcome.Skipped(id, "status ${record.status}")
+        }
+        val version = record.activeVersion ?: return Outcome.Skipped(id, "no active")
+        val builtin = registry.pluginFor(id) ?: return Outcome.Skipped(id, "no builtin")
+        val file = File(
+            PluginStorage.versionDir(File(context.filesDir, "plugins").path, id, version),
+            "plugin.json"
+        )
+        val bytes = if (file.isFile) runCatching { file.readBytes() }.getOrNull() else null
+            ?: return Outcome.Skipped(id, "payload missing")
+        val valid = when (
+            val v = store.verify(
+                manifestBytes = bytes,
+                trustedKeys = trustKeys.current(),
+                host = PluginTrust.productionCapabilities(BuildConfig.VERSION_NAME),
+                enforceFreshness = true
+            )
+        ) {
+            is ManifestResult.Invalid -> return Outcome.Skipped(id, "${v.reason}")
+            is ManifestResult.Valid -> v
+        }
+        if (!pilotSmoke(valid.manifest, builtin.descriptor)) {
+            return Outcome.Skipped(id, "smoke")
+        }
+        val plugin = object : SourcePlugin {
+            override val descriptor = valid.manifest
+            override val display = builtin.display
+            override val scraper = builtin.scraper
+        }
+        return when (val reg = registry.registerVerified(plugin, PluginOrigin.OFFICIAL)) {
+            is SourceRegistry.RegisterOutcome.Refused -> Outcome.Skipped(id, reg.reason)
+            SourceRegistry.RegisterOutcome.Installed ->
+                Outcome.Activated(id, hostsExpanded = false)
+            is SourceRegistry.RegisterOutcome.Superseded ->
+                Outcome.Activated(id, reg.hostsExpanded)
         }
     }
 

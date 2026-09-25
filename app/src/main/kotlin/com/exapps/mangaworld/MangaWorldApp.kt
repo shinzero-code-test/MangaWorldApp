@@ -47,6 +47,7 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     @Inject lateinit var downloadQueueManager: com.exapps.mangaworld.core.data.download.DownloadQueueManager
     @Inject lateinit var readingStatsStore: com.exapps.mangaworld.core.data.ReadingStatsStore
     @Inject lateinit var favoriteDigestScheduler: FavoriteDigestScheduler
+    @Inject lateinit var pluginSyncScheduler: com.exapps.mangaworld.core.source.sync.PluginSyncScheduler
     @Inject lateinit var bundledPluginLoader: com.exapps.mangaworld.core.source.plugins.BundledPluginLoader
 
     internal val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -141,6 +142,11 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
         // Favorite digest (sole chapter-update sweep) — scheduled via its own
         // Scheduler: 6h, settings/wifi-aware constraints, UPDATE policy (#9).
         applicationScope.launch { favoriteDigestScheduler.schedule() }
+        // Phase 2B distribution poll (24h ETag-conditional; fail-closed, background).
+        applicationScope.launch {
+            runCatching { pluginSyncScheduler.schedule() }
+                .onFailure { android.util.Log.w("MangaWorldApp", "Plugin sync schedule failed: ${it.message}") }
+        }
 
         // Inactivity reminders: the startup-time check is always suppressed by
         // the just-opened guard, so a daily background worker owns the check.

@@ -64,6 +64,15 @@ class FirebaseRemoteConfigManager @Inject constructor(
     private val _pluginRotationJson = MutableStateFlow("")
     val pluginRotationJson: StateFlow<String> = _pluginRotationJson.asStateFlow()
 
+    /**
+     * Phase 2B kill-switch transport (fail-closed direction only — installation
+     * still requires signatures either way). Raw JSON for [PluginKillSwitch].
+     */
+    private val _pluginKillSwitchJson = MutableStateFlow("")
+    val pluginKillSwitchJson: StateFlow<String> = _pluginKillSwitchJson.asStateFlow()
+
+    fun pluginKillSwitchJson(): String? = _pluginKillSwitchJson.value.ifBlank { null }
+
     /** Effective verification keys: pinned always, RC additions only when cross-signed. */
     fun pluginTrustedKeys(): Map<String, ByteArray> =
         com.exapps.mangaworld.core.source.plugins.PluginTrust.resolveTrustedKeys(
@@ -108,7 +117,8 @@ class FirebaseRemoteConfigManager @Inject constructor(
                     "engagement_tier_warming_ms" to 900000L,
                     "engagement_tier_active_ms" to 3600000L,
                     "engagement_tier_avid_ms" to 36000000L,
-                    "plugin_key_rotation" to ""
+                    "plugin_key_rotation" to "",
+                    "plugin_kill_switch" to ""
                 ) + sourceDefaultEntries()
             ).await()
             applyState()
@@ -177,6 +187,7 @@ class FirebaseRemoteConfigManager @Inject constructor(
             .toSet()
         _remoteAlertMessage.value = remoteConfig.getString("remote_alert_message")
         _pluginRotationJson.value = remoteConfig.getString("plugin_key_rotation")
+        _pluginKillSwitchJson.value = remoteConfig.getString("plugin_kill_switch")
         _scraperRuntimeConfig.value = ScraperRuntimeConfig(
             connectTimeoutSeconds = remoteConfig.getLong("scraper_connect_timeout_seconds").toInt().coerceIn(5, 90),
             readTimeoutSeconds = remoteConfig.getLong("scraper_read_timeout_seconds").toInt().coerceIn(5, 120),

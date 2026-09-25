@@ -105,7 +105,12 @@ data class PluginIndexEntry(
     val id: String,
     val version: Int,
     val manifestUrl: String,
-    val minAppVersion: String
+    val minAppVersion: String,
+    /**
+     * Routing hint only (plan §6: e.g. `descriptor`). On any conflict with the
+     * signed manifest's `engine`, the manifest wins and the skew is logged.
+     */
+    val kind: String = "descriptor"
 )
 
 /** Why a manifest was rejected. Fails closed: any reason blocks activation. */

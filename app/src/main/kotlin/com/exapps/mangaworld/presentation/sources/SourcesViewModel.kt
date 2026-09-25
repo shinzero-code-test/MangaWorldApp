@@ -24,7 +24,8 @@ data class SourceSettingsState(
 class SourcesViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val sourceUiMapper: SourceUiMapper,
-    private val sourceRegistry: SourceRegistry
+    private val sourceRegistry: SourceRegistry,
+    private val pluginSyncScheduler: com.exapps.mangaworld.core.source.sync.PluginSyncScheduler
 ) : ViewModel() {
 
     /** Registry-driven rows (names via resolver, never hardcoded). */
@@ -94,6 +95,13 @@ class SourcesViewModel @Inject constructor(
         hosts.forEach { CookieCache.clearDomain(it) }
         viewModelScope.launch {
             hosts.forEach { settingsRepository.clearCookies(it) }
+        }
+    }
+
+    /** On-demand distribution check (Sources settings hook; periodic schedule owns the rest). */
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            runCatching { pluginSyncScheduler.requestNow() }
         }
     }
 

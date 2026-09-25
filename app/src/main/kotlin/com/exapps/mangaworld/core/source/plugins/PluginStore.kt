@@ -33,42 +33,46 @@ class PluginStore @Inject constructor(
     }
 
     /**
-     * Verifies and activates one manifest payload.
-     *
-     * @param baseDir root (`files/plugins` in prod, temp dir in tests).
-     * @param manifestBytes raw `plugin.json` bytes (signature included).
-     * @param origin trust tier of this payload.
-     * @param trustedKeys keyId → raw public key (pinned + RC-merged by the caller).
-     * @param host host capabilities for the compat gate.
-     * @param enforceFreshness true for downloaded payloads (trust age vs issuedAt).
-     * @param smoke post-verification activation smoke; false blocks activation.
+     * Verification only: signature → freshness → smoke, with no disk or index
+     * writes. The sync engine verifies first, applies policy gates, then calls
+     * [persistVerified] — a refused candidate never moves the active pointer.
      */
-    suspend fun install(
-        baseDir: File,
+    fun verify(
         manifestBytes: ByteArray,
-        origin: PluginOrigin,
         trustedKeys: Map<String, ByteArray>,
         host: HostCapabilities,
         enforceFreshness: Boolean = true,
         smoke: (PluginManifest) -> Boolean = { true }
-    ): InstallResult = withContext(io) {
+    ): ManifestResult {
         val parser = ManifestParser(trustedKeys = trustedKeys, host = host)
         val valid = when (val r = parser.parseAndVerify(manifestBytes)) {
             is ManifestResult.Valid -> r
-            is ManifestResult.Invalid -> return@withContext InstallResult.Rejected(r.reason, r.message)
+            is ManifestResult.Invalid -> return r
         }
-        val manifest = valid.manifest
-        if (enforceFreshness && !PluginTrust.isFresh(manifest.issuedAt)) {
-            return@withContext InstallResult.Rejected(
+        if (enforceFreshness && !PluginTrust.isFresh(valid.manifest.issuedAt)) {
+            return ManifestResult.Invalid(
                 ManifestInvalidReason.SCHEMA_VIOLATION, "stale trust anchor issuedAt"
             )
         }
-        if (!smoke(manifest)) {
-            return@withContext InstallResult.Rejected(
+        if (!smoke(valid.manifest)) {
+            return ManifestResult.Invalid(
                 ManifestInvalidReason.SCHEMA_VIOLATION, "activation smoke failed"
             )
         }
-        val id = manifest.id.value
+        return valid
+    }
+
+    /**
+     * Persists an already-verified payload: immutable version dir + transactional
+     * pointer activation. Fails closed on version-byte conflicts.
+     */
+    suspend fun persistVerified(
+        baseDir: File,
+        id: String,
+        manifest: PluginManifest,
+        manifestBytes: ByteArray,
+        origin: PluginOrigin
+    ): InstallResult = withContext(io) {
         val versionDir = File(PluginStorage.versionDir(baseDir.path, id, manifest.version))
         if (versionDir.isDirectory) {
             // Immutable versions: same bytes = idempotent success, different bytes = refuse.
@@ -108,6 +112,32 @@ class PluginStore @Inject constructor(
             )
         )
         InstallResult.Installed(manifest, isUpdate = prev?.activeVersion != null)
+    }
+
+    /**
+     * Verifies and activates one manifest payload.
+     *
+     * @param baseDir root (`files/plugins` in prod, temp dir in tests).
+     * @param manifestBytes raw `plugin.json` bytes (signature included).
+     * @param origin trust tier of this payload.
+     * @param trustedKeys keyId → raw public key (pinned + RC-merged by the caller).
+     * @param host host capabilities for the compat gate.
+     * @param enforceFreshness true for downloaded payloads (trust age vs issuedAt).
+     * @param smoke post-verification activation smoke; false blocks activation.
+     */
+    suspend fun install(
+        baseDir: File,
+        manifestBytes: ByteArray,
+        origin: PluginOrigin,
+        trustedKeys: Map<String, ByteArray>,
+        host: HostCapabilities,
+        enforceFreshness: Boolean = true,
+        smoke: (PluginManifest) -> Boolean = { true }
+    ): InstallResult = withContext(io) {
+        when (val v = verify(manifestBytes, trustedKeys, host, enforceFreshness, smoke)) {
+            is ManifestResult.Invalid -> return@withContext InstallResult.Rejected(v.reason, v.message)
+            is ManifestResult.Valid -> persistVerified(baseDir, v.manifest.id.value, v.manifest, manifestBytes, origin)
+        }
     }
 
     /** Pointer-only rollback to the previous verified version. No byte copying. */

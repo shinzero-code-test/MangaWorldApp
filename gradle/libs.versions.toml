@@ -78,6 +78,7 @@ hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", v
 # Networking
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 # Source-plugin contract (Phase 0): pure-Java, JVM-test-safe, R8-safe.
 # Tink ships consumer ProGuard rules; Jackson is used tree-model-only (no reflection);

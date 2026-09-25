@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-24T20:01:16Z",
+  "entries": [
+    {
+      "id": "hijala",
+      "version": 1,
+      "kind": "descriptor",
+      "minAppVersion": "8.9.0",
+      "manifestUrl": "https://mangaworld-admin.vercel.app/plugins/hijala/v1/plugin.json"
+    },
+    {
+      "id": "lavascans",
+      "version": 1,
+      "kind": "descriptor",
+      "minAppVersion": "8.9.0",
+      "manifestUrl": "https://mangaworld-admin.vercel.app/plugins/lavascans/v1/plugin.json"
+    }
+  ]
+}
