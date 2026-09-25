@@ -15,6 +15,10 @@ import com.exapps.mangaworld.core.source.sync.PostSmoke
 import com.fasterxml.jackson.databind.node.ObjectNode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import com.exapps.mangaworld.core.source.plugins.PluginRunnerFactory
+import com.exapps.mangaworld.domain.repository.SettingsRepository
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -117,6 +121,13 @@ class PluginSyncEngineTest {
             .toByteArray(Charsets.UTF_8)
     }
 
+    // Phase 3: the engine pairs runners + honors enabledByDefault. Existing drills
+    // use a runner-less factory (historical deferral behavior) and a no-op settings.
+    private fun nullRunners(): PluginRunnerFactory = mockk {
+        every { createDescriptor(any()) } returns null
+    }
+    private fun silentSettings(): SettingsRepository = mockk(relaxed = true)
+
     private data class Harness(
         val engine: PluginSyncEngine,
         val index: FakeIndex,
@@ -150,7 +161,7 @@ class PluginSyncEngineTest {
     ): Harness {
         val registry = SourceUiTestFixtures.registry(*registryIds)
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
-        val engine = PluginSyncEngine(index, store, registry, fetcher, etags, kotlinx.coroutines.Dispatchers.Unconfined)
+        val engine = PluginSyncEngine(index, store, registry, fetcher, etags, nullRunners(), silentSettings(), kotlinx.coroutines.Dispatchers.Unconfined)
         val logs = mutableListOf<String>()
         engine.log = { logs += it }
         return Harness(engine, index, fetcher, registry, trust, host, tmp.root, logs)
@@ -175,7 +186,7 @@ class PluginSyncEngineTest {
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
         val fetcher = FakeFetcher(bodies)
         val engine = PluginSyncEngine(
-            index, store, registry, fetcher, FakeEtag(), kotlinx.coroutines.Dispatchers.Unconfined
+            index, store, registry, fetcher, FakeEtag(), nullRunners(), silentSettings(), kotlinx.coroutines.Dispatchers.Unconfined
         )
         val logs = mutableListOf<String>()
         engine.log = { logs += it }
@@ -267,7 +278,7 @@ class PluginSyncEngineTest {
         val fetcher = FakeFetcher(bodies)
         val etags = FakeEtag()
         val engine = PluginSyncEngine(
-            index, store, registry, fetcher, etags, kotlinx.coroutines.Dispatchers.Unconfined
+            index, store, registry, fetcher, etags, nullRunners(), silentSettings(), kotlinx.coroutines.Dispatchers.Unconfined
         )
         engine.log = { } // JVM: android Log stubs throw
         suspend fun runSync() = engine.sync(
@@ -300,7 +311,7 @@ class PluginSyncEngineTest {
         val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
         val engine = PluginSyncEngine(
-            index, store, registry, FakeFetcher(bodies), FakeEtag(),
+            index, store, registry, FakeFetcher(bodies), FakeEtag(), nullRunners(), silentSettings(),
             kotlinx.coroutines.Dispatchers.Unconfined
         )
         engine.log = { } // JVM: android Log stubs throw
@@ -329,7 +340,7 @@ class PluginSyncEngineTest {
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
         val etags = FakeEtag()
         val engine = PluginSyncEngine(
-            index, store, registry, FakeFetcher(bodies), etags,
+            index, store, registry, FakeFetcher(bodies), etags, nullRunners(), silentSettings(),
             kotlinx.coroutines.Dispatchers.Unconfined
         )
         engine.log = { } // JVM: android Log stubs throw
@@ -377,7 +388,7 @@ class PluginSyncEngineTest {
         val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
         val engine = PluginSyncEngine(
-            index, store, registry, FakeFetcher(bodies), FakeEtag(),
+            index, store, registry, FakeFetcher(bodies), FakeEtag(), nullRunners(), silentSettings(),
             kotlinx.coroutines.Dispatchers.Unconfined
         )
         engine.log = { } // JVM: android Log stubs throw
@@ -404,7 +415,7 @@ class PluginSyncEngineTest {
         val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
         val engine = PluginSyncEngine(
-            index, store, registry, fetcher, etags, kotlinx.coroutines.Dispatchers.Unconfined
+            index, store, registry, fetcher, etags, nullRunners(), silentSettings(), kotlinx.coroutines.Dispatchers.Unconfined
         )
         engine.log = { } // JVM: android Log stubs throw
         suspend fun runSync() = engine.sync(
@@ -452,7 +463,7 @@ class PluginSyncEngineTest {
         index.put(PluginIndexRecord("customx", 1, null, PluginOrigin.CUSTOM, PluginStatus.ENABLED, null))
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
         val engine = PluginSyncEngine(
-            index, store, registry, FakeFetcher(bodies), FakeEtag(),
+            index, store, registry, FakeFetcher(bodies), FakeEtag(), nullRunners(), silentSettings(),
             kotlinx.coroutines.Dispatchers.Unconfined
         )
         engine.log = { } // JVM: android Log stubs throw

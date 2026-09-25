@@ -18,6 +18,10 @@ class SourceDisplayResolver @Inject constructor(
     fun name(plugin: SourcePlugin, locale: String = "ar"): String =
         plugin.descriptor.names[locale]
             ?: plugin.descriptor.names["ar"]
+            ?: plugin.descriptor.names["en"]
+            // Remote manifests may carry a single locale: prefer any signed name
+            // over the APK fallback (which for remotes is only "unknown source").
+            ?: plugin.descriptor.names.values.firstOrNull()
             ?: context.getString(plugin.display.nameRes)
 
     fun nameFor(registry: SourceRegistry, id: String, locale: String = "ar"): String? =

@@ -167,9 +167,8 @@ object PluginTrust {
     }
 
     /**
-     * Production compatibility surface: every theme/API engine at contract v1.
-     * SCRIPT is deliberately absent — script manifests stay INCOMPATIBLE until the
-     * Phase 3 sandbox + blocking security review land.
+     * Production compatibility surface: every theme/API engine at contract v1,
+     * plus SCRIPT at bridge v1 (Phase 3: Rhino sandbox + blocking review landed).
      */
     fun productionCapabilities(appVersion: String): HostCapabilities = HostCapabilities(
         appVersion = appVersion,
@@ -177,7 +176,8 @@ object PluginTrust {
             SourceEngine.MADARA to 1..1,
             SourceEngine.MANGAREADER to 1..1,
             SourceEngine.ASTRO to 1..1,
-            SourceEngine.API to 1..1
+            SourceEngine.API to 1..1,
+            SourceEngine.SCRIPT to 1..1
         ),
         supportedBridgeApi = 1
     )

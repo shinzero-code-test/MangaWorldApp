@@ -64,8 +64,8 @@ android {
         applicationId = "com.exapps.mangaworld"
         minSdk        = 26
         targetSdk     = 36
-        versionCode   = 237
-        versionName   = "8.11.0"
+        versionCode   = 238
+        versionName   = "9.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -220,6 +220,11 @@ dependencies {
     implementation(libs.tink)
     implementation(libs.jackson.databind)
     implementation(libs.json.canonicalization)
+    // Phase 3 script sandbox: Rhino runs pure-interpreter only
+    // (optimizationLevel = -1, enforced in ScriptSandbox + tested) so no
+    // runtime class generation ever occurs. Pure Java, no NDK — the per-ABI
+    // APK matrix is unaffected.
+    implementation(libs.rhino)
     implementation(libs.play.services.base)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 

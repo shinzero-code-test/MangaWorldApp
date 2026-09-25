@@ -157,7 +157,8 @@ class ManifestParser(
         } ?: return fail("bad names")
 
         val logo = text("logo")
-        if (logo != null && !isValidLogoRef(logo)) return fail("bad logo")
+        // Host-checked after allowedHosts parse below (absolute URLs must stay
+        // inside the manifest's own host set or the Cloudinary pipeline).
 
         val engineApi = obj.get("engineApi")?.takeIf { it.isInt }?.asInt()?.takeIf { it >= 1 }
             ?: return fail("bad engineApi")
@@ -214,6 +215,14 @@ class ManifestParser(
             ?.takeIf { it in MIN_RESPONSE_MB..MAX_RESPONSE_MB }
             ?: return fail("bad maxResponseMb")
 
+        // Logo host constraint (plan §12): relative dashboard paths stay as-is;
+        // absolute URLs must live inside the manifest's own host set (base host
+        // implied) or the Cloudinary image pipeline — image parsers are not a
+        // trusted input surface for off-allowlist hosts.
+        if (logo != null && !isValidLogoRef(logo, allowedHosts + baseHost)) {
+            return fail("bad logo")
+        }
+
         val scriptSha = text("scriptSha256")
         if (engine == SourceEngine.SCRIPT) {
             if (scriptSha == null || !SHA256_HEX_REGEX.matches(scriptSha)) {
@@ -264,17 +273,20 @@ class ManifestParser(
         return host
     }
 
-    private fun isValidLogoRef(logo: String): Boolean {
+    private fun isValidLogoRef(logo: String, hosts: Set<String>): Boolean {
         if (logo.isBlank() || logo.length > 512) return false
         if (".." in logo.split("/")) return false
-        // Either a dashboard-relative path or an https URL.
+        // Either a dashboard-relative path or an https URL on the allow-list.
         if ("://" in logo) {
-            return validateBaseUrl(logo) != null
+            val host = validateBaseUrl(logo) ?: return false
+            return host in hosts || host in CLOUDINARY_HOSTS
         }
         return !logo.startsWith("/")
     }
 
     companion object {
+        /** Image-pipeline hosts permitted for absolute logo URLs. */
+        val CLOUDINARY_HOSTS = setOf("res.cloudinary.com")
         const val MAX_MANIFEST_BYTES = 64 * 1024
         const val MAX_HOSTS = 16
         const val MIN_TIMEOUT_MS = 1_000

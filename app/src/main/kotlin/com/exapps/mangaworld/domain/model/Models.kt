@@ -1,58 +1,14 @@
 package com.exapps.mangaworld.domain.model
 
-import com.exapps.mangaworld.R
 import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
 import com.exapps.mangaworld.core.source.plugins.SourceId
 
-// ─── Site Enum ───────────────────────────────────────────────────────────────
-// RETIRED (Phase 2-complete). Every reference outside this declaration is a
-// compile error by design — use SourceId + SourceRegistry/SourceUiMapper/
-// BuiltinSourceIds instead. Physical removal follows in v9.0.0.
-
-@Deprecated(
-    message = "Retired in Phase 2. Use SourceId with SourceRegistry/SourceUiMapper/BuiltinSourceIds.",
-    level = DeprecationLevel.ERROR
-)
-enum class MangaSource(
-    val id: String,
-    /** String resource for the localized source name — never hardcode (item 8). */
-    val nameRes: Int,
-    val baseUrl: String,
-    val requiresVerification: Boolean = false,
-    val themeType: ThemeType = ThemeType.OTHER,
-    val logoRes: Int = 0
-) {
-    // ─── Original Sources ─────────────────────────────────────────────────────
-    OLYMPUS("olympus", R.string.source_olympus, "https://olympustaff.com", true, ThemeType.OTHER, R.drawable.olympustaff_com_logo),
-    AZORA("azora", R.string.source_azora, "https://azorafly.com", false, ThemeType.ASTRO, R.drawable.azoramoon_com_logo),
-    STARZ("starz", R.string.source_starz, "https://starzmanga.com", true, ThemeType.MADARA, R.drawable.manga_starz_net_logo),
-    MANGASID("mangasid", R.string.source_mangasid, "https://mangasid.com", false, ThemeType.ASTRO, R.drawable.mangasid_com_logo),
-    MESHMANGA("meshmanga", R.string.source_meshmanga, "https://meshmanga.com", false, ThemeType.API, R.drawable.meshmanga_com_logo),
-
-    // ─── New Arabic Sources (Madara Theme) ────────────────────────────────────
-    ASQ3("asq3", R.string.source_asq3, "https://3asq.online", true, ThemeType.MADARA, R.drawable.asq3_org_logo),
-    LEKMANGA("lekmanga", R.string.source_lekmanga, "https://mangalik.net", false, ThemeType.MADARA, R.drawable.lek_manga_net_logo),
-    LEKMANGAONLINE("lekmangaonline", R.string.source_lekmangaonline, "https://lekmanga.online", false, ThemeType.MADARA, R.drawable.lekmanga_online_logo),
-    LIKEMANGA("likemanga", R.string.source_likemanga, "https://like-manga.net", false, ThemeType.MADARA, R.drawable.like_manga_net_logo),
-    LINKMANGA("linkmanga", R.string.source_linkmanga, "https://link-manga.net", false, ThemeType.MADARA, R.drawable.link_manga_net_logo),
-    MANGALEKO("mangaleko", R.string.source_mangaleko, "https://manga-leko.site", false, ThemeType.MADARA, R.drawable.manga_leko_site_logo),
-    MANGALIONZ("mangalionz", R.string.source_mangalionz, "https://manga-lionz.org", false, ThemeType.MADARA, R.drawable.manga_lionz_org_logo),
-
-    // ─── New Arabic Sources (MangaReader Theme) ───────────────────────────────
-    AREASCANS("areascans", R.string.source_areascans, "https://ar.kenmanga.com", false, ThemeType.CUSTOM, R.drawable.ar_kenmanga_com_logo),
-    HIJALA("hijala", R.string.source_hijala, "https://hijala.com", true, ThemeType.MANGAREADER, R.drawable.hijala_com_logo),
-    LAVASCANS("lavascans", R.string.source_lavascans, "https://lavascans.com", true, ThemeType.MANGAREADER, R.drawable.lavascans_com_logo),
-    STELLARSABER("stellarsaber", R.string.source_stellarsaber, "https://stellarsaber.pro", true, ThemeType.MANGAREADER, R.drawable.stellarsaber_pro_logo),
-
-    // ─── New Arabic Sources (Custom) ──────────────────────────────────────────
-    // NOTE: rockmanga/rocksmanga.com died upstream (audit 2026-09-24) and was removed.
-    // Stored rows with sourceId "rockmanga" are filtered at the repository layer —
-    // never resurrected via the AZORA fallback.
-    PROCOMIC("procomic", R.string.source_procomic, "https://procomic.pro", true, ThemeType.CUSTOM, R.drawable.procomic_pro_logo);
-
-    /** Retired with the enum (kept only so the declaration itself compiles). */
-    enum class ThemeType { MADARA, MANGAREADER, ASTRO, API, OTHER, CUSTOM, MADARA_CUSTOM }
-}
+// ─── Site enum ───────────────────────────────────────────────────────────────
+// REMOVED in v9.0.0 (Phase 3). `MangaSource` was retired in Phase 2
+// (@Deprecated(ERROR)) and physically deleted here per the plugin plan —
+// use SourceId + SourceRegistry/SourceUiMapper/BuiltinSourceIds instead.
+// (The R import left with the enum; per-source display bindings live in
+// SourcePlugin.display + SourceDisplayResolver.)
 
 // ─── Manga Type ───────────────────────────────────────────────────────────────
 

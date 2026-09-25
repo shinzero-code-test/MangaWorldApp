@@ -18,6 +18,14 @@ package com.exapps.mangaworld.core.source.plugins
  */
 object PluginStorage {
 
+    /**
+     * Hard on-device budget for installed plugin payloads (manifests + scripts).
+     * Enforced on a schedule (post-sync), never inline on install: eviction only
+     * removes versions that are neither active nor rollback-eligible, so an
+     * install can never delete the version it just superseded.
+     */
+    const val STORAGE_BUDGET_BYTES = 32L * 1024 * 1024
+
     /** Directory layout builders. Ids/versions are validated upstream; `..` is still refused. */
     fun versionDir(baseDir: String, id: String, version: Int): String {
         require(!id.contains("..") && !id.contains('/')) { "unsafe plugin id" }

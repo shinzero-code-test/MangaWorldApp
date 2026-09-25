@@ -93,7 +93,10 @@ class MangaRepositoryImpl @Inject constructor(
     private val cacheDao: MangaCacheDao,
     private val favoriteDao: FavoriteDao,
     private val firebaseTelemetry: FirebaseTelemetry,
-    private val recommendationEngine: RecommendationEngine
+    private val recommendationEngine: RecommendationEngine,
+    // Post-activation drift watch (§11B): observes scraper results, never cache
+    // fallbacks. Observation failures must never break reads (runCatching below).
+    private val health: com.exapps.mangaworld.core.source.plugins.SourceHealthMonitor
 ) : MangaRepository {
 
     private fun scraper(source: com.exapps.mangaworld.core.source.plugins.SourceId): MangaScraper =
@@ -102,7 +105,9 @@ class MangaRepositoryImpl @Inject constructor(
     override suspend fun getHomeData(source: com.exapps.mangaworld.core.source.plugins.SourceId) =
         runCatching {
             if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return@runCatching com.exapps.mangaworld.domain.model.HomeData()
-            firebaseTelemetry.traceSuspend("home_${source.value}") { scraper(source).getHomeData().getOrThrow() }
+            val result = firebaseTelemetry.traceSuspend("home_${source.value}") { scraper(source).getHomeData() }
+            runCatching { health.observeHome(source.value, result) }
+            result.getOrThrow()
         }
 
     override fun searchManga(filters: SearchFilters): Flow<PagingData<MangaItem>> = Pager(
@@ -145,6 +150,8 @@ class MangaRepositoryImpl @Inject constructor(
 
         // Fetch fresh from scraper
         val networkResult = scraper(source).getMangaDetail(slug)
+        // Drift watch sees the scraper result, not the cache fallback below.
+        runCatching { health.observeDetail(source.value, networkResult) }
 
         return networkResult
             .map { fresh ->
@@ -169,7 +176,9 @@ class MangaRepositoryImpl @Inject constructor(
 
     override suspend fun getChapterPages(mangaSlug: String, chapterUrl: String, source: com.exapps.mangaworld.core.source.plugins.SourceId): Result<List<ChapterPage>> {
         if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
-        return scraper(source).getChapterPages(chapterUrl)
+        val result = scraper(source).getChapterPages(chapterUrl)
+        runCatching { health.observePages(source.value, result) }
+        return result
     }
 
     override suspend fun getPopularManga(source: com.exapps.mangaworld.core.source.plugins.SourceId): Result<List<MangaItem>> {

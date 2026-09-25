@@ -394,8 +394,16 @@ open class MadaraBaseScraper(
     ): List<Chapter> {
         val allChapters = mutableListOf<Chapter>()
 
-        // Parse inline chapters first
-        doc.select(".listing-chapters_wrap li, .wp-manga-chapter, li.wp-manga-chapter").forEach { li ->
+        // Parse inline chapters first. The row selector is manifest-overridable
+        // (`config[chapterListSelector]`, consulted before Remote Config): a
+        // signed descriptor can retarget chapter rows without an app release.
+        // Default is byte-identical to the historical theme selector.
+        doc.select(
+            remoteSelector(
+                "chapterListSelector",
+                ".listing-chapters_wrap li, .wp-manga-chapter, li.wp-manga-chapter"
+            )
+        ).forEach { li ->
             parseChapterLi(li, slug)?.let { allChapters.add(it) }
         }
 

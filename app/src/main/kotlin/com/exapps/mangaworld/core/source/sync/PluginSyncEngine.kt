@@ -11,11 +11,16 @@ import com.exapps.mangaworld.core.source.plugins.PluginIndexStore
 import com.exapps.mangaworld.core.source.plugins.PluginKillSwitch
 import com.exapps.mangaworld.core.source.plugins.PluginManifest
 import com.exapps.mangaworld.core.source.plugins.PluginOrigin
+import com.exapps.mangaworld.core.source.plugins.PluginRunnerFactory
 import com.exapps.mangaworld.core.source.plugins.PluginStatus
 import com.exapps.mangaworld.core.source.plugins.PluginStorage
 import com.exapps.mangaworld.core.source.plugins.PluginStore
+import com.exapps.mangaworld.core.source.plugins.ScriptPluginLoader
+import com.exapps.mangaworld.core.source.plugins.SourceEngine
 import com.exapps.mangaworld.core.source.plugins.SourcePlugin
 import com.exapps.mangaworld.core.source.plugins.SourceRegistry
+import com.exapps.mangaworld.core.source.script.ScriptContract
+import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -73,14 +78,19 @@ sealed interface PostSmoke {
  * 3. For each changed id: version compare (downgrades refused — explicit
  *    `rollback()` is the downgrade path) → same-host manifest download →
  *    verify (signature/schema/compat/freshness) → engine-kill + consent gates →
- *    persist → pair with the builtin scraper → verified override → read smoke.
- * 4. New ids without a builtin have no runner in 2B (generic theme runners are
- *    deferred): the verified payload is retained DISABLED, never registered —
- *    no phantom sources, no shadowing.
- * 5. Remote arrivals install DISABLED and never auto-enable; official updates
- *    retain their serving state after every gate passes. `requiresPermission`
- *    updates are held for explicit consent. Host-set expansion is logged (and
- *    reported in the result) as the non-blocking notice.
+ *    script download + hash pin (script kind) → persist → runner pairing
+ *    (builtin scraper for same-engine overrides, generic runner for new ids) →
+ *    verified registration → read smoke.
+ * 4. New ids pair a runner when the engine has one (Phase 3: MADARA/MANGAREADER
+ *    descriptors, SCRIPT). Engines without a generic runner (ASTRO/API/CUSTOM)
+ *    keep the 2B behavior: verified payload retained DISABLED, never registered.
+ * 5. Remote arrivals honor `enabledByDefault` on first install (never auto-enable
+ *    beyond that); official updates retain their serving state — an explicit
+ *    user DISABLED survives an update. `requiresPermission` updates and
+ *    engine changes on override are held for explicit consent. Host-set
+ *    expansion is logged (and reported in the result) as the non-blocking notice.
+ * 6. End of sweep: quota enforcement evicts only non-active/non-previous
+ *    versions (installs can never delete what they superseded).
  *
  * Every entry is isolated in `runCatching`: one bad candidate can never abort
  * the sweep. Only index-level transport failures throw (the worker retries those).
@@ -92,6 +102,8 @@ class PluginSyncEngine @Inject constructor(
     private val registry: SourceRegistry,
     private val fetcher: PluginFetcher,
     private val etags: EtagStore,
+    private val runnerFactory: PluginRunnerFactory,
+    private val settingsRepo: SettingsRepository,
     @com.exapps.mangaworld.core.di.IoDispatcher private val io: kotlinx.coroutines.CoroutineDispatcher
 ) {
 
@@ -119,7 +131,9 @@ class PluginSyncEngine @Inject constructor(
     data class SyncResult(
         val indexNotModified: Boolean = false,
         val outcomes: Map<String, EntryOutcome> = emptyMap(),
-        val revocationsApplied: List<String> = emptyList()
+        val revocationsApplied: List<String> = emptyList(),
+        /** Old versions evicted by the post-sweep quota pass. */
+        val evictedVersions: Int = 0
     )
 
     /**
@@ -187,7 +201,16 @@ class PluginSyncEngine @Inject constructor(
                 EntryOutcome.Failed(e.message?.take(160) ?: "unknown")
             }
         }
-        SyncResult(outcomes = outcomes, revocationsApplied = revocations)
+        // Quota runs on a schedule (post-sweep), never inline on install: it can
+        // only remove versions that are neither active nor rollback-eligible.
+        val evicted = runCatching {
+            pluginStore.evictIfOverBudget(baseDir, PluginStorage.STORAGE_BUDGET_BYTES)
+        }.getOrElse { e ->
+            log("quota sweep failed: ${e.message}")
+            null
+        }?.evict?.size ?: 0
+        if (evicted > 0) log("quota sweep evicted $evicted old version(s)")
+        SyncResult(outcomes = outcomes, revocationsApplied = revocations, evictedVersions = evicted)
     }
 
     // ─── Kill-switch application ────────────────────────────────────────────
@@ -303,12 +326,101 @@ class PluginSyncEngine @Inject constructor(
             return EntryOutcome.HeldForConsent
         }
         val builtin = registry.pluginFor(entry.id)
-        if (builtin == null) {
-            // 2B has no generic theme runners yet: retain the verified payload
-            // DISABLED for a future runner, register nothing (no phantom source).
+        if (builtin != null) {
+            return syncOverride(entry, record, builtin, manifest, manifestBytes, postSmoke, baseDir)
+        }
+        // New id: pair a runner (Phase 3). Engines without a generic runner
+        // (ASTRO/API/CUSTOM) keep the 2B behavior: verified payload retained
+        // DISABLED, never registered — no phantom sources, no shadowing.
+        var scriptBytes: ByteArray? = null
+        if (manifest.engine == SourceEngine.SCRIPT) {
+            when (val s = downloadScript(entry, indexUrl, indexHost, allowInsecure, manifest)) {
+                is ScriptDownload.Ready -> scriptBytes = s.bytes
+                is ScriptDownload.Terminal -> return s.outcome
+            }
+        }
+        val scraper = if (manifest.engine == SourceEngine.SCRIPT) {
+            when (val r = runnerFactory.createScript(manifest, scriptBytes)) {
+                null -> null
+                else -> r.getOrElse {
+                    return EntryOutcome.Rejected("script build: ${it.message?.take(120)}")
+                }
+            }
+        } else {
+            runnerFactory.createDescriptor(manifest)
+        }
+        if (scraper == null) {
             persistQuietly(baseDir, entry, manifest, manifestBytes, enabled = false)
-            log("sync ${entry.id}: no builtin runner — payload retained, registration deferred")
+            log("sync ${entry.id}: no runner for ${manifest.engine.serialName} — payload retained, registration deferred")
             return EntryOutcome.NewSourceDeferred
+        }
+        when (
+            val persisted = pluginStore.persistVerified(
+                baseDir = baseDir,
+                id = entry.id,
+                manifest = manifest,
+                manifestBytes = manifestBytes,
+                origin = PluginOrigin.OFFICIAL,
+                scriptBytes = scriptBytes
+            )
+        ) {
+            is PluginStore.InstallResult.Rejected ->
+                return EntryOutcome.Rejected("${persisted.reason}: ${persisted.message.take(120)}")
+            is PluginStore.InstallResult.Installed -> Unit
+        }
+        val plugin = object : SourcePlugin {
+            override val descriptor: PluginManifest = manifest
+            override val display = runnerFactory.remoteDisplay()
+            override val scraper = scraper
+        }
+        val outcome = registry.registerVerified(plugin, PluginOrigin.OFFICIAL)
+        if (outcome is SourceRegistry.RegisterOutcome.Refused) {
+            return EntryOutcome.Rejected(outcome.reason)
+        }
+        val expanded = (outcome as? SourceRegistry.RegisterOutcome.Superseded)?.hostsExpanded == true
+        // Fresh arrivals honor enabledByDefault; previously-serving records keep
+        // their state (an explicit DISABLED survives an update).
+        val enable = record?.status == PluginStatus.ENABLED || manifest.enabledByDefault
+        if (enable) {
+            runCatching { settingsRepo.toggleSource(entry.id, true) }
+        }
+        indexStore.get(entry.id)?.let { rec ->
+            indexStore.put(rec.copy(status = if (enable) PluginStatus.ENABLED else PluginStatus.DISABLED))
+        }
+        if (!runPostSmoke(plugin, postSmoke)) {
+            registry.clearOverride(entry.id)
+            indexStore.get(entry.id)?.let { rec ->
+                indexStore.put(rec.copy(status = PluginStatus.QUARANTINED))
+            }
+            log("sync ${entry.id}: post-activation smoke failed — rolled back")
+            return EntryOutcome.RolledBack
+        }
+        return EntryOutcome.Updated(hostsExpanded = expanded)
+    }
+
+    /**
+     * Override path: metadata supersede while the builtin scraper keeps serving
+     * (behavior-identical by construction — same guarantee as the 2A pilots).
+     * An engine change rewires what the metadata CLAIMS the scraper does, so it
+     * is held for explicit consent instead of serving a mismatched pair (same
+     * rule as `BundledPluginLoader.pilotSmoke`).
+     */
+    private suspend fun syncOverride(
+        entry: PluginIndexEntry,
+        record: com.exapps.mangaworld.core.source.plugins.PluginIndexRecord?,
+        builtin: SourcePlugin,
+        manifest: PluginManifest,
+        manifestBytes: ByteArray,
+        postSmoke: PostSmoke,
+        baseDir: File
+    ): EntryOutcome {
+        if (manifest.engine != builtin.descriptor.engine) {
+            persistQuietly(baseDir, entry, manifest, manifestBytes)
+            log(
+                "sync ${entry.id}: engine ${builtin.descriptor.engine.serialName} → " +
+                    "${manifest.engine.serialName} held for consent"
+            )
+            return EntryOutcome.HeldForConsent
         }
         when (
             val persisted = pluginStore.persistVerified(
@@ -337,8 +449,10 @@ class PluginSyncEngine @Inject constructor(
             // Plan §8.9 non-blocking notice: logged + reported; UI surfacing follows.
             log("sync ${entry.id}: official update expands host set — notice")
         }
+        // Updates retain serving state: only an explicit DISABLED survives.
+        val enable = record?.status != PluginStatus.DISABLED
         indexStore.get(entry.id)?.let { rec ->
-            indexStore.put(rec.copy(status = PluginStatus.ENABLED))
+            indexStore.put(rec.copy(status = if (enable) PluginStatus.ENABLED else PluginStatus.DISABLED))
         }
         if (!runPostSmoke(plugin, postSmoke)) {
             // Previous verified version retained by construction: clear the
@@ -351,6 +465,55 @@ class PluginSyncEngine @Inject constructor(
             return EntryOutcome.RolledBack
         }
         return EntryOutcome.Updated(hostsExpanded = expanded)
+    }
+
+    /** Script sibling download + hash pin (defense in depth: loader re-checks). */
+    private sealed interface ScriptDownload {
+        data class Ready(val bytes: ByteArray) : ScriptDownload {
+            override fun equals(other: Any?): Boolean {
+                if (this === other) return true
+                if (other !is Ready) return false
+                return bytes.contentEquals(other.bytes)
+            }
+
+            override fun hashCode(): Int = bytes.contentHashCode()
+        }
+
+        data class Terminal(val outcome: EntryOutcome) : ScriptDownload
+    }
+
+    private suspend fun downloadScript(
+        entry: PluginIndexEntry,
+        indexUrl: String,
+        indexHost: String,
+        allowInsecure: Boolean,
+        manifest: PluginManifest
+    ): ScriptDownload {
+        val scriptUrl = ScriptPluginLoader.siblingScriptUrl(entry.manifestUrl)
+            ?: return ScriptDownload.Terminal(EntryOutcome.Rejected("no script url"))
+        // Same-dir sibling: the same-host rule doubles as the fetch allow-list.
+        PluginDistribution.checkManifestUrl(scriptUrl, indexUrl, allowInsecure)?.let {
+            return ScriptDownload.Terminal(EntryOutcome.Rejected("script url: $it"))
+        }
+        val bytes = try {
+            fetcher.get(
+                url = scriptUrl,
+                allowedHosts = setOf(indexHost),
+                maxBytes = ScriptContract.SCRIPT_MAX_BYTES.toLong()
+            ).body
+        } catch (e: PluginFetcher.FetchFailure) {
+            return ScriptDownload.Terminal(EntryOutcome.Failed("script fetch: ${e.message}"))
+        }
+        if (bytes.isEmpty()) {
+            return ScriptDownload.Terminal(EntryOutcome.Rejected("empty script"))
+        }
+        val expected = manifest.scriptSha256
+        if (expected == null ||
+            !ScriptPluginLoader.sha256Hex(bytes).equals(expected, ignoreCase = true)
+        ) {
+            return ScriptDownload.Terminal(EntryOutcome.Rejected("script hash mismatch"))
+        }
+        return ScriptDownload.Ready(bytes)
     }
 
     /** Verified persist without activation (consent holds, future runners). */

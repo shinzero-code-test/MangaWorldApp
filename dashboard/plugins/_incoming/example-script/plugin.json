@@ -1,0 +1,21 @@
+{
+  "id": "example-script",
+  "version": 1,
+  "minAppVersion": "9.0.0",
+  "issuedAt": "2026-09-26T00:00:00Z",
+  "bridgeApi": 1,
+  "names": { "ar": "مثال سكربت", "en": "Example Script" },
+  "logo": "logos/example-script.png",
+  "engine": "script",
+  "engineApi": 1,
+  "baseUrl": "https://example.com",
+  "requiresVerification": false,
+  "enabledByDefault": false,
+  "requiresPermission": false,
+  "config": {},
+  "allowedHosts": ["example.com", "cdn.example.com"],
+  "timeoutMs": 15000,
+  "maxResponseMb": 10,
+  "scriptSha256": "COMPUTE_AT_PROMOTE_SEE_README",
+  "signature": "ADDED_AT_SIGN_STEP_SEE_README"
+}

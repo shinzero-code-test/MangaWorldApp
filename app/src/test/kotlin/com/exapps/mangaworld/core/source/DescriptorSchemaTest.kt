@@ -152,4 +152,29 @@ class DescriptorSchemaTest {
         expectViolation { it.put("logo", "http://insecure.example/x.png") }
         expectViolation { it.put("logo", "../../etc/passwd") }
     }
+
+    @Test
+    fun absoluteLogoConstrainedToAllowlist() {
+        // Off-allowlist hosts are not a trusted image surface.
+        expectViolation { it.put("logo", "https://evil.example/logo.png") }
+        expectViolation { it.put("logo", "https://starzmanga.com.evil.example/l.png") }
+    }
+
+    @Test
+    fun absoluteLogoAcceptedOnAllowlistAndPipeline() {
+        // Base + declared CDN hosts pass; so does the Cloudinary pipeline.
+        // (Base tree: baseUrl starzmanga.com, allowedHosts +cdn.starzmanga.com.)
+        listOf(
+            "https://starzmanga.com/logo.png",
+            "https://cdn.starzmanga.com/l.png",
+            "https://res.cloudinary.com/demo/image/upload/x.png",
+            "logos/starz.png"
+        ).forEach { logo ->
+            val result = verify { it.put("logo", logo) }
+            assertTrue(
+                "logo $logo must validate",
+                result is ManifestResult.Valid
+            )
+        }
+    }
 }

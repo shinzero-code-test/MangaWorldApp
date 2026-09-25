@@ -65,14 +65,42 @@ class PluginStore @Inject constructor(
     /**
      * Persists an already-verified payload: immutable version dir + transactional
      * pointer activation. Fails closed on version-byte conflicts.
+     *
+     * @param scriptBytes required for SCRIPT manifests (hash re-checked against
+     *   the manifest pin — the bytes that execute are always the bytes the
+     *   signature pinned); must be null for every other engine.
      */
     suspend fun persistVerified(
         baseDir: File,
         id: String,
         manifest: PluginManifest,
         manifestBytes: ByteArray,
-        origin: PluginOrigin
+        origin: PluginOrigin,
+        scriptBytes: ByteArray? = null
     ): InstallResult = withContext(io) {
+        if (manifest.engine == SourceEngine.SCRIPT) {
+            if (scriptBytes == null) {
+                return@withContext InstallResult.Rejected(
+                    ManifestInvalidReason.SCHEMA_VIOLATION, "script payload missing"
+                )
+            }
+            if (scriptBytes.size > com.exapps.mangaworld.core.source.script.ScriptContract.SCRIPT_MAX_BYTES) {
+                return@withContext InstallResult.Rejected(
+                    ManifestInvalidReason.SCHEMA_VIOLATION, "source.js exceeds byte cap"
+                )
+            }
+            val expected = manifest.scriptSha256
+            val actual = ScriptPluginLoader.sha256Hex(scriptBytes)
+            if (expected == null || !actual.equals(expected, ignoreCase = true)) {
+                return@withContext InstallResult.Rejected(
+                    ManifestInvalidReason.SCHEMA_VIOLATION, "script hash mismatch"
+                )
+            }
+        } else if (scriptBytes != null) {
+            return@withContext InstallResult.Rejected(
+                ManifestInvalidReason.SCHEMA_VIOLATION, "unexpected script payload"
+            )
+        }
         val versionDir = File(PluginStorage.versionDir(baseDir.path, id, manifest.version))
         if (versionDir.isDirectory) {
             // Immutable versions: same bytes = idempotent success, different bytes = refuse.
@@ -82,17 +110,36 @@ class PluginStore @Inject constructor(
                     ManifestInvalidReason.SCHEMA_VIOLATION, "version immutable: bytes differ"
                 )
             }
+            if (scriptBytes != null) {
+                val existingJs = File(versionDir, "source.js").takeIf { it.isFile }?.readBytes()
+                if (existingJs == null || !existingJs.contentEquals(scriptBytes)) {
+                    return@withContext InstallResult.Rejected(
+                        ManifestInvalidReason.SCHEMA_VIOLATION, "version immutable: script bytes differ"
+                    )
+                }
+            }
         } else {
             // Stage → move. Partial/corrupt staging never becomes visible.
             val staging = File(PluginStorage.stagingDir(baseDir.path, id))
             staging.mkdirs()
             val staged = File(staging, "plugin.json")
             staged.writeBytes(manifestBytes)
+            if (scriptBytes != null) {
+                File(staging, "source.js").writeBytes(scriptBytes)
+            }
             versionDir.mkdirs()
             val target = File(versionDir, "plugin.json")
             if (!staged.renameTo(target)) {
                 staged.copyTo(target, overwrite = true)
                 staged.delete()
+            }
+            if (scriptBytes != null) {
+                val stagedJs = File(staging, "source.js")
+                val targetJs = File(versionDir, "source.js")
+                if (!stagedJs.renameTo(targetJs)) {
+                    stagedJs.copyTo(targetJs, overwrite = true)
+                    stagedJs.delete()
+                }
             }
             deleteRecursively(staging)
         }

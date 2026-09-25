@@ -41,7 +41,8 @@ class LocalBackupManager @Inject constructor(
     private val readingStatsStore: ReadingStatsStore,
     private val collectionManager: CollectionManager,
     private val bookmarkManager: BookmarkManager,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val pluginIndex: com.exapps.mangaworld.core.source.plugins.PluginIndexStore
 ) {
     /** Outcome of a backup import — callers must surface non-success to the user. */
     sealed interface ImportResult {
@@ -50,7 +51,9 @@ class LocalBackupManager @Inject constructor(
             val history: Int = 0,
             val readChapters: Int = 0,
             val collections: Int = 0,
-            val bookmarks: Int = 0
+            val bookmarks: Int = 0,
+            /** Plugin refs re-registered as AVAILABLE (payloads re-sync, never restored). */
+            val plugins: Int = 0
         ) : ImportResult
         object Corrupt : ImportResult
         object TooLarge : ImportResult
@@ -94,6 +97,19 @@ class LocalBackupManager @Inject constructor(
             put("readerSettings", settingsRepository.getReaderSettings().first().toJson())
             runCatching { put("readingStats", readingStatsStore.snapshot()) }
                 .onFailure { Log.w(TAG, "Stats export skipped: ${it.message}") }
+            // BK-4 (plan §11A): backups store plugin REFERENCES ({id, version,
+            // origin}), never payloads. Restore re-syncs verified payloads from
+            // distribution instead of resurrecting stale or revoked bytes.
+            runCatching {
+                put(
+                    "pluginRefs",
+                    JSONArray(
+                        pluginIndex.getAll()
+                            .filter { it.activeVersion != null }
+                            .map { pluginRefToJson(it) }
+                    )
+                )
+            }.onFailure { Log.w(TAG, "Plugin refs export skipped: ${it.message}") }
         }
         val text = root.toString(2)
         val tmp = runCatching {
@@ -210,7 +226,33 @@ class LocalBackupManager @Inject constructor(
             runCatching { readingStatsStore.restore(stats) }
                 .onFailure { Log.w(TAG, "Stats restore skipped: ${it.message}") }
         }
-        return ImportResult.Success(favCount, histCount, readCount, collectionCount, bookmarkCount)
+        // BK-4: plugin refs restore as AVAILABLE records with no bytes — the sync
+        // engine reconciles them (downloads verified payloads) instead of the
+        // backup resurrecting payloads. Existing local records always win; a ref
+        // never clobbers or downgrades local state.
+        var pluginCount = 0
+        root.optJSONArray("pluginRefs")?.let { arr ->
+            val total = minOf(arr.length(), MAX_PLUGIN_REFS)
+            for (i in 0 until total) {
+                val ref = runCatching { arr.getJSONObject(i).toPluginRef() }.getOrNull() ?: continue
+                runCatching {
+                    if (pluginIndex.get(ref.id) == null) {
+                        pluginIndex.put(
+                            com.exapps.mangaworld.core.source.plugins.PluginIndexRecord(
+                                id = ref.id,
+                                activeVersion = null,
+                                previousVersion = null,
+                                origin = ref.origin,
+                                status = com.exapps.mangaworld.core.source.plugins.PluginStatus.AVAILABLE,
+                                manifestJson = null
+                            )
+                        )
+                        pluginCount++
+                    }
+                }.onFailure { Log.w(TAG, "Plugin ref restore skipped: ${it.message}") }
+            }
+        }
+        return ImportResult.Success(favCount, histCount, readCount, collectionCount, bookmarkCount, pluginCount)
     }
 
     private suspend fun mergeFavorite(backup: FavoriteEntity) {
@@ -477,7 +519,41 @@ class LocalBackupManager @Inject constructor(
         /** Items parsed per collection / bookmark list (hostile-size guard). */
         const val MAX_COLLECTION_ITEMS = 5000
 
-        /** v3: adds `readingStats` and `showLibraryPublic`; imports of v1/v2 remain accepted. */
-        const val SCHEMA_VERSION = 3
+        /** Plugin refs parsed per import (hundreds of sources fit; fail-closed cap). */
+        const val MAX_PLUGIN_REFS = 500
+
+        /** v4: adds `pluginRefs` (references, never payloads); v1–v3 remain accepted. */
+        const val SCHEMA_VERSION = 4
     }
+}
+
+// ─── Plugin references (§11A backup-by-reference) ────────────────────────────
+// Top-level (no manager instance needed) so the codec is unit-testable without
+// Room/Context. References only — payloads always re-sync from distribution.
+
+internal data class PluginRef(
+    val id: String,
+    val version: Int,
+    val origin: com.exapps.mangaworld.core.source.plugins.PluginOrigin
+)
+
+private val PLUGIN_REF_ID_REGEX = Regex("^[a-z0-9][a-z0-9_-]{0,63}$")
+
+internal fun pluginRefToJson(
+    record: com.exapps.mangaworld.core.source.plugins.PluginIndexRecord
+): org.json.JSONObject = org.json.JSONObject().apply {
+    put("id", record.id)
+    put("version", record.activeVersion ?: 0)
+    put("origin", record.origin.name)
+}
+
+internal fun org.json.JSONObject.toPluginRef(): PluginRef {
+    val id = optString("id").take(64)
+    if (!PLUGIN_REF_ID_REGEX.matches(id)) throw IllegalArgumentException("bad plugin ref id")
+    val version = optInt("version", 0)
+    if (version < 1) throw IllegalArgumentException("bad plugin ref version")
+    val origin = runCatching {
+        com.exapps.mangaworld.core.source.plugins.PluginOrigin.valueOf(optString("origin"))
+    }.getOrElse { throw IllegalArgumentException("bad plugin ref origin") }
+    return PluginRef(id, version, origin)
 }

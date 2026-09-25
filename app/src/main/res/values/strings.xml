@@ -707,6 +707,7 @@
     <string name="local_manga">مانجا محلية</string>
     <string name="source_imported">مستورد</string>
     <string name="source_local">محلي</string>
+    <string name="source_unknown">مصدر غير معروف</string>
     <!-- ─── Source names (MangaSource.nameRes; never hardcode — item 8) ─────── -->
     <string name="source_olympus">تيم اكس</string>
     <string name="source_azora">ازورا مانجا</string>

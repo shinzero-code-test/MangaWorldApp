@@ -197,6 +197,6 @@ abstract class BaseScraperImpl(
         return headers
     }
 
-    protected fun remoteSelector(key: String, default: String): String =
+    protected open fun remoteSelector(key: String, default: String): String =
         RemoteSelectorOverridesStore.selector(sourceId, key, default)
 }
