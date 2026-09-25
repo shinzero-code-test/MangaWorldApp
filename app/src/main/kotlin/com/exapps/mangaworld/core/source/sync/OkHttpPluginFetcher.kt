@@ -60,6 +60,12 @@ class OkHttpPluginFetcher(
             } catch (e: Throwable) {
                 throw IllegalArgumentException("STAGE-newCall", e)
             }
+            // TEMPORARY DEBUG (revert): is virtual dispatch itself broken?
+            try {
+                call.request()
+            } catch (e: Throwable) {
+                throw IllegalArgumentException("RECEIVER-BROKEN", e)
+            }
             val response = try {
                 call.execute()
             } catch (e: AbstractMethodError) {
