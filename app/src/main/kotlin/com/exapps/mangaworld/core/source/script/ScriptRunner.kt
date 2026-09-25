@@ -23,6 +23,7 @@ import org.mozilla.javascript.NativeObject
 import org.mozilla.javascript.Script
 import org.mozilla.javascript.Scriptable
 import org.mozilla.javascript.ScriptableObject
+import org.mozilla.javascript.ScriptableObject
 import org.mozilla.javascript.Undefined
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -450,7 +451,9 @@ class ScriptRunnerFactory @Inject constructor(
         // stay safe across mid-session swaps).
         val compiled = try {
             sandbox.run { cx ->
-                val scope = cx.initStandardObjects()
+                // compileString takes ScriptableObject (not the interface):
+                // cast once at the single compile site.
+                val scope = cx.initStandardObjects() as ScriptableObject
                 cx.compileString(scope, source, "<source.js>", 1, null)
             }
         } catch (e: ScriptException) {
