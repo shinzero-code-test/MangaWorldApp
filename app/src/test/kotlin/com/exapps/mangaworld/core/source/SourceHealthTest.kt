@@ -77,14 +77,14 @@ class SourceHealthTest {
             val d = SourceHealthPolicy.observe(obs, failed = true, emptyPrimary = false, nowMs = 1_000)
             assertTrue(d is SourceHealthPolicy.Decision.Hold)
             d as SourceHealthPolicy.Decision.Hold
-            assertEquals(SourceHealthPolicy.HealthState.OK, d.state)
+            assertEquals(HealthState.OK, d.state)
             obs = SourceHealthPolicy.Observation(d.anomalies, d.state, 0L)
         }
         // 5th: degraded badge, still serving.
         val warn = SourceHealthPolicy.observe(obs, failed = true, emptyPrimary = false, nowMs = 1_000)
         assertTrue(warn is SourceHealthPolicy.Decision.Hold)
         warn as SourceHealthPolicy.Decision.Hold
-        assertEquals(SourceHealthPolicy.HealthState.DEGRADED, warn.state)
+        assertEquals(HealthState.DEGRADED, warn.state)
         // Success with content resets to zero (no flapping memory).
         assertTrue(
             SourceHealthPolicy.observe(
@@ -106,7 +106,7 @@ class SourceHealthTest {
 
     @Test
     fun quarantineCooldownSuppressesChurn() {
-        val obs = SourceHealthPolicy.Observation(10, SourceHealthPolicy.HealthState.DEGRADED, 1_000)
+        val obs = SourceHealthPolicy.Observation(10, HealthState.DEGRADED, 1_000)
         // 10 anomalies but quarantined 1s ago → hold degraded, not re-quarantine.
         val d = SourceHealthPolicy.observe(obs, failed = true, emptyPrimary = false, nowMs = 2_000)
         assertTrue(d is SourceHealthPolicy.Decision.Hold)
@@ -120,12 +120,12 @@ class SourceHealthTest {
 
     @Test
     fun quarantinedHoldsWithoutResmoke() {
-        val obs = SourceHealthPolicy.Observation(10, SourceHealthPolicy.HealthState.QUARANTINED, 1_000)
+        val obs = SourceHealthPolicy.Observation(10, HealthState.QUARANTINED, 1_000)
         // Even clean traffic cannot self-clear quarantine.
         val d = SourceHealthPolicy.observe(obs, failed = false, emptyPrimary = false, nowMs = 5_000)
         assertTrue(d is SourceHealthPolicy.Decision.Hold)
         assertEquals(
-            SourceHealthPolicy.HealthState.QUARANTINED,
+            HealthState.QUARANTINED,
             (d as SourceHealthPolicy.Decision.Hold).state
         )
     }
@@ -138,7 +138,7 @@ class SourceHealthTest {
         val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
         // Simulate an override registration (as sync would install it).
         val scraper: com.exapps.mangaworld.core.data.remote.scraper.MangaScraper =
-            io.mockk.mockk(relaxed = true)
+            mockk(relaxed = true)
         val override = object : com.exapps.mangaworld.core.source.plugins.SourcePlugin {
             override val descriptor = registry.descriptorFor("hijala")!!
             override val display = com.exapps.mangaworld.core.source.plugins.SourceDisplay(0, 0)

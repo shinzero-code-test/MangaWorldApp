@@ -36,12 +36,12 @@ class ScriptBridgeTest {
     )
 
     /** Evals [script]; returns the JSON result or fails when it throws. */
-    private fun evalOk(script: String, session: ScriptTestSupport.ScriptBridgeSession): String =
+    private fun evalOk(script: String, session: ScriptBridgeSession): String =
         ScriptTestSupport.evalJson(script, session)
-            ?: fail("expected a value, script returned undefined")
+            ?: throw AssertionError("expected a value, script returned undefined")
 
     /** Evals [script]; expects a throw whose chain mentions every [needle]. */
-    private fun evalFails(script: String, session: ScriptTestSupport.ScriptBridgeSession, vararg needles: String) {
+    private fun evalFails(script: String, session: ScriptBridgeSession, vararg needles: String) {
         try {
             ScriptTestSupport.evalJson(script, session)
         } catch (e: Exception) {

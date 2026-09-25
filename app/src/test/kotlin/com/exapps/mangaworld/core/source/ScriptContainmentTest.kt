@@ -44,7 +44,7 @@ class ScriptContainmentTest {
     /** Runs [script] expecting SUCCESS. */
     private fun allowed(script: String): String =
         ScriptTestSupport.evalJson(script, session())
-            ?: fail("legitimate script failed")
+            ?: throw AssertionError("legitimate script failed")
 
     @Test
     fun javaRootsAreGone() {
