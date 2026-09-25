@@ -121,7 +121,10 @@ class PluginSyncEngineTest {
         val engine: PluginSyncEngine,
         val index: FakeIndex,
         val fetcher: FakeFetcher,
-        val registry: com.exapps.mangaworld.core.source.plugins.SourceRegistry
+        val registry: com.exapps.mangaworld.core.source.plugins.SourceRegistry,
+        val trust: Map<String, ByteArray>,
+        val host: HostCapabilities,
+        val baseDir: java.io.File
     ) {
         suspend fun sync(
             kill: String? = null,
@@ -132,7 +135,7 @@ class PluginSyncEngineTest {
             indexUrl = "https://cdn.example/plugins/index.json",
             killSwitchJson = kill,
             postSmoke = smoke,
-            baseDir = tmp.root
+            baseDir = baseDir
         )
     }
 
@@ -146,7 +149,7 @@ class PluginSyncEngineTest {
         val registry = SourceUiTestFixtures.registry(*registryIds)
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
         val engine = PluginSyncEngine(index, store, registry, fetcher, etags, kotlinx.coroutines.Dispatchers.Unconfined)
-        return Harness(engine, index, fetcher, registry)
+        return Harness(engine, index, fetcher, registry, trust, host, tmp.root)
     }
 
     // ─── Drills ─────────────────────────────────────────────────────────────

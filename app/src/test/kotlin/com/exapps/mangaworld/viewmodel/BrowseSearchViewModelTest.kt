@@ -100,7 +100,8 @@ class BrowseSearchViewModelTest {
     private fun sourcesVm() = SourcesViewModel(
         settingsRepository = settingsRepo,
         sourceUiMapper = SourceUiTestFixtures.mapper(),
-        sourceRegistry = SourceUiTestFixtures.registry()
+        sourceRegistry = SourceUiTestFixtures.registry(),
+        pluginSyncScheduler = io.mockk.mockk(relaxed = true)
     )
 
     private fun sourceBrowseVm(sourceId: String = "azora") = SourceBrowseViewModel(

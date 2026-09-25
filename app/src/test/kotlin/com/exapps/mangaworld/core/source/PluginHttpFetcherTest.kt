@@ -45,7 +45,7 @@ class PluginHttpFetcherTest {
         val server = MockWebServer()
         server.enqueue(MockResponse().setResponseCode(302).addHeader("Location", "/b"))
         server.enqueue(MockResponse().setBody("hello"))
-        server.play()
+        server.start()
         try {
             val out = fetcher(server).get(
                 server.url("/a").toString(), hosts(server), maxBytes = 1024
@@ -62,7 +62,7 @@ class PluginHttpFetcherTest {
         val server = MockWebServer()
         server.enqueue(MockResponse().setResponseCode(302).addHeader("Location", "/b"))
         server.enqueue(MockResponse().setBody("ok"))
-        server.play()
+        server.start()
         try {
             val base = server.url("/").toString().removeSuffix("/")
             val f = fetcher(
@@ -84,7 +84,7 @@ class PluginHttpFetcherTest {
     fun crossHostEscapeRejectedBeforeRequest() = runTest {
         val server = MockWebServer()
         server.enqueue(MockResponse().setResponseCode(302).addHeader("Location", "https://evil.example/b"))
-        server.play()
+        server.start()
         try {
             try {
                 fetcher(server).get(
@@ -107,7 +107,7 @@ class PluginHttpFetcherTest {
         // Same host, http scheme: hop validation rejects the downgrade even
         // though the initial URL was permitted via allowInsecure.
         server.enqueue(MockResponse().setResponseCode(302).addHeader("Location", "http://evil.example/b"))
-        server.play()
+        server.start()
         try {
             try {
                 fetcher(server).get(
@@ -129,7 +129,7 @@ class PluginHttpFetcherTest {
         repeat(10) { i ->
             server.enqueue(MockResponse().setResponseCode(302).addHeader("Location", "/r$i"))
         }
-        server.play()
+        server.start()
         try {
             try {
                 fetcher(server).get(server.url("/start").toString(), hosts(server), maxBytes = 1024)
@@ -146,7 +146,7 @@ class PluginHttpFetcherTest {
     fun oversizedBodyRefused() = runTest {
         val server = MockWebServer()
         server.enqueue(MockResponse().setBody("x".repeat(100)))
-        server.play()
+        server.start()
         try {
             try {
                 fetcher(server).get(server.url("/big").toString(), hosts(server), maxBytes = 10)
@@ -163,7 +163,7 @@ class PluginHttpFetcherTest {
     fun httpStatusSurfaces() = runTest {
         val server = MockWebServer()
         server.enqueue(MockResponse().setResponseCode(404))
-        server.play()
+        server.start()
         try {
             try {
                 fetcher(server).get(server.url("/nope").toString(), hosts(server), maxBytes = 1024)
@@ -180,7 +180,7 @@ class PluginHttpFetcherTest {
     fun notModifiedPropagates() = runTest {
         val server = MockWebServer()
         server.enqueue(MockResponse().setResponseCode(304))
-        server.play()
+        server.start()
         try {
             try {
                 fetcher(server).get(
