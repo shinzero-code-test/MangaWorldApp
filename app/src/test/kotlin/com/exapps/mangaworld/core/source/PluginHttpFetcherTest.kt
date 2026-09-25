@@ -195,6 +195,63 @@ class PluginHttpFetcherTest {
     }
 
     @Test
+    fun probeFullReplication() = runTest {
+        val factory = ScriptCallFactory()
+        factory.enqueue(200, body = "hi")
+        val url = "https://cdn.example/a"
+        val allowedHosts = setOf("cdn.example")
+        val maxBytes = 1024L
+        val headers = emptyMap<String, String>()
+        val cookieHeader: (suspend (String) -> String?)? = { _ -> null }
+        val io = kotlinx.coroutines.Dispatchers.Unconfined
+        val out = withContext(io) {
+            val first = java.net.URI(url.trim())
+            if (!first.scheme.equals("https", ignoreCase = true)) throw IllegalStateException("scheme")
+            var current = first.toASCIIString()
+            var hops = 0
+            var finalBody: ByteArray? = null
+            while (true) {
+                val builder = okhttp3.Request.Builder().url(current).get()
+                headers.forEach { (k, v) ->
+                    if (!k.equals("Cookie", ignoreCase = true)) builder.header(k, v)
+                }
+                cookieHeader?.invoke(current)?.takeIf { it.isNotBlank() }?.let {
+                    builder.header("Cookie", it)
+                }
+                val request = builder.build()
+                val response = runCatching {
+                    factory.newCall(request).execute()
+                }.getOrElse { e ->
+                    throw PluginFetcher.FetchFailure.Network(e)
+                }
+                var redirectLocation: String? = null
+                var result: ByteArray? = null
+                response.use { res ->
+                    if (res.code in 301..308) {
+                        redirectLocation = res.header("Location")
+                    } else {
+                        if (!res.isSuccessful) throw IllegalStateException("http " + res.code)
+                        val body = res.body ?: throw IllegalStateException("empty")
+                        if (body.contentLength() > maxBytes) throw IllegalStateException("big")
+                        result = body.bytes()
+                    }
+                }
+                result?.let {
+                    finalBody = it
+                    // escape loop via flag instead of non-local return
+                    hops = 999
+                }
+                if (hops == 999) break
+                hops++
+                if (hops > 3) throw IllegalStateException("loop")
+                break
+            }
+            finalBody!!
+        }
+        assertEquals("hi", out.toString(Charsets.UTF_8))
+    }
+
+    @Test
     fun probeUnconfinedWithContext() = runTest {
         val out = withContext(kotlinx.coroutines.Dispatchers.Unconfined) { "ok" }
         assertEquals("ok", out)
