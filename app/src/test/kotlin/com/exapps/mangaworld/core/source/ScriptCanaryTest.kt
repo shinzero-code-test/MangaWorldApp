@@ -35,6 +35,7 @@ import java.io.File
 class ScriptCanaryTest {
 
     private fun dashboardFile(vararg parts: String): File {
+        val rootChildren = System.getProperty("canary.root.children")
         val rel = "dashboard/" + parts.joinToString("/")
         // Primary: repo-anchored dir handed down by Gradle (see
         // testOptions.systemProperty in app/build.gradle.kts) — immune to
@@ -44,7 +45,11 @@ class ScriptCanaryTest {
             ?.let { File(it, parts.joinToString("/")) }
         if (anchored != null) {
             if (anchored.isFile) return anchored
-            error("canary file missing: ${anchored.path} (repo-anchored; dir listing: ${anchored.parentFile?.list()?.take(12)})")
+            error(
+                "canary file missing: ${anchored.path} (repo-anchored; " +
+                    "config-time rootChildren=$rootChildren; " +
+                    "dir listing: ${anchored.parentFile?.list()?.take(12)})"
+            )
         }
         val start = runCatching { File(System.getProperty("user.dir")).canonicalFile }
             .getOrElse { File(".").absoluteFile }

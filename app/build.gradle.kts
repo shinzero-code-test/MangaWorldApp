@@ -148,6 +148,13 @@ android {
                 "canary.dashboard.dir",
                 rootDir.resolve("dashboard").absolutePath
             )
+            // Diagnostic: what the configuring filesystem actually contains
+            // (evaluated once, not per test).
+            it.systemProperty(
+                "canary.root.children",
+                (rootDir.list()?.take(20)?.joinToString(",") ?: "null") +
+                    "|dashboard=" + rootDir.resolve("dashboard").isDirectory
+            )
         }
     }
 
