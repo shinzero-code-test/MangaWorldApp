@@ -1,0 +1,1115 @@
+<!doctype html>
+<!--[if lt IE 8 ]><html lang="ar" class="ie7"> <![endif]-->
+<!--[if IE 8 ]><html lang="ar" class="ie8"> <![endif]-->
+<!--[if IE 9 ]><html lang="ar" class="ie9"> <![endif]-->
+<!--[if (gt IE 9)|!(IE)]><!--><html lang="ar"> <!--<![endif]-->
+    <head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    
+    
+<!--/ DFP tag header -->
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-TDKE5SR9N3"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-TDKE5SR9N3');
+</script>
+
+<meta name="purpleads-verification" content="406aae16aa9bdea8a449e207"/>
+
+
+<script type="text/javascript" src="https://fstatic.netpub.media/extra/cmp/cmp-gdpr.js" defer></script>
+
+<!--/ DFP tag header -->
+        
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+        <title>قائمة المانجا | مانجا اون لاين
+</title>
+        <meta name="description" content="قائمة المانجا تحوي مختلف أنواع القصص المصورة من مانجا ومانهوا ومانها بمختلف التصنيفات لإرضاء جميع الأدواق، ستجد هنا ما تبحث عنه وأكثر
+"/>
+        <meta name="keywords" content="ون بيس, مانجا العرب, مانجا بوروتو, مانجا ياوي, مترجم, مانجا يوري, مانجا يونا, مانجا يابانية, مانجا العاشق, مانجا شقاع, مانجا بليتش, مانجا القناص, مانجا هجوم العمالقة, مانجا ناروتو, naruto, one piece , bleach, fairy tail, Akatsuki no Yona, Boruto, Hunter x Hunter, Naruto Gaiden
+"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+                
+        <meta name="google-site-verification" content="" />
+        
+                                <link rel="shortcut icon" href="https://www.onma.me/uploads/favicon.png">
+                
+        <link rel="canonical" href="https://manonga.online"/>
+
+        <link rel="stylesheet" href="https://manonga.online/css/bootswatch/flatly/bootstrap.min.css"/>
+        <link rel="stylesheet" href="https://manonga.online/css/style.css"/>
+        <link rel="stylesheet" href="https://manonga.online/css/font-awesome.min.css"/>
+
+        <script src="https://manonga.online/js/vendor/modernizr-2.6.2-respond-1.1.0.min.js"></script>
+        <script src="https://manonga.online/js/vendor/jquery-1.11.0.min.js"></script>
+        <script src="https://manonga.online/js/vendor/bootstrap.min.js"></script>
+        <script src="https://manonga.online/js/vendor/jquery.autocomplete.min.js"></script>
+        <script src="https://manonga.online/js/slick.min.js"></script>
+        <script src="https://manonga.online/js/main.js?v=9"></script>
+
+                <link rel="stylesheet" href="https://manonga.online/css/bootstrap-rtl.min.css">
+        <link rel="stylesheet" href="https://manonga.online/css/slick.css">
+        <link rel="stylesheet" href="https://manonga.online/css/slick-theme.css">
+        <link rel="stylesheet" href="https://manonga.online/css/rtl.css?v=03">
+        
+        
+<script>
+    var type = "image";
+    var cat = "";
+    var catName = "";
+    var alpha = "";
+    var author = "";
+    var artist = "";
+    var tag = "";
+    var sortBy = "name";
+    var asc = true;
+
+    var ascIcon = '<i class="fa fa-sort-amount-asc"></i>';
+    var descIcon = '<i class="fa fa-sort-amount-desc"></i>';
+
+    $(document).ready(function(){
+        href=window.location.href;
+        tab = href.split('/');
+        if(tab[tab.length-2] == 'category'){
+            cat = tab[tab.length-1];
+            cat = cat.charAt(0).toUpperCase()+ cat.substr(1);
+            $('.filter-text').text(cat + ' Manga');
+        } else if(tab[tab.length-2] == 'author'){
+            author = tab[tab.length-1];
+            $('.filter-text').text('Author: ' + author.replace(/%20/g," "));
+        } else if(tab[tab.length-2] == 'artist'){
+            artist = tab[tab.length-1];
+            $('.filter-text').text('Artist: ' + artist.replace(/%20/g," "));
+        } else if(tab[tab.length-2] == 'tag'){
+            tag = tab[tab.length-1];
+            $('.filter-text').text('Tag: ' + tag.replace(/%20/g," "));
+        }
+    });
+
+    // change filter type
+    $(document).on('click', '#filter-types .btn-group', function(e) {
+        newType = $(this).find('input').attr('id');
+        if (type != newType) {
+            type = newType;
+            changeMangaList(type);
+        }
+    });
+
+    // sort
+    $(document).on('click', '#sort-types .btn-group', function(e) {
+        $('#sort-types').find('i').remove();
+        
+        newSortBy = $(this).find('input').attr('id');
+        if (sortBy == newSortBy) {
+            asc = !asc;
+            if(asc) {
+                $(this).find('input').after(ascIcon);
+            } else {
+                $(this).find('input').after(descIcon);
+            }
+        } else {
+            sortBy = newSortBy;
+            asc = true;
+            $(this).find('input').after(ascIcon);
+        }
+
+        getMangaList(1);
+    });
+
+    // filter by category
+    $(document).on('click', '.category', function(e) {
+        e.preventDefault();
+
+        alpha = "";
+        author = "";
+        artist = "";
+        tag = "";
+        cat = $(this).attr('href').split('cat=')[1];
+        catName = $(this).text();
+        getMangaList(1);
+    });
+
+    // filter by alphabet
+    $(document).on('click', '.alphabet', function(e) {
+        e.preventDefault();
+
+        cat = "";
+        author = "";
+        artist = "";
+        tag = "";
+        catName = "";
+        alpha = $(this).attr('href').split('alpha=')[1];
+        getMangaList(1);
+    });
+    
+    // paginate
+    $(document).on('click', '.pagination a', function(e) {
+        e.preventDefault();
+
+        var page = $(this).attr('href').split('page=')[1];
+        getMangaList(page);
+    });
+
+    function getMangaList(page) {
+        $('#waiting').show();
+        
+        $.ajax({
+            url: "https://manonga.online/filterList",
+            data: {'page': page, 'cat': cat, 'alpha': alpha, 'sortBy': sortBy, 'asc': asc, 'author': author, 'artist': artist, 'tag': tag}
+        }).done(function(data) {
+            $('#waiting').hide();
+            $('.content').html(data);
+            
+            $('.filter-text').text('');
+            if(catName != "") {
+                $('.filter-text').text(catName + ' Manga');
+            } else if (alpha != "") {
+                $('.filter-text').text(alpha);
+            }
+        });
+    }
+
+    function changeMangaList(type) {
+        $('#waiting').show();
+        
+        $.ajax({
+            url: 'https://manonga.online/changeMangaList',
+            data: {'type': type}
+        }).done(function(data) {
+            $('#waiting').hide();
+            $('.type-content').html(data);
+            
+            if (type == 'text') {
+                $('.image-version-sidebar').hide();
+                $('.text-version-sidebar').show();
+            } else if (type == 'image') {
+                cat = "";
+                catName = "";
+                alpha = "";
+                author = "";
+                artist = "";
+                tag = "";
+                sortBy = "name";
+                asc = true;
+                $('.filter-text').text('');
+
+                $('.image-version-sidebar').show();
+                $('.text-version-sidebar').hide();
+            }
+        });
+    }
+</script>
+
+<script src="https://manonga.online/packages/escapeboy/jraty/raty/lib/jquery.raty.min.js" type="text/javascript" charset="utf-8"></script>
+
+        <!--[if lt IE 9]>
+        <script src="https://manonga.online/js/vendor/html5shiv.js"></script>
+        <script src="https://manonga.online/js/vendor/respond.min.js"></script>
+        <![endif]-->
+        <script>if (window != top)
+    top.location.href = location.href</script>
+
+    
+    </head>
+    <body class=" layout-boxed ">
+        <!--[if lt IE 7]>
+            <p class="browsehappy">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> to improve your experience.</p>
+        <![endif]-->
+
+                <!-- Google Analytics -->
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', "UA-152685724-1", 'auto');
+  ga('send', 'pageview');
+
+</script>        
+        <div class="wrapper">
+            <!-- Website Menu -->
+            <nav class="navbar navbar-default" role="navigation">
+    <div class=" container ">
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar-menu">
+                <span class="sr-only">Toggle navigation</span><span class="icon-bar"></span><span class="icon-bar"></span><span class="icon-bar"></span>
+            </button> 
+            <h1 class="navbar-brand-logo " style="margin:0;">
+                <a class="navbar-brand" href="https://manonga.online">
+                                        <img alt="مانجا اون لاين" src="/uploads/logo.png"/>
+                    <span style="display: none">مانجا اون لاين</span>
+                                    </a>
+            </h1>
+        </div>
+        <div class="navbar-custom-menu">
+            <ul class="nav navbar-nav  navbar-left ">
+
+                                                                </ul>
+        </div>
+        <div class="collapse navbar-collapse" id="navbar-menu">
+            <!-- menu -->
+            <ul class="nav navbar-nav  navbar-left ">
+                                <li >
+     <a href="https://manonga.online"
+      title="الصفحة الرئيسية">
+      <i class="fa fa-home"></i>
+                الصفحة الرئيسية
+    </a>
+</li>
+<li >
+     <a href="https://manonga.online/manga-list"
+      title="قائمة المانجا">
+      <i class="fa fa-th-large"></i>
+                قائمة المانجا
+    </a>
+</li>
+<li >
+     <a href="https://manonga.online/latest-release"
+      title="أحدث الفصول">
+      <i class="fa fa-list"></i>
+                أحدث الفصول
+    </a>
+</li>
+<li >
+     <a href="https://manonga.online/latest-news"
+      title="أخبار">
+      <i class="fa fa-newspaper-o"></i>
+                أخبار
+    </a>
+</li>
+<li >
+     <a href="https://manonga.online/random"
+      title="اقتراح مانجا">
+      <i class="fa fa-random"></i>
+                اقتراح مانجا
+    </a>
+</li>
+
+                                                                <li class="search dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown"><i class="fa fa-search"></i></a>
+                    <div class="dropdown-menu">
+                        <form class="navbar-form">
+                            <div class="navbar-form  navbar-left " role="search">
+                                <div class="form-group">
+                                    <input id="autocomplete" class="form-control" type="text" placeholder="البحث..." style="border-radius:0;"/>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </li>
+                <!-- Notifications Menu -->
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<style>
+    .searching {
+        background-image: url('https://manonga.online/images/ajax-loader.gif');
+        background-position: 95% 50%;
+        background-repeat: no-repeat;
+    }
+</style>
+<script>
+    $('#autocomplete').autocomplete({
+        serviceUrl: "https://manonga.online/search",
+        onSearchStart: function (query) {
+            $('#autocomplete').addClass('searching');
+        },
+        onSearchComplete: function (query, suggestions) {
+            $('#autocomplete').removeClass('searching');
+        },
+        onSelect: function (suggestion) {
+            showURL = "https://manonga.online/manga/SELECTION";
+            window.location.href = showURL.replace('SELECTION', suggestion.data);
+        }
+    });
+</script>
+
+            <!--/ Website Menu -->
+        
+
+
+            <div class=" container ">
+                <!-- row -->
+                <div class="row" style="background:#e8e8e8">
+                    <div class="col-sm-12">
+                                            </div>
+                </div>
+                <!--/ row -->
+                <!-- row -->
+                <div class="row" style="background:#e8e8e8">
+                    <div>
+                                             </div>
+                </div>
+
+                <div class="row" style="background:#e8e8e8"> 
+                    <div class="col-sm-4 col-sm-push-8">
+                        
+<!-- google adsense -->
+
+<center>
+
+</center>
+<!-- google adsense -->
+
+
+<div class="image-version-sidebar" style="margin-top: 10px">
+    <div class="panel panel-default">
+        <div class="panel-heading">تصفية حسب الفئة</div>
+        <div class="panel-body">
+            <ul class="list-category" style="padding-right:8px">
+                                <li><a href="https://manonga.online/manga-list?cat=1" class="category">أكشن</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=2" class="category">مغامرة</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=3" class="category">كوميدي</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=4" class="category">شياطين</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=5" class="category">دراما</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=6" class="category">إيتشي</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=7" class="category">خيال</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=8" class="category">انحراف جنسي</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=9" class="category">حريم</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=10" class="category">تاريخي</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=11" class="category">رعب</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=12" class="category">جوسي</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=13" class="category">فنون قتالية</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=14" class="category">ناضج</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=15" class="category">ميكا</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=16" class="category">غموض</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=17" class="category">وان شوت</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=18" class="category">نفسي</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=19" class="category">رومنسي</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=20" class="category">حياة مدرسية</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=21" class="category">خيال علمي</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=22" class="category">سينين</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=23" class="category">شوجو</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=24" class="category">شوجو أي</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=25" class="category">شونين</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=26" class="category">شونين أي</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=27" class="category">شريحة من الحياة</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=28" class="category">رياضة</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=29" class="category">خارق للطبيعة</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=30" class="category">مأساة</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=31" class="category">مصاصي الدماء</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=32" class="category">سحر</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=35" class="category">ويب تون</a></li>
+                                <li><a href="https://manonga.online/manga-list?cat=36" class="category">دوجينشي</a></li>
+                            </ul>
+        </div>
+    </div>
+    
+    
+    <div class="panel panel-default">
+        <div class="panel-heading">تصفح المانجا حسب الأبجدية</div>
+        <div class="panel-body">
+            <div class="list-alphabet">
+                <a href="https://manonga.online/manga-list?alpha=Other" class="alphabet">#</a>
+                                <a href="https://manonga.online/manga-list?alpha=A" class="alphabet">A</a>
+                                <a href="https://manonga.online/manga-list?alpha=B" class="alphabet">B</a>
+                                <a href="https://manonga.online/manga-list?alpha=C" class="alphabet">C</a>
+                                <a href="https://manonga.online/manga-list?alpha=D" class="alphabet">D</a>
+                                <a href="https://manonga.online/manga-list?alpha=E" class="alphabet">E</a>
+                                <a href="https://manonga.online/manga-list?alpha=F" class="alphabet">F</a>
+                                <a href="https://manonga.online/manga-list?alpha=G" class="alphabet">G</a>
+                                <a href="https://manonga.online/manga-list?alpha=H" class="alphabet">H</a>
+                                <a href="https://manonga.online/manga-list?alpha=I" class="alphabet">I</a>
+                                <a href="https://manonga.online/manga-list?alpha=J" class="alphabet">J</a>
+                                <a href="https://manonga.online/manga-list?alpha=K" class="alphabet">K</a>
+                                <a href="https://manonga.online/manga-list?alpha=L" class="alphabet">L</a>
+                                <a href="https://manonga.online/manga-list?alpha=M" class="alphabet">M</a>
+                                <a href="https://manonga.online/manga-list?alpha=N" class="alphabet">N</a>
+                                <a href="https://manonga.online/manga-list?alpha=O" class="alphabet">O</a>
+                                <a href="https://manonga.online/manga-list?alpha=P" class="alphabet">P</a>
+                                <a href="https://manonga.online/manga-list?alpha=Q" class="alphabet">Q</a>
+                                <a href="https://manonga.online/manga-list?alpha=R" class="alphabet">R</a>
+                                <a href="https://manonga.online/manga-list?alpha=S" class="alphabet">S</a>
+                                <a href="https://manonga.online/manga-list?alpha=T" class="alphabet">T</a>
+                                <a href="https://manonga.online/manga-list?alpha=U" class="alphabet">U</a>
+                                <a href="https://manonga.online/manga-list?alpha=V" class="alphabet">V</a>
+                                <a href="https://manonga.online/manga-list?alpha=W" class="alphabet">W</a>
+                                <a href="https://manonga.online/manga-list?alpha=X" class="alphabet">X</a>
+                                <a href="https://manonga.online/manga-list?alpha=Y" class="alphabet">Y</a>
+                                <a href="https://manonga.online/manga-list?alpha=Z" class="alphabet">Z</a>
+                            </div>
+        </div>
+    </div>
+    
+
+    
+    </div>
+
+<div class="text-version-sidebar" style="display: none; margin-top: 10px">
+        <div class="panel panel-default">
+        <div class="panel-heading">تصفح المانجا حسب الأبجدية</div>
+        <div class="panel-body" style="padding:4px; padding-right:12px">
+        <div>
+            <span class="alphabetic media disabled unknown">#</span>
+                        <span class="alphabetic media disabled A">A</span>
+                        <span class="alphabetic media disabled B">B</span>
+                        <span class="alphabetic media disabled C">C</span>
+                        <span class="alphabetic media disabled D">D</span>
+                        <span class="alphabetic media disabled E">E</span>
+                        <span class="alphabetic media disabled F">F</span>
+                        <span class="alphabetic media disabled G">G</span>
+                        <span class="alphabetic media disabled H">H</span>
+                        <span class="alphabetic media disabled I">I</span>
+                        <span class="alphabetic media disabled J">J</span>
+                        <span class="alphabetic media disabled K">K</span>
+                        <span class="alphabetic media disabled L">L</span>
+                        <span class="alphabetic media disabled M">M</span>
+                        <span class="alphabetic media disabled N">N</span>
+                        <span class="alphabetic media disabled O">O</span>
+                        <span class="alphabetic media disabled P">P</span>
+                        <span class="alphabetic media disabled Q">Q</span>
+                        <span class="alphabetic media disabled R">R</span>
+                        <span class="alphabetic media disabled S">S</span>
+                        <span class="alphabetic media disabled T">T</span>
+                        <span class="alphabetic media disabled U">U</span>
+                        <span class="alphabetic media disabled V">V</span>
+                        <span class="alphabetic media disabled W">W</span>
+                        <span class="alphabetic media disabled X">X</span>
+                        <span class="alphabetic media disabled Y">Y</span>
+                        <span class="alphabetic media disabled Z">Z</span>
+                    </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- google adsense -->
+<center>
+
+</center>
+<!-- google adsense -->
+
+                    </div>
+                    <div class="col-sm-8 col-sm-pull-4" style="padding-left: 15px;">
+
+                        <div class="col-sm-12" style="padding:0">
+                            
+<!-- google adsense -->
+<div class="ad-desktop" style=" margin-bottom: 0px; margin-top: 0px;">
+<center>
+
+</div>
+
+<div class="ad-mobile" style=" margin-bottom: 0px; margin-top: 5px;">
+<center>
+
+</center>
+</div>
+<!-- google adsense -->
+
+<div style="clear:both"></div>
+
+<div class="advance-search">
+    
+<div id="waiting" style="display: none;" class=" pull-left ">
+    <img src="https://manonga.online/images/ajax-loader.gif" />
+</div>
+
+
+<h2 class="widget-title">قائمة المانجا <div id="filter-types" class="" role="group" data-toggle="buttons" style="margin-bottom: 10px">
+    <div class="btn-group" role="group">
+        <label class="btn btn-primary">
+            <input type="radio" name="filter-type" id="text" />
+            <i class="fa fa-bars" aria-hidden="true"></i>
+        </label>
+    </div>
+    <div class="btn-group" role="group">
+        <label class="btn btn-primary active">
+            <input type="radio" name="filter-type" id="image" />
+           <i class="fa fa-th-large" aria-hidden="true"></i>
+
+        </label>
+    </div>
+</div>
+</h2>
+
+<div class="type-content">
+    <div class="panel panel-default">
+        <div class="panel-body">
+            <div class="filter-text pull-left"></div>
+            <div class="pull-right">
+                فرز حسب:
+                <div id="sort-types" class="btn-group" role="group" data-toggle="buttons">
+                    <div class="btn-group" role="group">
+                        <label class="btn btn-default active">
+                            <input type="radio" name="sort-type" id="name" /> AZ
+                        </label>
+                    </div>
+                    <div class="btn-group" role="group">
+                        <label class="btn btn-default">
+                            <input type="radio" name="sort-type" id="views" /> الزيارة :
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="content">
+            <div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/2-jikanme-hoken-taiiku" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/2-jikanme-hoken-taiiku/cover/cover_250x350.jpg' class="img-responsive"  alt='2 jikanme Hoken Taiiku'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/2-jikanme-hoken-taiiku" class="chart-title"><strong>2 jikanme Hoken Taiiku</strong></a></h5>
+            <div class="readOnly-130" style="display: inline-block;"></div> <span style="vertical-align: middle;">3.39</span>
+            <script>$('.readOnly-130').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "3.39"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 69679
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                كوميدي, وان شوت, حياة مدرسية, شريحة من الحياة, رياضة
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/2-jikanme-hoken-taiiku/0">#0 ون شوت</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/a-dimwitted-monk-fell-from-heaven" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/a-dimwitted-monk-fell-from-heaven/cover/cover_250x350.jpg' class="img-responsive"  alt='A &quot;Dimwitted&quot; Monk fell from Heaven'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/a-dimwitted-monk-fell-from-heaven" class="chart-title"><strong>A &quot;Dimwitted&quot; Monk fell from Heaven</strong></a></h5>
+            <div class="readOnly-187" style="display: inline-block;"></div> <span style="vertical-align: middle;">3.92</span>
+            <script>$('.readOnly-187').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "3.92"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 298957
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                كوميدي, رومنسي, شوجو, خارق للطبيعة
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/a-dimwitted-monk-fell-from-heaven/44">#44 الراهبُ يُقاتل ؟!</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/a-journey-to-the-past" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/a-journey-to-the-past/cover/cover_250x350.jpg' class="img-responsive"  alt='A Journey to The Past'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/a-journey-to-the-past" class="chart-title"><strong>A Journey to The Past</strong></a></h5>
+            <div class="readOnly-193" style="display: inline-block;"></div> <span style="vertical-align: middle;">4.03</span>
+            <script>$('.readOnly-193').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "4.03"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 374962
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                مغامرة, تاريخي, رومنسي, شوجو, خارق للطبيعة
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/a-journey-to-the-past/330">#330 </a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/actually-i-was-the-real-one" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/actually-i-was-the-real-one/cover/cover_250x350.jpg' class="img-responsive"  alt='Actually, I Was the Real One'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/actually-i-was-the-real-one" class="chart-title"><strong>Actually, I Was the Real One</strong></a></h5>
+            <div class="readOnly-255" style="display: inline-block;"></div> <span style="vertical-align: middle;">4.2</span>
+            <script>$('.readOnly-255').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "4.2"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 59337
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                دراما, خيال, رومنسي, شوجو
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/actually-i-was-the-real-one/117">#117 نهاية الموسم الثالث</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/adonis-next-door" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/adonis-next-door/cover/cover_250x350.jpg' class="img-responsive"  alt='Adonis Next Door'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/adonis-next-door" class="chart-title"><strong>Adonis Next Door</strong></a></h5>
+            <div class="readOnly-140" style="display: inline-block;"></div> <span style="vertical-align: middle;">4.22</span>
+            <script>$('.readOnly-140').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "4.22"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 290602
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                كوميدي, رومنسي, شوجو, شريحة من الحياة
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/adonis-next-door/95">#95 النهاية</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/against-the-gods" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/against-the-gods/cover/cover_250x350.jpg' class="img-responsive"  alt='Against the gods'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/against-the-gods" class="chart-title"><strong>Against the gods</strong></a></h5>
+            <div class="readOnly-219" style="display: inline-block;"></div> <span style="vertical-align: middle;">4.37</span>
+            <script>$('.readOnly-219').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "4.37"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 744955
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                أكشن, كوميدي, دراما, حريم, فنون قتالية, رومنسي, خارق للطبيعة
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/against-the-gods/290">#290 </a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/akagami-no-shirayukihime" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/akagami-no-shirayukihime/cover/cover_250x350.jpg' class="img-responsive"  alt='Akagami no Shirayukihime'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/akagami-no-shirayukihime" class="chart-title"><strong>Akagami no Shirayukihime</strong></a></h5>
+            <div class="readOnly-46" style="display: inline-block;"></div> <span style="vertical-align: middle;">4.34</span>
+            <script>$('.readOnly-46').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "4.34"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 444149
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                كوميدي, دراما, خيال, تاريخي, رومنسي, شوجو
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/akagami-no-shirayukihime/132">#132 </a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/akame-ga-kill" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/akame-ga-kill/cover/cover_250x350.jpg' class="img-responsive"  alt='Akame ga Kill'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/akame-ga-kill" class="chart-title"><strong>Akame ga Kill</strong></a></h5>
+            <div class="readOnly-25" style="display: inline-block;"></div> <span style="vertical-align: middle;">4.3</span>
+            <script>$('.readOnly-25').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "4.3"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 211511
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                أكشن, خيال, رعب, ناضج, رومنسي, شونين, مأساة
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/akame-ga-kill/78">#78 انتهى ـ الفصل الاخير</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/akatsuki-no-yona" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/akatsuki-no-yona/cover/cover_250x350.jpg' class="img-responsive"  alt='Akatsuki no Yona'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/akatsuki-no-yona" class="chart-title"><strong>Akatsuki no Yona</strong></a></h5>
+            <div class="readOnly-36" style="display: inline-block;"></div> <span style="vertical-align: middle;">4.38</span>
+            <script>$('.readOnly-36').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "4.38"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 1509486
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                أكشن, مغامرة, كوميدي, دراما, خيال, حريم, تاريخي, نفسي, رومنسي, شوجو
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/akatsuki-no-yona/269">#269 من لا يُرعَب</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/all-you-need-is-kill" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/all-you-need-is-kill/cover/cover_250x350.jpg' class="img-responsive"  alt='All You Need Is Kill'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/all-you-need-is-kill" class="chart-title"><strong>All You Need Is Kill</strong></a></h5>
+            <div class="readOnly-10" style="display: inline-block;"></div> <span style="vertical-align: middle;">4.28</span>
+            <script>$('.readOnly-10').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "4.28"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 144834
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                أكشن, دراما, رعب, ناضج, ميكا, غموض, نفسي, رومنسي, خيال علمي, سينين, مأساة
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/all-you-need-is-kill/17">#17 أزرق سماوى</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/angel-densetsu" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/angel-densetsu/cover/cover_250x350.jpg' class="img-responsive"  alt='Angel Densetsu'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/angel-densetsu" class="chart-title"><strong>Angel Densetsu</strong></a></h5>
+            <div class="readOnly-64" style="display: inline-block;"></div> <span style="vertical-align: middle;">4.26</span>
+            <script>$('.readOnly-64').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "4.26"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 140095
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                أكشن, كوميدي, فنون قتالية, رومنسي, حياة مدرسية, شونين
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/angel-densetsu/84">#84 الملحمة الكبرى الأخيرة</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/anitomo" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/anitomo/cover/cover_250x350.jpg' class="img-responsive"  alt='Anitomo'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/anitomo" class="chart-title"><strong>Anitomo</strong></a></h5>
+            <div class="readOnly-156" style="display: inline-block;"></div> <span style="vertical-align: middle;">3.65</span>
+            <script>$('.readOnly-156').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "3.65"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 182894
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                كوميدي, رومنسي, حياة مدرسية, شوجو
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/anitomo/8">#8 صديق أخي</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/ao-haru-ride-" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/ao-haru-ride-/cover/cover_250x350.jpg' class="img-responsive"  alt='Ao Haru Ride'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/ao-haru-ride-" class="chart-title"><strong>Ao Haru Ride</strong></a></h5>
+            <div class="readOnly-28" style="display: inline-block;"></div> <span style="vertical-align: middle;">4.26</span>
+            <script>$('.readOnly-28').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "4.26"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 256899
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                كوميدي, دراما, رومنسي, حياة مدرسية, شوجو, شريحة من الحياة
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/ao-haru-ride-/44">#44 ركوب الربيع الأزرق</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/area-d-inou-ryouiki" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/area-d-inou-ryouiki/cover/cover_250x350.jpg' class="img-responsive"  alt='Area D - Inou Ryouiki'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/area-d-inou-ryouiki" class="chart-title"><strong>Area D - Inou Ryouiki</strong></a></h5>
+            <div class="readOnly-107" style="display: inline-block;"></div> <span style="vertical-align: middle;">4.71</span>
+            <script>$('.readOnly-107').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "4.71"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 128023
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                أكشن, كوميدي, دراما, إيتشي, شونين, خارق للطبيعة
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/area-d-inou-ryouiki/137">#137 ارماجيدون 10 - النهاية و البداية</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/arisa" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/arisa/cover/cover_250x350.jpg' class="img-responsive"  alt='Arisa'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/arisa" class="chart-title"><strong>Arisa</strong></a></h5>
+            <div class="readOnly-40" style="display: inline-block;"></div> <span style="vertical-align: middle;">3.91</span>
+            <script>$('.readOnly-40').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "3.91"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 142851
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                دراما, غموض, نفسي, رومنسي, حياة مدرسية, شوجو
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/arisa/1">#1 تسوباسا واريسا</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/aru-asa-okitara" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/aru-asa-okitara/cover/cover_250x350.jpg' class="img-responsive"  alt='Aru Asa Okitara'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/aru-asa-okitara" class="chart-title"><strong>Aru Asa Okitara</strong></a></h5>
+            <div class="readOnly-172" style="display: inline-block;"></div> <span style="vertical-align: middle;">3.51</span>
+            <script>$('.readOnly-172').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "3.51"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 143611
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                كوميدي, وان شوت, رومنسي, حياة مدرسية, شونين, خارق للطبيعة
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/aru-asa-okitara/0">#0 استيقظت ذات صباح</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/asadora" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/asadora/cover/cover_250x350.jpg' class="img-responsive"  alt='Asadora'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/asadora" class="chart-title"><strong>Asadora</strong></a></h5>
+            <div class="readOnly-212" style="display: inline-block;"></div> <span style="vertical-align: middle;">4.73</span>
+            <script>$('.readOnly-212').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "4.73"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 94498
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                سينين
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/asadora/13">#13 عيد ميلاد</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="col-sm-4">
+    <div class="chapter-container">
+            <div class="chapter-image">
+            <a href="https://manonga.online/manga/attack-ontitan-lost-girls" class="thumbnail">
+                <img width="100%" src='https://www.onma.top/uploads/manga/attack-ontitan-lost-girls/cover/cover_250x350.jpg' class="img-responsive"  alt='Attack on Titan: Lost Girls'>
+            </a>
+            </div>
+            <div class="chapter-content">
+                        <h5 class="media-heading"><a href="https://manonga.online/manga/attack-ontitan-lost-girls" class="chart-title"><strong>Attack on Titan: Lost Girls</strong></a></h5>
+            <div class="readOnly-132" style="display: inline-block;"></div> <span style="vertical-align: middle;">4.14</span>
+            <script>$('.readOnly-132').raty({path: "https://manonga.online/packages/escapeboy/jraty/raty/lib/img", readOnly: true, score: "4.14"});</script>
+            <div>
+                <i class="fa fa-eye"></i> 179693
+            </div>
+                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: inherit; width: 95%;">
+                أكشن, دراما, خيال, رعب, ناضج, غموض, شونين, خارق للطبيعة
+            </div>
+                                                <div style="position: absolute; bottom: 20px">
+                <a href="https://manonga.online/manga/attack-ontitan-lost-girls/4">#4 سور سينا. وداعا</a>
+            </div>
+                    </div>
+</div>
+</div>
+<div class="row">
+    <div class="col-xs-12">
+        <ul class="pagination">
+        
+                    <li class="disabled"><span>&laquo;</span></li>
+        
+        
+                    
+            
+            
+                                                                        <li class="active"><span>1</span></li>
+                                                                                <li><a href="https://manonga.online/manga-list?page=2">2</a></li>
+                                                                                <li><a href="https://manonga.online/manga-list?page=3">3</a></li>
+                                                                                <li><a href="https://manonga.online/manga-list?page=4">4</a></li>
+                                                                                <li><a href="https://manonga.online/manga-list?page=5">5</a></li>
+                                                                                <li><a href="https://manonga.online/manga-list?page=6">6</a></li>
+                                                                                <li><a href="https://manonga.online/manga-list?page=7">7</a></li>
+                                                                                <li><a href="https://manonga.online/manga-list?page=8">8</a></li>
+                                                                    
+                            <li class="disabled"><span>...</span></li>
+            
+            
+                                
+            
+            
+                                                                        <li><a href="https://manonga.online/manga-list?page=14">14</a></li>
+                                                                                <li><a href="https://manonga.online/manga-list?page=15">15</a></li>
+                                                        
+        
+                    <li><a href="https://manonga.online/manga-list?page=2" rel="next">&raquo;</a></li>
+            </ul>
+
+    </div>
+</div>
+        </div>
+    </div>
+</div>
+</div>
+
+
+                        </div>
+                    </div>
+                </div>
+                <!--/ row -->
+
+                
+                
+                <script>
+                    $(document).ready(function () {
+                        var url = window.location.href;
+                        var element = $('ul.nav a').filter(function () {
+                            if (url.charAt(url.length - 1) == '/') {
+                                url = url.substring(0, url.length - 1);
+                            }
+
+                            return this.href == url;
+                        }).parent();
+
+                        if (element.is('li')) {
+                            element.addClass('active');
+                        }
+                    });
+                </script>
+            </div>
+            
+            
+<!-- google adsense -->
+
+<!-- google adsense -->
+
+
+                            <footer class="manga-footer">
+                                <!-- menu -->
+                                <ul class=" pull-left ">
+                                                                    <li><a href="https://manonga.online/contact-us" title="إتصل بنا"><i class="fa fa-envelope-square"></i></a></li>
+                                &nbsp;
+                                <li><a href="https://manonga.online/feed" title="RSS feed" ><i class="fa fa-rss-square"></i></a></li>
+                                
+                                <li><a href="https://twitter.com/onmanga" title="تويتر" ><i class="fa fa-twitter-square"></i></a></li>
+                                
+                                <li><a href="https://www.facebook.com/onmangacom" title="فيس بوك" ><i class="fa fa-facebook-square"></i></a></li>
+
+                                                                        <li >
+     <a href="https://manonga.online"
+      title="الصفحة الرئيسية">
+           الصفحة الرئيسية
+    </a>
+</li>
+<li >
+     <a href="https://manonga.online/manga-list"
+      title="قائمة المانجا">
+           قائمة المانجا
+    </a>
+</li>
+<li >
+     <a href="https://manonga.online/latest-release"
+      title="أحدث الفصول">
+           أحدث الفصول
+    </a>
+</li>
+<li >
+     <a href="https://manonga.online/advanced-search"
+      title="بحث متقدم">
+           بحث متقدم
+    </a>
+</li>
+<li >
+     <a href="https://manonga.online/privacy-policy"
+      title="سياسة الخصوصية">
+           سياسة الخصوصية
+    </a>
+</li>
+
+                                                                    </ul>
+                                
+                                <a href="https://manonga.online" class="copy-rights"> &copy;&nbsp;2026&nbsp; مانجا اون لاين</a>
+                                &nbsp;
+
+                            </footer>
+                            
+                            
+
+
+        </div>
+    </div>
+
+<!-- auto safelink -->
+<script type="text/javascript">
+var setting = {
+pageurl : "https://www.onma.top/",
+hanyauntukstatus : true,
+hanyauntuk : "btifab.com/,liveinternet.ru",
+path : "#link?from="
+}; 
+</script>
+<script type="text/javascript" src='https://cdn.rawgit.com/proarabic/tharabic/1de4245e/safe-link-crypto.js'></script>
+<script type="text/javascript" src='https://cdn.rawgit.com/proarabic/tharabic/ca14c0b5/change-url.js'></script>
+<!-- auto safelink -->
+    
+<!-- ads -->
+<!-- ads -->
+    
+    
+</body>
+</html>
