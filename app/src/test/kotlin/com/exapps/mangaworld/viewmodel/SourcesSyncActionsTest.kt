@@ -35,6 +35,18 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class SourcesSyncActionsTest {
 
+    /** Hand fake (mockk answers-capture fights the compiler here; fakes don't). */
+    private class FakeIndexStore(
+        val map: MutableMap<String, PluginIndexRecord> = mutableMapOf()
+    ) : PluginIndexStore {
+        override suspend fun get(id: String) = map[id]
+        override suspend fun getAll() = map.values.toList()
+        override suspend fun put(record: PluginIndexRecord) {
+            map[record.id] = record
+        }
+        override suspend fun remove(id: String) = map.remove(id) != null
+    }
+
     private val dispatcher = StandardTestDispatcher()
 
     @Before
@@ -48,8 +60,7 @@ class SourcesSyncActionsTest {
     }
 
     private fun vm(
-        scheduler: PluginSyncScheduler = mockk(relaxed = true),
-        engine: PluginSyncEngine = mockk(relaxed = true),
+        scheduler: PluginSyncScheduler = mockk(relaxed = true),        engine: PluginSyncEngine = mockk(relaxed = true),
         index: PluginIndexStore = mockk(relaxed = true),
         settings: SettingsRepository = mockk<SettingsRepository>(relaxed = true).apply {
             every { getAppSettings() } returns
@@ -88,19 +99,12 @@ class SourcesSyncActionsTest {
             origin = PluginOrigin.OFFICIAL, status = PluginStatus.DISABLED,
             manifestJson = """{"id":"gated"}"""
         )
-        var stored: PluginIndexRecord = held
-        val index: PluginIndexStore = mockk {
-            coEvery { get("gated") } coAnswers { stored }
-            coEvery { put(any()) } coAnswers {
-                stored = firstArg()
-                Unit
-            }
-        }
-        val viewModel = vm(index = index)
+        val store = FakeIndexStore(mutableMapOf("gated" to held))
+        val viewModel = vm(index = store)
         advanceUntilIdle()
         viewModel.toggleSource("gated", true)
         advanceUntilIdle()
-        assertEquals(PluginStatus.ENABLED, stored.status)
+        assertEquals(PluginStatus.ENABLED, store.map["gated"]!!.status)
     }
 
     @Test
