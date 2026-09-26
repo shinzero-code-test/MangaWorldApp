@@ -22,6 +22,7 @@ class ScriptPluginLoaderTest {
             ScriptTestSupport.sandbox,
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
+            RecordingPluginTelemetry(),
             Dispatchers.Unconfined
         )
     )

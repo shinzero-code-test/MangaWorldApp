@@ -56,6 +56,7 @@ class ScriptScraper internal constructor(
     private val sandbox: ScriptContextFactory,
     private val fetcher: ScriptFetcher,
     private val logger: ScriptLogger,
+    private val telemetry: com.exapps.mangaworld.core.source.plugins.PluginTelemetry,
     private val dispatcher: kotlinx.coroutines.CoroutineDispatcher
 ) : MangaScraper {
 
@@ -150,6 +151,9 @@ class ScriptScraper internal constructor(
     ): Result<T> {
         val job = currentCoroutineContext()[Job]
         val cancelled = { job?.isCancelled == true }
+        // Gate 0: every entry execution emits one duration sample (success or
+        // failure-class only) so script performance is fleet-observable.
+        val start = System.currentTimeMillis()
         return try {
             val raw = withTimeout(manifest.timeoutMs.toLong()) {
                 withContext(dispatcher) {
@@ -159,13 +163,28 @@ class ScriptScraper internal constructor(
                 }
             }
             // Engine-owned validation runs outside the sandbox on plain data.
-            Result.success(map(raw))
+            val result = Result.success(map(raw))
+            telemetry.logScriptCall(
+                sourceId, entry, success = true,
+                System.currentTimeMillis() - start, failureClass = null
+            )
+            result
         } catch (e: CancellationException) {
             // Timeouts/cancellation stay cancellations (retry/backoff upstream),
             // never silent Result.failures. TimeoutCancellationException is a
             // CancellationException — rethrow before the generic catch.
+            telemetry.logScriptCall(
+                sourceId, entry, success = false,
+                System.currentTimeMillis() - start,
+                failureClass = e.javaClass.simpleName
+            )
             throw e
         } catch (e: Exception) {
+            telemetry.logScriptCall(
+                sourceId, entry, success = false,
+                System.currentTimeMillis() - start,
+                failureClass = e.javaClass.simpleName
+            )
             Result.failure(e)
         }
     }
@@ -491,6 +510,7 @@ class ScriptRunnerFactory @Inject constructor(
     private val sandbox: ScriptContextFactory,
     private val fetcher: ScriptFetcher,
     private val logger: ScriptLogger,
+    private val telemetry: com.exapps.mangaworld.core.source.plugins.PluginTelemetry,
     @ScriptDispatcher private val dispatcher: kotlinx.coroutines.CoroutineDispatcher
 ) {
 
@@ -534,6 +554,7 @@ class ScriptRunnerFactory @Inject constructor(
                 sandbox = sandbox,
                 fetcher = fetcher,
                 logger = logger,
+                telemetry = telemetry,
                 dispatcher = dispatcher
             )
         )

@@ -17,4 +17,8 @@ abstract class PluginStoreModule {
     /** Phase 3 health counters port → SharedPreferences implementation. */
     @Binds @Singleton
     abstract fun bindHealthStore(impl: PrefsHealthStore): HealthStore
+
+    /** Phase 3.5 Gate 0 fleet-telemetry port → Crashlytics implementation. */
+    @Binds @Singleton
+    abstract fun bindPluginTelemetry(impl: FirebasePluginTelemetry): PluginTelemetry
 }

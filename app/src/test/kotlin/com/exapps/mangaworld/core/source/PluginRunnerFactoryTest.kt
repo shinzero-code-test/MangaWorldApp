@@ -34,6 +34,7 @@ class PluginRunnerFactoryTest {
                 ScriptTestSupport.sandbox,
                 ScriptTestSupport.FakeFetcher(scriptBodies.toMutableMap()),
                 ScriptTestSupport.logger,
+                RecordingPluginTelemetry(),
                 Dispatchers.Unconfined
             )
         )

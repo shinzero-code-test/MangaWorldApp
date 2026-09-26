@@ -106,6 +106,7 @@ class PluginSyncEngine @Inject constructor(
     private val etags: EtagStore,
     private val runnerFactory: PluginRunnerFactory,
     private val settingsRepo: SettingsRepository,
+    private val telemetry: com.exapps.mangaworld.core.source.plugins.PluginTelemetry,
     @com.exapps.mangaworld.core.di.IoDispatcher private val io: kotlinx.coroutines.CoroutineDispatcher
 ) {
 
@@ -149,6 +150,67 @@ class PluginSyncEngine @Inject constructor(
      */
     @Suppress("LongParameterList")
     suspend fun sync(
+        trustedKeys: Map<String, ByteArray>,
+        host: HostCapabilities,
+        indexUrl: String = PluginDistribution.indexUrl(),
+        killSwitchJson: String? = null,
+        postSmoke: PostSmoke = PostSmoke.Network(),
+        allowInsecure: Boolean = false,
+        baseDir: File
+    ): SyncResult {
+        // Gate 0 fleet telemetry: every sweep emits one aggregate report —
+        // including 304 short-circuits (heartbeat) and transport aborts —
+        // so production behavior is observable, not logcat-only.
+        val start = System.currentTimeMillis()
+        return try {
+            val result = syncInner(
+                trustedKeys = trustedKeys,
+                host = host,
+                indexUrl = indexUrl,
+                killSwitchJson = killSwitchJson,
+                postSmoke = postSmoke,
+                allowInsecure = allowInsecure,
+                baseDir = baseDir
+            )
+            telemetry.logSync(reportOf(result, System.currentTimeMillis() - start))
+            result
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            telemetry.logSync(
+                com.exapps.mangaworld.core.source.plugins.PluginSyncReport(
+                    indexNotModified = false,
+                    outcomeCounts = mapOf("SyncAborted" to 1),
+                    failedIds = emptyList(),
+                    rejectedIds = emptyList(),
+                    revocations = emptyList(),
+                    evictedVersions = 0,
+                    durationMs = System.currentTimeMillis() - start
+                )
+            )
+            throw e
+        }
+    }
+
+    private fun reportOf(result: SyncResult, durationMs: Long) =
+        com.exapps.mangaworld.core.source.plugins.PluginSyncReport(
+            indexNotModified = result.indexNotModified,
+            outcomeCounts = result.outcomes.values
+                .groupingBy { it.javaClass.simpleName }
+                .eachCount(),
+            failedIds = result.outcomes
+                .filterValues { it is EntryOutcome.Failed }
+                .keys.take(10).toList(),
+            rejectedIds = result.outcomes
+                .filterValues { it is EntryOutcome.Rejected }
+                .keys.take(10).toList(),
+            revocations = result.revocationsApplied,
+            evictedVersions = result.evictedVersions,
+            durationMs = durationMs
+        )
+
+    @Suppress("LongParameterList")
+    private suspend fun syncInner(
         trustedKeys: Map<String, ByteArray>,
         host: HostCapabilities,
         indexUrl: String = PluginDistribution.indexUrl(),

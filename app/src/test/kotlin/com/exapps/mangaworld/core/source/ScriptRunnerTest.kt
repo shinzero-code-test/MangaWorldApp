@@ -84,6 +84,7 @@ class ScriptRunnerTest {
         ScriptTestSupport.sandbox,
         ScriptTestSupport.FakeFetcher(bodies.toMutableMap()),
         ScriptTestSupport.logger,
+        RecordingPluginTelemetry(),
         Dispatchers.Unconfined
     ).create(manifestFor(script), script.toByteArray(Charsets.UTF_8)).getOrThrow()
 
@@ -172,6 +173,7 @@ class ScriptRunnerTest {
             ScriptTestSupport.sandbox,
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
+            RecordingPluginTelemetry(),
             Dispatchers.Unconfined
         ).create(
             manifestFor(genreScript),
@@ -188,6 +190,7 @@ class ScriptRunnerTest {
             ScriptTestSupport.sandbox,
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
+            RecordingPluginTelemetry(),
             Dispatchers.Unconfined
         ).create(
             manifestFor(missingEntryScript),
@@ -203,6 +206,7 @@ class ScriptRunnerTest {
             ScriptTestSupport.sandbox,
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
+            RecordingPluginTelemetry(),
             Dispatchers.Unconfined
         ).create(
             manifestFor("function broken( {"),
@@ -226,6 +230,7 @@ class ScriptRunnerTest {
             ScriptTestSupport.sandbox,
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
+            RecordingPluginTelemetry(),
             Dispatchers.Unconfined
         ).create(manifestFor(script), script.toByteArray(Charsets.UTF_8)).getOrThrow()
         assertTrue(r.getHomeData().isFailure)
@@ -257,6 +262,7 @@ class ScriptRunnerTest {
             ScriptTestSupport.sandbox,
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
+            RecordingPluginTelemetry(),
             Dispatchers.Unconfined
         ).create(manifestFor(script), script.toByteArray(Charsets.UTF_8)).getOrThrow()
         assertTrue(r.getChapterPages("first").isSuccess)
@@ -280,6 +286,7 @@ class ScriptRunnerTest {
             ScriptTestSupport.sandbox,
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
+            RecordingPluginTelemetry(),
             Dispatchers.Unconfined
         ).create(manifestFor(script, 200), script.toByteArray(Charsets.UTF_8)).getOrThrow()
         val result = r.getHomeData()
@@ -320,6 +327,7 @@ class ScriptRunnerTest {
             ScriptTestSupport.sandbox,
             fetcher,
             ScriptTestSupport.logger,
+            RecordingPluginTelemetry(),
             Dispatchers.Unconfined
         ).create(manifestFor(script), script.toByteArray(Charsets.UTF_8)).getOrThrow()
         try {
@@ -345,10 +353,34 @@ class ScriptRunnerTest {
             ScriptTestSupport.sandbox,
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
+            RecordingPluginTelemetry(),
             counting
         ).create(manifestFor(source), source.toByteArray(Charsets.UTF_8)).getOrThrow()
         assertTrue(r.getHomeData().isSuccess)
         assertTrue("script never ran on the injected dispatcher", dispatched > 0)
+    }
+
+    @Test
+    fun scriptCallsEmitFleetSamples() = runTest {
+        val recording = RecordingPluginTelemetry()
+        val r = ScriptRunnerFactory(
+            ScriptTestSupport.sandbox,
+            ScriptTestSupport.FakeFetcher(),
+            ScriptTestSupport.logger,
+            recording,
+            Dispatchers.Unconfined
+        ).create(manifestFor(source), source.toByteArray(Charsets.UTF_8)).getOrThrow()
+        r.getHomeData().getOrThrow()
+        assertTrue(r.getMangaDetail("bad").isFailure)
+        // One sample per call: success carries duration, failure carries class.
+        val home = recording.scriptCalls.single { it.entry == "home" }
+        assertEquals("scriptpilot", home.id)
+        assertTrue(home.success)
+        assertTrue(home.durationMs >= 0)
+        assertEquals(null, home.failureClass)
+        val detail = recording.scriptCalls.single { it.entry == "detail" }
+        assertTrue(!detail.success)
+        assertTrue(detail.failureClass != null)
     }
 
     @Test
@@ -357,6 +389,7 @@ class ScriptRunnerTest {
             ScriptTestSupport.sandbox,
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
+            RecordingPluginTelemetry(),
             Dispatchers.Unconfined
         )
         val bytes = source.toByteArray(Charsets.UTF_8)

@@ -33,6 +33,7 @@ class SourceHealthMonitor @Inject constructor(
     private val store: HealthStore,
     private val index: PluginIndexStore,
     private val registry: SourceRegistry,
+    private val telemetry: PluginTelemetry,
     @com.exapps.mangaworld.core.di.IoDispatcher private val io: kotlinx.coroutines.CoroutineDispatcher
 ) {
 
@@ -78,6 +79,8 @@ class SourceHealthMonitor @Inject constructor(
                 index.put(rec.copy(status = PluginStatus.INSTALLED))
             }
         }
+        // Gate 0: re-smoke outcomes are fleet-visible (who recovered, who did not).
+        telemetry.logHealth(id, current.state, HealthState.OK)
         true
     }
 
@@ -91,25 +94,28 @@ class SourceHealthMonitor @Inject constructor(
             // write, outside any store lock — re-running it is idempotent, so
             // a crash between write and apply self-heals on the next anomaly.
             val now = nowMs()
-            val (state, quarantined) = store.update(id) { current ->
+            val (state, quarantined, from) = store.update(id) { current ->
                 when (val d = SourceHealthPolicy.observe(current, failed, emptyPrimary, now)) {
                     is SourceHealthPolicy.Decision.Reset ->
                         SourceHealthPolicy.Observation(
                             anomalies = 0,
                             state = HealthState.OK,
                             lastQuarantinedAt = current.lastQuarantinedAt
-                        ) to (HealthState.OK to false)
+                        ) to Triple(HealthState.OK, false, current.state)
                     is SourceHealthPolicy.Decision.Hold ->
                         SourceHealthPolicy.Observation(
                             d.anomalies, d.state, current.lastQuarantinedAt
-                        ) to (d.state to false)
+                        ) to Triple(d.state, false, current.state)
                     is SourceHealthPolicy.Decision.Quarantine ->
                         SourceHealthPolicy.Observation(
                             d.anomalies, HealthState.QUARANTINED, now
-                        ) to (HealthState.QUARANTINED to true)
+                        ) to Triple(HealthState.QUARANTINED, true, current.state)
                 }
             }
             if (quarantined) applyQuarantine(id)
+            // Gate 0: real transitions are fleet-visible; steady-state traffic
+            // (OK→OK) stays silent by construction.
+            if (state != from) telemetry.logHealth(id, from, state)
             state
         }
 

@@ -55,7 +55,7 @@ class SourceHealthTest {
         health: FakeHealth = FakeHealth(),
         index: FakeIndex = FakeIndex(),
         ids: Array<String> = arrayOf("hijala", "lavascans")
-    ) = SourceHealthMonitor(health, index, SourceUiTestFixtures.registry(*ids), io)
+    ) = SourceHealthMonitor(health, index, SourceUiTestFixtures.registry(*ids), RecordingPluginTelemetry(), io)
 
     private fun home(vararg titles: String) = Result.success(
         HomeData(
@@ -147,7 +147,7 @@ class SourceHealthTest {
         registry.registerVerified(override, PluginOrigin.OFFICIAL)
         assertTrue(registry.isOverridden("hijala"))
 
-        val m = SourceHealthMonitor(health, index, registry, io)
+        val m = SourceHealthMonitor(health, index, registry, RecordingPluginTelemetry(), io)
         repeat(4) { m.observeHome("hijala", failure()) }
         assertEquals(HealthState.OK, m.snapshot("hijala"))
         m.observeHome("hijala", failure())
@@ -202,6 +202,32 @@ class SourceHealthTest {
     }
 
     @Test
+    fun transitionsAreFleetVisibleButSteadyStateIsSilent() = runTest {
+        val health = FakeHealth()
+        // Recording telemetry needs threading through the monitor under test.
+        val recording = RecordingPluginTelemetry()
+        val index = FakeIndex()
+        val m = SourceHealthMonitor(
+            health, index, SourceUiTestFixtures.registry("hijala", "lavascans"),
+            recording, io
+        )
+        // Steady OK traffic: no events at all.
+        repeat(3) { m.observeHome("hijala", home("A")) }
+        assertTrue(recording.healths.isEmpty())
+        // Degrade transition emits exactly once (further degraded observations
+        // re-emit only on state CHANGE: OK→DEGRADED once, then silence).
+        repeat(5) { m.observeHome("hijala", failure()) }
+        val degrades = recording.healths.filter { it.to == HealthState.DEGRADED }
+        assertEquals(1, degrades.size)
+        assertEquals(HealthState.OK, degrades.single().from)
+        // Quarantine transition emits with the degraded predecessor.
+        repeat(5) { m.observeHome("hijala", failure()) }
+        val quarantines = recording.healths.filter { it.to == HealthState.QUARANTINED }
+        assertEquals(1, quarantines.size)
+        assertEquals(HealthState.DEGRADED, quarantines.single().from)
+    }
+
+    @Test
     fun successResetsCounter() = runTest {
         val m = monitor()
         repeat(4) { m.observeHome("hijala", failure()) }
@@ -241,7 +267,7 @@ class SourceHealthTest {
         val scraper: MangaScraper = mockk()
         coEvery { scraper.getHomeData() } returns home("A")
         val registry = SourceUiTestFixtures.registry("hijala", "lavascans", scrapers = mapOf("hijala" to scraper))
-        val m = SourceHealthMonitor(health, index, registry, io)
+        val m = SourceHealthMonitor(health, index, registry, RecordingPluginTelemetry(), io)
         assertEquals(true, m.reverify("hijala"))
         assertEquals(HealthState.OK, m.snapshot("hijala"))
         assertEquals(PluginStatus.INSTALLED, index.get("hijala")!!.status)
@@ -259,7 +285,7 @@ class SourceHealthTest {
         val scraper: MangaScraper = mockk()
         coEvery { scraper.getHomeData() } returns emptyHome()
         val registry = SourceUiTestFixtures.registry("hijala", "lavascans", scrapers = mapOf("hijala" to scraper))
-        val m = SourceHealthMonitor(health, index, registry, io)
+        val m = SourceHealthMonitor(health, index, registry, RecordingPluginTelemetry(), io)
         assertEquals(false, m.reverify("hijala"))
         assertEquals(HealthState.QUARANTINED, m.snapshot("hijala"))
         assertEquals(PluginStatus.QUARANTINED, index.get("hijala")!!.status)

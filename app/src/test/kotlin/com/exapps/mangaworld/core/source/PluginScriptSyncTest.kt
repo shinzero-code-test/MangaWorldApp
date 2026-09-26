@@ -123,13 +123,14 @@ class PluginScriptSyncTest {
                     ScriptTestSupport.sandbox,
                     ScriptTestSupport.FakeFetcher(),
                     ScriptTestSupport.logger,
+                    RecordingPluginTelemetry(),
                     kotlinx.coroutines.Dispatchers.Unconfined
                 )
             )
         )
         val e = PluginSyncEngine(
             index, store, registry, FakeFetcher(bodies), FakeEtag(),
-            runners, settings, kotlinx.coroutines.Dispatchers.Unconfined
+            runners, settings, RecordingPluginTelemetry(), kotlinx.coroutines.Dispatchers.Unconfined
         )
         e.log = { }
         return Triple(e, index, settings)
@@ -174,7 +175,7 @@ class PluginScriptSyncTest {
         )
         val e = PluginSyncEngine(
             index, store, registry, FakeFetcher(bodies), FakeEtag(),
-            runners, settings, kotlinx.coroutines.Dispatchers.Unconfined
+            runners, settings, RecordingPluginTelemetry(), kotlinx.coroutines.Dispatchers.Unconfined
         )
         e.log = { }
         val result = e.sync(
@@ -244,7 +245,7 @@ class PluginScriptSyncTest {
         )
         val e = PluginSyncEngine(
             index, store, registry, FakeFetcher(bodies), FakeEtag(),
-            runners, settings, kotlinx.coroutines.Dispatchers.Unconfined
+            runners, settings, RecordingPluginTelemetry(), kotlinx.coroutines.Dispatchers.Unconfined
         )
         e.log = { }
         val result = e.sync(
@@ -373,7 +374,7 @@ class PluginScriptSyncTest {
         )
         val e = PluginSyncEngine(
             index, store, registry, FakeFetcher(bodies), FakeEtag(),
-            runners, settings, kotlinx.coroutines.Dispatchers.Unconfined
+            runners, settings, RecordingPluginTelemetry(), kotlinx.coroutines.Dispatchers.Unconfined
         )
         e.log = { }
         val result = e.sync(

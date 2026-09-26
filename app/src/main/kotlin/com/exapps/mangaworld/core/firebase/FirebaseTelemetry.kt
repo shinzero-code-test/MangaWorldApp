@@ -78,6 +78,21 @@ class FirebaseTelemetry @Inject constructor(
         crashlytics.setCustomKey("active_source", sourceId)
     }
 
+    /**
+     * Low-volume breadcrumb for subsystem telemetry ports (plugin sync, health,
+     * scripts). Log-line only — no exception recorded, so routine fleet
+     * chatter never becomes alert fatigue. See `PluginTelemetry` for the
+     * privacy contract (ids/counts only, never content).
+     */
+    fun crashlyticsLog(message: String) {
+        crashlytics.log(message)
+    }
+
+    /** Bounded custom key for telemetry ports (callers truncate value lists). */
+    fun setTelemetryKey(key: String, value: String) {
+        crashlytics.setCustomKey(key, value)
+    }
+
     fun currentNetworkType(): String {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return "unknown"

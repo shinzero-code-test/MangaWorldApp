@@ -39,6 +39,7 @@ class BundledPluginLoader @Inject constructor(
     private val runnerFactory: PluginRunnerFactory,
     private val reconciler: PluginUpgradeReconciler,
     private val appVersionStore: PrefsAppVersionStore,
+    private val telemetry: PluginTelemetry,
     @com.exapps.mangaworld.core.di.IoDispatcher private val io: kotlinx.coroutines.CoroutineDispatcher
 ) {
 
@@ -58,22 +59,38 @@ class BundledPluginLoader @Inject constructor(
                 Log.w(TAG, "resume ${record.id} failed closed: ${e.message}")
                 Outcome.Skipped(record.id, "exception")
             } }
-        runCatching { reconcileUpgrades() }.onFailure { e ->
+        val revived = runCatching { reconcileUpgrades() }.getOrElse { e ->
             Log.w(TAG, "upgrade reconciliation failed closed: ${e.message}")
+            0
         }
-        pilots + installed
+        // Gate 0 fleet telemetry: one aggregate line per boot (activated ids
+        // bounded; skips collapsed by reason) instead of per-id logcat only.
+        val outcomes = pilots + installed
+        telemetry.logBootstrap(
+            activatedIds = outcomes
+                .filterIsInstance<Outcome.Activated>()
+                .map { it.id }.take(20),
+            skippedByReason = outcomes
+                .filterIsInstance<Outcome.Skipped>()
+                .groupingBy { it.reason }
+                .eachCount(),
+            reconciled = revived,
+            appVersion = BuildConfig.VERSION_NAME
+        )
+        outcomes
     }
 
     /**
      * App-upgrade hook (§11A): first boot on a new version re-evaluates
      * `INCOMPATIBLE` records instead of leaving them declined forever.
      */
-    private suspend fun reconcileUpgrades() {
+    private suspend fun reconcileUpgrades(): Int {
         val current = BuildConfig.VERSION_NAME
-        if (appVersionStore.get() == current) return
+        if (appVersionStore.get() == current) return 0
         val revived = reconciler.reconcile(current)
         if (revived > 0) Log.i(TAG, "upgrade to $current revived $revived incompatible plugin(s)")
         appVersionStore.set(current)
+        return revived
     }
 
     private suspend fun bootstrapOne(id: String): Outcome {
