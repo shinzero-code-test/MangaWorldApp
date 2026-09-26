@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = new Set(["/login", "/api/auth/login", "/api/auth/google", "/api/auth/google-credential"]);
+const PUBLIC_PATHS = new Set([
+  "/login",
+  "/api/auth/login",
+  "/api/auth/google",
+  "/api/auth/google-credential",
+  // Signed plugin distribution (plan §6/§10): index.json, manifests,
+  // source.js, fixtures, logos are PUBLIC BY DESIGN — authenticity comes
+  // from Ed25519 signatures verified on-device, never from access control.
+  // The app polls these anonymously (no session cookie exists on devices).
+  // Never place unpublished/review material here: _incoming/ and _archive/
+  // live outside public/ and are not served.
+  "/plugins",
+]);
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
