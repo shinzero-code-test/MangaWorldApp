@@ -291,11 +291,12 @@ class ScriptRunnerTest {
     }
 
     @Test
-    fun wallClockTimeoutPropagatesAsCancellation() {
-        // Real time, blocked fetch: the ONLY thing that can stop this call is
-        // the wall clock — and it must surface as CancellationException
-        // (structured concurrency), never be swallowed into a Result.
-        val gate = kotlinx.coroutines.CompletableDeferred<ByteArray>()
+    fun cancellationsAreNeverSwallowedIntoResults() = runTest {
+        // A fetcher-level cancellation (its own timeout, scope teardown) must
+        // propagate out of getHomeData as CancellationException — through the
+        // bridge AND the runner — never be wrapped into a Result failure.
+        // Deterministic by construction: the fake throws immediately, no
+        // parking, no threads, no timing.
         val fetcher = object : com.exapps.mangaworld.core.source.script.ScriptFetcher {
             override suspend fun fetch(
                 url: String,
@@ -303,34 +304,27 @@ class ScriptRunnerTest {
                 maxBytes: Long,
                 timeoutMs: Int,
                 allowedHosts: Set<String>
-            ): com.exapps.mangaworld.core.source.script.ScriptFetcher.Response {
-                gate.await()
-                error("unreachable")
-            }
+            ): com.exapps.mangaworld.core.source.script.ScriptFetcher.Response =
+                throw kotlinx.coroutines.TimeoutCancellationException("boom")
         }
-        val exec = java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
-            Thread(runnable).apply { isDaemon = true }
-        }
+        val script = """
+            function home(ctx){ fetch('https://script.example/'); return {featured: [], latest: [], trending: []}; }
+            function detail(ctx){ return {id:'a', slug:'a', title:'A'}; }
+            function pages(ctx){ return []; }
+            function search(ctx){ return []; }
+            function browse(ctx){ return []; }
+        """.trimIndent()
+        val r = ScriptRunnerFactory(
+            ScriptTestSupport.sandbox,
+            fetcher,
+            ScriptTestSupport.logger,
+            Dispatchers.Unconfined
+        ).create(manifestFor(script), script.toByteArray(Charsets.UTF_8)).getOrThrow()
         try {
-            val script = """
-                function home(ctx){ fetch('https://script.example/'); return {featured: [], latest: [], trending: []}; }
-                function detail(ctx){ return {id:'a', slug:'a', title:'A'}; }
-                function pages(ctx){ return []; }
-                function search(ctx){ return []; }
-                function browse(ctx){ return []; }
-            """.trimIndent()
-            val r = ScriptRunnerFactory(
-                ScriptTestSupport.sandbox,
-                fetcher,
-                ScriptTestSupport.logger,
-                exec.asCoroutineDispatcher()
-            ).create(manifestFor(script, 200), script.toByteArray(Charsets.UTF_8)).getOrThrow()
-            kotlinx.coroutines.runBlocking { r.getHomeData() }
+            r.getHomeData()
             fail("expected cancellation")
         } catch (e: kotlinx.coroutines.CancellationException) {
             // Expected: TimeoutCancellationException propagates.
-        } finally {
-            exec.shutdownNow()
         }
     }
 

@@ -2,6 +2,7 @@ package com.exapps.mangaworld.core.source.script
 
 import com.exapps.mangaworld.core.source.plugins.HostPolicy
 import com.exapps.mangaworld.core.source.plugins.PluginManifest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.mozilla.javascript.BaseFunction
 import org.mozilla.javascript.Context
@@ -204,6 +205,11 @@ object ScriptBridge {
                         allowedHosts = session.effectiveHosts
                     )
                 }
+            } catch (e: CancellationException) {
+                // Structured concurrency passes through: a cancelled fetch
+                // (timeout, scope teardown) must abort the call, never be
+                // wrapped into a failure the runner would swallow into a Result.
+                throw e
             } catch (e: ScriptException) {
                 throw e
             } catch (e: Exception) {
