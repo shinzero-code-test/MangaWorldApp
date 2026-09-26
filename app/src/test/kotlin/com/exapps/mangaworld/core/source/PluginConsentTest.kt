@@ -116,7 +116,14 @@ class PluginConsentTest {
         assertTrue(mapper.entries().none { it.id == "gated" })
         mapper.refresh()
         val extra = mapper.entries().single { it.id == "gated" }
-        assertEquals("مقيد", extra.name)
+        // Name follows the device locale via the same precedence the resolver
+        // uses (asserted per-locale in previewParsesDisplayFacts); here we pin
+        // it to whatever the JVM default resolves to, deterministically.
+        val preview = parseManifestPreview(previewJson)!!
+        assertEquals(
+            preview.displayName(java.util.Locale.getDefault().language),
+            extra.name
+        )
         assertEquals(0, extra.logoRes)
         assertEquals(PluginRowState.HELD, extra.rowState)
         assertEquals(extra, mapper.entry("gated"))

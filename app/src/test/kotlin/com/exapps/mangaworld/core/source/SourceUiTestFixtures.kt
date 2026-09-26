@@ -9,6 +9,7 @@ import com.exapps.mangaworld.core.source.plugins.SourcePlugin
 import com.exapps.mangaworld.core.source.plugins.SourceRegistry
 import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
 import com.exapps.mangaworld.core.source.plugins.SourceUiMapper
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 
@@ -44,6 +45,8 @@ object SourceUiTestFixtures {
         every { m.entry(any(), any()) } answers { entry(firstArg()) }
         every { m.displayName(any()) } answers { firstArg<String>() }
         every { m.displayName(any(), any()) } answers { firstArg<String>() }
+        coEvery { m.refresh() } returns Unit
+        every { m.heldDetails() } returns emptyMap()
         return m
     }
 
