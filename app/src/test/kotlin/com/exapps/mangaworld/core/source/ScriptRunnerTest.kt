@@ -6,6 +6,7 @@ import com.exapps.mangaworld.domain.model.MangaType
 import com.exapps.mangaworld.domain.model.SortBy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
