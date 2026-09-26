@@ -4,7 +4,7 @@ import com.exapps.mangaworld.core.source.plugins.PluginIndexRecord
 import com.exapps.mangaworld.core.source.plugins.PluginIndexStore
 import com.exapps.mangaworld.core.source.plugins.PluginOrigin
 import com.exapps.mangaworld.core.source.plugins.PluginStatus
-import com.exapps.mangaworld.core.source.plugins.PluginSyncScheduler
+import com.exapps.mangaworld.core.source.sync.PluginSyncScheduler
 import com.exapps.mangaworld.core.source.sync.PluginSyncEngine
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.core.source.SourceUiTestFixtures
@@ -90,7 +90,7 @@ class SourcesSyncActionsTest {
         var stored: PluginIndexRecord = held
         val index: PluginIndexStore = mockk {
             coEvery { get("gated") } answers { stored }
-            coEvery { put(any()) } answers { stored = firstArg() }
+            coEvery { put(any()) } answers { stored = firstArg<PluginIndexRecord>() }
         }
         val viewModel = vm(index = index)
         advanceUntilIdle()
