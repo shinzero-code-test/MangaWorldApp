@@ -140,6 +140,14 @@ android {
                 events("started", "failed", "skipped")
                 showStandardStreams = false
             }
+            // Canary gate (ScriptCanaryTest) reads dashboard staging/public
+            // payloads: hand it the repo-anchored dashboard dir instead of
+            // guessing the checkout layout from the worker (fragile across
+            // runners/symlinks). Falls back to upward search when unset (IDE).
+            it.systemProperty(
+                "canary.dashboard.dir",
+                rootDir.resolve("dashboard").absolutePath
+            )
         }
     }
 

@@ -36,9 +36,16 @@ class ScriptCanaryTest {
 
     private fun dashboardFile(vararg parts: String): File {
         val rel = "dashboard/" + parts.joinToString("/")
-        // Robust to any test workdir: walk UP from user.dir (canonicalized, so
-        // symlinks and `..` cannot mislead) looking for the dashboard tree,
-        // plus the plain relative path as a last resort.
+        // Primary: repo-anchored dir handed down by Gradle (see
+        // testOptions.systemProperty in app/build.gradle.kts) — immune to
+        // workdir/symlink layout guesses. Fallback: upward search for IDE runs.
+        val anchored = System.getProperty("canary.dashboard.dir")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { File(it, parts.joinToString("/")) }
+        if (anchored != null) {
+            if (anchored.isFile) return anchored
+            error("canary file missing: ${anchored.path} (repo-anchored; dir listing: ${anchored.parentFile?.list()?.take(12)})")
+        }
         val start = runCatching { File(System.getProperty("user.dir")).canonicalFile }
             .getOrElse { File(".").absoluteFile }
         val chain = generateSequence(start) { it.parentFile }.take(6).toList()
