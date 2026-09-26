@@ -165,3 +165,90 @@ sealed interface CompatibilityResult {
     data object Compatible : CompatibilityResult
     data class Incompatible(val reason: String) : CompatibilityResult
 }
+
+/**
+ * Lenient, display-only manifest read for consent/health surfaces (v9.1.0).
+ *
+ * Unlike [ManifestParser], this verifies NOTHING — it renders stored manifest
+ * JSON so a human can judge it. Every approval/revoke path re-verifies
+ * authoritatively; a lying preview only mis-renders, never authorises.
+ * Unparseable input yields null (caller falls back to id-only display).
+ */
+data class ManifestPreview(
+    val id: String,
+    val version: Int,
+    val engineName: String,
+    val baseUrl: String,
+    val names: Map<String, String>,
+    val hosts: List<String>,
+    val requiresPermission: Boolean
+)
+
+private val previewMapper = com.fasterxml.jackson.databind.ObjectMapper()
+
+fun parseManifestPreview(manifestJson: String?): ManifestPreview? {
+    if (manifestJson.isNullOrBlank()) return null
+    return runCatching {
+        val root = previewMapper.readTree(manifestJson.take(64 * 1024))
+        if (!root.isObject) return null
+        fun text(name: String): String? =
+            root.get(name)?.takeIf { it.isTextual }?.asText()?.take(512)
+        val id = text("id")?.takeIf { it.isNotBlank() } ?: return null
+        val names = root.get("names")?.takeIf { it.isObject }?.let { node ->
+            node.fields().asSequence().toList().take(16).mapNotNull { (k, v) ->
+                if (k.length <= 16 && v.isTextual && v.asText().isNotBlank()) {
+                    k to v.asText().take(100)
+                } else null
+            }.toMap()
+        }.orEmpty()
+        val hosts = root.get("allowedHosts")?.takeIf { it.isArray }?.let { node ->
+            (0 until minOf(node.size(), 16)).mapNotNull { i ->
+                node.get(i)?.takeIf { it.isTextual }?.asText()?.take(253)
+                    ?.takeIf { it.isNotBlank() }
+            }
+        }.orEmpty()
+        ManifestPreview(
+            id = id,
+            version = root.get("version")?.takeIf { it.isInt }?.asInt()?.takeIf { it >= 0 } ?: 0,
+            engineName = text("engine").orEmpty(),
+            baseUrl = text("baseUrl").orEmpty(),
+            names = names,
+            hosts = hosts,
+            requiresPermission = root.get("requiresPermission")?.takeIf { it.isBoolean }?.asBoolean()
+                ?: false
+        )
+    }.getOrNull()
+}
+
+/** Display name precedence shared by consent surfaces (locale → ar → en → first). */
+fun ManifestPreview.displayName(locale: String): String =
+    names[locale] ?: names["ar"] ?: names["en"] ?: names.values.firstOrNull() ?: id
+
+/** Row-level plugin posture for Sources display (v9.1.0 consent surfaces). */
+enum class PluginRowState {
+    /** Normal serving (builtin, enabled override, or enabled remote). */
+    SERVING,
+
+    /**
+     * Installed-but-disabled with verified bytes on disk: approvable held
+     * payload (consent hold, deferral, fresh opt-out). Approving an opt-out
+     * merely enables it — always an explicit user action, never surprising.
+     */
+    HELD,
+
+    /** Isolated by drift watch or failed smoke: re-smoke to recover. */
+    QUARANTINED
+}
+
+/**
+ * Maps an index record to its row posture. Pure logic (unit-tested); the
+ * mapper feeds it from its record snapshot, the sync engine from live reads.
+ */
+fun rowStateFor(record: PluginIndexRecord?): PluginRowState = when {
+    record == null -> PluginRowState.SERVING
+    record.status == PluginStatus.QUARANTINED -> PluginRowState.QUARANTINED
+    record.status == PluginStatus.DISABLED &&
+        record.activeVersion != null && record.manifestJson != null ->
+        PluginRowState.HELD
+    else -> PluginRowState.SERVING
+}

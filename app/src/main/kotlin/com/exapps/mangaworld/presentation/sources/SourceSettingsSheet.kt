@@ -17,7 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.exapps.mangaworld.core.source.plugins.ManifestPreview
 import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
@@ -31,7 +33,13 @@ fun SourceSettingsSheet(
     onToggleEnabled: (Boolean) -> Unit,
     onToggleNotification: (Boolean) -> Unit,
     onClearCookies: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** Consent facts for held/quarantined rows (null = normal serving row). */
+    detail: ManifestPreview? = null,
+    /** True while approve/re-check is in flight for this source. */
+    busy: Boolean = false,
+    onApprove: () -> Unit = {},
+    onRecheck: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var showClearConfirm by remember { mutableStateOf(false) }
@@ -73,6 +81,20 @@ fun SourceSettingsSheet(
             }
 
             HorizontalDivider(color = MangaColors.Muted.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 8.dp))
+
+            // Consent section (v9.1.0): held/quarantined rows show what is
+            // waiting and offer the explicit action. Serving rows skip this.
+            if (source.rowState != com.exapps.mangaworld.core.source.plugins.PluginRowState.SERVING) {
+                PluginConsentSection(
+                    source = source,
+                    detail = detail,
+                    busy = busy,
+                    onApprove = onApprove,
+                    onRecheck = onRecheck,
+                    onKeepDisabled = onDismiss
+                )
+                HorizontalDivider(color = MangaColors.Muted.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 8.dp))
+            }
 
             // Enable/disable source
             SourceSettingToggle(
@@ -156,6 +178,101 @@ fun SourceSettingsSheet(
                     Text(LocalContext.current.getString(R.string.cancel), color = MangaColors.Muted)
                 }
             }
+        )
+    }
+}
+
+@Composable
+private fun PluginConsentSection(
+    source: SourceUiEntry,
+    detail: ManifestPreview?,
+    busy: Boolean,
+    onApprove: () -> Unit,
+    onRecheck: () -> Unit,
+    onKeepDisabled: () -> Unit
+) {
+    val context = LocalContext.current
+    val held = source.rowState == com.exapps.mangaworld.core.source.plugins.PluginRowState.HELD
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = if (held) stringResource(R.string.plugin_needs_approval)
+            else stringResource(R.string.plugin_quarantined),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (held) MangaColors.Yellow else MangaColors.Error
+        )
+        detail?.let { facts ->
+            PluginFactRow(label = stringResource(R.string.plugin_version), value = "v${facts.version}")
+            PluginFactRow(label = stringResource(R.string.plugin_engine), value = facts.engineName.ifBlank { "—" })
+            if (facts.hosts.isNotEmpty()) {
+                PluginFactRow(
+                    label = stringResource(R.string.plugin_hosts),
+                    value = facts.hosts.take(4).joinToString(", ")
+                )
+            }
+            if (facts.requiresPermission) {
+                Text(
+                    text = stringResource(R.string.plugin_permission_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MangaColors.Yellow
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (held) {
+                Button(
+                    onClick = onApprove,
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Primary)
+                ) { Text(context.getString(R.string.plugin_approve)) }
+            } else {
+                Button(
+                    onClick = onRecheck,
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Primary)
+                ) { Text(context.getString(R.string.plugin_recheck)) }
+            }
+            TextButton(
+                onClick = onKeepDisabled,
+                enabled = !busy,
+                modifier = Modifier.weight(1f)
+            ) { Text(context.getString(R.string.plugin_keep_disabled), color = MangaColors.Muted) }
+        }
+        if (busy) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                color = MangaColors.Cyan
+            )
+        }
+    }
+}
+
+@Composable
+private fun PluginFactRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MangaColors.Muted,
+            modifier = Modifier.width(72.dp)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MangaColors.OnSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
         )
     }
 }

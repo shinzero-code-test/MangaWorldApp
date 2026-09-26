@@ -442,10 +442,21 @@ class PluginSyncEngine @Inject constructor(
         if (manifest.engine in policy.disabledEngines) {
             return EntryOutcome.Rejected("engine ${manifest.engine.serialName} disabled by kill-switch")
         }
+        // Script payloads download BEFORE any hold so every held record is
+        // approvable from disk later (v9.1.0): the manifest URL that found this
+        // candidate is gone by approval time. Bytes are hash-verified here and
+        // re-checked at persist + load (defense in depth).
+        var scriptBytes: ByteArray? = null
+        if (manifest.engine == SourceEngine.SCRIPT) {
+            when (val s = downloadScript(entry, indexUrl, indexHost, allowInsecure, manifest)) {
+                is ScriptDownload.Ready -> scriptBytes = s.bytes
+                is ScriptDownload.Terminal -> return s.outcome
+            }
+        }
         if (manifest.requiresPermission) {
             // Never auto-install consent-gated payloads: persist verified bytes
             // for review, keep serving the current version.
-            persistQuietly(baseDir, entry, manifest, manifestBytes)
+            persistQuietly(baseDir, entry, manifest, manifestBytes, scriptBytes = scriptBytes)
             return EntryOutcome.HeldForConsent
         }
         val builtin = registry.pluginFor(entry.id)
@@ -455,13 +466,6 @@ class PluginSyncEngine @Inject constructor(
         // New id: pair a runner (Phase 3). Engines without a generic runner
         // (ASTRO/API/CUSTOM) keep the 2B behavior: verified payload retained
         // DISABLED, never registered — no phantom sources, no shadowing.
-        var scriptBytes: ByteArray? = null
-        if (manifest.engine == SourceEngine.SCRIPT) {
-            when (val s = downloadScript(entry, indexUrl, indexHost, allowInsecure, manifest)) {
-                is ScriptDownload.Ready -> scriptBytes = s.bytes
-                is ScriptDownload.Terminal -> return s.outcome
-            }
-        }
         val scraper = if (manifest.engine == SourceEngine.SCRIPT) {
             when (val r = runnerFactory.createScript(manifest, scriptBytes)) {
                 null -> null
@@ -655,9 +659,10 @@ class PluginSyncEngine @Inject constructor(
         entry: PluginIndexEntry,
         manifest: PluginManifest,
         manifestBytes: ByteArray,
-        enabled: Boolean = false
+        enabled: Boolean = false,
+        scriptBytes: ByteArray? = null
     ) {
-        when (pluginStore.persistVerified(baseDir, entry.id, manifest, manifestBytes, PluginOrigin.OFFICIAL)) {
+        when (pluginStore.persistVerified(baseDir, entry.id, manifest, manifestBytes, PluginOrigin.OFFICIAL, scriptBytes)) {
             is PluginStore.InstallResult.Installed -> {
                 indexStore.get(entry.id)?.let { rec ->
                     indexStore.put(
@@ -686,6 +691,147 @@ class PluginSyncEngine @Inject constructor(
         val host = runCatching { java.net.URI(url.trim()).host }.getOrNull()
             ?.lowercase()?.trimEnd('.')
         return host?.takeIf { it.isNotBlank() }
+    }
+
+    // ─── Explicit approval (v9.1.0 consent surfaces) ─────────────────────────
+
+    sealed interface ApproveOutcome {
+        data object Approved : ApproveOutcome
+        /** Still held: no runner, refused registration, or revoked meanwhile. */
+        data class Held(val reason: String) : ApproveOutcome
+        /** Terminal for this attempt: unknown id, unreadable payload, failed gates. */
+        data class Failed(val reason: String) : ApproveOutcome
+        data object Unknown : ApproveOutcome
+    }
+
+    /**
+     * Approves a held record (consent hold, engine-change hold, deferral,
+     * fresh opt-out): re-verifies the on-disk bytes against CURRENT keys and
+     * policy, pairs the runner exactly like the sync paths, registers,
+     * enables, and post-smokes. Rollback on smoke failure mirrors sync
+     * (override → pointer rollback; new id → record removal).
+     *
+     * Mirrors sync pairing deliberately: same-engine overrides reuse the
+     * builtin scraper; an engine change the user just consented to pairs the
+     * new runner; new ids pair runners with the remote fallback display.
+     */
+    @Suppress("LongParameterList")
+    suspend fun approveHeld(
+        id: String,
+        baseDir: File,
+        trustedKeys: Map<String, ByteArray>,
+        host: HostCapabilities,
+        killSwitchJson: String? = null,
+        postSmoke: PostSmoke = PostSmoke.Network()
+    ): ApproveOutcome = withContext(io) {
+        val record = indexStore.get(id) ?: return@withContext ApproveOutcome.Unknown
+        val version = record.activeVersion
+            ?: return@withContext ApproveOutcome.Failed("no payload")
+        val manifestFile = File(
+            com.exapps.mangaworld.core.source.plugins.PluginStorage.versionDir(baseDir.path, id, version),
+            "plugin.json"
+        )
+        val manifestBytes = if (manifestFile.isFile) {
+            runCatching { manifestFile.readBytes() }.getOrNull()
+        } else null ?: return@withContext ApproveOutcome.Failed("payload missing")
+        val policy = PluginKillSwitch.parse(killSwitchJson)
+        if (PluginKillSwitch.isRevoked(policy, id, version)) {
+            applyKillSwitch(
+                PluginKillSwitch.Policy(
+                    revoked = listOf(PluginKillSwitch.Revocation(id, version))
+                )
+            )
+            return@withContext ApproveOutcome.Held("revoked")
+        }
+        val manifest = when (
+            val v = pluginStore.verify(
+                manifestBytes = manifestBytes,
+                trustedKeys = trustedKeys,
+                host = host,
+                enforceFreshness = true
+            )
+        ) {
+            is ManifestResult.Invalid -> return@withContext ApproveOutcome.Failed("${v.reason}: ${v.message.take(120)}")
+            is ManifestResult.Valid -> v.manifest
+        }
+        if (manifest.engine in policy.disabledEngines) {
+            return@withContext ApproveOutcome.Held("engine ${manifest.engine.serialName} disabled")
+        }
+        var scriptBytes: ByteArray? = null
+        if (manifest.engine == SourceEngine.SCRIPT) {
+            val js = File(manifestFile.parent, "source.js").takeIf { it.isFile }
+                ?.let { runCatching { it.readBytes() }.getOrNull() }
+            if (js == null || js.isEmpty()) {
+                return@withContext ApproveOutcome.Failed("script payload missing — re-sync")
+            }
+            val expected = manifest.scriptSha256
+            if (expected == null ||
+                !ScriptPluginLoader.sha256Hex(js).equals(expected, ignoreCase = true)
+            ) {
+                return@withContext ApproveOutcome.Failed("script hash mismatch")
+            }
+            scriptBytes = js
+        }
+        val builtin = registry.pluginFor(id)
+        val scraper: MangaScraper
+        val display: com.exapps.mangaworld.core.source.plugins.SourceDisplay
+        if (builtin != null && manifest.engine == builtin.descriptor.engine) {
+            scraper = builtin.scraper
+            display = builtin.display
+        } else {
+            val runner = if (manifest.engine == SourceEngine.SCRIPT) {
+                when (val r = runnerFactory.createScript(manifest, scriptBytes)) {
+                    null -> null
+                    else -> r.getOrElse {
+                        return@withContext ApproveOutcome.Failed("script build: ${it.message?.take(120)}")
+                    }
+                }
+            } else {
+                runnerFactory.createDescriptor(manifest)
+            } ?: return@withContext ApproveOutcome.Held("no runner for ${manifest.engine.serialName}")
+            scraper = runner
+            display = builtin?.display ?: runnerFactory.remoteDisplay()
+        }
+        when (
+            val persisted = pluginStore.persistVerified(
+                baseDir = baseDir,
+                id = id,
+                manifest = manifest,
+                manifestBytes = manifestBytes,
+                origin = PluginOrigin.OFFICIAL,
+                scriptBytes = scriptBytes
+            )
+        ) {
+            is PluginStore.InstallResult.Rejected ->
+                return@withContext ApproveOutcome.Failed("${persisted.reason}: ${persisted.message.take(120)}")
+            is PluginStore.InstallResult.Installed -> Unit
+        }
+        val plugin = object : SourcePlugin {
+            override val descriptor: PluginManifest = manifest
+            override val display = display
+            override val scraper = scraper
+        }
+        when (val outcome = registry.registerVerified(plugin, PluginOrigin.OFFICIAL)) {
+            is SourceRegistry.RegisterOutcome.Refused ->
+                return@withContext ApproveOutcome.Held(outcome.reason)
+            else -> Unit
+        }
+        runCatching { settingsRepo.toggleSource(id, true) }
+        indexStore.get(id)?.let { rec ->
+            indexStore.put(rec.copy(status = PluginStatus.ENABLED))
+        }
+        if (!runPostSmoke(plugin, postSmoke)) {
+            if (builtin != null) {
+                registry.clearOverride(id)
+                runCatching { pluginStore.rollback(id) }
+            } else {
+                registry.clearOverride(id)
+                runCatching { indexStore.remove(id) }
+            }
+            log("approve $id: post-activation smoke failed — rolled back")
+            return@withContext ApproveOutcome.Failed("post-activation smoke failed")
+        }
+        ApproveOutcome.Approved
     }
 
     companion object {

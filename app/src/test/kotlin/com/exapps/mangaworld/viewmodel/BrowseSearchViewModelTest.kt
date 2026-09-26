@@ -101,7 +101,12 @@ class BrowseSearchViewModelTest {
         settingsRepository = settingsRepo,
         sourceUiMapper = SourceUiTestFixtures.mapper(),
         sourceRegistry = SourceUiTestFixtures.registry(),
-        pluginSyncScheduler = io.mockk.mockk(relaxed = true)
+        pluginSyncScheduler = io.mockk.mockk(relaxed = true),
+        syncEngine = io.mockk.mockk(relaxed = true),
+        trustKeys = io.mockk.mockk(relaxed = true),
+        remoteConfig = io.mockk.mockk(relaxed = true),
+        health = io.mockk.mockk(relaxed = true),
+        appContext = io.mockk.mockk(relaxed = true)
     )
 
     private fun sourceBrowseVm(sourceId: String = "azora") = SourceBrowseViewModel(

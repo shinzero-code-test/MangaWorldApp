@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.LocalContext
+import com.exapps.mangaworld.core.source.plugins.PluginRowState
 import com.exapps.mangaworld.core.source.plugins.SourceEngine
 import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
 import com.exapps.mangaworld.presentation.theme.MangaColors
@@ -44,9 +46,29 @@ fun SourcesScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var selectedSourceId by remember { mutableStateOf<String?>(null) }
     val entries by viewModel.entries.collectAsStateWithLifecycle()
+    val heldDetails by viewModel.heldDetails.collectAsStateWithLifecycle()
+    val busyId by viewModel.busyId.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
+    // One-shot result notices (approve / re-check outcomes).
+    LaunchedEffect(Unit) {
+        viewModel.notice.collect { resId ->
+            runCatching { snackbar.showSnackbar(context.getString(resId)) }
+        }
+    }
 
     Scaffold(
         containerColor = MangaColors.Background,
+        snackbarHost = {
+            SnackbarHost(snackbar) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = MangaColors.Surface,
+                    contentColor = MangaColors.OnSurface
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.more_sources), color = MangaColors.OnSurface) },
@@ -113,7 +135,11 @@ fun SourcesScreen(
                 onToggleEnabled = { enabled -> viewModel.toggleSource(sourceId, enabled) },
                 onToggleNotification = { enabled -> viewModel.toggleSourceNotification(sourceId, enabled) },
                 onClearCookies = { viewModel.clearCookies(sourceId) },
-                onDismiss = { selectedSourceId = null }
+                onDismiss = { selectedSourceId = null },
+                detail = heldDetails[sourceId],
+                busy = busyId == sourceId,
+                onApprove = { viewModel.approve(sourceId) },
+                onRecheck = { viewModel.recheck(sourceId) }
             )
         }
     }
@@ -224,6 +250,24 @@ private fun SourceGridCard(
                     color = MangaColors.Error,
                     fontWeight = FontWeight.Bold
                 )
+            }
+
+            // Consent posture badge (v9.1.0): held/quarantined rows explain why
+            // they don't serve; details + actions live in the settings sheet.
+            when (source.rowState) {
+                PluginRowState.HELD -> Text(
+                    stringResource(R.string.plugin_needs_approval),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                    color = MangaColors.Yellow,
+                    fontWeight = FontWeight.Bold
+                )
+                PluginRowState.QUARANTINED -> Text(
+                    stringResource(R.string.plugin_quarantined),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                    color = MangaColors.Error,
+                    fontWeight = FontWeight.Bold
+                )
+                PluginRowState.SERVING -> Unit
             }
         }
     }

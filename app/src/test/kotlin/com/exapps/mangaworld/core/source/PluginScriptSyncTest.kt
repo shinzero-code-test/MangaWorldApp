@@ -413,4 +413,180 @@ class PluginScriptSyncTest {
         assertEquals(2, h.second.get("hijala")!!.activeVersion)
         assertEquals(PluginStatus.DISABLED, h.second.get("hijala")!!.status)
     }
+
+    // ─── Explicit approval (v9.1.0 consent surface, local until 9.0.1 tags) ──
+
+    private fun realRunners() = PluginRunnerFactory(
+        OkHttpClient(), settings,
+        ScriptPluginLoader(
+            ScriptRunnerFactory(
+                ScriptTestSupport.sandbox, ScriptTestSupport.FakeFetcher(),
+                ScriptTestSupport.logger, RecordingPluginTelemetry(),
+                kotlinx.coroutines.Dispatchers.Unconfined
+            )
+        )
+    )
+
+    private fun approvalEngine(
+        bodies: MutableMap<String, ByteArray>,
+        index: FakeIndex,
+        registry: com.exapps.mangaworld.core.source.plugins.SourceRegistry
+    ): PluginSyncEngine {
+        val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
+        val e = PluginSyncEngine(
+            index, store, registry, FakeFetcher(bodies), FakeEtag(),
+            realRunners(), settings, RecordingPluginTelemetry(),
+            kotlinx.coroutines.Dispatchers.Unconfined
+        )
+        e.log = { }
+        return e
+    }
+
+    @Test
+    fun approveDescriptorHoldRegistersAndEnables() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/gated/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to
+                indexJson(Triple("gated", 1, manifestUrl)),
+            manifestUrl to manifestBytes("gated", 1) {
+                it.put("engine", "mangareader")
+                it.put("baseUrl", "https://gated.example")
+                it.put("requiresPermission", true)
+            }
+        )
+        val index = FakeIndex()
+        val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+        val e = approvalEngine(bodies, index, registry)
+        val syncResult = e.sync(
+            trustedKeys = trust, host = host,
+            indexUrl = "https://cdn.example/plugins/index.json",
+            postSmoke = PostSmoke.Custom({ true }), baseDir = tmp.root
+        )
+        assertEquals(PluginSyncEngine.EntryOutcome.HeldForConsent, syncResult.outcomes["gated"])
+        assertEquals(PluginStatus.DISABLED, index.get("gated")!!.status)
+        // User approves from the Sources sheet: re-verified against current
+        // keys, registered, enabled, smoked.
+        val outcome = e.approveHeld(
+            id = "gated",
+            baseDir = tmp.root,
+            trustedKeys = trust,
+            host = host,
+            postSmoke = PostSmoke.Custom({ true })
+        )
+        assertEquals(PluginSyncEngine.ApproveOutcome.Approved, outcome)
+        assertTrue(registry.scraperFor("gated") is DescriptorScraper)
+        assertEquals(PluginStatus.ENABLED, index.get("gated")!!.status)
+        coVerify { settings.toggleSource("gated", true) }
+    }
+
+    @Test
+    fun approveTamperedHoldFails() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/gated/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to
+                indexJson(Triple("gated", 1, manifestUrl)),
+            manifestUrl to manifestBytes("gated", 1) {
+                it.put("engine", "mangareader")
+                it.put("baseUrl", "https://gated.example")
+                it.put("requiresPermission", true)
+            }
+        )
+        val index = FakeIndex()
+        val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+        val e = approvalEngine(bodies, index, registry)
+        e.sync(
+            trustedKeys = trust, host = host,
+            indexUrl = "https://cdn.example/plugins/index.json",
+            postSmoke = PostSmoke.Custom({ true }), baseDir = tmp.root
+        )
+        // Tamper the staged bytes after the hold: approval re-verifies.
+        val staged = java.io.File(tmp.root, "gated/versions/1/plugin.json")
+        assertTrue(staged.isFile)
+        val tampered = staged.readBytes().also { it[it.size / 2] = (it[it.size / 2].toInt() xor 0xFF).toByte() }
+        staged.writeBytes(tampered)
+        val outcome = e.approveHeld(
+            id = "gated", baseDir = tmp.root, trustedKeys = trust, host = host,
+            postSmoke = PostSmoke.Custom({ true })
+        )
+        assertTrue(outcome is PluginSyncEngine.ApproveOutcome.Failed)
+        assertTrue(!registry.isKnown("gated"))
+    }
+
+    @Test
+    fun approveRunnerlessHoldStaysHeld() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/gatedapi/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to
+                indexJson(Triple("gatedapi", 1, manifestUrl)),
+            manifestUrl to manifestBytes("gatedapi", 1) {
+                it.put("engine", "api")
+                it.put("baseUrl", "https://gatedapi.example")
+                it.put("requiresPermission", true)
+                it.remove("config")
+                val paths = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode()
+                paths.put("list", "data")
+                it.set("paths", paths)
+            }
+        )
+        val index = FakeIndex()
+        val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+        val e = approvalEngine(bodies, index, registry)
+        val syncResult = e.sync(
+            trustedKeys = trust, host = host,
+            indexUrl = "https://cdn.example/plugins/index.json",
+            postSmoke = PostSmoke.Custom({ true }), baseDir = tmp.root
+        )
+        assertEquals(PluginSyncEngine.EntryOutcome.HeldForConsent, syncResult.outcomes["gatedapi"])
+        // No generic API runner: approval holds instead of failing.
+        val outcome = e.approveHeld(
+            id = "gatedapi", baseDir = tmp.root, trustedKeys = trust, host = host,
+            postSmoke = PostSmoke.Custom({ true })
+        )
+        assertTrue(outcome is PluginSyncEngine.ApproveOutcome.Held)
+        assertTrue(!registry.isKnown("gatedapi"))
+    }
+
+    @Test
+    fun approveRevokedMeanwhileHolds() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/gated/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to
+                indexJson(Triple("gated", 1, manifestUrl)),
+            manifestUrl to manifestBytes("gated", 1) {
+                it.put("engine", "mangareader")
+                it.put("baseUrl", "https://gated.example")
+                it.put("requiresPermission", true)
+            }
+        )
+        val index = FakeIndex()
+        val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+        val e = approvalEngine(bodies, index, registry)
+        e.sync(
+            trustedKeys = trust, host = host,
+            indexUrl = "https://cdn.example/plugins/index.json",
+            postSmoke = PostSmoke.Custom({ true }), baseDir = tmp.root
+        )
+        // Kill arrives between hold and approval: approval refuses + revokes.
+        val outcome = e.approveHeld(
+            id = "gated", baseDir = tmp.root, trustedKeys = trust, host = host,
+            killSwitchJson = """{"revoked":[{"id":"gated","version":1}]}""",
+            postSmoke = PostSmoke.Custom({ true })
+        )
+        assertTrue(outcome is PluginSyncEngine.ApproveOutcome.Held)
+        assertEquals(PluginStatus.REVOKED, index.get("gated")!!.status)
+    }
+
+    @Test
+    fun approveUnknownId() = runTest {
+        val index = FakeIndex()
+        val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+        val e = approvalEngine(mutableMapOf(), index, registry)
+        assertEquals(
+            PluginSyncEngine.ApproveOutcome.Unknown,
+            e.approveHeld(
+                id = "nope", baseDir = tmp.root, trustedKeys = trust, host = host,
+                postSmoke = PostSmoke.Custom({ true })
+            )
+        )
+    }
 }
