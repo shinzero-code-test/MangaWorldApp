@@ -36,15 +36,18 @@ class ScriptCanaryTest {
 
     private fun dashboardFile(vararg parts: String): File {
         val rel = "dashboard/" + parts.joinToString("/")
-        // Unit-test workdir is the :app module dir (BundledPilotTest precedent);
-        // fall back to a repo-root workdir.
-        val candidates = listOf(
-            File(System.getProperty("user.dir"), "../$rel"),
-            File(System.getProperty("user.dir"), rel),
-            File(rel)
-        )
+        // Robust to any test workdir: walk UP from user.dir (canonicalized, so
+        // symlinks and `..` cannot mislead) looking for the dashboard tree,
+        // plus the plain relative path as a last resort.
+        val start = runCatching { File(System.getProperty("user.dir")).canonicalFile }
+            .getOrElse { File(".").absoluteFile }
+        val chain = generateSequence(start) { it.parentFile }.take(6).toList()
+        val candidates = chain.map { File(it, rel) } + File(rel)
         return candidates.firstOrNull { it.isFile }
-            ?: error("canary file missing: $rel (tried ${candidates.map { it.path }})")
+            ?: error(
+                "canary file missing: $rel (start=$start " +
+                    "children=${start.list()?.take(12)} tried ${candidates.map { it.path }})"
+            )
     }
 
     private fun staging(name: String): ByteArray =
