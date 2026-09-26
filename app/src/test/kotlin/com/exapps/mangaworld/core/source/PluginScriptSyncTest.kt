@@ -523,9 +523,8 @@ class PluginScriptSyncTest {
                 it.put("baseUrl", "https://gatedapi.example")
                 it.put("requiresPermission", true)
                 it.remove("config")
-                val paths = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode()
-                paths.put("list", "data")
-                it.set("paths", paths)
+                val paths = PluginTestFixtures.mapper.createObjectNode().put("list", "data")
+                it.replace("paths", paths)
             }
         )
         val index = FakeIndex()
