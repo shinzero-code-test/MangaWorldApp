@@ -721,6 +721,9 @@
     <string name="plugin_hosts">النطاقات</string>
     <string name="plugin_version">الإصدار</string>
     <string name="plugin_permission_note">يتطلب هذا المصدر إذنًا صريحًا قبل التفعيل</string>
+    <string name="plugin_check_updates">التحقق من التحديثات</string>
+    <string name="plugin_check_started">بدأ التحقق من تحديثات المصادر</string>
+    <string name="plugin_check_failed">تعذر بدء التحقق</string>
     <string name="source_unknown">مصدر غير معروف</string>
     <!-- ─── Source names (MangaSource.nameRes; never hardcode — item 8) ─────── -->
     <string name="source_olympus">تيم اكس</string>

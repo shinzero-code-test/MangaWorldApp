@@ -22,7 +22,8 @@ class PluginSyncWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val engine: PluginSyncEngine,
-    private val remoteConfigManager: FirebaseRemoteConfigManager
+    private val remoteConfigManager: FirebaseRemoteConfigManager,
+    private val scheduler: PluginSyncScheduler
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -38,6 +39,9 @@ class PluginSyncWorker @AssistedInject constructor(
                 "sync done: ${result.outcomes.size} entries, " +
                     "revoked=${result.revocationsApplied}, notModified=${result.indexNotModified}"
             )
+            // v9.1.1: a finished sweep (even all-rejected) counts as "checked"
+            // for bootstrap staleness — only transport failure retries early.
+            scheduler.recordSyncCompleted()
             Result.success()
         } catch (ce: kotlinx.coroutines.CancellationException) {
             throw ce
@@ -46,6 +50,8 @@ class PluginSyncWorker @AssistedInject constructor(
         } catch (_: Exception) {
             // Deterministic rejection (tampered index, bad schema): retrying
             // immediately changes nothing; the periodic schedule re-checks.
+            // Still counts as checked so boot-stale triggers don't loop it.
+            scheduler.recordSyncCompleted()
             Result.failure()
         }
     }

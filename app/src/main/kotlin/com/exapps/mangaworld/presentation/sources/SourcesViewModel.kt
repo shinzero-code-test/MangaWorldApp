@@ -42,6 +42,7 @@ class SourcesViewModel @Inject constructor(
     private val trustKeys: PluginTrustKeys,
     private val remoteConfig: FirebaseRemoteConfigManager,
     private val health: SourceHealthMonitor,
+    private val indexStore: com.exapps.mangaworld.core.source.plugins.PluginIndexStore,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -105,6 +106,21 @@ class SourcesViewModel @Inject constructor(
             settingsRepository.toggleSource(sourceId, enabled)
             _state.update {
                 it.copy(enabledSources = it.enabledSources + (sourceId to enabled))
+            }
+            // v9.1.1 badge truthfulness: enabling a held row (index DISABLED
+            // with verified bytes) clears the stale "needs approval" badge.
+            // The payload was already smoked at install; the toggle IS consent.
+            // Disabling never touches the index (re-enable stays one tap).
+            if (enabled) {
+                runCatching {
+                    val rec = indexStore.get(sourceId)
+                    if (rec != null && rec.status == com.exapps.mangaworld.core.source.plugins.PluginStatus.DISABLED &&
+                        rec.activeVersion != null && rec.manifestJson != null
+                    ) {
+                        indexStore.put(rec.copy(status = com.exapps.mangaworld.core.source.plugins.PluginStatus.ENABLED))
+                        refreshTick.emit(refreshTick.value + 1)
+                    }
+                }
             }
         }
     }
@@ -179,10 +195,15 @@ class SourcesViewModel @Inject constructor(
         }
     }
 
-    /** On-demand distribution check (Sources settings hook; periodic schedule owns the rest). */
+    /** On-demand distribution check (Sources action; periodic schedule owns the rest). */
     fun checkForUpdates() {
         viewModelScope.launch {
-            runCatching { pluginSyncScheduler.requestNow() }
+            val enqueued = runCatching { pluginSyncScheduler.requestNow() }
+            _notice.emit(
+                if (enqueued.isSuccess) R.string.plugin_check_started
+                else R.string.plugin_check_failed
+            )
+            refresh()
         }
     }
 

@@ -146,6 +146,12 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
         applicationScope.launch {
             runCatching { pluginSyncScheduler.schedule() }
                 .onFailure { android.util.Log.w("MangaWorldApp", "Plugin sync schedule failed: ${it.message}") }
+            // v9.1.1 bootstrap: the periodic worker alone never fires promptly
+            // on fresh installs (first run is at the OS's discretion), which
+            // left new sources undistributed for days with no user recourse.
+            // A stale boot triggers one on-demand sweep; steady state stays quiet.
+            runCatching { pluginSyncScheduler.requestNowIfStale() }
+                .onFailure { android.util.Log.w("MangaWorldApp", "Plugin sync bootstrap failed: ${it.message}") }
         }
 
         // Inactivity reminders: the startup-time check is always suppressed by

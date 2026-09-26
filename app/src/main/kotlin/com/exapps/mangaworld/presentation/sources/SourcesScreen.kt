@@ -77,6 +77,17 @@ fun SourcesScreen(
                         Icon(Icons.Filled.ArrowBack, stringResource(R.string.back), tint = MangaColors.OnSurface)
                     }
                 },
+                // v9.1.1: the on-demand sync lane finally has a trigger —
+                // without it only the 24h worker could fetch new sources.
+                actions = {
+                    IconButton(onClick = { viewModel.checkForUpdates() }) {
+                        Icon(
+                            Icons.Filled.Refresh,
+                            stringResource(R.string.plugin_check_updates),
+                            tint = MangaColors.OnSurface
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MangaColors.Surface)
             )
         }

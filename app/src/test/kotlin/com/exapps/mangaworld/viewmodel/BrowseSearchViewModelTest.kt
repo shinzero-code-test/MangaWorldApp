@@ -106,7 +106,8 @@ class BrowseSearchViewModelTest {
         trustKeys = io.mockk.mockk(relaxed = true),
         remoteConfig = io.mockk.mockk(relaxed = true),
         health = io.mockk.mockk(relaxed = true),
-        appContext = io.mockk.mockk(relaxed = true)
+        appContext = io.mockk.mockk(relaxed = true),
+        indexStore = io.mockk.mockk(relaxed = true)
     )
 
     private fun sourceBrowseVm(sourceId: String = "azora") = SourceBrowseViewModel(
