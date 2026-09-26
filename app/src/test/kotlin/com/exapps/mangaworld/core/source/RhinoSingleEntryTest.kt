@@ -16,8 +16,11 @@ class RhinoSingleEntryTest {
 
     @Test
     fun noDirectContextEnterOutsideSandbox() {
+        // Unit-test workdir is the :app module dir (same convention as
+        // BundledPilotTest's asset lookup); fall back to a repo-root relative.
         val roots = listOf(
-            File("app/src/main/kotlin"),
+            File("src/main/kotlin"),
+            File(System.getProperty("user.dir"), "src/main/kotlin"),
             File(System.getProperty("user.dir"), "app/src/main/kotlin")
         )
         val root = roots.firstOrNull { it.isDirectory }

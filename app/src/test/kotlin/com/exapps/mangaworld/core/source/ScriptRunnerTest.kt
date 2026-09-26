@@ -68,6 +68,13 @@ class ScriptRunnerTest {
     private val searchHtml =
         "<html><body><a href=\"/manga/x/\">Xen</a><a href=\"/manga/y/\">Yen</a></body></html>"
 
+    private fun manifestFor(script: String) =
+        ScriptTestSupport.manifest(
+            scriptSha256 = com.exapps.mangaworld.core.source.plugins.ScriptPluginLoader.sha256Hex(
+                script.toByteArray(Charsets.UTF_8)
+            )
+        )
+
     private fun runner(
         script: String = source,
         bodies: Map<String, ByteArray> = mapOf(
@@ -78,7 +85,7 @@ class ScriptRunnerTest {
         ScriptTestSupport.FakeFetcher(bodies.toMutableMap()),
         ScriptTestSupport.logger,
         Dispatchers.Unconfined
-    ).create(ScriptTestSupport.manifest(), script.toByteArray(Charsets.UTF_8)).getOrThrow()
+    ).create(manifestFor(script), script.toByteArray(Charsets.UTF_8)).getOrThrow()
 
     @Test
     fun homeMaps() = runTest {
@@ -160,28 +167,31 @@ class ScriptRunnerTest {
 
     @Test
     fun genresPresentMaps() = runTest {
+        val genreScript = source + "\nfunction genres(ctx){ return ['A', 'B']; }"
         val r = ScriptRunnerFactory(
             ScriptTestSupport.sandbox,
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
             Dispatchers.Unconfined
         ).create(
-            ScriptTestSupport.manifest(),
-            (source + "\nfunction genres(ctx){ return ['A', 'B']; }").toByteArray(Charsets.UTF_8)
+            manifestFor(genreScript),
+            genreScript.toByteArray(Charsets.UTF_8)
         ).getOrThrow()
         assertEquals(listOf("A", "B"), r.getGenres().getOrThrow())
     }
 
     @Test
     fun missingEntryFails() = runTest {
+        val missingEntryScript =
+            "function home(ctx){ return {featured: [], latest: [], trending: []}; }"
         val r = ScriptRunnerFactory(
             ScriptTestSupport.sandbox,
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
             Dispatchers.Unconfined
         ).create(
-            ScriptTestSupport.manifest(),
-            "function home(ctx){ return {featured: [], latest: [], trending: []}; }".toByteArray(Charsets.UTF_8)
+            manifestFor(missingEntryScript),
+            missingEntryScript.toByteArray(Charsets.UTF_8)
         ).getOrThrow()
         assertTrue(r.getHomeData().isSuccess)
         assertTrue(r.getChapterPages("x").isFailure)
@@ -194,7 +204,10 @@ class ScriptRunnerTest {
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
             Dispatchers.Unconfined
-        ).create(ScriptTestSupport.manifest(), "function broken( {".toByteArray(Charsets.UTF_8))
+        ).create(
+            manifestFor("function broken( {"),
+            "function broken( {".toByteArray(Charsets.UTF_8)
+        )
         assertTrue(result.isFailure)
     }
 
@@ -214,7 +227,7 @@ class ScriptRunnerTest {
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
             Dispatchers.Unconfined
-        ).create(ScriptTestSupport.manifest(), script.toByteArray(Charsets.UTF_8)).getOrThrow()
+        ).create(manifestFor(script), script.toByteArray(Charsets.UTF_8)).getOrThrow()
         assertTrue(r.getHomeData().isFailure)
     }
 
@@ -245,7 +258,7 @@ class ScriptRunnerTest {
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
             Dispatchers.Unconfined
-        ).create(ScriptTestSupport.manifest(), script.toByteArray(Charsets.UTF_8)).getOrThrow()
+        ).create(manifestFor(script), script.toByteArray(Charsets.UTF_8)).getOrThrow()
         assertTrue(r.getChapterPages("first").isSuccess)
         // Second call reuses the saved handle → unknown-handle failure.
         assertTrue(r.getChapterPages("second").isFailure)
@@ -336,7 +349,7 @@ class ScriptRunnerTest {
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
             counting
-        ).create(ScriptTestSupport.manifest(), source.toByteArray(Charsets.UTF_8)).getOrThrow()
+        ).create(manifestFor(source), source.toByteArray(Charsets.UTF_8)).getOrThrow()
         assertTrue(r.getHomeData().isSuccess)
         assertTrue("script never ran on the injected dispatcher", dispatched > 0)
     }
@@ -351,7 +364,7 @@ class ScriptRunnerTest {
         )
         val bytes = source.toByteArray(Charsets.UTF_8)
         val t0 = System.currentTimeMillis()
-        val r = factory.create(ScriptTestSupport.manifest(), bytes).getOrThrow()
+        val r = factory.create(manifestFor(source), bytes).getOrThrow()
         val tCompile = System.currentTimeMillis() - t0
         val t1 = System.currentTimeMillis()
         r.getHomeData().getOrThrow()
