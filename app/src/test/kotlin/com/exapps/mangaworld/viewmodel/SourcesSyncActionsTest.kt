@@ -9,7 +9,6 @@ import com.exapps.mangaworld.core.source.sync.PluginSyncEngine
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.core.source.SourceUiTestFixtures
 import com.exapps.mangaworld.presentation.sources.SourcesViewModel
-import io.mockk.coAnswers
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
