@@ -13,7 +13,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -82,7 +82,7 @@ fun SourcesScreen(
                 actions = {
                     IconButton(onClick = { viewModel.checkForUpdates() }) {
                         Icon(
-                            Icons.Filled.CloudSync,
+                            Icons.Filled.Refresh,
                             stringResource(R.string.plugin_check_updates),
                             tint = MangaColors.OnSurface
                         )
