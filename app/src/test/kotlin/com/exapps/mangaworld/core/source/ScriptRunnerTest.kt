@@ -304,7 +304,10 @@ class ScriptRunnerTest {
                 timeoutMs: Int,
                 allowedHosts: Set<String>
             ): com.exapps.mangaworld.core.source.script.ScriptFetcher.Response =
-                throw kotlinx.coroutines.TimeoutCancellationException("boom")
+                // A plain CancellationException exercises the same contract as a
+                // real TimeoutCancellationException (whose ctor is internal):
+                // cancellations must propagate, never be wrapped into failures.
+                throw kotlinx.coroutines.CancellationException("boom")
         }
         val script = """
             function home(ctx){ fetch('https://script.example/'); return {featured: [], latest: [], trending: []}; }
