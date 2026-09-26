@@ -9,6 +9,7 @@ import com.exapps.mangaworld.core.source.sync.PluginSyncEngine
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.core.source.SourceUiTestFixtures
 import com.exapps.mangaworld.presentation.sources.SourcesViewModel
+import io.mockk.coAnswers
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -89,8 +90,11 @@ class SourcesSyncActionsTest {
         )
         var stored: PluginIndexRecord = held
         val index: PluginIndexStore = mockk {
-            coEvery { get("gated") } answers { stored }
-            coEvery { put(any()) } answers { stored = firstArg<PluginIndexRecord>() }
+            coEvery { get("gated") } coAnswers { stored }
+            coEvery { put(any()) } coAnswers {
+                stored = firstArg()
+                Unit
+            }
         }
         val viewModel = vm(index = index)
         advanceUntilIdle()
