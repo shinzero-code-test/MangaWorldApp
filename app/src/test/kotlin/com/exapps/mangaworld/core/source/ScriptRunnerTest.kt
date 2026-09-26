@@ -68,8 +68,9 @@ class ScriptRunnerTest {
     private val searchHtml =
         "<html><body><a href=\"/manga/x/\">Xen</a><a href=\"/manga/y/\">Yen</a></body></html>"
 
-    private fun manifestFor(script: String) =
+    private fun manifestFor(script: String, timeoutMs: Int = 15_000) =
         ScriptTestSupport.manifest(
+            timeoutMs = timeoutMs,
             scriptSha256 = com.exapps.mangaworld.core.source.plugins.ScriptPluginLoader.sha256Hex(
                 script.toByteArray(Charsets.UTF_8)
             )
@@ -281,7 +282,7 @@ class ScriptRunnerTest {
             ScriptTestSupport.FakeFetcher(),
             ScriptTestSupport.logger,
             Dispatchers.Unconfined
-        ).create(ScriptTestSupport.manifest(timeoutMs = 200), script.toByteArray(Charsets.UTF_8)).getOrThrow()
+        ).create(manifestFor(script, 200), script.toByteArray(Charsets.UTF_8)).getOrThrow()
         val result = r.getHomeData()
         assertTrue(result.isFailure)
         assertTrue(
@@ -323,7 +324,7 @@ class ScriptRunnerTest {
                 fetcher,
                 ScriptTestSupport.logger,
                 exec.asCoroutineDispatcher()
-            ).create(ScriptTestSupport.manifest(timeoutMs = 200), script.toByteArray(Charsets.UTF_8)).getOrThrow()
+            ).create(manifestFor(script, 200), script.toByteArray(Charsets.UTF_8)).getOrThrow()
             kotlinx.coroutines.runBlocking { r.getHomeData() }
             fail("expected cancellation")
         } catch (e: kotlinx.coroutines.CancellationException) {
