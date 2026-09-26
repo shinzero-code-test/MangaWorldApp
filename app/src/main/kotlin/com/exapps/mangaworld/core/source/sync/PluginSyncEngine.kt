@@ -731,9 +731,13 @@ class PluginSyncEngine @Inject constructor(
             com.exapps.mangaworld.core.source.plugins.PluginStorage.versionDir(baseDir.path, id, version),
             "plugin.json"
         )
-        val manifestBytes = if (manifestFile.isFile) {
-            runCatching { manifestFile.readBytes() }.getOrNull()
-        } else null ?: return@withContext ApproveOutcome.Failed("payload missing")
+        val manifestBytes: ByteArray = (
+            if (manifestFile.isFile) {
+                runCatching { manifestFile.readBytes() }.getOrNull()
+            } else {
+                null
+            }
+            ) ?: return@withContext ApproveOutcome.Failed("payload missing")
         val policy = PluginKillSwitch.parse(killSwitchJson)
         if (PluginKillSwitch.isRevoked(policy, id, version)) {
             applyKillSwitch(
