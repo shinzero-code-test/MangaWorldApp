@@ -82,7 +82,7 @@ fun SourcesScreen(
                 actions = {
                     IconButton(onClick = { viewModel.checkForUpdates() }) {
                         Icon(
-                            Icons.Filled.Refresh,
+                            Icons.Filled.CloudSync,
                             stringResource(R.string.plugin_check_updates),
                             tint = MangaColors.OnSurface
                         )
