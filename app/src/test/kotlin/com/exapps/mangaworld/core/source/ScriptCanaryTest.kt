@@ -66,7 +66,7 @@ class ScriptCanaryTest {
         dashboardFile("plugins", "_incoming", "manonga", name).readBytes()
 
     private fun published(name: String): ByteArray =
-        dashboardFile("plugins", "manonga", "v1", name).readBytes()
+        dashboardFile("public", "plugins", "manonga", "v1", name).readBytes()
 
     private fun fixture(name: String): ByteArray =
         dashboardFile("plugins", "_incoming", "manonga", "fixtures", name).readBytes()
