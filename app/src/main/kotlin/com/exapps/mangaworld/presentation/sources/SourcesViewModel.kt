@@ -37,7 +37,6 @@ class SourcesViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val sourceUiMapper: SourceUiMapper,
     private val sourceRegistry: SourceRegistry,
-    private val pluginSyncScheduler: com.exapps.mangaworld.core.source.sync.PluginSyncScheduler,
     private val syncEngine: PluginSyncEngine,
     private val trustKeys: PluginTrustKeys,
     private val remoteConfig: FirebaseRemoteConfigManager,
@@ -65,6 +64,11 @@ class SourcesViewModel @Inject constructor(
 
     /** Id of the source with an in-flight approve/re-check, if any. */
     val busyId: StateFlow<String?> = _busyId.asStateFlow()
+
+    private val _syncing = MutableStateFlow(false)
+
+    /** True while an on-demand sweep runs inline in the foreground. */
+    val syncing: StateFlow<Boolean> = _syncing.asStateFlow()
 
     private val _notice = MutableSharedFlow<Int>(extraBufferCapacity = 1)
 
@@ -198,12 +202,33 @@ class SourcesViewModel @Inject constructor(
     /** On-demand distribution check (Sources action; periodic schedule owns the rest). */
     fun checkForUpdates() {
         viewModelScope.launch {
-            val enqueued = runCatching { pluginSyncScheduler.requestNow() }
-            _notice.emit(
-                if (enqueued.isSuccess) R.string.plugin_check_started
-                else R.string.plugin_check_failed
-            )
-            refresh()
+            _syncing.value = true
+            try {
+                // v9.1.4: run the sweep INLINE in the foreground instead of only
+                // enqueueing a worker. OEM JobScheduler throttling (MIUI et al)
+                // can starve background work indefinitely with zero surface —
+                // a user-initiated check must not depend on it. The engine is
+                // main-safe (withContext(io) throughout); the periodic worker
+                // remains the background path.
+                val result = syncEngine.sync(
+                    trustedKeys = trustKeys.current(),
+                    host = PluginTrust.productionCapabilities(BuildConfig.VERSION_NAME),
+                    killSwitchJson = remoteConfig.pluginKillSwitchJson(),
+                    baseDir = File(appContext.filesDir, "plugins")
+                )
+                val updated = result.outcomes.count { it.value is PluginSyncEngine.EntryOutcome.Updated }
+                _notice.emit(
+                    if (updated > 0) R.string.plugin_check_updated
+                    else R.string.plugin_check_done
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _notice.emit(R.string.plugin_check_failed)
+            } finally {
+                _syncing.value = false
+                refresh()
+            }
         }
     }
 

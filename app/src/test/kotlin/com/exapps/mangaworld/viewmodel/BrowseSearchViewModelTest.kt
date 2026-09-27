@@ -101,7 +101,6 @@ class BrowseSearchViewModelTest {
         settingsRepository = settingsRepo,
         sourceUiMapper = SourceUiTestFixtures.mapper(),
         sourceRegistry = SourceUiTestFixtures.registry(),
-        pluginSyncScheduler = io.mockk.mockk(relaxed = true),
         syncEngine = io.mockk.mockk(relaxed = true),
         trustKeys = io.mockk.mockk(relaxed = true),
         remoteConfig = io.mockk.mockk(relaxed = true),

@@ -48,6 +48,7 @@ fun SourcesScreen(
     val entries by viewModel.entries.collectAsStateWithLifecycle()
     val heldDetails by viewModel.heldDetails.collectAsStateWithLifecycle()
     val busyId by viewModel.busyId.collectAsStateWithLifecycle()
+    val syncing by viewModel.syncing.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
 
@@ -80,7 +81,10 @@ fun SourcesScreen(
                 // v9.1.1: the on-demand sync lane finally has a trigger —
                 // without it only the 24h worker could fetch new sources.
                 actions = {
-                    IconButton(onClick = { viewModel.checkForUpdates() }) {
+                    IconButton(
+                        onClick = { viewModel.checkForUpdates() },
+                        enabled = !syncing
+                    ) {
                         Icon(
                             Icons.Filled.Refresh,
                             stringResource(R.string.plugin_check_updates),

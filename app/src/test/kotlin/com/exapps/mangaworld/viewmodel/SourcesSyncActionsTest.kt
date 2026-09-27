@@ -16,6 +16,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -59,7 +60,7 @@ class SourcesSyncActionsTest {
     }
 
     private fun vm(
-        scheduler: PluginSyncScheduler = mockk(relaxed = true),        engine: PluginSyncEngine = mockk(relaxed = true),
+        engine: PluginSyncEngine = mockk(relaxed = true),
         index: PluginIndexStore = mockk(relaxed = true),
         settings: SettingsRepository = mockk<SettingsRepository>(relaxed = true).apply {
             every { getAppSettings() } returns
@@ -71,7 +72,6 @@ class SourcesSyncActionsTest {
             settingsRepository = settings,
             sourceUiMapper = SourceUiTestFixtures.mapper(),
             sourceRegistry = SourceUiTestFixtures.registry(),
-            pluginSyncScheduler = scheduler,
             syncEngine = engine,
             trustKeys = mockk(relaxed = true),
             remoteConfig = mockk(relaxed = true),
@@ -82,13 +82,41 @@ class SourcesSyncActionsTest {
     }
 
     @Test
-    fun checkForUpdatesEnqueuesOneShot() = runTest(dispatcher) {
-        val scheduler: PluginSyncScheduler = mockk(relaxed = true)
-        val viewModel = vm(scheduler = scheduler)
+    fun checkForUpdatesRunsInlineSweepAndNotices() = runTest(dispatcher) {
+        val engine: PluginSyncEngine = mockk()
+        coEvery {
+            engine.sync(any(), any(), any(), any(), any(), any(), any())
+        } returns PluginSyncEngine.SyncResult(
+            outcomes = mapOf("manonga" to PluginSyncEngine.EntryOutcome.Updated(false))
+        )
+        val viewModel = vm(engine = engine)
+        advanceUntilIdle()
+        val notices = mutableListOf<Int>()
+        val collect = launch { viewModel.notice.collect { notices += it } }
         advanceUntilIdle()
         viewModel.checkForUpdates()
         advanceUntilIdle()
-        coVerify { scheduler.requestNow() }
+        assertTrue(notices.contains(com.exapps.mangaworld.R.string.plugin_check_updated))
+        assertEquals(false, viewModel.syncing.value)
+        collect.cancel()
+    }
+
+    @Test
+    fun checkForUpdatesFailureNotices() = runTest(dispatcher) {
+        val engine: PluginSyncEngine = mockk()
+        coEvery {
+            engine.sync(any(), any(), any(), any(), any(), any(), any())
+        } throws RuntimeException("boom")
+        val viewModel = vm(engine = engine)
+        advanceUntilIdle()
+        val notices = mutableListOf<Int>()
+        val collect = launch { viewModel.notice.collect { notices += it } }
+        advanceUntilIdle()
+        viewModel.checkForUpdates()
+        advanceUntilIdle()
+        assertTrue(notices.contains(com.exapps.mangaworld.R.string.plugin_check_failed))
+        assertEquals(false, viewModel.syncing.value)
+        collect.cancel()
     }
 
     @Test

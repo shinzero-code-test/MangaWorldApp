@@ -724,6 +724,8 @@
     <string name="plugin_check_updates">التحقق من التحديثات</string>
     <string name="plugin_check_started">بدأ التحقق من تحديثات المصادر</string>
     <string name="plugin_check_failed">تعذر بدء التحقق</string>
+    <string name="plugin_check_updated">تم التحديث — مصادر جديدة متاحة</string>
+    <string name="plugin_check_done">اكتمل التحقق — لا جديد</string>
     <string name="source_unknown">مصدر غير معروف</string>
     <!-- ─── Source names (MangaSource.nameRes; never hardcode — item 8) ─────── -->
     <string name="source_olympus">تيم اكس</string>
