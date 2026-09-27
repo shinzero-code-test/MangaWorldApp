@@ -37,6 +37,16 @@ import javax.inject.Singleton
 interface EtagStore {
     fun get(): String?
     fun set(etag: String?)
+
+    /**
+     * v9.1.5 anti-304-lock: ids whose last full sweep ended non-terminal
+     * (Failed / RolledBack). While non-empty the sweep skips `If-None-Match`
+     * so a 304 can never suppress their retry; recomputed after every full
+     * sweep, untouched by 304 short-circuits and aborts. Default no-ops keep
+     * existing fakes compiling with unchanged behavior.
+     */
+    fun getUnresolved(): Set<String> = emptySet()
+    fun setUnresolved(ids: Set<String>) = Unit
 }
 
 @Singleton
@@ -51,8 +61,16 @@ class PrefsEtagStore @Inject constructor(
         prefs.edit().putString(KEY, etag).apply()
     }
 
+    override fun getUnresolved(): Set<String> =
+        prefs.getStringSet(UNRESOLVED_KEY, null).orEmpty()
+
+    override fun setUnresolved(ids: Set<String>) {
+        prefs.edit().putStringSet(UNRESOLVED_KEY, ids.toSet()).apply()
+    }
+
     companion object {
         private const val KEY = "index_etag"
+        private const val UNRESOLVED_KEY = "unresolved_ids"
     }
 }
 
@@ -129,6 +147,26 @@ class PluginSyncEngine @Inject constructor(
         data class Rejected(val reason: String) : EntryOutcome
         data class Skipped(val reason: String) : EntryOutcome
         data class Failed(val reason: String) : EntryOutcome
+
+        /**
+         * R8-stable identifier (v9.1.5): `javaClass.simpleName` minifies to
+         * single letters in release (`{w=2, p=1}`), which made both logcat
+         * diagnosis AND the Gate-0 telemetry `outcomeCounts` unreadable on
+         * fleet builds. This `when` survives minification by construction.
+         */
+        val code: String
+            get() = when (this) {
+                is UpToDate -> "UpToDate"
+                is Updated -> "Updated"
+                is HeldForConsent -> "HeldForConsent"
+                is NewSourceDeferred -> "NewSourceDeferred"
+                is RolledBack -> "RolledBack"
+                is Revoked -> "Revoked"
+                is DowngradeRefused -> "DowngradeRefused"
+                is Rejected -> "Rejected"
+                is Skipped -> "Skipped"
+                is Failed -> "Failed"
+            }
     }
 
     data class SyncResult(
@@ -206,11 +244,11 @@ class PluginSyncEngine @Inject constructor(
      */
     private fun logOutcomeLines(result: SyncResult) {
         val counts = result.outcomes.values
-            .groupingBy { it.javaClass.simpleName }
+            .groupingBy { it.code }
             .eachCount()
         result.outcomes.forEach { (id, outcome) ->
             if (outcome !is EntryOutcome.UpToDate) {
-                log("sync $id -> ${outcome.javaClass.simpleName}")
+                log("sync $id -> ${outcome.code}")
             }
         }
         log(
@@ -224,7 +262,7 @@ class PluginSyncEngine @Inject constructor(
     private fun reportOf(result: SyncResult, durationMs: Long) =        com.exapps.mangaworld.core.source.plugins.PluginSyncReport(
             indexNotModified = result.indexNotModified,
             outcomeCounts = result.outcomes.values
-                .groupingBy { it.javaClass.simpleName }
+                .groupingBy { it.code }
                 .eachCount(),
             failedIds = result.outcomes
                 .filterValues { it is EntryOutcome.Failed }
@@ -255,8 +293,18 @@ class PluginSyncEngine @Inject constructor(
 
         val indexHost = hostOf(indexUrl)
             ?: throw PluginFetcher.FetchFailure.Insecure(indexUrl)
+        // v9.1.5: a 304 short-circuit returns EMPTY outcomes, so entries that
+        // failed/rolled-back would never be retried (nor even re-logged) until
+        // the index changes again — the on-device canary went dark exactly
+        // this way. While anything is unresolved, skip the validator.
+        val unresolved = etags.getUnresolved()
+        if (unresolved.isNotEmpty()) {
+            log("sync forcing full fetch (${unresolved.size} unresolved: ${unresolved.sorted().joinToString(",").take(120)})")
+        }
         val headers = buildMap {
-            etags.get()?.takeIf { it.isNotBlank() }?.let { put("If-None-Match", it) }
+            if (unresolved.isEmpty()) {
+                etags.get()?.takeIf { it.isNotBlank() }?.let { put("If-None-Match", it) }
+            }
         }
         val indexBytes = try {
             fetcher.get(
@@ -292,7 +340,17 @@ class PluginSyncEngine @Inject constructor(
                     baseDir = baseDir
                 )
             }.getOrElse { e ->
-                log("sync ${entry.id} failed: ${e.message}")
+                // v9.1.5: fleet builds minify class names AND many throws carry
+                // no message (the on-device `failed: null` dead end), so log the
+                // exception class plus a stack head — framework frames keep
+                // their names under R8, which localizes the throwing layer.
+                log("sync ${entry.id} failed: ${e.javaClass.name}: ${e.message?.take(160)}")
+                log(
+                    "sync ${entry.id} stack: " + e.stackTrace
+                        .take(8)
+                        .joinToString(" <- ") { "${it.className}.${it.methodName}:${it.lineNumber}" }
+                        .take(900)
+                )
                 EntryOutcome.Failed(e.message?.take(160) ?: "unknown")
             }
         }
@@ -305,6 +363,11 @@ class PluginSyncEngine @Inject constructor(
             null
         }?.evict?.size ?: 0
         if (evicted > 0) log("quota sweep evicted $evicted old version(s)")
+        etags.setUnresolved(
+            outcomes
+                .filterValues { it is EntryOutcome.Failed || it is EntryOutcome.RolledBack }
+                .keys
+        )
         SyncResult(outcomes = outcomes, revocationsApplied = revocations, evictedVersions = evicted)
     }
 

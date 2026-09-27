@@ -57,6 +57,11 @@ class PluginSyncEngineTest {
         override fun set(etag: String?) {
             value = etag
         }
+        var unresolved: Set<String> = emptySet()
+        override fun getUnresolved(): Set<String> = unresolved
+        override fun setUnresolved(ids: Set<String>) {
+            unresolved = ids
+        }
     }
 
     private class FakeFetcher(
@@ -437,6 +442,30 @@ class PluginSyncEngineTest {
         val second = runSync()
         assertTrue(second.indexNotModified)
         assertEquals(before, fetcher.manifestRequests)
+    }
+
+    @Test
+    fun failedEntriesForceFullRefetchPast304() = runTest {
+        // v9.1.5 (on-device canary went dark): a sweep that fails an entry
+        // stores the index ETag anyway, so every later sweep 304s with EMPTY
+        // outcomes — the failure is never retried nor re-logged until the
+        // index changes. Failed/RolledBack ids must force a full fetch.
+        val manifestUrl = "https://cdn.example/plugins/ghost/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson(Triple("ghost", 1, manifestUrl))
+            // No manifest body: the fetch 404s → Failed (not an escape).
+        )
+        val etags = FakeEtag()
+        val h = harness(bodies, etags = etags)
+        val first = h.sync()
+        assertTrue(first.outcomes["ghost"] is PluginSyncEngine.EntryOutcome.Failed)
+        assertEquals(setOf("ghost"), etags.unresolved)
+        val indexHitsBefore = h.fetcher.requests.count { it.endsWith("index.json") }
+        val second = h.sync()
+        assertTrue(!second.indexNotModified)
+        assertTrue(second.outcomes["ghost"] is PluginSyncEngine.EntryOutcome.Failed)
+        assertEquals(indexHitsBefore + 1, h.fetcher.requests.count { it.endsWith("index.json") })
+        assertTrue(h.logs.any { it.contains("forcing full fetch") && it.contains("ghost") })
     }
 
     @Test
