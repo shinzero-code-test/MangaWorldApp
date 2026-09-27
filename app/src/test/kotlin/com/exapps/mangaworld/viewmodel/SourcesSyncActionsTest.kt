@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.viewmodel
 
+import android.content.Context
 import com.exapps.mangaworld.core.source.plugins.PluginIndexRecord
 import com.exapps.mangaworld.core.source.plugins.PluginIndexStore
 import com.exapps.mangaworld.core.source.plugins.PluginOrigin
@@ -13,7 +14,6 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.any
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
@@ -27,7 +27,9 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 /**
  * v9.1.1 sources actions: the on-demand sync trigger, toggle-clears-held, and
@@ -50,6 +52,9 @@ class SourcesSyncActionsTest {
 
     private val dispatcher = StandardTestDispatcher()
 
+    @get:Rule
+    val tmp = TemporaryFolder()
+
     @Before
     fun setup() {
         Dispatchers.setMain(dispatcher)
@@ -67,6 +72,12 @@ class SourcesSyncActionsTest {
             every { getAppSettings() } returns
                 flowOf(com.exapps.mangaworld.domain.model.AppSettings(enabledSources = setOf("azora")))
             every { isSourceNotificationEnabled(any()) } returns flowOf(true)
+        },
+        // checkForUpdates() builds File(appContext.filesDir, "plugins") inline:
+        // a relaxed Context returns null filesDir, which throws NPE inside the
+        // File constructor and forces the failure notice. Stub a real dir.
+        appContext: Context = mockk<Context>(relaxed = true).apply {
+            every { filesDir } returns tmp.root
         }
     ): SourcesViewModel {
         return SourcesViewModel(
@@ -77,7 +88,7 @@ class SourcesSyncActionsTest {
             trustKeys = mockk(relaxed = true),
             remoteConfig = mockk(relaxed = true),
             health = mockk(relaxed = true),
-            appContext = mockk(relaxed = true),
+            appContext = appContext,
             indexStore = index
         )
     }
