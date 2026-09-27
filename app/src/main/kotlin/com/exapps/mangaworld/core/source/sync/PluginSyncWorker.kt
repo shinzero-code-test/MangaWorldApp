@@ -28,17 +28,13 @@ class PluginSyncWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         return try {
-            val result = engine.sync(
+            engine.sync(
                 trustedKeys = remoteConfigManager.pluginTrustedKeys(),
                 host = PluginTrust.productionCapabilities(BuildConfig.VERSION_NAME),
                 killSwitchJson = remoteConfigManager.pluginKillSwitchJson(),
                 baseDir = File(applicationContext.filesDir, "plugins")
             )
-            android.util.Log.i(
-                "PluginSync",
-                "sync done: ${result.outcomes.size} entries, " +
-                    "revoked=${result.revocationsApplied}, notModified=${result.indexNotModified}"
-            )
+            // Outcome lines are logged inside the engine (single-sourced).
             // v9.1.1: a finished sweep (even all-rejected) counts as "checked"
             // for bootstrap staleness — only transport failure retries early.
             scheduler.recordSyncCompleted()

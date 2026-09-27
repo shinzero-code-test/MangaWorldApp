@@ -172,6 +172,7 @@ class PluginSyncEngine @Inject constructor(
                 allowInsecure = allowInsecure,
                 baseDir = baseDir
             )
+            logOutcomeLines(result)
             telemetry.logSync(reportOf(result, System.currentTimeMillis() - start))
             result
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -192,8 +193,31 @@ class PluginSyncEngine @Inject constructor(
         }
     }
 
-    private fun reportOf(result: SyncResult, durationMs: Long) =
-        com.exapps.mangaworld.core.source.plugins.PluginSyncReport(
+    /**
+     * Logcat-debuggable sweep summary through the test-replaceable [log] sink
+     * (raw `android.util.Log` throws on plain JVM, so this never calls it
+     * directly). Steady-state entries (`UpToDate`) collapse to a count; every
+     * other outcome gets its own line so a single `adb logcat -s PluginSync`
+     * names the exact gate a source stopped at — no Firebase access needed.
+     */
+    private fun logOutcomeLines(result: SyncResult) {
+        val counts = result.outcomes.values
+            .groupingBy { it.javaClass.simpleName }
+            .eachCount()
+        result.outcomes.forEach { (id, outcome) ->
+            if (outcome !is EntryOutcome.UpToDate) {
+                log("sync $id -> ${outcome.javaClass.simpleName}")
+            }
+        }
+        log(
+            "sync done: ${result.outcomes.size} entries $counts, " +
+                "revoked=${result.revocationsApplied}, " +
+                "notModified=${result.indexNotModified}, " +
+                "evicted=${result.evictedVersions}"
+        )
+    }
+
+    private fun reportOf(result: SyncResult, durationMs: Long) =        com.exapps.mangaworld.core.source.plugins.PluginSyncReport(
             indexNotModified = result.indexNotModified,
             outcomeCounts = result.outcomes.values
                 .groupingBy { it.javaClass.simpleName }

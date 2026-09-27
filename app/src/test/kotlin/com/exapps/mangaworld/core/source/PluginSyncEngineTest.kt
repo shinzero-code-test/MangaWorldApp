@@ -459,6 +459,20 @@ class PluginSyncEngineTest {
     }
 
     @Test
+    fun sweepLogsPerEntryOutcomesForLogcat() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/hijala/v2/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson(Triple("hijala", 2, manifestUrl)),
+            manifestUrl to manifestBytes("hijala", 2)
+        )
+        val h = harness(bodies)
+        h.sync()
+        // v9.1.2: non-trivial outcomes get their own line; the summary always lands.
+        assertTrue(h.logs.any { it.contains("sync hijala -> Updated") })
+        assertTrue(h.logs.any { it.contains("sync done:") && it.contains("notModified=false") })
+    }
+
+    @Test
     fun notModifiedSweepEmitsHeartbeatReport() = runTest {
         val manifestUrl = "https://cdn.example/plugins/hijala/v2/plugin.json"
         val bodies = mutableMapOf(

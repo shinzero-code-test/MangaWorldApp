@@ -10,8 +10,13 @@
 # ── Rhino (Phase 3 script sandbox) ─────────────────────────────────────────────
 # java.beans is referenced by JavaToJSONConverters but never reached: no Java
 # object crosses the bridge (results are validated primitives; a leaked host
-# object is a hard failure). Interpreter-only operation generates no classes,
-# so no keeps are needed — just silence the missing platform types.
+# object is a hard failure). Interpreter-only operation generates no classes.
+# v9.1.2: keep the whole runtime anyway. R8 full-mode strips
+# reflectively-reached Rhino internals that static analysis cannot see, and a
+# release-only NoClassDefFoundError inside compile/exec would surface as a
+# silent smoke failure (rollback, no card, no crash). The interpreter is fully
+# exercised at runtime, so nothing kept here is dead weight in practice.
+-keep class org.mozilla.javascript.** { *; }
 -dontwarn java.beans.**
 
 # ── Kotlin coroutines ──────────────────────────────────────────────────────────
