@@ -61,4 +61,24 @@ class RhinoInterpreterModeTest {
             assertEquals(-1, cx.optimizationLevel)
         }
     }
+
+    @Test
+    fun reflectiveRuntimeNamesResolve() {
+        // v9.1.6 pin: Rhino locates these platform/runtime classes by exact
+        // class-name string (Kit.classOrNull), so the release keep rules must
+        // preserve them — direct references in app code do NOT cover them.
+        // This runs unobfuscated on JVM, so it cannot prove the keep rules;
+        // it fails loudly if a Rhino UPGRADE moves/renames the probed classes,
+        // which is the signal to sync proguard-rules.pro (the 9.1.5 fleet
+        // EIIE at Context.enter was VMBridge_jdk18 missing under R8).
+        for (name in listOf(
+            "org.mozilla.javascript.jdk18.VMBridge_jdk18",
+            "org.mozilla.javascript.Interpreter",
+            "org.mozilla.javascript.regexp.NativeRegExp",
+            "org.mozilla.javascript.typedarrays.NativeArrayBuffer"
+        )) {
+            val cl = Class.forName(name)
+            assertEquals("Rhino upgrade moved $name — sync proguard-rules.pro", name, cl.name)
+        }
+    }
 }

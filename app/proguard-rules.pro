@@ -18,6 +18,28 @@
 # references (Context/ContextFactory/Scriptable*/BaseFunction/...).
 -dontwarn java.beans.**
 -dontwarn java.awt.**
+# Reflective names (v9.1.6): Rhino locates these by exact class-name STRING via
+# Kit.classOrNull, so R8 must neither rename NOR strip them — our direct
+# references don't cover them. Verified against rhino-1.7.15 sources:
+# - VMBridge.makeInstance probes VMBridge_custom, then jdk18.VMBridge_jdk18.
+#   When both miss, <clinit> throws IllegalStateException, and EVERY
+#   Context.enter dies with ExceptionInInitializerError — the exact 9.1.5
+#   fleet failure (manonga canary: `sync manonga failed:
+#   java.lang.ExceptionInInitializerError: null`). Full -keep (not just
+#   -keepnames): newInstanceOrNull needs the no-arg constructor to survive too.
+# - Context.createCompiler/createInterpreter probe optimizer.Codegen (skipped
+#   at optimizationLevel=-1, stays stripped) and Interpreter (used: keep).
+# - ScriptRuntime lazily loads RegExp/Continuation/typed-arrays by literal;
+#   XML* only registers when FEATURE_E4X is on (ours is off — not kept).
+# - Bridge functions extend BaseFunction directly (no InterfaceAdapter, so no
+#   JavaAdapter bytecode path). tools/debugger + tools/shell + optimizer +
+#   xml + commonjs stay stripped.
+-keep class org.mozilla.javascript.VMBridge { *; }
+-keep class org.mozilla.javascript.jdk18.VMBridge_jdk18 { *; }
+-keep class org.mozilla.javascript.Interpreter { *; }
+-keep class org.mozilla.javascript.regexp.NativeRegExp { *; }
+-keep class org.mozilla.javascript.NativeContinuation { *; }
+-keep class org.mozilla.javascript.typedarrays.** { *; }
 
 # ── Kotlin coroutines ──────────────────────────────────────────────────────────
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
