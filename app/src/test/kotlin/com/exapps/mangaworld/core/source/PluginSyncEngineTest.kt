@@ -22,6 +22,7 @@ import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -459,8 +460,7 @@ class PluginSyncEngineTest {
     }
 
     @Test
-    fun sweepLogsPerEntryOutcomesForLogcat() = runTest {
-        val manifestUrl = "https://cdn.example/plugins/hijala/v2/plugin.json"
+    fun sweepLogsPerEntryOutcomesForLogcat() = runTest {        val manifestUrl = "https://cdn.example/plugins/hijala/v2/plugin.json"
         val bodies = mutableMapOf(
             "https://cdn.example/plugins/index.json" to indexJson(Triple("hijala", 2, manifestUrl)),
             manifestUrl to manifestBytes("hijala", 2)
@@ -470,6 +470,24 @@ class PluginSyncEngineTest {
         // v9.1.2: non-trivial outcomes get their own line; the summary always lands.
         assertTrue(h.logs.any { it.contains("sync hijala -> Updated") })
         assertTrue(h.logs.any { it.contains("sync done:") && it.contains("notModified=false") })
+    }
+
+    @Test
+    fun abortedSweepLogsCauseForLogcat() = runTest {
+        // Empty bodies: even the index fetch 404s, so the sweep aborts before
+        // any outcome exists. v9.1.3: the abort still logs class+message (and
+        // still emits the SyncAborted telemetry report) — transport-level
+        // failures must never be fully silent on-device again.
+        val h = harness(mutableMapOf())
+        try {
+            h.sync()
+            fail("expected abort")
+        } catch (e: PluginFetcher.FetchFailure.Http) {
+            // Expected: FakeFetcher 404s the index fetch.
+        }
+        assertTrue(h.logs.any { it.contains("sync aborted:") })
+        val report = h.telemetry.syncs.single()
+        assertEquals(1, report.outcomeCounts["SyncAborted"])
     }
 
     @Test

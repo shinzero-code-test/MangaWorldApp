@@ -178,6 +178,10 @@ class PluginSyncEngine @Inject constructor(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            // v9.1.3: aborts log their cause class+message to logcat (not just
+            // Crashlytics telemetry) — transport-level failures otherwise leave
+            // zero on-device trace, which made a real fleet issue invisible.
+            log("sync aborted: ${e.javaClass.simpleName}: ${e.message?.take(160)}")
             telemetry.logSync(
                 com.exapps.mangaworld.core.source.plugins.PluginSyncReport(
                     indexNotModified = false,
