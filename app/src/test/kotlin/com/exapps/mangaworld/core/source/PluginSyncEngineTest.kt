@@ -57,10 +57,10 @@ class PluginSyncEngineTest {
         override fun set(etag: String?) {
             value = etag
         }
-        var unresolved: Set<String> = emptySet()
-        override fun getUnresolved(): Set<String> = unresolved
+        var unresolvedIds: Set<String> = emptySet()
+        override fun getUnresolved(): Set<String> = unresolvedIds
         override fun setUnresolved(ids: Set<String>) {
-            unresolved = ids
+            unresolvedIds = ids
         }
     }
 
@@ -459,7 +459,7 @@ class PluginSyncEngineTest {
         val h = harness(bodies, etags = etags)
         val first = h.sync()
         assertTrue(first.outcomes["ghost"] is PluginSyncEngine.EntryOutcome.Failed)
-        assertEquals(setOf("ghost"), etags.unresolved)
+        assertEquals(setOf("ghost"), etags.unresolvedIds)
         val indexHitsBefore = h.fetcher.requests.count { it.endsWith("index.json") }
         val second = h.sync()
         assertTrue(!second.indexNotModified)
