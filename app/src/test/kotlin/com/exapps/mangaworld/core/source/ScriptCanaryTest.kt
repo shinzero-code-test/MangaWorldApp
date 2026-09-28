@@ -188,4 +188,34 @@ class ScriptCanaryTest {
         assertTrue(genres.contains("أكشن"))
         assertTrue(genres.size >= 30)
     }
+
+    @Test
+    fun homeServesLiveSnapshot() = runTest {
+        // v9.1.9 diagnostic: the 9.1.9 fleet post-smoke (live network) rolled
+        // back while every fixture gate stays green. Drive the REAL home path
+        // against a byte-identical live snapshot (no sockets): a throw here
+        // reproduces with a full JVM stack; a pass isolates the failure to
+        // the on-device bridge fetch/policy layer.
+        val live = dashboardFile(
+            "plugins", "_incoming", "manonga", "diagnostics", "home-20260928.html"
+        ).readBytes()
+        val manifest = verifiedManifest()
+        val factory = ScriptRunnerFactory(
+            ScriptContextFactory(),
+            ScriptTestSupport.FakeFetcher(
+                mutableMapOf("https://manonga.online/" to live)
+            ),
+            ScriptLogger { _, _, _ -> },
+            RecordingPluginTelemetry(),
+            Dispatchers.Unconfined
+        )
+        val scraper = factory.create(manifest, published("source.js")).getOrThrow()
+        val home = scraper.getHomeData().getOrThrow()
+        println(
+            "LIVE-SNAPSHOT: featured=${home.featured.size} " +
+                "latest=${home.latestChapters.size}"
+        )
+        assertTrue(home.featured.isNotEmpty())
+        assertTrue(home.latestChapters.isNotEmpty())
+    }
 }
