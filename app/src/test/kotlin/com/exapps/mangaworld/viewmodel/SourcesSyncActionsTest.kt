@@ -90,7 +90,10 @@ class SourcesSyncActionsTest {
             health = mockk(relaxed = true),
             appContext = appContext,
             indexStore = index
-        )
+        ).also {
+            // v9.1.8 lifecycle sink is raw android.util.Log (throws on JVM).
+            it.log = {}
+        }
     }
 
     @Test

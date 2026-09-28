@@ -75,6 +75,15 @@ class SourcesViewModel @Inject constructor(
     /** One-shot string-resource ids for snackbars. */
     val notice: SharedFlow<Int> = _notice.asSharedFlow()
 
+    /**
+     * Refresh-tap lifecycle sink (v9.1.8): the on-device 9.1.7 refresh
+     * produced zero engine lines with an enabled button, so the tap→sweep
+     * chain itself went dark — these lines bracket it (tap received,
+     * coroutine started, engine entered/returned/threw, flag reset).
+     * Plain `android.util.Log` throws on JVM unit tests, so tests replace it.
+     */
+    var log: (String) -> Unit = { android.util.Log.i("SourcesSync", it) }
+
     init {
         refresh()
         // Observe per-source notification settings
@@ -201,7 +210,9 @@ class SourcesViewModel @Inject constructor(
 
     /** On-demand distribution check (Sources action; periodic schedule owns the rest). */
     fun checkForUpdates() {
+        log("refresh tapped")
         viewModelScope.launch {
+            log("sweep coroutine started")
             _syncing.value = true
             try {
                 // v9.1.4: run the sweep INLINE in the foreground instead of only
@@ -210,22 +221,27 @@ class SourcesViewModel @Inject constructor(
                 // a user-initiated check must not depend on it. The engine is
                 // main-safe (withContext(io) throughout); the periodic worker
                 // remains the background path.
+                log("sweep calling engine")
                 val result = syncEngine.sync(
                     trustedKeys = trustKeys.current(),
                     host = PluginTrust.productionCapabilities(BuildConfig.VERSION_NAME),
                     killSwitchJson = remoteConfig.pluginKillSwitchJson(),
                     baseDir = File(appContext.filesDir, "plugins")
                 )
+                log("sweep returned ${result.outcomes.size} outcomes")
                 val updated = result.outcomes.count { it.value is PluginSyncEngine.EntryOutcome.Updated }
                 _notice.emit(
                     if (updated > 0) R.string.plugin_check_updated
                     else R.string.plugin_check_done
                 )
             } catch (e: kotlinx.coroutines.CancellationException) {
+                log("sweep cancelled")
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                log("sweep threw ${e.javaClass.name}: ${e.message?.take(160)}")
                 _notice.emit(R.string.plugin_check_failed)
             } finally {
+                log("sweep finally: resetting syncing")
                 _syncing.value = false
                 refresh()
             }
