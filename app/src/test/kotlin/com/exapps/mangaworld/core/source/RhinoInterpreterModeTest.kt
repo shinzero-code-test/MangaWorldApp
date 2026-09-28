@@ -75,6 +75,7 @@ class RhinoInterpreterModeTest {
             "org.mozilla.javascript.jdk18.VMBridge_jdk18",
             "org.mozilla.javascript.Interpreter",
             "org.mozilla.javascript.regexp.NativeRegExp",
+            "org.mozilla.javascript.regexp.RegExpImpl",
             "org.mozilla.javascript.typedarrays.NativeArrayBuffer"
         )) {
             val cl = Class.forName(name)

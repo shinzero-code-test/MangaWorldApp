@@ -31,13 +31,19 @@
 #   at optimizationLevel=-1, stays stripped) and Interpreter (used: keep).
 # - ScriptRuntime lazily loads RegExp/Continuation/typed-arrays by literal;
 #   XML* only registers when FEATURE_E4X is on (ours is off — not kept).
+# - Regex pre-compilation (CodeGenerator.generateRegExpLiterals, shared by the
+#   interpreter path) resolves its engine via Context.getRegExpProxy, which
+#   probes the literal "org.mozilla.javascript.regexp.RegExpImpl". When that
+#   misses, EVERY script containing a regex literal fails to compile with
+#   msg.no.regexp ("Regular expressions are not available") — the exact 9.1.6
+#   fleet failure (manonga source.js regex literals). Hence regexp.** above.
 # - Bridge functions extend BaseFunction directly (no InterfaceAdapter, so no
 #   JavaAdapter bytecode path). tools/debugger + tools/shell + optimizer +
 #   xml + commonjs stay stripped.
 -keep class org.mozilla.javascript.VMBridge { *; }
 -keep class org.mozilla.javascript.jdk18.VMBridge_jdk18 { *; }
 -keep class org.mozilla.javascript.Interpreter { *; }
--keep class org.mozilla.javascript.regexp.NativeRegExp { *; }
+-keep class org.mozilla.javascript.regexp.** { *; }
 -keep class org.mozilla.javascript.NativeContinuation { *; }
 -keep class org.mozilla.javascript.typedarrays.** { *; }
 
