@@ -248,7 +248,16 @@ class PluginSyncEngine @Inject constructor(
             .eachCount()
         result.outcomes.forEach { (id, outcome) ->
             if (outcome !is EntryOutcome.UpToDate) {
-                log("sync $id -> ${outcome.code}")
+                // v9.1.7: terminal outcomes carry the gate reason in the
+                // outcome itself — log it. (The 9.1.6 manonga Rejected was
+                // undiagnosable from the code alone; the reason names the fix.)
+                val detail = when (outcome) {
+                    is EntryOutcome.Rejected -> " ${outcome.reason.take(160)}"
+                    is EntryOutcome.Skipped -> " ${outcome.reason.take(160)}"
+                    is EntryOutcome.Failed -> " ${outcome.reason.take(160)}"
+                    else -> ""
+                }
+                log("sync $id -> ${outcome.code}$detail")
             }
         }
         log(

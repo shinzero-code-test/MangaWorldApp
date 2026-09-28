@@ -239,6 +239,24 @@ class PluginSyncEngineTest {
     }
 
     @Test
+    fun terminalOutcomeLinesCarryTheGateReason() = runTest {
+        // v9.1.7: a bare `-> Rejected` code is undiagnosable on fleet builds
+        // (the 9.1.6 manonga case) — the reason must ride the log line.
+        val manifestUrl = "https://cdn.example/plugins/hijala/v2/plugin.json"
+        val good = manifestBytes("hijala", 2)
+        good[good.size / 2] = (good[good.size / 2].toInt() xor 0xFF).toByte()
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson(Triple("hijala", 2, manifestUrl)),
+            manifestUrl to good
+        )
+        val h = harness(bodies)
+        h.sync()
+        val line = h.logs.firstOrNull { it.contains("sync hijala -> Rejected") }
+        assertTrue("missing outcome line: ${h.logs}", line != null)
+        assertTrue("reason missing: $line", line!!.length > "sync hijala -> Rejected".length)
+    }
+
+    @Test
     fun forgedIndexBumpRejectedByIdVersionBind() = runTest {
         // Index claims v99; the only signed bytes in the world are v2.
         val manifestUrl = "https://cdn.example/plugins/hijala/v99/plugin.json"
