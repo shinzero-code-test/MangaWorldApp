@@ -174,9 +174,15 @@ DASH_PIN = "o01gRyLfjV9Zxuo8rOxYB/kdMvPt9mLHbv/tKN9k9FM="
 
 def cmd_selftest():
     pub = load_public_key_b64(DASH_PIN)
-    # 1. shipped pilots verify (oracle: our JCS == the original signer's bytes)
-    for pid in ("hijala", "lavascans", "manonga"):
-        path = os.path.join(REPO, "dashboard/public/plugins/%s/v1/plugin.json" % pid)
+    # 1. promoted manifests verify (oracle: our JCS == the original signer's
+    # bytes). Follows the index (versions move; v1 lives in _archive).
+    index = json.loads(
+        open(os.path.join(REPO, "dashboard/public/plugins/index.json"), encoding="utf-8").read(),
+        object_pairs_hook=_no_dupes,
+    )
+    for e in index["entries"]:
+        pid, ver = e["id"], e["version"]
+        path = os.path.join(REPO, "dashboard/public/plugins/%s/v%d/plugin.json" % (pid, ver))
         text = open(path, encoding="utf-8").read()
         node = json.loads(text, object_pairs_hook=_no_dupes)
         key_id, sig = parse_sig_header(node["signature"])
