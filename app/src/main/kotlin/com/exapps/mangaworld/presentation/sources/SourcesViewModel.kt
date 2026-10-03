@@ -141,7 +141,7 @@ class SourcesViewModel @Inject constructor(
             _state.update {
                 it.copy(
                     enabledSources = it.enabledSources + (
-                        sourceId to (outcome != com.exapps.mangaworld.core.source.sync.PluginToggleReconciler.ToggleOutcome.ApprovalFailed)
+                        sourceId to (outcome !is com.exapps.mangaworld.core.source.sync.PluginToggleReconciler.ToggleOutcome.ApprovalFailed)
                     )
                 )
             }

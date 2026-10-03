@@ -592,7 +592,9 @@ class PluginSyncEngine @Inject constructor(
         }
         val existing = registry.pluginFor(entry.id)
         if (existing != null && registry.isBuiltin(entry.id)) {
-            return syncOverride(entry, record, existing, manifest, manifestBytes, postSmoke, baseDir)
+            return syncOverride(
+                entry, record, existing, manifest, manifestBytes, scriptBytes, postSmoke, baseDir
+            )
         }
         if (existing != null) {
             // Installed REMOTE id (override or new id): never the builtin
@@ -690,6 +692,7 @@ class PluginSyncEngine @Inject constructor(
         builtin: SourcePlugin,
         manifest: PluginManifest,
         manifestBytes: ByteArray,
+        scriptBytes: ByteArray?,
         postSmoke: PostSmoke,
         baseDir: File
     ): EntryOutcome {
@@ -826,6 +829,9 @@ class PluginSyncEngine @Inject constructor(
                 return EntryOutcome.Rejected("${persisted.reason}: ${persisted.message.take(120)}")
             is PluginStore.InstallResult.Installed -> Unit
         }
+        // Explicit type: smart-cast does not survive capture into the registry
+        // plugin below, so bind the non-null runner once, by name.
+        val runner: MangaScraper = scraper
         val plugin = object : SourcePlugin {
             override val descriptor: PluginManifest = manifest
             override val display = existing.display
