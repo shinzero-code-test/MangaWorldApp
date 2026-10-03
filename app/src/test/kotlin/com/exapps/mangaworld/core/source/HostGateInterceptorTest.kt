@@ -1,14 +1,7 @@
 package com.exapps.mangaworld.core.source
 
 import com.exapps.mangaworld.core.source.plugins.HostGateInterceptor
-import io.mockk.answers
-import io.mockk.capture
-import io.mockk.every
-import io.mockk.firstArg
-import io.mockk.mockk
-import io.mockk.slot
-import io.mockk.verify
-import io.mockk.slot
+import io.mockk.*
 import java.io.IOException
 import okhttp3.Interceptor
 import okhttp3.Protocol

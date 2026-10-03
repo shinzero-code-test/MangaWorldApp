@@ -7,6 +7,7 @@ import com.exapps.mangaworld.core.source.plugins.PluginOrigin
 import com.exapps.mangaworld.core.source.plugins.PluginRunnerFactory
 import com.exapps.mangaworld.core.source.plugins.PluginStatus
 import com.exapps.mangaworld.core.source.plugins.PluginStore
+import com.exapps.mangaworld.core.source.plugins.SourceRegistry
 import com.exapps.mangaworld.core.source.plugins.ScriptPluginLoader
 import com.exapps.mangaworld.core.source.plugins.SourceEngine
 import com.exapps.mangaworld.core.source.script.ScriptRunnerFactory
@@ -759,7 +760,10 @@ class PluginScriptSyncTest {
             trustedKeys = trust, host = host,
             indexUrl = "https://cdn.example/plugins/index.json",
             postSmoke = PostSmoke.Custom({
-                throw kotlinx.coroutines.TimeoutCancellationException("60 ms")
+                kotlinx.coroutines.withTimeout(1) {
+                    kotlinx.coroutines.delay(1_000)
+                }
+                true
             }),
             baseDir = tmp.root
         )

@@ -7,10 +7,7 @@ import com.exapps.mangaworld.core.source.plugins.SourceRegistry
 import com.exapps.mangaworld.core.data.remote.scraper.MangaScraper
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
-import io.mockk.answers
-import io.mockk.firstArg
-import io.mockk.every
-import io.mockk.mockk
+import io.mockk.*
 import javax.inject.Provider
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher

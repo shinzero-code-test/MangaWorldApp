@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.core.source
 
 import com.exapps.mangaworld.core.source.plugins.HostCapabilities
+import com.exapps.mangaworld.core.source.plugins.SourceRegistry
 import com.exapps.mangaworld.core.source.plugins.PluginIndexRecord
 import com.exapps.mangaworld.core.source.plugins.PluginIndexStore
 import com.exapps.mangaworld.core.source.plugins.PluginOrigin
