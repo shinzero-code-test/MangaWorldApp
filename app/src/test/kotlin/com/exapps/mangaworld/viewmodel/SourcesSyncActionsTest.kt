@@ -108,8 +108,17 @@ class SourcesSyncActionsTest {
         } returns PluginSyncEngine.SyncResult(
             outcomes = mapOf("manonga" to PluginSyncEngine.EntryOutcome.Updated(false))
         )
-        val scheduler: PluginSyncScheduler = mockk()
-        every { scheduler.recordSyncCompleted(any()) } returns Unit
+        // Real scheduler over fake prefs (D8): stubbing recordSyncCompleted
+        // with matchers never matches (default-arg timestamp evaluates per
+        // call), so verify the prefs write instead.
+        val editor: android.content.SharedPreferences.Editor = mockk(relaxed = true)
+        val prefs: android.content.SharedPreferences = mockk {
+            every { edit() } returns editor
+        }
+        val schedCtx: Context = mockk<Context>(relaxed = true).apply {
+            every { getSharedPreferences(any(), any()) } returns prefs
+        }
+        val scheduler = PluginSyncScheduler(schedCtx)
         val viewModel = vm(engine = engine, scheduler = scheduler)
         advanceUntilIdle()
         val notices = mutableListOf<Int>()
@@ -120,7 +129,7 @@ class SourcesSyncActionsTest {
         assertTrue(notices.contains(com.exapps.mangaworld.R.string.plugin_check_updated))
         assertEquals(false, viewModel.syncing.value)
         // D8: a finished manual sweep resets the boot-stale window.
-        coVerify { scheduler.recordSyncCompleted() }
+        coVerify { editor.putLong("last_sync_ms", any()) }
         collect.cancel()
     }
 
