@@ -109,7 +109,7 @@ class ScriptCanaryTest {
         )
         result as ManifestResult.Valid
         assertEquals("manonga", result.manifest.id.value)
-        assertEquals(1, result.manifest.version)
+        assertEquals(promotedVersion(), result.manifest.version)
         // The pin binds the exact promoted bytes (checked again at build).
         assertEquals(
             result.manifest.scriptSha256,
