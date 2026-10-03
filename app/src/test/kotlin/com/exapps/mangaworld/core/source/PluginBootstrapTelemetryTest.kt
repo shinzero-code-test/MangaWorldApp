@@ -147,7 +147,7 @@ class PluginBootstrapTelemetryTest {
             it.put("baseUrl", "https://hijala.example")
         }
         val bytes = PluginTestFixtures.signManifest(node, "k1", kp.private)
-        val dir = File(tmp.root, "hijala/versions/1")
+        val dir = File(tmp.root, "plugins/hijala/versions/1")
         assertTrue(dir.mkdirs())
         File(dir, "plugin.json").writeBytes(bytes)
         val index = FakeIndex()

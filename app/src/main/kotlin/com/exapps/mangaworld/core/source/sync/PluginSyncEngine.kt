@@ -970,6 +970,10 @@ class PluginSyncEngine @Inject constructor(
             is PostSmoke.Custom -> try {
                 if (postSmoke.fn(plugin)) SmokeResult.Passed
                 else SmokeResult.Failed("custom smoke refused")
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                // A withTimeout budget inside the probe (not outer
+                // cancellation — that type is JobCancellationException).
+                SmokeResult.TimedOut
             } catch (e: Exception) {
                 SmokeResult.Failed(e.message?.take(120) ?: "custom smoke threw")
             }

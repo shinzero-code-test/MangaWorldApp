@@ -109,7 +109,7 @@ class SourcesSyncActionsTest {
             outcomes = mapOf("manonga" to PluginSyncEngine.EntryOutcome.Updated(false))
         )
         val scheduler: PluginSyncScheduler = mockk()
-        every { scheduler.recordSyncCompleted() } returns Unit
+        every { scheduler.recordSyncCompleted(any()) } returns Unit
         val viewModel = vm(engine = engine, scheduler = scheduler)
         advanceUntilIdle()
         val notices = mutableListOf<Int>()
@@ -151,7 +151,10 @@ class SourcesSyncActionsTest {
         coEvery {
             engine.approveHeld(any(), any(), any(), any(), any(), any())
         } returns PluginSyncEngine.ApproveOutcome.Approved
-        val settings: SettingsRepository = mockk(relaxed = true)
+        val settings: SettingsRepository = mockk<SettingsRepository>(relaxed = true).apply {
+            every { getAppSettings() } returns
+                flowOf(com.exapps.mangaworld.domain.model.AppSettings(enabledSources = setOf("azora")))
+        }
         val held = PluginIndexRecord(
             id = "gated", activeVersion = 1, previousVersion = null,
             origin = PluginOrigin.OFFICIAL, status = PluginStatus.DISABLED,
@@ -168,7 +171,9 @@ class SourcesSyncActionsTest {
         val idSlot = slot<String>()
         coVerify { engine.approveHeld(capture(idSlot), any(), any(), any(), any(), any()) }
         assertEquals("gated", idSlot.captured)
-        coVerify { settings.toggleSource("gated", true) }
+        // The settings flip lives inside the real approveHeld (mocked here);
+        // the VM's job is routing + notice. The flip itself is covered by
+        // PluginScriptSyncTest.approveDescriptorHoldRegistersAndEnables.
         assertTrue(notices.contains(com.exapps.mangaworld.R.string.plugin_approved))
         collect.cancel()
     }
@@ -179,7 +184,10 @@ class SourcesSyncActionsTest {
         coEvery {
             engine.approveHeld(any(), any(), any(), any(), any(), any())
         } returns PluginSyncEngine.ApproveOutcome.Failed("smoke failed")
-        val settings: SettingsRepository = mockk(relaxed = true)
+        val settings: SettingsRepository = mockk<SettingsRepository>(relaxed = true).apply {
+            every { getAppSettings() } returns
+                flowOf(com.exapps.mangaworld.domain.model.AppSettings(enabledSources = setOf("azora")))
+        }
         val held = PluginIndexRecord(
             id = "gated", activeVersion = 1, previousVersion = null,
             origin = PluginOrigin.OFFICIAL, status = PluginStatus.DISABLED,

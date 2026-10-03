@@ -101,6 +101,23 @@ class ScriptRunnerTest {
     }
 
     @Test
+    fun oversizeResultStringRejected() = runTest {
+        // C-8: a single giant string must fail at the JS->Kotlin boundary,
+        // before validators materialize it (transient OOM vector on the
+        // 2-thread script pool). 2 MiB description vs 1 MiB conversion cap.
+        val big = source.replace(
+            "description: 'demo'",
+            "description: 'x'.repeat(2 * 1024 * 1024)"
+        )
+        val result = runner(big).getMangaDetail("a")
+        assertTrue(result.isFailure)
+        assertTrue(
+            "${result.exceptionOrNull()}",
+            result.exceptionOrNull()!!.message!!.contains("too large")
+        )
+    }
+
+    @Test
     fun detailMaps() = runTest {
         val detail = runner().getMangaDetail("a").getOrThrow()
         assertEquals("Alpha", detail.title)

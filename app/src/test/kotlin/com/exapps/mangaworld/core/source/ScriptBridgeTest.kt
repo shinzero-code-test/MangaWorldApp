@@ -122,19 +122,6 @@ class ScriptBridgeTest {
     }
 
     @Test
-    fun oversizeResultStringRejected() {
-        // C-8: a single giant string must fail at the JS->Kotlin boundary,
-        // before validators materialize it (transient OOM vector on the
-        // 2-thread script pool).
-        val session = sessionWith()
-        evalFails(
-            "('x'.repeat(2 * 1024 * 1024))",
-            session,
-            "too large"
-        )
-    }
-
-    @Test
     fun fetchSurfacesHttpStatus() {
         evalFails(
             "fetch('https://script.example/nope')", sessionWith(status = 404),
