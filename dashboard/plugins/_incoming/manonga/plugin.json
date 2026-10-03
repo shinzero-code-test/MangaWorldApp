@@ -22,6 +22,6 @@
   ],
   "timeoutMs": 15000,
   "maxResponseMb": 10,
-  "scriptSha256": "94d132a5a19df1a8a766937ffc383c75a584b19862142a68dee59bef23cce3e8",
-  "signature": "ed25519:official-1:xTRZoBzfKXIMORJw9tjn24wAm4Jpu0qARl5JznQszFFaq+Zjw+a56S4bAN98tkf5x6DPGc3dM6+KE9Mvu5N+Cw=="
+  "scriptSha256": "COMPUTE_AT_PROMOTE_SEE_README",
+  "signature": "ADDED_AT_SIGN_STEP_SEE_README"
 }
