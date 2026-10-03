@@ -36,6 +36,11 @@ over HTTP and the app never reads it — promotion is a deliberate human act.
   version bump — re-publishing v1 bytes is refused on-device as immutable.
 - `updatedAt`-only index re-touches do NOT re-drive `UpToDate`/held entries
   on device; use a version bump (new behavior to verify) or explicit approval.
+- Trust calendar: manifests carry `issuedAt` and downloaded trust older
+  than 90 days is rejected. Re-issue (new `issuedAt` + version bump +
+  re-sign) well before expiry — same-version bytes can never be re-signed
+  (immutability). Current anchors: `hijala`/`lavascans` 2026-09-24,
+  `manonga` v2 2026-10-03.
 - `manonga` ships `enabledByDefault: false` (dogfood-only): fresh installs
   land DISABLED until opted in — distinguish opt-in state from sync failure
   in fleet reports.
