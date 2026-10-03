@@ -47,3 +47,10 @@
       `plugin_sync` (Updated for manonga), `script_call` samples, no
       unintended quarantines
 - [ ] v2 update drill + rollback drill per `tmp/stabilization-plan-v9.md`
+
+## v2 (2026-10-03) — blank-image guards only
+- `pickSrc`: return `""` on blank input before `resolveUrl` (cover-less cards).
+- `pages`: skip blank `raw` (spacer/tracking pixels) before `resolveUrl`.
+- No route/selector/output-shape changes; fixtures re-validate unchanged.
+- Purpose: payload-side parity with the bridge's blank tolerance + the first
+  exercise of the remote SCRIPT v1→v2 update path (F2 fix verification).
