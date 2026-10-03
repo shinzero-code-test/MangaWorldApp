@@ -103,14 +103,18 @@ class ManongaSyncReproTest {
         val v = promotedVersion()
         val manifestBytes = dashboardFile("public", "plugins", "manonga", "v$v", "plugin.json").readBytes()
         val scriptBytes = dashboardFile("public", "plugins", "manonga", "v$v", "source.js").readBytes()
-        val manifestUrl = "https://cdn.example/plugins/manonga/v1/plugin.json"
+        // Fake distribution URLs stay fixed-host; the entry version tracks
+        // the promoted manifest (authorizeInstall binds id+version).
+        val manifestUrl = "https://cdn.example/plugins/manonga/v$v/plugin.json"
         val indexUrl = "https://cdn.example/plugins/index.json"
         val bodies = mapOf(
             indexUrl to
-                """{"schemaVersion":1,"updatedAt":"2026-09-27T13:59:34Z","entries":[{"id":"manonga","version":1,"kind":"script","minAppVersion":"9.1.0","manifestUrl":"$manifestUrl"}]}"""
+                ("{\"schemaVersion\":1,\"updatedAt\":\"2026-09-27T13:59:34Z\",\"entries\"" +
+                    ":[{\"id\":\"manonga\",\"version\":$v,\"kind\":\"script\"," +
+                    "\"minAppVersion\":\"9.1.0\",\"manifestUrl\":\"$manifestUrl\"}]}")
                     .toByteArray(Charsets.UTF_8),
             manifestUrl to manifestBytes,
-            "https://cdn.example/plugins/manonga/v1/source.js" to scriptBytes
+            "https://cdn.example/plugins/manonga/v$v/source.js" to scriptBytes
         )
         val index = FakeIndex()
         val store = PluginStore(index, Dispatchers.Unconfined)
