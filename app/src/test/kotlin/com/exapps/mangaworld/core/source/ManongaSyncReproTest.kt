@@ -87,10 +87,22 @@ class ManongaSyncReproTest {
         }
     }
 
+    /** Promoted version follows `public/plugins/index.json` (see ScriptCanaryTest). */
+    private fun promotedVersion(): Int {
+        val text = dashboardFile("public", "plugins", "index.json").readText()
+        val entries = org.json.JSONObject(text).getJSONArray("entries")
+        for (i in 0 until entries.length()) {
+            val e = entries.getJSONObject(i)
+            if (e.getString("id") == "manonga") return e.getInt("version")
+        }
+        error("manonga entry missing from promoted index")
+    }
+
     @Test
     fun promotedManongaInstallsThroughRealSyncPath() = runTest {
-        val manifestBytes = dashboardFile("public", "plugins", "manonga", "v1", "plugin.json").readBytes()
-        val scriptBytes = dashboardFile("public", "plugins", "manonga", "v1", "source.js").readBytes()
+        val v = promotedVersion()
+        val manifestBytes = dashboardFile("public", "plugins", "manonga", "v$v", "plugin.json").readBytes()
+        val scriptBytes = dashboardFile("public", "plugins", "manonga", "v$v", "source.js").readBytes()
         val manifestUrl = "https://cdn.example/plugins/manonga/v1/plugin.json"
         val indexUrl = "https://cdn.example/plugins/index.json"
         val bodies = mapOf(

@@ -62,11 +62,23 @@ class ScriptCanaryTest {
             )
     }
 
+    /** Promoted version follows `public/plugins/index.json` (v1 lives in `_archive`
+     * after a promotion — hardcoding a version breaks on every bump). */
+    private fun promotedVersion(): Int {
+        val text = dashboardFile("public", "plugins", "index.json").readText()
+        val entries = org.json.JSONObject(text).getJSONArray("entries")
+        for (i in 0 until entries.length()) {
+            val e = entries.getJSONObject(i)
+            if (e.getString("id") == "manonga") return e.getInt("version")
+        }
+        error("manonga entry missing from promoted index")
+    }
+
     private fun staging(name: String): ByteArray =
         dashboardFile("plugins", "_incoming", "manonga", name).readBytes()
 
     private fun published(name: String): ByteArray =
-        dashboardFile("public", "plugins", "manonga", "v1", name).readBytes()
+        dashboardFile("public", "plugins", "manonga", "v${promotedVersion()}", name).readBytes()
 
     private fun fixture(name: String): ByteArray =
         dashboardFile("plugins", "_incoming", "manonga", "fixtures", name).readBytes()
