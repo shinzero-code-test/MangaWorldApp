@@ -116,8 +116,8 @@ class ScriptBridgeTest {
             """.trimIndent(),
             session
         )
-        assertTrue(json, json.contains('"blank":""'))
-        assertTrue(json, json.contains('"missing":""'))
+        assertTrue(json, json.contains("\"blank\":\"\""))
+        assertTrue(json, json.contains("\"missing\":\"\""))
         assertTrue(json, json.contains("https://script.example/manga/three/"))
     }
 

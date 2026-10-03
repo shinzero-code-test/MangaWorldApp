@@ -618,6 +618,7 @@ class PluginScriptSyncTest {
             runners, settings, RecordingPluginTelemetry(),
             kotlinx.coroutines.Dispatchers.Unconfined
         )
+        // android.util.Log throws on JVM: neutralize unless the test captures.
         e.log = { }
         return Triple(e, index, registry)
     }
@@ -646,8 +647,9 @@ class PluginScriptSyncTest {
             manifestUrl to scriptManifest("scriptnew", 1, js1, "https://scriptnew.example"),
             scriptUrl to js1
         )
-        val (e, index, registry) = updateEngine(bodies)
-        val first = sync()
+        val t = updateEngine(bodies)
+        val (e, index, registry) = t
+        val first = t.sync()
         assertTrue(first.outcomes["scriptnew"] is PluginSyncEngine.EntryOutcome.Updated)
         val v2manifestUrl = "https://cdn.example/plugins/scriptnew/v2/plugin.json"
         val v2scriptUrl = "https://cdn.example/plugins/scriptnew/v2/source.js"
@@ -656,7 +658,7 @@ class PluginScriptSyncTest {
             indexJson(Triple("scriptnew", 2, v2manifestUrl))
         bodies[v2manifestUrl] = scriptManifest("scriptnew", 2, js2, "https://scriptnew.example")
         bodies[v2scriptUrl] = js2
-        val second = sync()
+        val second = t.sync()
         assertTrue(second.outcomes["scriptnew"] is PluginSyncEngine.EntryOutcome.Updated)
         val rec = index.get("scriptnew")!!
         assertEquals(2, rec.activeVersion)
@@ -681,8 +683,9 @@ class PluginScriptSyncTest {
                 it.put("baseUrl", "https://descnew.example")
             }
         )
-        val (e, index, registry) = updateEngine(bodies)
-        val first = sync()
+        val t = updateEngine(bodies)
+        val (e, index, registry) = t
+        val first = t.sync()
         assertTrue(first.outcomes["descnew"] is PluginSyncEngine.EntryOutcome.Updated)
         val before = registry.scraperFor("descnew")!!
         val v2manifestUrl = "https://cdn.example/plugins/descnew/v2/plugin.json"
@@ -691,7 +694,7 @@ class PluginScriptSyncTest {
         bodies[v2manifestUrl] = manifestBytes("descnew", 2) {
             it.put("baseUrl", "https://descnew-moved.example")
         }
-        val second = sync()
+        val second = t.sync()
         assertTrue(second.outcomes["descnew"] is PluginSyncEngine.EntryOutcome.Updated)
         assertEquals("https://descnew-moved.example", registry.descriptorFor("descnew")!!.baseUrl)
         assertTrue(registry.scraperFor("descnew")!! !== before)

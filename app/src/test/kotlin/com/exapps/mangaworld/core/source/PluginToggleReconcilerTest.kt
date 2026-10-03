@@ -10,11 +10,7 @@ import com.exapps.mangaworld.core.source.plugins.PluginTrustKeys
 import com.exapps.mangaworld.core.source.sync.PluginSyncEngine
 import com.exapps.mangaworld.core.source.sync.PluginToggleReconciler
 import com.exapps.mangaworld.domain.repository.SettingsRepository
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.eq
-import io.mockk.every
-import io.mockk.mockk
+import io.mockk.*
 import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest

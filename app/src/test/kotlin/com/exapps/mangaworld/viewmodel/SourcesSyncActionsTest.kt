@@ -10,12 +10,7 @@ import com.exapps.mangaworld.core.source.sync.PluginSyncEngine
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.core.source.SourceUiTestFixtures
 import com.exapps.mangaworld.presentation.sources.SourcesViewModel
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.capture
-import io.mockk.slot
-import io.mockk.every
-import io.mockk.mockk
+import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
