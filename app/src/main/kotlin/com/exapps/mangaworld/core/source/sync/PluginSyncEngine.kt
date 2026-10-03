@@ -992,7 +992,19 @@ class PluginSyncEngine @Inject constructor(
                             SmokeResult.Failed("smoke home empty")
                         }
                     },
-                    onFailure = { SmokeResult.Failed(it.message?.take(120) ?: "smoke read failed") }
+                    onFailure = {
+                        // v9.2.1: the fleet failure reason alone ("RegExp")
+                        // does not identify the thrower — log class + stack
+                        // head like the per-entry path does.
+                        log("smoke read failed: ${it.javaClass.name}: ${it.message?.take(160)}")
+                        log(
+                            "smoke read stack: " + it.stackTrace
+                                .take(8)
+                                .joinToString(" <- ") { "${it.className}.${it.methodName}:${it.lineNumber}" }
+                                .take(900)
+                        )
+                        SmokeResult.Failed(it.message?.take(120) ?: "smoke read failed")
+                    }
                 )
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
                 SmokeResult.TimedOut
