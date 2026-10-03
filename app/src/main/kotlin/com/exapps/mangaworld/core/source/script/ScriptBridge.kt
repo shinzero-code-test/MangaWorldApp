@@ -285,8 +285,17 @@ object ScriptBridge {
     private class ResolveUrlFn(val session: ScriptBridgeSession) : BaseFunction() {
         override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
             val doc = requiredHandle(args, session)
-            val href = requiredString(args, 1, "href", ScriptContract.MAX_URL_CHARS)
-            return absolutizeHref(doc, href)
+            // F3: blank-tolerant like absolutizeHref (and the publish-gate
+            // harness, which models `if (!t) return ""`). A missing image
+            // attribute must yield "" for the caller to skip — never fail a
+            // whole home/browse/pages call. Length still capped.
+            val raw = args.getOrNull(1)
+                ?.takeUnless { it == Undefined.instance || it == null }
+                ?.let { Context.toString(it) }.orEmpty()
+            if (raw.length > ScriptContract.MAX_URL_CHARS) {
+                throw ScriptBridgeException("href exceeds ${ScriptContract.MAX_URL_CHARS} chars")
+            }
+            return absolutizeHref(doc, raw)
         }
     }
 

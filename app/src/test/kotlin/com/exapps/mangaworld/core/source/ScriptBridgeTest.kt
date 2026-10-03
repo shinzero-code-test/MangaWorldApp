@@ -98,6 +98,43 @@ class ScriptBridgeTest {
     }
 
     @Test
+    fun resolveUrlBlankYieldsEmpty() {
+        // F3: blank/missing hrefs (cover-less cards, spacer pixels) must
+        // yield "" for the caller to skip -- never fail the whole call.
+        // Matches the publish-gate harness contract (`if (!t) return ""`).
+        val session = sessionWith()
+        val json = evalOk(
+            """
+            (function(){
+              var doc = parse(${jsString(html)});
+              return {
+                blank: resolveUrl(doc, ''),
+                missing: resolveUrl(doc),
+                valid: resolveUrl(doc, '/manga/three/')
+              };
+            })()
+            """.trimIndent(),
+            session
+        )
+        assertTrue(json, json.contains('"blank":""'))
+        assertTrue(json, json.contains('"missing":""'))
+        assertTrue(json, json.contains("https://script.example/manga/three/"))
+    }
+
+    @Test
+    fun oversizeResultStringRejected() {
+        // C-8: a single giant string must fail at the JS->Kotlin boundary,
+        // before validators materialize it (transient OOM vector on the
+        // 2-thread script pool).
+        val session = sessionWith()
+        evalFails(
+            "('x'.repeat(2 * 1024 * 1024))",
+            session,
+            "too large"
+        )
+    }
+
+    @Test
     fun fetchSurfacesHttpStatus() {
         evalFails(
             "fetch('https://script.example/nope')", sessionWith(status = 404),

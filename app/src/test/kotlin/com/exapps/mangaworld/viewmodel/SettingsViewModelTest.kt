@@ -46,6 +46,14 @@ class SettingsViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private val reconciler: com.exapps.mangaworld.core.source.sync.PluginToggleReconciler =
+        mockk<com.exapps.mangaworld.core.source.sync.PluginToggleReconciler>().also { r ->
+            coEvery { r.setEnabled(any(), true) } returns
+                com.exapps.mangaworld.core.source.sync.PluginToggleReconciler.ToggleOutcome.Enabled
+            coEvery { r.setEnabled(any(), false) } returns
+                com.exapps.mangaworld.core.source.sync.PluginToggleReconciler.ToggleOutcome.Disabled
+        }
+
     private fun createViewModel() = SettingsViewModel(
         repo = settingsRepo,
         context = io.mockk.mockk(relaxed = true),
@@ -55,7 +63,8 @@ class SettingsViewModelTest {
         firebaseSyncManager = firebaseSyncManager,
         widgetShortcutCoordinator = widgetShortcutCoordinator,
         sourceUiMapper = SourceUiTestFixtures.mapper(),
-        sourceRegistry = SourceUiTestFixtures.registry()
+        sourceRegistry = SourceUiTestFixtures.registry(),
+        reconciler = reconciler
     )
 
     @Test
@@ -73,10 +82,12 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun toggleSource_callsSettingsRepo() {
+    fun toggleSource_delegatesToReconciler() {
+        // D6: both toggles funnel through one reconciler (which owns the
+        // settings write), so assert delegation instead of a direct repo call.
         val vm = createViewModel()
         vm.toggleSource("azora", false)
-        coVerify { settingsRepo.toggleSource("azora", false) }
+        coVerify { reconciler.setEnabled("azora", false) }
     }
 
     @Test

@@ -83,9 +83,22 @@ class SourceRegistryTest {
 
     @Test
     fun remoteCannotShadowBuiltin() {
+        // C-7: registerRemote (verification-free install primitive) is gone;
+        // custom-origin installs go through registerVerified, which refuses
+        // builtin shadowing the same way.
         val registry = SourceRegistry(mapOf("azora" to fakePlugin("azora")))
-        assertFalse(registry.registerRemote(fakePlugin("azora")))
-        assertTrue(registry.registerRemote(fakePlugin("newsite")))
+        assertTrue(
+            registry.registerVerified(
+                fakePlugin("azora"),
+                com.exapps.mangaworld.core.source.plugins.PluginOrigin.CUSTOM
+            ) is SourceRegistry.RegisterOutcome.Refused
+        )
+        assertTrue(
+            registry.registerVerified(
+                fakePlugin("newsite"),
+                com.exapps.mangaworld.core.source.plugins.PluginOrigin.CUSTOM
+            ) is SourceRegistry.RegisterOutcome.Installed
+        )
         assertTrue(registry.isKnown("newsite"))
         assertTrue(registry.unregisterRemote("newsite"))
         assertFalse(registry.isKnown("newsite"))

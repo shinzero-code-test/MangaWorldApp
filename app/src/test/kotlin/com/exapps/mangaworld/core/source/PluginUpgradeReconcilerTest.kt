@@ -59,7 +59,10 @@ class PluginUpgradeReconcilerTest {
         PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined),
         trustKeys,
         kotlinx.coroutines.Dispatchers.Unconfined
-    )
+    ).also {
+        // v9.2.0: reconciler has a test-replaceable log sink (raw Log throws).
+        it.log = {}
+    }
 
     private fun record(status: PluginStatus, manifestJson: String? = signedManifest()) =
         PluginIndexRecord("upg", 2, 1, PluginOrigin.OFFICIAL, status, manifestJson)

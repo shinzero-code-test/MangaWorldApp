@@ -49,6 +49,7 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     @Inject lateinit var favoriteDigestScheduler: FavoriteDigestScheduler
     @Inject lateinit var pluginSyncScheduler: com.exapps.mangaworld.core.source.sync.PluginSyncScheduler
     @Inject lateinit var bundledPluginLoader: com.exapps.mangaworld.core.source.plugins.BundledPluginLoader
+    @Inject lateinit var sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 
     internal val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -99,6 +100,11 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
             // official overrides. Fails closed to builtins; never crashes startup.
             runCatching { bundledPluginLoader.bootstrap() }
                 .onFailure { android.util.Log.w("MangaWorldApp", "Pilot bootstrap failed: ${it.message}") }
+            // D4: the mapper snapshot feeds every non-Sources screen, and only
+            // the Sources screen refreshes it — seed it here so boot-resumed
+            // rows/states are visible app-wide from the first frame.
+            runCatching { sourceUiMapper.refresh() }
+                .onFailure { android.util.Log.w("MangaWorldApp", "Plugin snapshot refresh failed: ${it.message}") }
         }
     }
 

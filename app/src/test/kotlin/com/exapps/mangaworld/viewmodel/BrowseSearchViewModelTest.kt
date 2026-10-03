@@ -97,6 +97,14 @@ class BrowseSearchViewModelTest {
         sourceUiMapper = SourceUiTestFixtures.mapper()
     )
 
+    private val toggleReconciler: com.exapps.mangaworld.core.source.sync.PluginToggleReconciler =
+        io.mockk.mockk<com.exapps.mangaworld.core.source.sync.PluginToggleReconciler>().also { r ->
+            io.mockk.coEvery { r.setEnabled(any(), true) } returns
+                com.exapps.mangaworld.core.source.sync.PluginToggleReconciler.ToggleOutcome.Enabled
+            io.mockk.coEvery { r.setEnabled(any(), false) } returns
+                com.exapps.mangaworld.core.source.sync.PluginToggleReconciler.ToggleOutcome.Disabled
+        }
+
     private fun sourcesVm() = SourcesViewModel(
         settingsRepository = settingsRepo,
         sourceUiMapper = SourceUiTestFixtures.mapper(),
@@ -106,7 +114,8 @@ class BrowseSearchViewModelTest {
         remoteConfig = io.mockk.mockk(relaxed = true),
         health = io.mockk.mockk(relaxed = true),
         appContext = io.mockk.mockk(relaxed = true),
-        indexStore = io.mockk.mockk(relaxed = true)
+        reconciler = toggleReconciler,
+        scheduler = io.mockk.mockk(relaxed = true)
     )
 
     private fun sourceBrowseVm(sourceId: String = "azora") = SourceBrowseViewModel(
@@ -307,7 +316,9 @@ class BrowseSearchViewModelTest {
             vm.toggleSource("azora", false)
             advanceUntilIdle()
             assertTrue(vm.state.value.enabledSources["azora"] == false)
-            coVerify { settingsRepo.toggleSource("azora", false) }
+            // D6: the toggle funnels through the reconciler (which owns the
+            // settings write), not the repository directly.
+            coVerify { toggleReconciler.setEnabled("azora", false) }
         }
     }
 

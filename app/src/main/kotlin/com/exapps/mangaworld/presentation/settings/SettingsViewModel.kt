@@ -28,7 +28,8 @@ class SettingsViewModel @Inject constructor(
     private val firebaseSyncManager: FirebaseSyncManager,
     private val widgetShortcutCoordinator: WidgetShortcutCoordinator,
     private val sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper,
-    private val sourceRegistry: com.exapps.mangaworld.core.source.plugins.SourceRegistry
+    private val sourceRegistry: com.exapps.mangaworld.core.source.plugins.SourceRegistry,
+    private val reconciler: com.exapps.mangaworld.core.source.sync.PluginToggleReconciler
 ) : ViewModel() {
     val appSettings: StateFlow<AppSettings> = repo.getAppSettings()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettings())
@@ -69,7 +70,11 @@ class SettingsViewModel @Inject constructor(
     fun setSpoilerCollapseDefault(enabled: Boolean) = saveAndSync { repo.setSpoilerCollapseDefault(enabled) }
     fun setMutedUserIds(values: Set<String>) = saveAndSync { repo.setMutedUserIds(values) }
     fun toggleSource(id: String, enabled: Boolean) = viewModelScope.launch {
-        repo.toggleSource(id, enabled)
+        // D6: same funnel as the Sources toggle — enabling a held row runs
+        // approval instead of a bare flip (which would strand the row with
+        // nothing registered). appSettings flow re-emits, so the switch snaps
+        // back by itself when approval fails.
+        reconciler.setEnabled(id, enabled)
         runCatching { widgetDataRepository.refreshRemoteSnapshot() }
         widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
     }

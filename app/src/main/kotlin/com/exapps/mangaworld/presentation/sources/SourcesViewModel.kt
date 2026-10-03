@@ -41,7 +41,8 @@ class SourcesViewModel @Inject constructor(
     private val trustKeys: PluginTrustKeys,
     private val remoteConfig: FirebaseRemoteConfigManager,
     private val health: SourceHealthMonitor,
-    private val indexStore: com.exapps.mangaworld.core.source.plugins.PluginIndexStore,
+    private val reconciler: com.exapps.mangaworld.core.source.sync.PluginToggleReconciler,
+    private val scheduler: com.exapps.mangaworld.core.source.sync.PluginSyncScheduler,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -116,25 +117,35 @@ class SourcesViewModel @Inject constructor(
 
     fun toggleSource(sourceId: String, enabled: Boolean) {
         viewModelScope.launch {
-            settingsRepository.toggleSource(sourceId, enabled)
-            _state.update {
-                it.copy(enabledSources = it.enabledSources + (sourceId to enabled))
-            }
-            // v9.1.1 badge truthfulness: enabling a held row (index DISABLED
-            // with verified bytes) clears the stale "needs approval" badge.
-            // The payload was already smoked at install; the toggle IS consent.
-            // Disabling never touches the index (re-enable stays one tap).
-            if (enabled) {
-                runCatching {
-                    val rec = indexStore.get(sourceId)
-                    if (rec != null && rec.status == com.exapps.mangaworld.core.source.plugins.PluginStatus.DISABLED &&
-                        rec.activeVersion != null && rec.manifestJson != null
-                    ) {
-                        indexStore.put(rec.copy(status = com.exapps.mangaworld.core.source.plugins.PluginStatus.ENABLED))
-                        refreshTick.emit(refreshTick.value + 1)
-                    }
+            // D6: both toggles funnel through one reconciler — enabling a
+            // held row runs approval (verify/pair/register/smoke) instead of
+            // a bare flip that would make the row vanish with nothing
+            // registered behind it.
+            if (!enabled) {
+                reconciler.setEnabled(sourceId, false)
+                _state.update {
+                    it.copy(enabledSources = it.enabledSources + (sourceId to false))
                 }
+                return@launch
             }
+            _busyId.value = sourceId
+            val outcome = reconciler.setEnabled(sourceId, true)
+            _busyId.value = null
+            when (outcome) {
+                is com.exapps.mangaworld.core.source.sync.PluginToggleReconciler.ToggleOutcome.Approved ->
+                    _notice.emit(R.string.plugin_approved)
+                is com.exapps.mangaworld.core.source.sync.PluginToggleReconciler.ToggleOutcome.ApprovalFailed ->
+                    _notice.emit(R.string.plugin_approve_failed)
+                else -> Unit
+            }
+            _state.update {
+                it.copy(
+                    enabledSources = it.enabledSources + (
+                        sourceId to (outcome != com.exapps.mangaworld.core.source.sync.PluginToggleReconciler.ToggleOutcome.ApprovalFailed)
+                    )
+                )
+            }
+            refresh()
         }
     }
 
@@ -229,6 +240,11 @@ class SourcesViewModel @Inject constructor(
                     baseDir = File(appContext.filesDir, "plugins")
                 )
                 log("sweep returned ${result.outcomes.size} outcomes")
+                // D8: a finished manual sweep (success OR deterministic
+                // failure — both "checked") resets the 12 h boot-stale window,
+                // like the worker does. Transport failure stays unrecorded so
+                // the stale lane can retry it.
+                scheduler.recordSyncCompleted()
                 val updated = result.outcomes.count { it.value is PluginSyncEngine.EntryOutcome.Updated }
                 _notice.emit(
                     if (updated > 0) R.string.plugin_check_updated
@@ -237,7 +253,13 @@ class SourcesViewModel @Inject constructor(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 log("sweep cancelled")
                 throw e
+            } catch (e: com.exapps.mangaworld.core.source.sync.PluginFetcher.FetchFailure.Network) {
+                log("sweep transport failure (not marking complete)")
+                _notice.emit(R.string.plugin_check_failed)
             } catch (e: Exception) {
+                // Deterministic abort counts as checked (worker parity) so a
+                // failed sweep does not suppress the boot-stale lane.
+                scheduler.recordSyncCompleted()
                 log("sweep threw ${e.javaClass.name}: ${e.message?.take(160)}")
                 _notice.emit(R.string.plugin_check_failed)
             } finally {

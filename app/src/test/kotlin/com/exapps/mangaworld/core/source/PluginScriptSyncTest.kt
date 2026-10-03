@@ -575,6 +575,198 @@ class PluginScriptSyncTest {
         assertEquals(PluginStatus.REVOKED, index.get("gated")!!.status)
     }
 
+    // ─── F2: installed REMOTE ids update through rebuilt runners ───
+
+    private fun scriptManifest(id: String, version: Int, js: ByteArray, base: String) =
+        manifestBytes(id, version) {
+            it.put("engine", "script")
+            it.put("bridgeApi", 1)
+            it.put("scriptSha256", ScriptPluginLoader.sha256Hex(js))
+            it.put("baseUrl", base)
+            it.remove("config")
+        }
+
+    private fun scriptV(tag: String) = (
+        "function home(ctx){ return {featured: [{id:'m', slug:'m', title:'$tag'}], latest: [], trending: []}; }" +
+            "function detail(ctx){ return {id:'a', slug:'a', title:'A'}; }" +
+            "function pages(ctx){ return []; }" +
+            "function search(ctx){ return []; }" +
+            "function browse(ctx){ return []; }"
+        ).toByteArray(Charsets.UTF_8)
+
+    private fun updateEngine(bodies: MutableMap<String, ByteArray>): Triple<
+        PluginSyncEngine,
+        FakeIndex,
+        com.exapps.mangaworld.core.source.plugins.SourceRegistry
+        > {
+        val index = FakeIndex()
+        val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+        val runners = PluginRunnerFactory(
+            OkHttpClient(), settings,
+            ScriptPluginLoader(
+                ScriptRunnerFactory(
+                    ScriptTestSupport.sandbox, ScriptTestSupport.FakeFetcher(),
+                    ScriptTestSupport.logger, RecordingPluginTelemetry(),
+                    kotlinx.coroutines.Dispatchers.Unconfined
+                )
+            )
+        )
+        val e = PluginSyncEngine(
+            index, PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined),
+            registry, FakeFetcher(bodies), FakeEtag(),
+            runners, settings, RecordingPluginTelemetry(),
+            kotlinx.coroutines.Dispatchers.Unconfined
+        )
+        e.log = { }
+        return Triple(e, index, registry)
+    }
+
+    private suspend fun Triple<
+        PluginSyncEngine,
+        FakeIndex,
+        com.exapps.mangaworld.core.source.plugins.SourceRegistry
+        >.sync(): PluginSyncEngine.SyncResult = first.sync(
+        trustedKeys = trust, host = host,
+        indexUrl = "https://cdn.example/plugins/index.json",
+        postSmoke = PostSmoke.Custom({ true }), baseDir = tmp.root
+    )
+
+    @Test
+    fun remoteScriptUpdateReplacesRunner() = runTest {
+        // F2/C-1: a v2 SCRIPT candidate for an installed remote id must
+        // rebuild + persist + serve the new bytes — never route through the
+        // builtin override path (which drops scriptBytes and rejects).
+        val manifestUrl = "https://cdn.example/plugins/scriptnew/v1/plugin.json"
+        val scriptUrl = "https://cdn.example/plugins/scriptnew/v1/source.js"
+        val js1 = scriptV("A")
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to
+                indexJson(Triple("scriptnew", 1, manifestUrl)),
+            manifestUrl to scriptManifest("scriptnew", 1, js1, "https://scriptnew.example"),
+            scriptUrl to js1
+        )
+        val (e, index, registry) = updateEngine(bodies)
+        val first = sync()
+        assertTrue(first.outcomes["scriptnew"] is PluginSyncEngine.EntryOutcome.Updated)
+        val v2manifestUrl = "https://cdn.example/plugins/scriptnew/v2/plugin.json"
+        val v2scriptUrl = "https://cdn.example/plugins/scriptnew/v2/source.js"
+        val js2 = scriptV("B")
+        bodies["https://cdn.example/plugins/index.json"] =
+            indexJson(Triple("scriptnew", 2, v2manifestUrl))
+        bodies[v2manifestUrl] = scriptManifest("scriptnew", 2, js2, "https://scriptnew.example")
+        bodies[v2scriptUrl] = js2
+        val second = sync()
+        assertTrue(second.outcomes["scriptnew"] is PluginSyncEngine.EntryOutcome.Updated)
+        val rec = index.get("scriptnew")!!
+        assertEquals(2, rec.activeVersion)
+        assertEquals(PluginStatus.ENABLED, rec.status)
+        assertTrue(java.io.File(tmp.root, "scriptnew/versions/2/source.js").isFile)
+        // The serving runner is the v2 build, not the retained v1 object.
+        val home = registry.scraperFor("scriptnew")!!
+            .getHomeData().getOrThrow()
+        assertEquals("B", home.featured.first().title)
+    }
+
+    @Test
+    fun remoteDescriptorUpdateRebuildsRunner() = runTest {
+        // F2/C-3: a descriptor update must serve the NEW metadata (baseUrl,
+        // listPath, selectors) — reusing the v1 runner reports Updated while
+        // silently serving stale behavior.
+        val manifestUrl = "https://cdn.example/plugins/descnew/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to
+                indexJson(Triple("descnew", 1, manifestUrl)),
+            manifestUrl to manifestBytes("descnew", 1) {
+                it.put("baseUrl", "https://descnew.example")
+            }
+        )
+        val (e, index, registry) = updateEngine(bodies)
+        val first = sync()
+        assertTrue(first.outcomes["descnew"] is PluginSyncEngine.EntryOutcome.Updated)
+        val before = registry.scraperFor("descnew")!!
+        val v2manifestUrl = "https://cdn.example/plugins/descnew/v2/plugin.json"
+        bodies["https://cdn.example/plugins/index.json"] =
+            indexJson(Triple("descnew", 2, v2manifestUrl))
+        bodies[v2manifestUrl] = manifestBytes("descnew", 2) {
+            it.put("baseUrl", "https://descnew-moved.example")
+        }
+        val second = sync()
+        assertTrue(second.outcomes["descnew"] is PluginSyncEngine.EntryOutcome.Updated)
+        assertEquals("https://descnew-moved.example", registry.descriptorFor("descnew")!!.baseUrl)
+        assertTrue(registry.scraperFor("descnew")!! !== before)
+        assertEquals(2, index.get("descnew")!!.activeVersion)
+        assertEquals(PluginStatus.ENABLED, index.get("descnew")!!.status)
+    }
+
+    @Test
+    fun emptyHomeNetworkSmokeRollsBack() = runTest {
+        // Smoke predicate: an empty-but-wellformed home must NOT install.
+        val manifestUrl = "https://cdn.example/plugins/emptyhome/v1/plugin.json"
+        val scriptUrl = "https://cdn.example/plugins/emptyhome/v1/source.js"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to
+                indexJson(Triple("emptyhome", 1, manifestUrl)),
+            manifestUrl to scriptManifest("emptyhome", 1, scriptBytes, "https://emptyhome.example"),
+            scriptUrl to scriptBytes
+        )
+        val index = FakeIndex()
+        val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+        val runners = PluginRunnerFactory(
+            OkHttpClient(), settings,
+            ScriptPluginLoader(
+                ScriptRunnerFactory(
+                    ScriptTestSupport.sandbox, ScriptTestSupport.FakeFetcher(),
+                    ScriptTestSupport.logger, RecordingPluginTelemetry(),
+                    kotlinx.coroutines.Dispatchers.Unconfined
+                )
+            )
+        )
+        val e = PluginSyncEngine(
+            index, PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined),
+            registry, FakeFetcher(bodies), FakeEtag(),
+            runners, settings, RecordingPluginTelemetry(),
+            kotlinx.coroutines.Dispatchers.Unconfined
+        )
+        e.log = { }
+        // NOTE: PostSmoke.Network here performs no sockets — the fixture
+        // script returns its (empty) home without fetching.
+        val result = e.sync(
+            trustedKeys = trust, host = host,
+            indexUrl = "https://cdn.example/plugins/index.json",
+            postSmoke = PostSmoke.Network(),
+            baseDir = tmp.root
+        )
+        assertTrue(result.outcomes["emptyhome"] is PluginSyncEngine.EntryOutcome.RolledBack)
+        assertTrue(index.get("emptyhome") == null)
+    }
+
+    @Test
+    fun smokeTimeoutIsTypedNotSilent() = runTest {
+        // D10: a wall-clock timeout must surface as a timeout (diagnosable,
+        // manifest timeoutMs is tunable), never a bare silent failure.
+        val manifestUrl = "https://cdn.example/plugins/slowpoke/v1/plugin.json"
+        val scriptUrl = "https://cdn.example/plugins/slowpoke/v1/source.js"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to
+                indexJson(Triple("slowpoke", 1, manifestUrl)),
+            manifestUrl to scriptManifest("slowpoke", 1, scriptBytes, "https://slowpoke.example"),
+            scriptUrl to scriptBytes
+        )
+        val logs = mutableListOf<String>()
+        val (engine, _, _) = updateEngine(bodies)
+        engine.log = { logs += it }
+        val result = engine.sync(
+            trustedKeys = trust, host = host,
+            indexUrl = "https://cdn.example/plugins/index.json",
+            postSmoke = PostSmoke.Custom({
+                throw kotlinx.coroutines.TimeoutCancellationException("60 ms")
+            }),
+            baseDir = tmp.root
+        )
+        assertTrue(result.outcomes["slowpoke"] is PluginSyncEngine.EntryOutcome.RolledBack)
+        assertTrue(logs.any { it.contains("timed out") })
+    }
+
     @Test
     fun approveUnknownId() = runTest {
         val index = FakeIndex()

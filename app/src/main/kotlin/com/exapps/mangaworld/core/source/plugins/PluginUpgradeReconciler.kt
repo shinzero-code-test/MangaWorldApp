@@ -50,6 +50,12 @@ class PluginUpgradeReconciler @Inject constructor(
     @com.exapps.mangaworld.core.di.IoDispatcher private val io: kotlinx.coroutines.CoroutineDispatcher
 ) {
 
+    /**
+     * Log sink (mirrors `PluginSyncEngine.log` for the same JVM reason).
+     * Internal for test access; production never reassigns.
+     */
+    internal var log: (String) -> Unit = { android.util.Log.i("PluginSync", it) }
+
     /** Re-evaluates every `INCOMPATIBLE` record; returns how many became `AVAILABLE`. */
     suspend fun reconcile(appVersion: String): Int = withContext(io) {
         var revived = 0
@@ -57,15 +63,35 @@ class PluginUpgradeReconciler @Inject constructor(
             if (record.status != PluginStatus.INCOMPATIBLE) continue
             val bytes = record.manifestJson?.toByteArray(Charsets.UTF_8)
                 ?.takeIf { it.isNotEmpty() } ?: continue
-            val valid = store.verify(
+            // C-11: distinguish true incompatibility from a stale trust
+            // anchor. A compatible-but-stale payload stays INCOMPATIBLE (only
+            // a publisher re-issue with a fresh anchor can revive it — same
+            // version bytes can never be re-signed), but it must not be
+            // confused with an engine/schema mismatch when diagnosing.
+            val strict = store.verify(
                 manifestBytes = bytes,
                 trustedKeys = trustKeys.current(),
                 host = PluginTrust.productionCapabilities(appVersion),
                 enforceFreshness = true
             )
-            if (valid is ManifestResult.Valid) {
+            if (strict is ManifestResult.Valid) {
                 index.put(record.copy(status = PluginStatus.AVAILABLE))
                 revived++
+                continue
+            }
+            val timeless = store.verify(
+                manifestBytes = bytes,
+                trustedKeys = trustKeys.current(),
+                host = PluginTrust.productionCapabilities(appVersion),
+                enforceFreshness = false
+            )
+            if (timeless is ManifestResult.Valid) {
+                // Same sink discipline as PluginSyncEngine.log: raw
+                // android.util.Log throws on plain JVM, so tests replace it.
+                log(
+                    "reconcile ${record.id}: compatible but stale trust anchor " +
+                        "(needs publisher re-issue, not an app upgrade)"
+                )
             }
         }
         revived

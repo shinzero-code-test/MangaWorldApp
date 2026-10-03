@@ -72,6 +72,14 @@ object ScriptContract {
     /** Longest single returned item (outerHTML of a pathological node). */
     const val MAX_ITEM_CHARS = 64 * 1024
 
+    /**
+     * C-8 bound: per-string cap at the JS→Kotlin boundary. Node counting
+     * cannot see a single giant string (`'x'.repeat(50M)` in one field
+     * allocates tens of MB transiently on the 2-thread script pool before
+     * validators truncate). Length is checked BEFORE materializing ropes.
+     */
+    const val MAX_RESULT_STRING_CHARS = 1_000_000
+
     // ─── Bridge globals installed per call ───────────────────────────────────
 
     const val FN_FETCH = "fetch"

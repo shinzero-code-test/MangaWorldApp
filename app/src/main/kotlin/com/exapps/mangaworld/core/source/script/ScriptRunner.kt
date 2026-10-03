@@ -220,6 +220,9 @@ class ScriptScraper internal constructor(
         // Breadth the depth cap misses: every node spends from one budget.
         budget[0]--
         if (budget[0] < 0) throw ScriptResultException("result too large")
+        if (value is CharSequence && value.length > ScriptContract.MAX_RESULT_STRING_CHARS) {
+            throw ScriptResultException("result string too large")
+        }
         return when {
             value == null || value === Undefined.instance || value === Scriptable.NOT_FOUND -> null
             value is String -> value

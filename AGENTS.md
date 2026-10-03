@@ -16,7 +16,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 9.1.9 (versionCode 249)
+- **Current version**: 9.2.0 (versionCode 250)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 36 · **Compile SDK**: 36
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -106,7 +106,17 @@ Adding a source = **one plugin class + one `@Binds` line** in `SourcePluginModul
    - `scraper`: the implementation instance
 3. Bind it in `SourcePluginModule` with `@Binds @IntoMap @StringKey("sourceId")`
 4. Ship a captured-style fixture under `app/src/test/resources/scrapers/` + a test driving the REAL parser (never re-implement selectors inline — tautological fixtures pass while prod breaks)
-5. Remote Config needs NO edit (kill-switch/domain keys derive from the registry)
+5. Remote Config needs NO edit for APK-bundled source ids (kill-switch/domain keys derive from the registry). Dynamic remotes are different: `FirebaseRemoteConfigManager` seeds defaults once, so a later `source_<id>_enabled` lookup may default false after an RC refresh; see `tmp/review/remote-plugin-review-2026-10-02.md` before adding or debugging remote ids.
+
+**Remote plugin review (2026-10-02):** findings remediated in v9.2.0 (see below). Original report: `tmp/review/remote-plugin-review-2026-10-02.md`.
+
+**Remediation pack (v9.2.0):** all review findings fixed. Architecture rules that follow:
+- `syncOverride` is builtin-only: gate with `registry.isBuiltin(id)`; installed remotes update via `syncRemoteUpdate` (rebuild runner from candidate + persist bytes, smoke-before-register, preserve serving state).
+- `approveHeld` mirrors the same pairing (builtin reuse on same-engine, new runner otherwise); consent holds download script bytes up front so approval never needs the network.
+- Toggles funnel through `PluginToggleReconciler` (enabling a DISABLED-with-payload row runs approval, never a bare flip); disabling never touches the index.
+- RC `applyState()` re-seeds defaults from the live registry every run (dynamic ids), and domain overrides publish for builtins only (signed remote manifests pin their own baseUrl).
+- `BundledPluginLoader.bootstrapOne` never re-activates QUARANTINED/REVOKED/DISABLED records; freshness gates acquisition only, never stored bytes.
+- Quarantined new-ids stay visible (row + badge) and `reverify` rebuilds from disk; malformed index entries skip (whole-document Invalid is structural-only); pilot descriptors are frozen at v1 (corrections bump version).
 
 **Per-source audit evidence**: `tmp/analysis/` (2026-09-24, Chromium-verified). Treat HTTP/WAF behavior as dated; re-verify before trusting. Key corrections baked in: Starz fully working (audit 403s were egress-specific); StellarSaber is AES-**128**-GCM; Hijala cover = `.manga-info .thumb img[data-src]`, no default split-stitching; Leko/Lionz/Spark chapters via numeric `manga_get_chapters` (NOT slug-ajax); LekMangaOnline oEmbed thumbnail broken; Despair canonical = despair-world.com.
 

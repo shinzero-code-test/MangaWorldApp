@@ -268,6 +268,10 @@ class ManifestParser(
         if (!uri.scheme.equals("https", ignoreCase = true)) return null
         if (uri.userInfo != null) return null
         if (uri.query != null || uri.fragment != null) return null
+        // C-9/C-12: an explicit port or path in a pinned base URL is an
+        // undeclared channel/scope — origins are bare `https://host`.
+        if (uri.port != -1) return null
+        if (!uri.path.isNullOrEmpty() && uri.path != "/") return null
         val host = uri.host?.lowercase()?.trimEnd('.').orEmpty()
         if (host.isEmpty() || !HostPolicy.isValidAllowListEntry(host)) return null
         return host

@@ -9,6 +9,12 @@ const nextConfig: NextConfig = {
   // the same posture when Vercel edge headers don't apply.
   async headers() {
     return [
+      // Plugin distribution must revalidate (mirrors vercel.json
+      // /plugins/*): promotions/revokes are polled by ETag.
+      {
+        source: "/plugins/:path*",
+        headers: [{ key: "Cache-Control", value: "no-cache, must-revalidate" }],
+      },
       {
         source: "/(.*)",
         headers: [

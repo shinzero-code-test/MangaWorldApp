@@ -92,6 +92,36 @@ class PluginConsentTest {
     }
 
     @Test
+    fun mapperListsQuarantinedExtrasWithBadge() = runTest {
+        // F5: a quarantined new-id remote must stay visible (row + badge +
+        // re-check facts) instead of going dark with no recovery path.
+        val index = object : com.exapps.mangaworld.core.source.plugins.PluginIndexStore {
+            val rec = PluginIndexRecord(
+                id = "gated", activeVersion = 1, previousVersion = null,
+                origin = PluginOrigin.OFFICIAL, status = PluginStatus.QUARANTINED,
+                manifestJson = previewJson
+            )
+            override suspend fun get(id: String) = rec.takeIf { it.id == id }
+            override suspend fun getAll() = listOf(rec)
+            override suspend fun put(record: PluginIndexRecord) = Unit
+            override suspend fun remove(id: String) = false
+        }
+        val context: android.content.Context = mockk {
+            every { getString(any<Int>()) } returns "?"
+        }
+        val mapper = SourceUiMapper(
+            registry = SourceUiTestFixtures.registry("hijala"),
+            resolver = SourceDisplayResolver(context),
+            indexStore = index
+        )
+        mapper.refresh()
+        val extra = mapper.entries().single { it.id == "gated" }
+        assertEquals(PluginRowState.QUARANTINED, extra.rowState)
+        assertEquals("gated", mapper.heldDetails()["gated"]!!.id)
+        assertEquals(extra, mapper.entry("gated"))
+    }
+
+    @Test
     fun mapperListsHeldExtrasWithPreview() = runTest {
         val index = object : com.exapps.mangaworld.core.source.plugins.PluginIndexStore {
             val rec = PluginIndexRecord(

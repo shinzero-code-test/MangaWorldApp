@@ -23,7 +23,8 @@ class PluginSyncWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val engine: PluginSyncEngine,
     private val remoteConfigManager: FirebaseRemoteConfigManager,
-    private val scheduler: PluginSyncScheduler
+    private val scheduler: PluginSyncScheduler,
+    private val sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -41,6 +42,9 @@ class PluginSyncWorker @AssistedInject constructor(
             // Outcome lines are logged inside the engine (single-sourced).
             // v9.1.1: a finished sweep (even all-rejected) counts as "checked"
             // for bootstrap staleness — only transport failure retries early.
+            // D4: refresh the mapper snapshot so non-Sources screens (which
+            // never call refresh() themselves) see the new rows/states.
+            runCatching { sourceUiMapper.refresh() }
             scheduler.recordSyncCompleted()
             android.util.Log.i("PluginSync", "sync worker finished: success")
             Result.success()
@@ -50,6 +54,12 @@ class PluginSyncWorker @AssistedInject constructor(
         } catch (e: PluginFetcher.FetchFailure.Network) {
             android.util.Log.w("PluginSync", "sync worker transport failure, retrying: ${e.message?.take(160)}")
             Result.retry()
+        } catch (e: com.exapps.mangaworld.core.source.sync.IndexRejectedException) {
+            // D9: document-level index rejection is NOT a completed sweep —
+            // skip recordSyncCompleted so the 12 h boot-stale lane retries it
+            // instead of going dark until the next 24 h periodic run.
+            android.util.Log.w("PluginSync", "sync worker index rejected, not marking complete: ${e.message?.take(160)}")
+            Result.failure()
         } catch (e: Exception) {
             // Deterministic rejection (tampered index, bad schema): retrying
             // immediately changes nothing; the periodic schedule re-checks.

@@ -185,4 +185,27 @@ class PluginTrustTest {
         )
         assertEquals(1, host.supportedBridgeApi)
     }
+
+    @Test
+    fun rotationPayloadDiscipline() {
+        // C-10: trust-adjacent parsing matches the manifest parser -- byte cap
+        // before parsing, strict duplicate rejection, entry cap.
+        val pinned = mapOf("k1" to ByteArray(32))
+        // Oversize: ignored wholesale, pinned trust survives.
+        assertEquals(
+            pinned,
+            PluginTrust.resolveTrustedKeys(pinned, "x".repeat(PluginTrust.MAX_ROTATION_JSON_BYTES + 1))
+        )
+        // Duplicate top-level keys: rejected, pinned trust survives.
+        assertEquals(
+            pinned,
+            PluginTrust.resolveTrustedKeys(pinned, "{\"add\":[],\"add\":[]}")
+        )
+        // Entry-count cap: 17 garbage entries exceed the bound wholesale.
+        val many = (1..(PluginTrust.MAX_ROTATION_ENTRIES + 1)).joinToString(",") { "{}" }
+        assertEquals(
+            pinned,
+            PluginTrust.resolveTrustedKeys(pinned, "{\"add\":[$many]}")
+        )
+    }
 }

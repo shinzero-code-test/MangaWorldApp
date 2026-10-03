@@ -12,6 +12,8 @@ import com.exapps.mangaworld.core.source.SourceUiTestFixtures
 import com.exapps.mangaworld.presentation.sources.SourcesViewModel
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.capture
+import io.mockk.slot
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -78,18 +80,25 @@ class SourcesSyncActionsTest {
         // File constructor and forces the failure notice. Stub a real dir.
         appContext: Context = mockk<Context>(relaxed = true).apply {
             every { filesDir } returns tmp.root
-        }
+        },
+        trustKeys: com.exapps.mangaworld.core.source.plugins.PluginTrustKeys = mockk(relaxed = true),
+        remoteConfig: com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager = mockk(relaxed = true),
+        scheduler: PluginSyncScheduler = mockk(relaxed = true),
+        reconciler: com.exapps.mangaworld.core.source.sync.PluginToggleReconciler? = null
     ): SourcesViewModel {
         return SourcesViewModel(
             settingsRepository = settings,
             sourceUiMapper = SourceUiTestFixtures.mapper(),
             sourceRegistry = SourceUiTestFixtures.registry(),
             syncEngine = engine,
-            trustKeys = mockk(relaxed = true),
-            remoteConfig = mockk(relaxed = true),
+            trustKeys = trustKeys,
+            remoteConfig = remoteConfig,
             health = mockk(relaxed = true),
             appContext = appContext,
-            indexStore = index
+            reconciler = reconciler ?: com.exapps.mangaworld.core.source.sync.PluginToggleReconciler(
+                engine, settings, trustKeys, remoteConfig, index, appContext
+            ),
+            scheduler = scheduler
         ).also {
             // v9.1.8 lifecycle sink is raw android.util.Log (throws on JVM).
             it.log = {}
@@ -104,7 +113,9 @@ class SourcesSyncActionsTest {
         } returns PluginSyncEngine.SyncResult(
             outcomes = mapOf("manonga" to PluginSyncEngine.EntryOutcome.Updated(false))
         )
-        val viewModel = vm(engine = engine)
+        val scheduler: PluginSyncScheduler = mockk()
+        every { scheduler.recordSyncCompleted() } returns Unit
+        val viewModel = vm(engine = engine, scheduler = scheduler)
         advanceUntilIdle()
         val notices = mutableListOf<Int>()
         val collect = launch { viewModel.notice.collect { notices += it } }
@@ -113,6 +124,8 @@ class SourcesSyncActionsTest {
         advanceUntilIdle()
         assertTrue(notices.contains(com.exapps.mangaworld.R.string.plugin_check_updated))
         assertEquals(false, viewModel.syncing.value)
+        // D8: a finished manual sweep resets the boot-stale window.
+        coVerify { scheduler.recordSyncCompleted() }
         collect.cancel()
     }
 
@@ -135,18 +148,58 @@ class SourcesSyncActionsTest {
     }
 
     @Test
-    fun toggleOnClearsHeldBadge() = runTest(dispatcher) {
+    fun toggleOnHeldPayloadRoutesToApprove() = runTest(dispatcher) {
+        // D6: enabling a DISABLED record with verifiable bytes must run the
+        // approve pipeline (register + smoke), not a bare flip that strands
+        // the row with nothing registered behind it.
+        val engine: PluginSyncEngine = mockk()
+        coEvery {
+            engine.approveHeld(any(), any(), any(), any(), any(), any())
+        } returns PluginSyncEngine.ApproveOutcome.Approved
+        val settings: SettingsRepository = mockk(relaxed = true)
         val held = PluginIndexRecord(
             id = "gated", activeVersion = 1, previousVersion = null,
             origin = PluginOrigin.OFFICIAL, status = PluginStatus.DISABLED,
             manifestJson = """{"id":"gated"}"""
         )
         val store = FakeIndexStore(mutableMapOf("gated" to held))
-        val viewModel = vm(index = store)
+        val viewModel = vm(engine = engine, index = store, settings = settings)
+        advanceUntilIdle()
+        val notices = mutableListOf<Int>()
+        val collect = launch { viewModel.notice.collect { notices += it } }
         advanceUntilIdle()
         viewModel.toggleSource("gated", true)
         advanceUntilIdle()
-        assertEquals(PluginStatus.ENABLED, store.map["gated"]!!.status)
+        val idSlot = slot<String>()
+        coVerify { engine.approveHeld(capture(idSlot), any(), any(), any(), any(), any()) }
+        assertEquals("gated", idSlot.captured)
+        coVerify { settings.toggleSource("gated", true) }
+        assertTrue(notices.contains(com.exapps.mangaworld.R.string.plugin_approved))
+        collect.cancel()
+    }
+
+    @Test
+    fun toggleOnApproveFailureSnapsBack() = runTest(dispatcher) {
+        val engine: PluginSyncEngine = mockk()
+        coEvery {
+            engine.approveHeld(any(), any(), any(), any(), any(), any())
+        } returns PluginSyncEngine.ApproveOutcome.Failed("smoke failed")
+        val settings: SettingsRepository = mockk(relaxed = true)
+        val held = PluginIndexRecord(
+            id = "gated", activeVersion = 1, previousVersion = null,
+            origin = PluginOrigin.OFFICIAL, status = PluginStatus.DISABLED,
+            manifestJson = """{"id":"gated"}"""
+        )
+        val viewModel = vm(engine = engine, index = FakeIndexStore(mutableMapOf("gated" to held)), settings = settings)
+        advanceUntilIdle()
+        val notices = mutableListOf<Int>()
+        val collect = launch { viewModel.notice.collect { notices += it } }
+        advanceUntilIdle()
+        viewModel.toggleSource("gated", true)
+        advanceUntilIdle()
+        assertTrue(notices.contains(com.exapps.mangaworld.R.string.plugin_approve_failed))
+        coVerify(exactly = 0) { settings.toggleSource("gated", true) }
+        collect.cancel()
     }
 
     @Test

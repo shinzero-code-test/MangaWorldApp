@@ -40,9 +40,12 @@ object SourceDomainOverrides {
      * plain https? origin (path/query/whitespace → rejected).
      */
     fun normalizeBaseUrl(raw: String?): String? {
+        // C-12: https origins only (the app sets usesCleartextTraffic=false,
+        // so an http value silently bricks the source), no explicit ports or
+        // paths — matches ManifestParser.validateBaseUrl discipline.
         val trimmed = raw?.trim()?.trimEnd('/')?.trim() ?: return null
         if (trimmed.isEmpty()) return null
-        val match = Regex("^https?://[A-Za-z0-9.-]+(?::\\d+)?$").matchEntire(trimmed) ?: return null
+        val match = Regex("^https://[A-Za-z0-9.-]+$").matchEntire(trimmed) ?: return null
         return match.value.lowercase()
     }
 }

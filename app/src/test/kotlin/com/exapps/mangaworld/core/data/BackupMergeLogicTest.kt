@@ -29,7 +29,8 @@ class BackupMergeLogicTest {
         collectionManager = mockk(relaxed = true),
         bookmarkManager = mockk(relaxed = true),
         settingsRepository = mockk(relaxed = true),
-        pluginIndex = mockk(relaxed = true)
+        pluginIndex = mockk(relaxed = true),
+        pluginSyncScheduler = mockk(relaxed = true)
     )
 
     // ─── BK-1 collections ─────────────────────────────────────────────────

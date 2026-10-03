@@ -62,6 +62,11 @@ class DescriptorSchemaTest {
         expectViolation { it.put("baseUrl", "https://starzmanga.com/?x=1") }
         expectViolation { it.put("baseUrl", "not a url") }
         expectViolation { it.put("baseUrl", "https://*.starzmanga.com") }
+        // C-9/C-12: explicit ports and paths are undeclared channels/scope —
+        // pinned origins are bare `https://host`.
+        expectViolation { it.put("baseUrl", "https://starzmanga.com:8443") }
+        expectViolation { it.put("baseUrl", "https://starzmanga.com:443") }
+        expectViolation { it.put("baseUrl", "https://starzmanga.com/manga") }
     }
 
     @Test

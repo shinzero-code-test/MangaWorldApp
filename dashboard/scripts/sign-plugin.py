@@ -175,7 +175,7 @@ DASH_PIN = "o01gRyLfjV9Zxuo8rOxYB/kdMvPt9mLHbv/tKN9k9FM="
 def cmd_selftest():
     pub = load_public_key_b64(DASH_PIN)
     # 1. shipped pilots verify (oracle: our JCS == the original signer's bytes)
-    for pid in ("hijala", "lavascans"):
+    for pid in ("hijala", "lavascans", "manonga"):
         path = os.path.join(REPO, "dashboard/public/plugins/%s/v1/plugin.json" % pid)
         text = open(path, encoding="utf-8").read()
         node = json.loads(text, object_pairs_hook=_no_dupes)
@@ -247,10 +247,89 @@ def cmd_sign(manifest_path, js_path, key_path, out_path):
     print("signed + independently verified:", out_path)
 
 
+def cmd_check_published():
+    """CI gate for dashboard-only edits (3.5): index schema + manifest URLs,
+    per-entry signature verification against the pin, scriptSha256 agreement,
+    and pinned-key equality across the three copies (signer/dashboard/app).
+    Exits non-zero with the first violation named."""
+    from urllib.parse import urlparse
+
+    def fail(msg):
+        raise SystemExit("check-published FAILED: " + msg)
+
+    pub = load_public_key_b64(DASH_PIN)
+    # 4.3: the same base64 pin must live in all three files (substring
+    # presence, not first-match — those files contain other base64).
+    for label, rel in (("PluginTrust.kt",
+                        "app/src/main/kotlin/com/exapps/mangaworld/core/source/plugins/PluginTrust.kt"),
+                       ("plugin-keys.ts", "dashboard/lib/plugin-keys.ts")):
+        text = open(os.path.join(REPO, rel), encoding="utf-8").read()
+        if DASH_PIN not in text:
+            fail("pinned key drift in %s" % label)
+    print("key pins agree across signer/dashboard/app")
+
+    index_path = os.path.join(REPO, "dashboard/public/plugins/index.json")
+    index = json.loads(open(index_path, encoding="utf-8").read(), object_pairs_hook=_no_dupes)
+    if index.get("schemaVersion") != 1:
+        fail("index schemaVersion != 1")
+    entries = index.get("entries")
+    if not isinstance(entries, list) or not entries:
+        fail("index entries missing/empty")
+    if len(entries) > 1000:
+        fail("index exceeds entry cap")
+    index_host = urlparse("https://mangaworld-admin.vercel.app/plugins/index.json").hostname
+    seen = set()
+    for e in entries:
+        if not isinstance(e, dict):
+            fail("index entry not an object")
+        pid = e.get("id")
+        if not isinstance(pid, str) or not pid or pid in seen:
+            fail("bad/duplicate index id %r" % (pid,))
+        seen.add(pid)
+        ver = e.get("version")
+        if not isinstance(ver, int) or ver < 1:
+            fail("bad version for %s" % pid)
+        if e.get("kind") not in ("descriptor", "script"):
+            fail("bad kind for %s" % pid)
+        murl = e.get("manifestUrl", "")
+        u = urlparse(murl)
+        if u.scheme != "https" or (u.hostname or "").lower() != index_host:
+            fail("manifestUrl off-distribution-host for %s" % pid)
+        mp = os.path.join(REPO, "dashboard/public/plugins/%s/v%d/plugin.json" % (pid, ver))
+        if not os.path.isfile(mp):
+            fail("missing promoted manifest %s" % mp)
+        text = open(mp, encoding="utf-8").read()
+        node = json.loads(text, object_pairs_hook=_no_dupes)
+        key_id, sig = parse_sig_header(node.get("signature", ""))
+        if key_id != "official-1":
+            fail("unexpected key id for %s" % pid)
+        try:
+            verify_signature(pub, canonical_manifest_bytes(text), sig)
+        except Exception as ex:
+            fail("signature mismatch for %s (%s)" % (pid, ex))
+        if node.get("id") != pid or node.get("version") != ver:
+            fail("id/version mismatch for %s" % pid)
+        engine = node.get("engine", "")
+        if engine == "script":
+            pin = node.get("scriptSha256", "")
+            jsp = os.path.join(REPO, "dashboard/public/plugins/%s/v%d/source.js" % (pid, ver))
+            if not os.path.isfile(jsp):
+                fail("missing source.js for %s" % pid)
+            js = open(jsp, "rb").read()
+            if len(js) > 512 * 1024:
+                fail("source.js exceeds cap for %s" % pid)
+            if hashlib.sha256(js).hexdigest() != pin.lower():
+                fail("scriptSha256 mismatch for %s" % pid)
+        print("published %s v%d OK" % (pid, ver))
+    print("CHECK-PUBLISHED PASS")
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
     if args == ["--selftest"]:
         cmd_selftest()
+    elif args == ["--check-published"]:
+        cmd_check_published()
     elif len(args) == 8 and args[0] == "--manifest" and args[2] == "--js" and args[4] == "--key" and args[6] == "--out":
         cmd_sign(args[1], args[3], args[5], args[7])
     else:

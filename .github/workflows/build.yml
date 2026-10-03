@@ -170,6 +170,14 @@ jobs:
         working-directory: dashboard
         run: npm run lint
 
+      - name: Plugin distribution checks
+        # 3.5/4.3: dashboard-only edits (index typo, manifest host swap,
+        # pin drift, sha256 mismatch) merge with no app-side cover.
+        run: |
+          python3 -m pip install --quiet cryptography
+          python3 dashboard/scripts/sign-plugin.py --selftest
+          python3 dashboard/scripts/sign-plugin.py --check-published
+
   # ─── Firestore Rules Verification ───────────────────────────────────────────
   # Boots the Firestore emulator with the shipped rules + indexes and replays
   # the app's exact public-library query (visitor/owner/denied/legacy/anon).

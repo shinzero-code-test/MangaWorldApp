@@ -60,7 +60,11 @@ class PluginBootstrapTelemetryTest {
             ?: error("asset missing: $path")
     }
 
-    private fun loader(telemetry: RecordingPluginTelemetry): BundledPluginLoader {
+    private fun loader(
+        telemetry: RecordingPluginTelemetry,
+        index: FakeIndex = FakeIndex(),
+        keys: Map<String, ByteArray>? = null
+    ): BundledPluginLoader {
         val assetManager: AssetManager = mockk()
         every { assetManager.open(any()) } answers {
             assetBytes(firstArg<String>()).inputStream()
@@ -74,9 +78,8 @@ class PluginBootstrapTelemetryTest {
         every { context.filesDir } returns tmp.root
         every { context.assets } returns assetManager
         every { context.getSharedPreferences(any(), any()) } returns prefs
-        val index = FakeIndex()
         val trustKeys: PluginTrustKeys = mockk {
-            every { current() } returns PluginTrust.pinnedKeys()
+            every { current() } returns (keys ?: PluginTrust.pinnedKeys())
         }
         return BundledPluginLoader(
             context = context,
@@ -94,6 +97,79 @@ class PluginBootstrapTelemetryTest {
             appVersionStore = PrefsAppVersionStore(context),
             telemetry = telemetry,
             io = kotlinx.coroutines.Dispatchers.Unconfined
+        )
+    }
+
+    @Test
+    fun bootstrapSkipsSafetyControlledPilotRecords() = runTest {
+        // F4: a kill-switch REVOKED, quarantined, or explicitly DISABLED
+        // pilot must not be re-activated (and re-enabled) by the APK asset
+        // on every process start.
+        for (status in listOf(
+            com.exapps.mangaworld.core.source.plugins.PluginStatus.REVOKED,
+            com.exapps.mangaworld.core.source.plugins.PluginStatus.QUARANTINED,
+            com.exapps.mangaworld.core.source.plugins.PluginStatus.DISABLED
+        )) {
+            val telemetry = RecordingPluginTelemetry()
+            val index = FakeIndex()
+            index.put(
+                PluginIndexRecord(
+                    "hijala", 1, null,
+                    com.exapps.mangaworld.core.source.plugins.PluginOrigin.OFFICIAL,
+                    status, null
+                )
+            )
+            val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+            val outcomes = loader(telemetry, index).bootstrap()
+            assertTrue(
+                "expected skip for $status: $outcomes",
+                outcomes.any {
+                    it is BundledPluginLoader.Outcome.Skipped &&
+                        it.id == "hijala" && it.reason.startsWith("blocked:")
+                }
+            )
+            assertEquals(status, index.get("hijala")!!.status)
+        }
+    }
+
+    @Test
+    fun staleButInstalledPayloadResumes() = runTest {
+        // F6a: trust age gates acquisition, not re-verification of stored
+        // immutable bytes — a stale-but-installed payload still resumes.
+        val kp = PluginTestFixtures.generateKeyPair()
+        val keys = mapOf("k1" to PluginTestFixtures.rawPublicKey(kp.public))
+        val node = PluginTestFixtures.manifestTree {
+            it.put("id", "hijala")
+            it.put("version", 1)
+            it.put("engineApi", 1)
+            it.put("minAppVersion", "8.9.0")
+            it.put("issuedAt", "2020-01-01T00:00:00Z")
+            it.put("baseUrl", "https://hijala.example")
+        }
+        val bytes = PluginTestFixtures.signManifest(node, "k1", kp.private)
+        val dir = File(tmp.root, "hijala/versions/1")
+        assertTrue(dir.mkdirs())
+        File(dir, "plugin.json").writeBytes(bytes)
+        val index = FakeIndex()
+        index.put(
+            PluginIndexRecord(
+                "hijala", 1, null,
+                com.exapps.mangaworld.core.source.plugins.PluginOrigin.OFFICIAL,
+                com.exapps.mangaworld.core.source.plugins.PluginStatus.ENABLED,
+                bytes.toString(Charsets.UTF_8)
+            )
+        )
+        val telemetry = RecordingPluginTelemetry()
+        val outcomes = loader(telemetry, index, keys).bootstrap()
+        assertTrue(
+            "expected hijala activation, got: $outcomes",
+            outcomes.any {
+                it is BundledPluginLoader.Outcome.Activated && it.id == "hijala"
+            }
+        )
+        assertEquals(
+            com.exapps.mangaworld.core.source.plugins.PluginStatus.ENABLED,
+            index.get("hijala")!!.status
         )
     }
 

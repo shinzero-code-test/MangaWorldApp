@@ -33,9 +33,11 @@ class FirebaseRemoteConfigManager @Inject constructor(
      * Provider (not direct) — the registry's plugins need SettingsRepository,
      * which needs this manager. Lazy lookup breaks the cycle.
      */
-    private val registryProvider: javax.inject.Provider<com.exapps.mangaworld.core.source.plugins.SourceRegistry>
+    private val registryProvider: javax.inject.Provider<com.exapps.mangaworld.core.source.plugins.SourceRegistry>,
+    // Injected (not getInstance()) so JVM tests can substitute a fake with
+    // faithful defaults/fetch precedence semantics (F1 regression test).
+    private val remoteConfig: FirebaseRemoteConfig
 ) {
-    private val remoteConfig: FirebaseRemoteConfig = FirebaseRemoteConfig.getInstance()
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     private val _disabledSourceIds = MutableStateFlow<Set<String>>(emptySet())
@@ -104,26 +106,27 @@ class FirebaseRemoteConfigManager @Inject constructor(
                     .setMinimumFetchIntervalInSeconds(3600)
                     .build()
             ).await()
-            remoteConfig.setDefaultsAsync(
-                mapOf(
-                    "scraper_selector_overrides" to "{}",
-                    "scraper_connect_timeout_seconds" to 30,
-                    "scraper_read_timeout_seconds" to 30,
-                    "scraper_write_timeout_seconds" to 15,
-                    "scraper_retry_count" to 1,
-                    "home_layout_variant" to "default",
-                    "community_banned_keywords" to "",
-                    "remote_alert_message" to "",
-                    "engagement_tier_warming_ms" to 900000L,
-                    "engagement_tier_active_ms" to 3600000L,
-                    "engagement_tier_avid_ms" to 36000000L,
-                    "plugin_key_rotation" to "",
-                    "plugin_kill_switch" to ""
-                ) + sourceDefaultEntries()
-            ).await()
+            remoteConfig.setDefaultsAsync(staticDefaults() + sourceDefaultEntries()).await()
             applyState()
         }
     }
+
+    /** Non-source RC defaults (stable set; source ids are dynamic — see below). */
+    private fun staticDefaults(): Map<String, Any> = mapOf(
+        "scraper_selector_overrides" to "{}",
+        "scraper_connect_timeout_seconds" to 30,
+        "scraper_read_timeout_seconds" to 30,
+        "scraper_write_timeout_seconds" to 15,
+        "scraper_retry_count" to 1,
+        "home_layout_variant" to "default",
+        "community_banned_keywords" to "",
+        "remote_alert_message" to "",
+        "engagement_tier_warming_ms" to 900000L,
+        "engagement_tier_active_ms" to 3600000L,
+        "engagement_tier_avid_ms" to 36000000L,
+        "plugin_key_rotation" to "",
+        "plugin_kill_switch" to ""
+    )
 
     /**
      * Per-source defaults straight from the plugin registry: enabled + base URL per
@@ -149,7 +152,13 @@ class FirebaseRemoteConfigManager @Inject constructor(
 
     fun currentScraperRuntimeConfig(): ScraperRuntimeConfig = scraperRuntimeConfig.value
 
-    private fun applyState() {
+    private suspend fun applyState() {
+        // F1: dynamic remote ids arrive AFTER the one-shot defaults seeding in
+        // init, so a later getBoolean("source_<new>_enabled") reads false and
+        // the fresh source is subtracted from enabledSources on the next
+        // refresh. Re-seed from the CURRENT registry on every apply (merge
+        // semantics: fetched server values still win over these defaults).
+        remoteConfig.setDefaultsAsync(staticDefaults() + sourceDefaultEntries()).await()
         // Registry-driven: every known plugin gets kill-switch + domain keys.
         val plugins = registryProvider.get().all()
         val disabled = buildSet {
@@ -162,9 +171,13 @@ class FirebaseRemoteConfigManager @Inject constructor(
 
         // Per-source domains. Only non-blank, valid origins are kept — anything
         // else falls back to the descriptor default inside SourceDomainOverrides.
+        // C-6: unsigned RC must not repoint SIGNED remote manifests — domain
+        // overrides publish for APK builtins only (domain moves); remote
+        // descriptors are pinned by their signed baseUrl and move via versions.
         val domainOverrides: Map<String, String> = buildMap<String, String> {
             for (plugin in plugins) {
                 val id = plugin.descriptor.id.value
+                if (!registryProvider.get().isBuiltin(id)) continue
                 val raw = remoteConfig.getString("source_${id}_base_url")
                 SourceDomainOverrides.normalizeBaseUrl(raw)?.let { put(id, it) }
             }

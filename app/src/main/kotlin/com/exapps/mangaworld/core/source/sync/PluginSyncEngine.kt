@@ -90,6 +90,16 @@ sealed interface PostSmoke {
 }
 
 /**
+ * Document-level distribution failure (D9): the whole index was rejected
+ * (structural parse failure — per-entry malformations are skipped, not
+ * fatal). Extends [IllegalStateException] so existing handling still
+ * applies; the worker matches this type to skip `recordSyncCompleted`,
+ * keeping the 12 h boot-stale lane as the retry instead of going dark
+ * until the next 24 h periodic run.
+ */
+class IndexRejectedException(message: String) : IllegalStateException(message)
+
+/**
  * Phase 2B sync engine: untrusted-index poll → verified activation.
  *
  * Per sync (plan §8):
@@ -210,8 +220,13 @@ class PluginSyncEngine @Inject constructor(
                 allowInsecure = allowInsecure,
                 baseDir = baseDir
             )
-            logOutcomeLines(result)
-            telemetry.logSync(reportOf(result, System.currentTimeMillis() - start))
+            // D8: a screen-leaving cancellation must not eat the bookkeeping —
+            // partial-sweep lines + telemetry still land, then cancellation
+            // propagates to the caller below.
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                logOutcomeLines(result)
+                telemetry.logSync(reportOf(result, System.currentTimeMillis() - start))
+            }
             result
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -331,9 +346,12 @@ class PluginSyncEngine @Inject constructor(
         val parsed = when (val r = PluginIndexParser.parse(indexBytes.body)) {
             is PluginIndexParser.IndexResult.Valid -> r
             is PluginIndexParser.IndexResult.Invalid ->
-                throw IllegalStateException("index rejected: ${r.reason}")
+                throw IndexRejectedException("index rejected: ${r.reason}")
         }
         indexBytes.etag?.let { etags.set(it) }
+        if (parsed.skipped.isNotEmpty()) {
+            log("sync skipping malformed entries: ${parsed.skipped.take(10).joinToString(",")}")
+        }
 
         val outcomes = mutableMapOf<String, EntryOutcome>()
         for (entry in parsed.entries) {
@@ -372,11 +390,15 @@ class PluginSyncEngine @Inject constructor(
             null
         }?.evict?.size ?: 0
         if (evicted > 0) log("quota sweep evicted $evicted old version(s)")
-        etags.setUnresolved(
-            outcomes
-                .filterValues { it is EntryOutcome.Failed || it is EntryOutcome.RolledBack }
-                .keys
-        )
+        // D8: same cancellation discipline as the outcome report above —
+        // retry bookkeeping must survive a mid-sweep screen exit.
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            etags.setUnresolved(
+                outcomes
+                    .filterValues { it is EntryOutcome.Failed || it is EntryOutcome.RolledBack }
+                    .keys
+            )
+        }
         SyncResult(outcomes = outcomes, revocationsApplied = revocations, evictedVersions = evicted)
     }
 
@@ -388,12 +410,10 @@ class PluginSyncEngine @Inject constructor(
             val record = indexStore.get(rev.id) ?: continue
             val active = record.activeVersion ?: continue
             if (rev.version != null && rev.version != active) continue
-            if (registry.isOverridden(rev.id)) {
-                registry.clearOverride(rev.id)
-            }
-            // Remote/custom installs are also unregistered; builtins simply
-            // resume (their kill-switch stays `source_<id>_enabled`).
-            registry.unregisterRemote(rev.id)
+            // Remote/custom installs are removed from every serving map;
+            // builtins simply resume (their kill-switch stays
+            // `source_<id>_enabled`).
+            registry.removeAll(rev.id)
             indexStore.put(record.copy(status = PluginStatus.REVOKED))
             applied += rev.id
             log("kill-switch revoked ${rev.id} (was v$active)")
@@ -426,10 +446,7 @@ class PluginSyncEngine @Inject constructor(
             if (record.status != PluginStatus.ENABLED && record.status != PluginStatus.INSTALLED) continue
             val engine = record.manifestJson?.let(::parseManifestEngine) ?: continue
             if (engine !in policy.disabledEngines) continue
-            if (registry.isOverridden(record.id)) {
-                registry.clearOverride(record.id)
-            }
-            registry.unregisterRemote(record.id)
+            registry.removeAll(record.id)
             indexStore.put(record.copy(status = PluginStatus.REVOKED))
             applied += "${record.id} (engine ${engine.serialName})"
             log("kill-switch disabled engine ${engine.serialName}: revoked ${record.id} (was v${record.activeVersion})")
@@ -485,6 +502,18 @@ class PluginSyncEngine @Inject constructor(
                 return EntryOutcome.DowngradeRefused
             }
         }
+        if (record?.status == PluginStatus.INCOMPATIBLE) {
+            // Declined candidate unchanged: re-downloading + re-rejecting it
+            // every sweep is pure churn (the bytes are content-pinned, so a
+            // same-version candidate IS the same candidate). A version bump
+            // (or the upgrade reconciler) re-opens evaluation.
+            val markedVersion = record.manifestJson?.let { json ->
+                runCatching { jsonMapper.readTree(json).get("version")?.asInt() }.getOrNull()
+            }
+            if (markedVersion != null && markedVersion == entry.version) {
+                return EntryOutcome.Rejected("incompatible candidate unchanged")
+            }
+        }
         PluginDistribution.checkManifestUrl(entry.manifestUrl, indexUrl, allowInsecure)?.let {
             return EntryOutcome.Rejected("manifest url: $it")
         }
@@ -515,7 +544,9 @@ class PluginSyncEngine @Inject constructor(
                 // small manifests, bounded by the parser cap). Only written when
                 // no record exists — a serving record is never touched by a
                 // declined candidate.
-                if (v.reason == ManifestInvalidReason.INCOMPATIBLE && indexStore.get(entry.id) == null) {
+                if (v.reason == ManifestInvalidReason.INCOMPATIBLE &&
+                    indexStore.get(entry.id)?.manifestJson == null
+                ) {
                     indexStore.put(
                         com.exapps.mangaworld.core.source.plugins.PluginIndexRecord(
                             id = entry.id,
@@ -559,9 +590,16 @@ class PluginSyncEngine @Inject constructor(
             persistQuietly(baseDir, entry, manifest, manifestBytes, scriptBytes = scriptBytes)
             return EntryOutcome.HeldForConsent
         }
-        val builtin = registry.pluginFor(entry.id)
-        if (builtin != null) {
-            return syncOverride(entry, record, builtin, manifest, manifestBytes, postSmoke, baseDir)
+        val existing = registry.pluginFor(entry.id)
+        if (existing != null && registry.isBuiltin(entry.id)) {
+            return syncOverride(entry, record, existing, manifest, manifestBytes, postSmoke, baseDir)
+        }
+        if (existing != null) {
+            // Installed REMOTE id (override or new id): never the builtin
+            // path — the runner must be rebuilt from the candidate payload.
+            return syncRemoteUpdate(
+                entry, record, existing, manifest, manifestBytes, scriptBytes, postSmoke, baseDir
+            )
         }
         // New id: pair a runner (Phase 3). Engines without a generic runner
         // (ASTRO/API/CUSTOM) keep the 2B behavior: verified payload retained
@@ -614,8 +652,10 @@ class PluginSyncEngine @Inject constructor(
         // re-enables sources the user opted out of).
         val enable = record?.status == PluginStatus.ENABLED ||
             (record == null && manifest.enabledByDefault)
+        var toggled = false
         if (enable && record?.status != PluginStatus.ENABLED) {
             runCatching { settingsRepo.toggleSource(entry.id, true) }
+            toggled = true
         }
         indexStore.get(entry.id)?.let { rec ->
             indexStore.put(rec.copy(status = if (enable) PluginStatus.ENABLED else PluginStatus.DISABLED))
@@ -626,6 +666,9 @@ class PluginSyncEngine @Inject constructor(
             // read UpToDate forever). Remove the record instead: the next sweep
             // re-runs the full flow and self-heals when the payload is fixed.
             // Orphaned bytes are quota-collected (no record protects them).
+            // Undo our own settings flip so a rolled-back id is not left
+            // phantom-enabled with nothing registered behind it.
+            if (toggled) runCatching { settingsRepo.toggleSource(entry.id, false) }
             registry.clearOverride(entry.id)
             runCatching { indexStore.remove(entry.id) }
             log("sync ${entry.id}: post-activation smoke failed — rolled back")
@@ -651,7 +694,7 @@ class PluginSyncEngine @Inject constructor(
         baseDir: File
     ): EntryOutcome {
         if (manifest.engine != builtin.descriptor.engine) {
-            persistQuietly(baseDir, entry, manifest, manifestBytes)
+            persistQuietly(baseDir, entry, manifest, manifestBytes, scriptBytes = scriptBytes)
             log(
                 "sync ${entry.id}: engine ${builtin.descriptor.engine.serialName} → " +
                     "${manifest.engine.serialName} held for consent"
@@ -687,6 +730,11 @@ class PluginSyncEngine @Inject constructor(
         }
         // Updates retain serving state: only an explicit DISABLED survives.
         val enable = record?.status != PluginStatus.DISABLED
+        var toggled = false
+        if (enable && record?.status != PluginStatus.ENABLED) {
+            runCatching { settingsRepo.toggleSource(entry.id, true) }
+            toggled = true
+        }
         indexStore.get(entry.id)?.let { rec ->
             indexStore.put(rec.copy(status = if (enable) PluginStatus.ENABLED else PluginStatus.DISABLED))
         }
@@ -696,10 +744,125 @@ class PluginSyncEngine @Inject constructor(
             // reading UpToDate on a failed version forever (F-review: the old
             // registry-only rollback stranded the pointer). rollback() also
             // gives PluginStore.rollback its first production caller.
+            // Undo our own settings flip for the same phantom-enable reason
+            // as the new-id path.
+            if (toggled) runCatching { settingsRepo.toggleSource(entry.id, false) }
             registry.clearOverride(entry.id)
             runCatching { pluginStore.rollback(entry.id) }
             log("sync ${entry.id}: post-activation smoke failed — rolled back")
             return EntryOutcome.RolledBack
+        }
+        return EntryOutcome.Updated(hostsExpanded = expanded)
+    }
+
+    /**
+     * Remote update path: an already-installed REMOTE id (override entry or
+     * new id) whose index version advanced. Unlike [syncOverride] — which
+     * reuses the APK scraper and is only valid for builtins — this rebuilds
+     * the runner from the CANDIDATE manifest + downloaded script bytes, then
+     * persists those bytes. Serving state is preserved (an explicit DISABLED
+     * survives); consent holds mirror the new-id path (requiresPermission and
+     * engine changes never auto-install).
+     *
+     * Smoke runs BEFORE registration here (the candidate object smokes
+     * directly): on failure the previous registration is untouched, so unlike
+     * the legacy paths there is no serving window and no re-registration to
+     * undo — only pointer/status bookkeeping rolls back.
+     */
+    @Suppress("LongParameterList")
+    private suspend fun syncRemoteUpdate(
+        entry: PluginIndexEntry,
+        record: com.exapps.mangaworld.core.source.plugins.PluginIndexRecord?,
+        existing: SourcePlugin,
+        manifest: PluginManifest,
+        manifestBytes: ByteArray,
+        scriptBytes: ByteArray?,
+        postSmoke: PostSmoke,
+        baseDir: File
+    ): EntryOutcome {
+        if (manifest.requiresPermission) {
+            persistQuietly(baseDir, entry, manifest, manifestBytes, scriptBytes = scriptBytes)
+            return EntryOutcome.HeldForConsent
+        }
+        if (manifest.engine != existing.descriptor.engine) {
+            persistQuietly(baseDir, entry, manifest, manifestBytes, scriptBytes = scriptBytes)
+            log(
+                "sync ${entry.id}: engine ${existing.descriptor.engine.serialName} → " +
+                    "${manifest.engine.serialName} held for consent"
+            )
+            return EntryOutcome.HeldForConsent
+        }
+        val scraper = if (manifest.engine == SourceEngine.SCRIPT) {
+            when (val r = runnerFactory.createScript(manifest, scriptBytes)) {
+                null -> null
+                else -> r.getOrElse {
+                    return EntryOutcome.Rejected("script build: ${it.message?.take(120)}")
+                }
+            }
+        } else {
+            runnerFactory.createDescriptor(manifest)
+        }
+        if (scraper == null) {
+            // No generic runner: keep serving the current version untouched
+            // (no persist — persisting would move the pointer while v1 serves).
+            // The next sweep retries; a runner-capable app version picks it up.
+            log("sync ${entry.id}: no runner for ${manifest.engine.serialName} update — v${record?.activeVersion} keeps serving")
+            return EntryOutcome.NewSourceDeferred
+        }
+        // Snapshot serving state BEFORE persistVerified rewrites the record:
+        // rollback restores this copy wholesale (pointers + status).
+        val prior = indexStore.get(entry.id)
+        when (
+            val persisted = pluginStore.persistVerified(
+                baseDir = baseDir,
+                id = entry.id,
+                manifest = manifest,
+                manifestBytes = manifestBytes,
+                origin = PluginOrigin.OFFICIAL,
+                scriptBytes = scriptBytes
+            )
+        ) {
+            is PluginStore.InstallResult.Rejected ->
+                return EntryOutcome.Rejected("${persisted.reason}: ${persisted.message.take(120)}")
+            is PluginStore.InstallResult.Installed -> Unit
+        }
+        val plugin = object : SourcePlugin {
+            override val descriptor: PluginManifest = manifest
+            override val display = existing.display
+            override val scraper = runner
+        }
+        // Updates retain serving state: only an explicit DISABLED survives;
+        // a missing record falls back to the manifest default (new-id rule).
+        val enable = if (record == null) manifest.enabledByDefault
+        else record.status != PluginStatus.DISABLED
+        var toggled = false
+        if (enable && record?.status != PluginStatus.ENABLED) {
+            runCatching { settingsRepo.toggleSource(entry.id, true) }
+            toggled = true
+        }
+        if (!runPostSmoke(plugin, postSmoke)) {
+            if (toggled) runCatching { settingsRepo.toggleSource(entry.id, false) }
+            if (prior != null) {
+                indexStore.put(prior)
+            } else {
+                runCatching { indexStore.remove(entry.id) }
+            }
+            log("sync ${entry.id}: post-activation smoke failed — rolled back")
+            return EntryOutcome.RolledBack
+        }
+        val outcome = registry.registerVerified(plugin, PluginOrigin.OFFICIAL)
+        if (outcome is SourceRegistry.RegisterOutcome.Refused) {
+            if (toggled) runCatching { settingsRepo.toggleSource(entry.id, false) }
+            if (prior != null) {
+                indexStore.put(prior)
+            } else {
+                runCatching { indexStore.remove(entry.id) }
+            }
+            return EntryOutcome.Rejected(outcome.reason)
+        }
+        val expanded = (outcome as? SourceRegistry.RegisterOutcome.Superseded)?.hostsExpanded == true
+        indexStore.get(entry.id)?.let { rec ->
+            indexStore.put(rec.copy(status = if (enable) PluginStatus.ENABLED else PluginStatus.DISABLED))
         }
         return EntryOutcome.Updated(hostsExpanded = expanded)
     }
@@ -776,16 +939,65 @@ class PluginSyncEngine @Inject constructor(
         }
     }
 
-    private suspend fun runPostSmoke(plugin: SourcePlugin, postSmoke: PostSmoke): Boolean =
-        when (postSmoke) {
-            is PostSmoke.Disabled -> true
-            is PostSmoke.Custom -> runCatching { postSmoke.fn(plugin) }.getOrDefault(false)
-            is PostSmoke.Network -> runCatching {
-                withTimeout(postSmoke.timeoutMs) {
-                    plugin.scraper.getHomeData().isSuccess
+    /**
+     * Post-activation read probe, typed (D10): a wall-clock timeout is a
+     * transient transport condition, not a payload verdict — it must not
+     * masquerade as a generic failure (the old `runCatching/getOrDefault`
+     * swallowed `TimeoutCancellationException` into `false`). Behavior on
+     * timeout stays rollback (nothing serving is left behind); the type only
+     * separates the log/telemetry signal so slow sources are diagnosable and
+     * the manifest `timeoutMs` can be raised deliberately.
+     *
+     * The Network probe also requires a non-empty home (F-review): an empty
+     * `HomeData` maps successfully, so without this a selector-drifted source
+     * installs as healthy.
+     */
+    sealed interface SmokeResult {
+        data object Passed : SmokeResult
+        data class Failed(val reason: String) : SmokeResult
+        data object TimedOut : SmokeResult
+    }
+
+    private suspend fun runPostSmoke(plugin: SourcePlugin, postSmoke: PostSmoke): Boolean {
+        val result: SmokeResult = when (postSmoke) {
+            is PostSmoke.Disabled -> SmokeResult.Passed
+            is PostSmoke.Custom -> try {
+                if (postSmoke.fn(plugin)) SmokeResult.Passed
+                else SmokeResult.Failed("custom smoke refused")
+            } catch (e: Exception) {
+                SmokeResult.Failed(e.message?.take(120) ?: "custom smoke threw")
+            }
+            is PostSmoke.Network -> try {
+                val read = withTimeout(postSmoke.timeoutMs) {
+                    plugin.scraper.getHomeData()
                 }
-            }.getOrDefault(false)
+                read.fold(
+                    onSuccess = { home ->
+                        if (home.featured.isNotEmpty() ||
+                            home.latestChapters.isNotEmpty() ||
+                            home.trending.isNotEmpty()
+                        ) {
+                            SmokeResult.Passed
+                        } else {
+                            SmokeResult.Failed("smoke home empty")
+                        }
+                    },
+                    onFailure = { SmokeResult.Failed(it.message?.take(120) ?: "smoke read failed") }
+                )
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                SmokeResult.TimedOut
+            } catch (e: Exception) {
+                SmokeResult.Failed(e.message?.take(120) ?: "smoke threw")
+            }
         }
+        when (result) {
+            is SmokeResult.Passed -> Unit
+            is SmokeResult.Failed -> log("post-smoke failed: ${result.reason}")
+            is SmokeResult.TimedOut ->
+                log("post-smoke timed out after budget (transient — not a payload verdict)")
+        }
+        return result is SmokeResult.Passed
+    }
 
     private fun hostOf(url: String): String? {
         val host = runCatching { java.net.URI(url.trim()).host }.getOrNull()
@@ -876,7 +1088,7 @@ class PluginSyncEngine @Inject constructor(
             }
             scriptBytes = js
         }
-        val builtin = registry.pluginFor(id)
+        val builtin = registry.pluginFor(id)?.takeIf { registry.isBuiltin(id) }
         val scraper: MangaScraper
         val display: com.exapps.mangaworld.core.source.plugins.SourceDisplay
         if (builtin != null && manifest.engine == builtin.descriptor.engine) {
@@ -915,25 +1127,31 @@ class PluginSyncEngine @Inject constructor(
             override val display = display
             override val scraper = scraper
         }
+        // Consent is explicit here, so the settings flip happens up front —
+        // and is undone below unless registration AND smoke both pass (a
+        // phantom-enabled id with nothing registered is the same bug class
+        // as the sync rollback toggle hygiene).
+        runCatching { settingsRepo.toggleSource(id, true) }
+        // Smoke BEFORE registration: the candidate object smokes directly,
+        // so on failure there is no override to clear and no previous runner
+        // to rebuild — the previous registration (if any) kept serving
+        // throughout, and the hold simply persists.
+        if (!runPostSmoke(plugin, postSmoke)) {
+            runCatching { settingsRepo.toggleSource(id, false) }
+            runCatching { indexStore.put(record) }
+            log("approve $id: post-activation smoke failed — hold restored")
+            return@withContext ApproveOutcome.Failed("post-activation smoke failed")
+        }
         when (val outcome = registry.registerVerified(plugin, PluginOrigin.OFFICIAL)) {
-            is SourceRegistry.RegisterOutcome.Refused ->
+            is SourceRegistry.RegisterOutcome.Refused -> {
+                runCatching { settingsRepo.toggleSource(id, false) }
+                runCatching { indexStore.put(record) }
                 return@withContext ApproveOutcome.Held(outcome.reason)
+            }
             else -> Unit
         }
-        runCatching { settingsRepo.toggleSource(id, true) }
         indexStore.get(id)?.let { rec ->
             indexStore.put(rec.copy(status = PluginStatus.ENABLED))
-        }
-        if (!runPostSmoke(plugin, postSmoke)) {
-            if (builtin != null) {
-                registry.clearOverride(id)
-                runCatching { pluginStore.rollback(id) }
-            } else {
-                registry.clearOverride(id)
-                runCatching { indexStore.remove(id) }
-            }
-            log("approve $id: post-activation smoke failed — rolled back")
-            return@withContext ApproveOutcome.Failed("post-activation smoke failed")
         }
         ApproveOutcome.Approved
     }

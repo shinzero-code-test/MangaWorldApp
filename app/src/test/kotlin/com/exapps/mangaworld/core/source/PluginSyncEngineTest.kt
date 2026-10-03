@@ -584,7 +584,12 @@ class PluginSyncEngineTest {
             override val display = com.exapps.mangaworld.core.source.plugins.SourceDisplay(0, 0)
             override val scraper = scraper
         }
-        assertTrue(registry.registerRemote(custom))
+        assertTrue(
+            registry.registerVerified(
+                custom,
+                com.exapps.mangaworld.core.source.plugins.PluginOrigin.CUSTOM
+            ) is SourceRegistry.RegisterOutcome.Installed
+        )
         index.put(PluginIndexRecord("customx", 1, null, PluginOrigin.CUSTOM, PluginStatus.ENABLED, null))
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
         val engine = PluginSyncEngine(

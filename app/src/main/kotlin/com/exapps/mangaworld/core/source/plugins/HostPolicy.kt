@@ -80,6 +80,8 @@ object HostPolicy {
         EMPTY_LOCATION,
         UNPARSEABLE,
         NOT_HTTPS,
+        USERINFO_PRESENT,
+        NON_DEFAULT_PORT,
         HOST_NOT_ALLOWED,
         HOP_BUDGET_EXCEEDED
     }
@@ -107,6 +109,15 @@ object HostPolicy {
         if (!next.scheme.equals("https", ignoreCase = true)) {
             // Catches both plain-http targets and https→http downgrades mid-chain.
             return RedirectDecision.Reject(RedirectRejectReason.NOT_HTTPS)
+        }
+        // C-9: userinfo and explicit non-default ports are undeclared exfil
+        // channels inside the "same host" guarantee (OkHttp strips/sends
+        // userinfo as auth; :8443 is a different service on the same name).
+        if (!next.userInfo.isNullOrBlank()) {
+            return RedirectDecision.Reject(RedirectRejectReason.USERINFO_PRESENT)
+        }
+        if (next.port != -1 && next.port != 443) {
+            return RedirectDecision.Reject(RedirectRejectReason.NON_DEFAULT_PORT)
         }
         val host = next.host?.lowercase()?.trimEnd('.').orEmpty()
         if (!isHostAllowed(host, allowedHosts)) {

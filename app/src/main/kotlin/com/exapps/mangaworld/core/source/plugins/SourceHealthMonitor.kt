@@ -34,6 +34,8 @@ class SourceHealthMonitor @Inject constructor(
     private val index: PluginIndexStore,
     private val registry: SourceRegistry,
     private val telemetry: PluginTelemetry,
+    private val loader: BundledPluginLoader,
+    private val settingsRepo: com.exapps.mangaworld.domain.repository.SettingsRepository,
     @com.exapps.mangaworld.core.di.IoDispatcher private val io: kotlinx.coroutines.CoroutineDispatcher
 ) {
 
@@ -58,11 +60,34 @@ class SourceHealthMonitor @Inject constructor(
      * self-clears into serving).
      */
     suspend fun reverify(id: String): Boolean = kotlinx.coroutines.withContext(io) {
-        val scraper = registry.scraperFor(id) ?: return@withContext false
+        var scraper = registry.scraperFor(id)
+        // C-4: quarantine unregisters new ids, so there is nothing to smoke.
+        // Rebuild the registration from the retained on-disk payload (same
+        // verified bytes the boot path trusts) and smoke THAT — never the
+        // builtin/whatever happens to be registered instead.
+        var revived = false
+        if (scraper == null) {
+            val built = loader.buildPluginFromDisk(id)
+            if (built !is BundledPluginLoader.DiskBuild.Ready) return@withContext false
+            if (registry.registerVerified(
+                    built.plugin,
+                    PluginOrigin.OFFICIAL
+                ) is SourceRegistry.RegisterOutcome.Refused
+            ) {
+                return@withContext false
+            }
+            revived = true
+            scraper = registry.scraperFor(id) ?: return@withContext false
+        }
         val ok = runCatching { scraper.getHomeData().getOrThrow() }
             .map { !it.isHomeEmpty() }
             .getOrDefault(false)
-        if (!ok) return@withContext false
+        if (!ok) {
+            // Undo the revival registration so a failed re-check leaves no
+            // half-serving state behind (pre-existing registrations untouched).
+            if (revived) registry.clearOverride(id)
+            return@withContext false
+        }
         val current = store.load(id)
         store.save(
             id,
@@ -125,11 +150,11 @@ class SourceHealthMonitor @Inject constructor(
             // Pure builtin: no fallback exists — record only, keep serving.
             return
         }
-        if (registry.isOverridden(id)) {
-            registry.clearOverride(id)
-        }
-        registry.unregisterRemote(id)
+        registry.removeAll(id)
         index.put(record.copy(status = PluginStatus.QUARANTINED))
+        // Q-3: an isolated source must not keep reading "enabled" in
+        // settings while nothing is registered behind it.
+        runCatching { settingsRepo.toggleSource(id, false) }
     }
 
     private fun failedOf(result: Result<*>): Boolean {

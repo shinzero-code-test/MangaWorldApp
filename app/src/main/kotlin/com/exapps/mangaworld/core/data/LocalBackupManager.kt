@@ -42,7 +42,8 @@ class LocalBackupManager @Inject constructor(
     private val collectionManager: CollectionManager,
     private val bookmarkManager: BookmarkManager,
     private val settingsRepository: SettingsRepository,
-    private val pluginIndex: com.exapps.mangaworld.core.source.plugins.PluginIndexStore
+    private val pluginIndex: com.exapps.mangaworld.core.source.plugins.PluginIndexStore,
+    private val pluginSyncScheduler: com.exapps.mangaworld.core.source.sync.PluginSyncScheduler
 ) {
     /** Outcome of a backup import — callers must surface non-success to the user. */
     sealed interface ImportResult {
@@ -259,6 +260,11 @@ class LocalBackupManager @Inject constructor(
                     }
                 }.onFailure { Log.w(TAG, "Plugin ref restore skipped: ${it.message}") }
             }
+        }
+        // D12: restored refs are payload-less AVAILABLE markers — nudge the
+        // sync lane so re-discovery does not wait for the next boot window.
+        if (pluginCount > 0) {
+            runCatching { pluginSyncScheduler.requestNow() }
         }
         return ImportResult.Success(favCount, histCount, readCount, collectionCount, bookmarkCount, pluginCount)
     }

@@ -50,11 +50,12 @@ class SourceUiMapper @Inject constructor(
         val known = registry.allDescriptors().map { it.id.value }.toSet()
         heldExtras = all
             .filter {
-                it.id !in known && it.status == PluginStatus.DISABLED &&
+                it.id !in known &&
+                    (it.status == PluginStatus.DISABLED || it.status == PluginStatus.QUARANTINED) &&
                     it.activeVersion != null && it.manifestJson != null
             }
             .mapNotNull { rec ->
-                parseManifestPreview(rec.manifestJson)?.toExtraEntry()
+                parseManifestPreview(rec.manifestJson)?.toExtraEntry(rec.status)
             }
     }
 
@@ -91,7 +92,8 @@ class SourceUiMapper @Inject constructor(
     fun heldDetails(): Map<String, ManifestPreview> =
         records.values
             .filter {
-                (it.status == PluginStatus.DISABLED || it.status == PluginStatus.QUARANTINED) &&
+                (it.status == PluginStatus.DISABLED || it.status == PluginStatus.QUARANTINED ||
+                    it.status == PluginStatus.INCOMPATIBLE || it.status == PluginStatus.AVAILABLE) &&
                     it.manifestJson != null
             }
             .mapNotNull { rec ->
@@ -103,7 +105,7 @@ class SourceUiMapper @Inject constructor(
     fun displayName(id: String, locale: String = Locale.getDefault().language): String? =
         entry(id, locale)?.name
 
-    private fun ManifestPreview.toExtraEntry(): SourceUiEntry? {
+    private fun ManifestPreview.toExtraEntry(status: PluginStatus): SourceUiEntry? {
         val engine = SourceEngine.fromSerialName(engineName) ?: return null
         return SourceUiEntry(
             id = id,
@@ -112,7 +114,8 @@ class SourceUiMapper @Inject constructor(
             engine = engine,
             requiresVerification = false,
             hostHint = HostPolicy.hostOf(baseUrl).takeIf { it.isNotBlank() } ?: id,
-            rowState = PluginRowState.HELD
+            rowState = if (status == PluginStatus.QUARANTINED) PluginRowState.QUARANTINED
+            else PluginRowState.HELD
         )
     }
 }

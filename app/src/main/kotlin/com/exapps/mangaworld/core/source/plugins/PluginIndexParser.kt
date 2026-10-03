@@ -28,7 +28,9 @@ object PluginIndexParser {
     sealed interface IndexResult {
         data class Valid(
             val updatedAt: String,
-            val entries: List<PluginIndexEntry>
+            val entries: List<PluginIndexEntry>,
+            /** Malformed entries skipped (D9): logged by the caller, never fatal. */
+            val skipped: List<String> = emptyList()
         ) : IndexResult
 
         data class Invalid(val reason: String) : IndexResult
@@ -52,26 +54,30 @@ object PluginIndexParser {
             return IndexResult.Invalid("too many entries")
         }
         val entries = mutableListOf<PluginIndexEntry>()
+        val skipped = mutableListOf<String>()
         val seen = mutableSetOf<String>()
         for (node in entriesNode) {
             val id = node.get("id")?.takeIf { it.isTextual }?.asText()
                 ?.takeIf { ID_REGEX.matches(it) }
-                ?: return IndexResult.Invalid("bad entry id")
+            if (id == null) {
+                skipped += "<bad-id>"
+                continue
+            }
             // First wins on duplicates; a forged bump rides the same manifest
             // verification as any other candidate (authorizeInstall binds id+version).
             if (!seen.add(id)) continue
             val version = node.get("version")?.takeIf { it.isInt }?.asInt()
                 ?.takeIf { it >= 1 }
-                ?: return IndexResult.Invalid("bad entry version for $id")
             val kind = node.get("kind")?.takeIf { it.isTextual }?.asText()
                 ?.takeIf { it.isNotBlank() && it.length <= 32 }
-                ?: return IndexResult.Invalid("bad entry kind for $id")
             val minAppVersion = node.get("minAppVersion")?.takeIf { it.isTextual }?.asText()
                 ?.takeIf { APP_VERSION_REGEX.matches(it) }
-                ?: return IndexResult.Invalid("bad entry minAppVersion for $id")
             val manifestUrl = node.get("manifestUrl")?.takeIf { it.isTextual }?.asText()
                 ?.takeIf { it.isNotBlank() && it.length <= 512 }
-                ?: return IndexResult.Invalid("bad entry manifestUrl for $id")
+            if (version == null || kind == null || minAppVersion == null || manifestUrl == null) {
+                skipped += id
+                continue
+            }
             entries += PluginIndexEntry(
                 id = id,
                 version = version,
@@ -80,6 +86,6 @@ object PluginIndexParser {
                 kind = kind
             )
         }
-        return IndexResult.Valid(updatedAt = updatedAt, entries = entries)
+        return IndexResult.Valid(updatedAt = updatedAt, entries = entries, skipped = skipped)
     }
 }

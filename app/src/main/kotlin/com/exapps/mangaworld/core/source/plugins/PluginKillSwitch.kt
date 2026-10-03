@@ -35,15 +35,22 @@ object PluginKillSwitch {
     }
 
     private val mapper = ObjectMapper()
+        .enable(com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+
+    /** C-10 bound: revocation lists are small; unbounded lists cost a Room read per entry per sync. */
+    const val MAX_KILLSWITCH_JSON_BYTES = 64 * 1024
+    const val MAX_REVOCATIONS = 256
     private val ID_REGEX = Regex("^[a-z0-9][a-z0-9_-]{0,63}$")
 
     /** Parses the RC payload; any malformation fails closed to [Policy.EMPTY]. */
     fun parse(rcJson: String?): Policy {
         if (rcJson.isNullOrBlank()) return Policy.EMPTY
+        if (rcJson.toByteArray(Charsets.UTF_8).size > MAX_KILLSWITCH_JSON_BYTES) return Policy.EMPTY
         return runCatching {
             val root = mapper.readTree(rcJson)
             if (!root.isObject) return Policy.EMPTY
             val revoked = root.get("revoked")?.takeIf { it.isArray }
+                ?.takeIf { it.size() <= MAX_REVOCATIONS }
                 ?.mapNotNull { node ->
                     val id = node.get("id")?.takeIf { it.isTextual }?.asText()
                         ?.takeIf { ID_REGEX.matches(it) } ?: return@mapNotNull null

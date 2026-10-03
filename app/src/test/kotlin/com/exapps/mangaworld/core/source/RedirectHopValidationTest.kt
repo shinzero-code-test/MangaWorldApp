@@ -49,6 +49,26 @@ class RedirectHopValidationTest {
     }
 
     @Test
+    fun userinfoHopRejected() {
+        val result = HostPolicy.resolveRedirect(current, "https://user:pass@starzmanga.com/x", allowed, 0)
+        assertTrue(result is RedirectDecision.Reject)
+        assertEquals(RedirectRejectReason.USERINFO_PRESENT, (result as RedirectDecision.Reject).reason)
+    }
+
+    @Test
+    fun nonDefaultPortHopRejected() {
+        val result = HostPolicy.resolveRedirect(current, "https://starzmanga.com:8443/x", allowed, 0)
+        assertTrue(result is RedirectDecision.Reject)
+        assertEquals(RedirectRejectReason.NON_DEFAULT_PORT, (result as RedirectDecision.Reject).reason)
+    }
+
+    @Test
+    fun explicitDefaultPortHopAllowed() {
+        val result = HostPolicy.resolveRedirect(current, "https://cdn.starzmanga.com:443/i.png", allowed, 0)
+        assertTrue(result is RedirectDecision.Follow)
+    }
+
+    @Test
     fun hopBudgetEnforced() {
         val ok = HostPolicy.resolveRedirect(current, "/a", allowed, hopsUsed = HostPolicy.MAX_REDIRECT_HOPS - 1)
         assertTrue(ok is RedirectDecision.Follow)

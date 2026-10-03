@@ -72,6 +72,17 @@ class SourceRegistry @Inject constructor(
     fun pluginFor(id: String): SourcePlugin? =
         verifiedOverrides[id]?.plugin ?: remote[id] ?: builtinMap[id]
 
+    /** APK-builtin ownership test. Installed remotes/overrides are NOT builtins —
+     * update and consent paths must not treat them as such (remote v1→v2 upgrades
+     * rebuild runners from the candidate payload; builtin overrides reuse the
+     * shipped scraper). */
+    fun isBuiltin(id: String): Boolean = builtinMap.containsKey(id)
+
+    /** Removes every registration for [id] (override AND remote). Kill/health
+     * paths must clear both maps — clearing only one leaks the other serving. */
+    fun removeAll(id: String): Boolean =
+        (verifiedOverrides.remove(id) != null) || (remote.remove(id) != null)
+
     fun descriptorFor(id: String): PluginManifest? = pluginFor(id)?.descriptor
 
     fun scraperFor(id: String): MangaScraper? = pluginFor(id)?.scraper
@@ -84,16 +95,6 @@ class SourceRegistry @Inject constructor(
 
     /** True when [id] currently serves a verified official override (not the builtin). */
     fun isOverridden(id: String): Boolean = verifiedOverrides.containsKey(id)
-
-    /**
-     * Phase 2/Lab entry point: install a verified remote plugin at runtime.
-     * Built-ins win collisions (`putIfAbsent`) — shadowing a shipped id is refused.
-     */
-    fun registerRemote(plugin: SourcePlugin): Boolean =
-        if (builtinMap.containsKey(plugin.descriptor.id.value)) false
-        else {
-            remote.putIfAbsent(plugin.descriptor.id.value, plugin) == null
-        }
 
     fun unregisterRemote(id: String): Boolean = remote.remove(id) != null
 

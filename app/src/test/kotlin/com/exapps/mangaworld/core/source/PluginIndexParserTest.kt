@@ -57,21 +57,30 @@ class PluginIndexParserTest {
     }
 
     @Test
-    fun badEntriesRejected() {
-        // Bad id.
-        assertTrue(PluginIndexParser.parse(index(entry(id = "Hijala"))) is PluginIndexParser.IndexResult.Invalid)
-        // Bad version.
-        assertTrue(
-            PluginIndexParser.parse(
-                index("""{"id":"hijala","version":0,"kind":"descriptor","minAppVersion":"8.9.0","manifestUrl":"https://x/y"}""")
-            ) is PluginIndexParser.IndexResult.Invalid
+    fun badEntriesSkippedNotFatal() {
+        // D9 (deliberate inversion): one malformed entry must not invalidate
+        // the whole document -- it is skipped while valid entries process.
+        // Whole-document Invalid is reserved for size/parse/schema failures
+        // (covered by oversizeRejected/badSchemaVersionRejected above).
+        val result = PluginIndexParser.parse(index(entry(id = "Hijala")))
+        assertTrue(result is PluginIndexParser.IndexResult.Valid)
+        result as PluginIndexParser.IndexResult.Valid
+        assertTrue(result.entries.isEmpty())
+        assertEquals(listOf("<bad-id>"), result.skipped)
+    }
+
+    @Test
+    fun oneBadEntryDoesNotSuppressGoodEntries() {
+        val badVersion = entry(id = "hijala", version = 0)
+        val result = PluginIndexParser.parse(
+            index(badVersion, entry("lavascans", 3), entry(kind = ""), entry("azora", 1))
         )
-        // Blank kind.
-        assertTrue(PluginIndexParser.parse(index(entry(kind = ""))) is PluginIndexParser.IndexResult.Invalid)
-        // Bad minAppVersion.
-        assertTrue(PluginIndexParser.parse(index(entry(minApp = "8.9"))) is PluginIndexParser.IndexResult.Invalid)
-        // Blank manifestUrl.
-        assertTrue(PluginIndexParser.parse(index(entry(url = ""))) is PluginIndexParser.IndexResult.Invalid)
+        assertTrue(result is PluginIndexParser.IndexResult.Valid)
+        result as PluginIndexParser.IndexResult.Valid
+        assertEquals(listOf("lavascans", "azora"), result.entries.map { it.id })
+        // The blank-kind hijala dedups against the already-seen id and skips
+        // silently (first-wins); only the version-invalid one is reported.
+        assertEquals(listOf("hijala"), result.skipped)
     }
 
     @Test

@@ -41,9 +41,24 @@ class DescriptorScraper(
     override val sourceId: String = manifest.id.value
     override val pluginDescriptor: PluginManifest = manifest
 
+    /**
+     * C-5: theme delegates run on a gated client — every request AND
+     * transparent redirect hop is validated against the signed manifest's
+     * `effectiveHosts` (plus https/userinfo/port discipline), and cookies
+     * never cross hosts. The shared client's timeouts/pool are inherited via
+     * `newBuilder`; only the gate is added.
+     */
+    private val gatedClient: OkHttpClient = client.newBuilder()
+        .addNetworkInterceptor(
+            com.exapps.mangaworld.core.source.plugins.HostGateInterceptor(
+                manifest.effectiveHosts
+            )
+        )
+        .build()
+
     private val delegate: MangaScraper = when (manifest.engine) {
         SourceEngine.MADARA -> object : MadaraBaseScraper(
-            client = client,
+            client = gatedClient,
             sourceId = manifest.id.value,
             defaultBaseUrl = manifest.baseUrl,
             settingsRepo = settingsRepo,
@@ -54,7 +69,7 @@ class DescriptorScraper(
                 manifest.selector(key) ?: super.remoteSelector(key, default)
         }
         SourceEngine.MANGAREADER -> object : MangaReaderBaseScraper(
-            client = client,
+            client = gatedClient,
             sourceId = manifest.id.value,
             defaultBaseUrl = manifest.baseUrl,
             settingsRepo = settingsRepo,

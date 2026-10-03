@@ -32,6 +32,9 @@ object PluginTrust {
 
     /** Maximum age of downloaded trust data (rotation announcements). Bundled payloads exempt. */
     const val MAX_TRUST_AGE_DAYS = 90L
+        /** C-10 bound: rotation payloads are a handful of keys. */
+        const val MAX_ROTATION_JSON_BYTES = 64 * 1024
+        const val MAX_ROTATION_ENTRIES = 16
 
     /** Remote Config transport key carrying rotation announcements (JSON, see [parseRotationConfig]). */
     const val RC_ROTATION_KEY = "plugin_key_rotation"
@@ -130,17 +133,25 @@ object PluginTrust {
      * chained rotation (K1→K2→K3) resolves within one payload. Unknown/malformed/freshness
      * failures are skipped, never fatal — pinned trust always survives.
      */
+    private val strictMapper = com.fasterxml.jackson.databind.ObjectMapper()
+        .enable(com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+
     fun resolveTrustedKeys(
         pinned: Map<String, ByteArray> = pinnedKeys(),
         rcJson: String?,
         nowMs: Long = System.currentTimeMillis()
     ): Map<String, ByteArray> {
         if (rcJson.isNullOrBlank()) return pinned
+        // C-10: trust-adjacent parsing matches the manifest parser's
+        // discipline — byte cap before parsing, strict duplicate rejection,
+        // entry cap (a bloated RC payload degrades every sync otherwise).
+        if (rcJson.toByteArray(Charsets.UTF_8).size > MAX_ROTATION_JSON_BYTES) return pinned
         val merged = pinned.toMutableMap()
         val root = runCatching {
-            com.fasterxml.jackson.databind.ObjectMapper().readTree(rcJson)
+            strictMapper.readTree(rcJson)
         }.getOrNull() ?: return merged
         val adds = root.get("add")?.takeIf { it.isArray } ?: return merged
+        if (adds.size() > MAX_ROTATION_ENTRIES) return merged
         for (node in adds) {
             val ann = parseAnnouncement(node) ?: continue
             if (verifyRotation(ann, merged, nowMs)) {

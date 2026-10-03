@@ -36,6 +36,8 @@ object PluginDistribution {
         val secure = manifest.scheme.equals("https", ignoreCase = true) ||
             (allowInsecure && manifest.scheme.equals("http", ignoreCase = true))
         if (!secure) return "manifestUrl must be https"
+        if (!manifest.userInfo.isNullOrBlank()) return "manifestUrl must not carry userinfo"
+        if (manifest.port != -1 && manifest.port != 443) return "manifestUrl must not carry a non-default port"
         if (manifest.host.isNullOrBlank()) return "manifestUrl has no host"
         if (!manifest.host.equals(index.host, ignoreCase = true)) {
             return "manifestUrl host must match index host"

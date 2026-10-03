@@ -55,7 +55,7 @@ class SourceHealthTest {
         health: FakeHealth = FakeHealth(),
         index: FakeIndex = FakeIndex(),
         ids: Array<String> = arrayOf("hijala", "lavascans")
-    ) = SourceHealthMonitor(health, index, SourceUiTestFixtures.registry(*ids), RecordingPluginTelemetry(), io)
+    ) = SourceHealthMonitor(health, index, SourceUiTestFixtures.registry(*ids), RecordingPluginTelemetry(), mockk(relaxed = true), mockk(relaxed = true), io)
 
     private fun home(vararg titles: String) = Result.success(
         HomeData(
@@ -147,7 +147,7 @@ class SourceHealthTest {
         registry.registerVerified(override, PluginOrigin.OFFICIAL)
         assertTrue(registry.isOverridden("hijala"))
 
-        val m = SourceHealthMonitor(health, index, registry, RecordingPluginTelemetry(), io)
+        val m = SourceHealthMonitor(health, index, registry, RecordingPluginTelemetry(), mockk(relaxed = true), mockk(relaxed = true), io)
         repeat(4) { m.observeHome("hijala", failure()) }
         assertEquals(HealthState.OK, m.snapshot("hijala"))
         m.observeHome("hijala", failure())
@@ -209,7 +209,7 @@ class SourceHealthTest {
         val index = FakeIndex()
         val m = SourceHealthMonitor(
             health, index, SourceUiTestFixtures.registry("hijala", "lavascans"),
-            recording, io
+            recording, mockk(relaxed = true), mockk(relaxed = true), io
         )
         // Steady OK traffic: no events at all.
         repeat(3) { m.observeHome("hijala", home("A")) }
@@ -267,10 +267,64 @@ class SourceHealthTest {
         val scraper: MangaScraper = mockk()
         coEvery { scraper.getHomeData() } returns home("A")
         val registry = SourceUiTestFixtures.registry("hijala", "lavascans", scrapers = mapOf("hijala" to scraper))
-        val m = SourceHealthMonitor(health, index, registry, RecordingPluginTelemetry(), io)
+        val m = SourceHealthMonitor(health, index, registry, RecordingPluginTelemetry(), mockk(relaxed = true), mockk(relaxed = true), io)
         assertEquals(true, m.reverify("hijala"))
         assertEquals(HealthState.OK, m.snapshot("hijala"))
         assertEquals(PluginStatus.INSTALLED, index.get("hijala")!!.status)
+    }
+
+    @Test
+    fun reverifyRebuildsUnregisteredRemoteFromDisk() = runTest {
+        // F5/C-4: quarantine unregisters new ids, so there is no scraper to
+        // smoke. Reverify must rebuild the registration from the retained
+        // on-disk payload (which it then smokes) instead of failing outright.
+        val health = FakeHealth()
+        val index = FakeIndex()
+        index.put(
+            PluginIndexRecord("newbie", 1, null, PluginOrigin.OFFICIAL, PluginStatus.QUARANTINED, null)
+        )
+        val scraper: MangaScraper = mockk()
+        coEvery { scraper.getHomeData() } returns home("A")
+        val plugin = SourceUiTestFixtures.registry(
+            "newbie", scrapers = mapOf("newbie" to scraper)
+        ).pluginFor("newbie")!!
+        val loader: com.exapps.mangaworld.core.source.plugins.BundledPluginLoader = mockk()
+        coEvery { loader.buildPluginFromDisk("newbie") } returns
+            com.exapps.mangaworld.core.source.plugins.BundledPluginLoader.DiskBuild.Ready(plugin, false)
+        val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+        val m = SourceHealthMonitor(
+            health, index, registry, RecordingPluginTelemetry(),
+            loader, mockk(relaxed = true), io
+        )
+        assertEquals(true, m.reverify("newbie"))
+        assertEquals(HealthState.OK, m.snapshot("newbie"))
+        assertEquals(PluginStatus.INSTALLED, index.get("newbie")!!.status)
+        assertTrue(registry.scraperFor("newbie") === scraper)
+    }
+
+    @Test
+    fun reverifyFailureUndoesRevivalRegistration() = runTest {
+        val health = FakeHealth()
+        val index = FakeIndex()
+        index.put(
+            PluginIndexRecord("newbie", 1, null, PluginOrigin.OFFICIAL, PluginStatus.QUARANTINED, null)
+        )
+        val scraper: MangaScraper = mockk()
+        coEvery { scraper.getHomeData() } returns emptyHome()
+        val plugin = SourceUiTestFixtures.registry(
+            "newbie", scrapers = mapOf("newbie" to scraper)
+        ).pluginFor("newbie")!!
+        val loader: com.exapps.mangaworld.core.source.plugins.BundledPluginLoader = mockk()
+        coEvery { loader.buildPluginFromDisk("newbie") } returns
+            com.exapps.mangaworld.core.source.plugins.BundledPluginLoader.DiskBuild.Ready(plugin, false)
+        val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+        val m = SourceHealthMonitor(
+            health, index, registry, RecordingPluginTelemetry(),
+            loader, mockk(relaxed = true), io
+        )
+        assertEquals(false, m.reverify("newbie"))
+        assertEquals(PluginStatus.QUARANTINED, index.get("newbie")!!.status)
+        assertTrue(registry.scraperFor("newbie") == null)
     }
 
     @Test
@@ -285,7 +339,7 @@ class SourceHealthTest {
         val scraper: MangaScraper = mockk()
         coEvery { scraper.getHomeData() } returns emptyHome()
         val registry = SourceUiTestFixtures.registry("hijala", "lavascans", scrapers = mapOf("hijala" to scraper))
-        val m = SourceHealthMonitor(health, index, registry, RecordingPluginTelemetry(), io)
+        val m = SourceHealthMonitor(health, index, registry, RecordingPluginTelemetry(), mockk(relaxed = true), mockk(relaxed = true), io)
         assertEquals(false, m.reverify("hijala"))
         assertEquals(HealthState.QUARANTINED, m.snapshot("hijala"))
         assertEquals(PluginStatus.QUARANTINED, index.get("hijala")!!.status)

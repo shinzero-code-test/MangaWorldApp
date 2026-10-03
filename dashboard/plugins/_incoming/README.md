@@ -16,7 +16,11 @@ over HTTP and the app never reads it — promotion is a deliberate human act.
    `dashboard/public/plugins/<id>/v<version>/`, move the superseded version to
    `dashboard/plugins/_archive/<id>/`, bump `public/plugins/index.json`
    (`version` + `updatedAt`).
-5. **Rollback**: re-publish a previously signed archived manifest/version (or
+5. **Deploy**: git auto-deploy is OFF (`vercel.json`) — run `vercel --prod`
+   from `dashboard/` and verify the live `/plugins/index.json` bytes
+   (`updatedAt`/ETag) before announcing. A merged-but-undeployed `index.json`
+   changes nothing the fleet polls.
+6. **Rollback**: re-publish a previously signed archived manifest/version (or
    lower the index `version` back); the app transactionally re-points its local
    active-version pointer. Downgrades to never-signed versions are refused
    on-device.
@@ -27,3 +31,11 @@ over HTTP and the app never reads it — promotion is a deliberate human act.
 - `allowedHosts` entries are literal hostnames only (no wildcards in v1).
 - `requiresPermission` sources (robots-gated APIs) are never auto-enabled.
 - Promote requires the dashboard's standard admin guard (role + MFA).
+- Pilot descriptors (`hijala`/`lavascans` v1) are frozen: the app reinstalls
+  the APK asset every boot, so correcting a shipped v1 manifest requires a
+  version bump — re-publishing v1 bytes is refused on-device as immutable.
+- `updatedAt`-only index re-touches do NOT re-drive `UpToDate`/held entries
+  on device; use a version bump (new behavior to verify) or explicit approval.
+- `manonga` ships `enabledByDefault: false` (dogfood-only): fresh installs
+  land DISABLED until opted in — distinguish opt-in state from sync failure
+  in fleet reports.

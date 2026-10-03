@@ -475,9 +475,13 @@ class MangaDetailViewModel @Inject constructor(
 
     private fun loadSourceComparisons(manga: MangaDetail) {
         viewModelScope.launch {
-            // Limit to top 10 sources to avoid overwhelming the network
+            // Limit to top 10 sources to avoid overwhelming the network.
+            // D7: only user-enabled, normally-serving sources — held,
+            // quarantined or disabled plugin rows must not receive live
+            // traffic the user never approved.
+            val enabled = settingsRepo.getAppSettings().first().enabledSources
             val sourcesToCheck = sourceRegistry.scraperMap().keys
-                .filter { it != currentSource.value }
+                .filter { it != currentSource.value && it in enabled && isServing(it) }
                 .take(MAX_SOURCE_COMPARISONS)
                 .map { SourceId(it) }
 
@@ -542,7 +546,10 @@ class MangaDetailViewModel @Inject constructor(
         val title = detail.title.trim()
         if (title.length < 2) return@coroutineScope emptyList()
         val normalizedTarget = normalizeTitle(title)
-        val results = sourceRegistry.scraperMap().keys.filter { it != detail.source.value }.map { SourceId(it) }.map { source ->
+        val enabled = settingsRepo.getAppSettings().first().enabledSources
+        val results = sourceRegistry.scraperMap().keys.filter {
+            it != detail.source.value && it in enabled && isServing(it)
+        }.map { SourceId(it) }.map { source ->
             async {
                 mangaRepo.searchMangaDirect(title, source).getOrDefault(emptyList())
                     .filter { normalizeTitle(it.title) == normalizedTarget || normalizeTitle(it.title).contains(normalizedTarget) || normalizedTarget.contains(normalizeTitle(it.title)) }
@@ -551,6 +558,11 @@ class MangaDetailViewModel @Inject constructor(
         }.awaitAll().filterNotNull()
         results.distinctBy { it.source.value }.take(5)
     }
+
+    /** D7 serving check: registry presence is not consent. */
+    private fun isServing(id: String): Boolean =
+        sourceUiMapper.entry(id)?.rowState ==
+            com.exapps.mangaworld.core.source.plugins.PluginRowState.SERVING
 
     fun sortedChapters(): List<Chapter> {
         val state = _state.value
