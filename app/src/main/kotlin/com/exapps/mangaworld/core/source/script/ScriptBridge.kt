@@ -10,6 +10,7 @@ import org.mozilla.javascript.NativeArray
 import org.mozilla.javascript.Scriptable
 import org.mozilla.javascript.ScriptableObject
 import org.mozilla.javascript.Undefined
+import org.mozilla.javascript.regexp.NativeRegExp
 
 /**
  * Narrow JS bridge: the ONLY globals a script may call (plan §5).
@@ -112,6 +113,21 @@ object ScriptBridge {
             if (check !== Undefined.instance && check != null && check !== Scriptable.NOT_FOUND) {
                 throw ScriptException("cannot secure scope ($name)")
             }
+        }
+        // Eager RegExp init (fleet root cause, v9.2.2): Rhino registers the
+        // RegExp builtin lazily by class-name string; its first touch runs
+        // LazilyLoadedCtor init → buildClassCtor → a re-entrant getProperty
+        // of the still-initializing slot, which throws
+        // IllegalStateException("RegExp") on R8 builds (mapping-decoded from
+        // a live device stack: LazyLoadSlot.getValue → getValue → ISE). The
+        // JVM never trips it, so no unit test can reproduce it — only this
+        // direct definition removes the lazy path entirely. This is the same
+        // call the reflective path would make; as a direct reference it is
+        // R8-proof by construction (no string lookup involved).
+        NativeRegExp.init(cx, scope, false)
+        val regExp = scope.get("RegExp", scope)
+        if (regExp === Undefined.instance || regExp === Scriptable.NOT_FOUND || regExp == null) {
+            throw ScriptException("cannot secure scope (RegExp)")
         }
     }
 

@@ -31,6 +31,11 @@
 #   at optimizationLevel=-1, stays stripped) and Interpreter (used: keep).
 # - ScriptRuntime lazily loads RegExp/Continuation/typed-arrays by literal;
 #   XML* only registers when FEATURE_E4X is on (ours is off — not kept).
+# v9.2.2: the bridge additionally defines NativeRegExp eagerly via a direct
+# NativeRegExp.init call (no string lookup), because the lazy path
+# (LazilyLoadedCtor init -> buildClassCtor -> re-entrant self-read)
+# throws IllegalStateException("RegExp") on R8 builds. The keeps below
+# remain required for the string-probed names (RegExpImpl etc.).
 # - Regex pre-compilation (CodeGenerator.generateRegExpLiterals, shared by the
 #   interpreter path) resolves its engine via Context.getRegExpProxy, which
 #   probes the literal "org.mozilla.javascript.regexp.RegExpImpl". When that

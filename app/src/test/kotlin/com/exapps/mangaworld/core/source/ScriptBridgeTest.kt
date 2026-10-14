@@ -122,6 +122,20 @@ class ScriptBridgeTest {
     }
 
     @Test
+    fun regExpBuiltinIsEagerlyAvailable() {
+        // v9.2.2 fleet root cause: the lazy RegExp path (LazilyLoadedCtor
+        // init -> buildClassCtor -> re-entrant self-read) throws
+        // IllegalStateException("RegExp") on R8 builds. The bridge defines it
+        // eagerly at install; this locks the observable invariant (a JVM run
+        // cannot reproduce the device-only lazy failure, but it pins the
+        // behavior the fix guarantees).
+        val session = sessionWith()
+        val json = evalOk("(function(){ return { t: typeof RegExp, exec: /[0-9]+/.exec('abc123')[0] }; })()", session)
+        assertTrue(json, json.contains("\"t\":\"function\""))
+        assertTrue(json, json.contains("123"))
+    }
+
+    @Test
     fun fetchSurfacesHttpStatus() {
         evalFails(
             "fetch('https://script.example/nope')", sessionWith(status = 404),
