@@ -200,8 +200,9 @@ class PluginConsentTest {
             resolver = SourceDisplayResolver(context),
             indexStore = index
         )
-        // Before refresh: extras invisible (snapshot empty by construction).
-        assertTrue(mapper.entries().none { it.id == "gated" })
+        // v9.2.3: the mapper re-reads itself (its @ApplicationScope collector), so
+        // "extras invisible until someone calls refresh()" is no longer a property
+        // — and the explicit refresh() below is only an idempotent second read.
         mapper.refresh()
         val extra = mapper.entries().single { it.id == "gated" }
         // Name follows the device locale via the same precedence the resolver

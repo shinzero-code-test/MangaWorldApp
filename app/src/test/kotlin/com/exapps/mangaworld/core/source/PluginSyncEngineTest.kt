@@ -194,7 +194,11 @@ class PluginSyncEngineTest {
         // has no plugin for the id — exactly the unresolved case.
         index.put(PluginIndexRecord("newbie", 1, null, PluginOrigin.OFFICIAL, PluginStatus.ENABLED, null))
         val h = harness(bodies, registryIds = arrayOf("hijala", "lavascans"), index = index)
-        val result = h.engine.sync(h.trust, h.host, baseDir = h.baseDir)
+        val result = h.engine.sync(
+            trustedKeys = h.trust, host = h.host,
+            indexUrl = "https://cdn.example/plugins/index.json",
+            baseDir = h.baseDir
+        )
         val outcome = result.outcomes["newbie"]
         assertTrue(
             "expected a re-drive, got $outcome",

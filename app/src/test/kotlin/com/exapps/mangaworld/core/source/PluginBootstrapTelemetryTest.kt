@@ -149,7 +149,8 @@ class PluginBootstrapTelemetryTest {
                 it.put("baseUrl", "https://newbie.example")
             }
             val bytes = PluginTestFixtures.signManifest(node, "k1", kp.private)
-            val dir = File(tmp.root, "newbie/versions/1")
+            // payload layout mirrors production: <filesDir>/plugins/<id>/versions/<n>
+            val dir = File(tmp.root, "plugins/newbie/versions/1")
             assertTrue(dir.mkdirs())
             File(dir, "plugin.json").writeBytes(bytes)
 
