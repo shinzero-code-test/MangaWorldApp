@@ -109,8 +109,9 @@ class PluginBootstrapTelemetryTest {
     /**
      * Index whose boot snapshot ([getAll]) predates a live status change that the
      * guard read ([get]) sees — exactly the race where a sweep quarantines or
-     * revokes an id while boot resume is verifying its bytes. Deterministic
-     * without threads.
+     * revokes an id while boot resume is verifying its bytes. Deterministic,
+     * no threads. The pilot-asset path blocks first, so this drives the resume
+     * of a NON-pilot id with a real on-disk payload.
      */
     private class FlippingIndex(
         private val bootSnapshot: MutableMap<String, PluginIndexRecord>,
@@ -132,34 +133,56 @@ class PluginBootstrapTelemetryTest {
         // `activeVersion`, so the old pointer-only re-read guard passed and the
         // resume then re-registered the isolated payload and rewrote its status
         // to ENABLED — erasing the safety marker the app had just set.
-        for (isolated in listOf(
+        val isolatedStatuses = listOf(
             com.exapps.mangaworld.core.source.plugins.PluginStatus.QUARANTINED,
             com.exapps.mangaworld.core.source.plugins.PluginStatus.REVOKED
-        )) {
+        )
+        for (isolated in isolatedStatuses) {
+            val kp = PluginTestFixtures.generateKeyPair()
+            val keys = mapOf("k1" to PluginTestFixtures.rawPublicKey(kp.public))
+            val node = PluginTestFixtures.manifestTree {
+                it.put("id", "newbie")
+                it.put("version", 1)
+                it.put("engineApi", 1)
+                it.put("minAppVersion", "8.9.0")
+                it.put("issuedAt", "2026-10-01T00:00:00Z")
+                it.put("baseUrl", "https://newbie.example")
+            }
+            val bytes = PluginTestFixtures.signManifest(node, "k1", kp.private)
+            val dir = File(tmp.root, "newbie/versions/1")
+            assertTrue(dir.mkdirs())
+            File(dir, "plugin.json").writeBytes(bytes)
+
             val bootRecord = PluginIndexRecord(
-                "hijala", 1, null,
+                "newbie", 1, null,
                 com.exapps.mangaworld.core.source.plugins.PluginOrigin.OFFICIAL,
-                com.exapps.mangaworld.core.source.plugins.PluginStatus.ENABLED, null
+                com.exapps.mangaworld.core.source.plugins.PluginStatus.ENABLED,
+                bytes.toString(Charsets.UTF_8)
             )
-            val liveRecord = bootRecord.copy(status = isolated)
             val index = FlippingIndex(
-                mutableMapOf("hijala" to bootRecord),
-                mutableMapOf("hijala" to liveRecord)
+                mutableMapOf("newbie" to bootRecord),
+                mutableMapOf("newbie" to bootRecord.copy(status = isolated))
             )
             val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
-            val outcomes = loader(RecordingPluginTelemetry(), FakeIndex(), null, index, registry)
-                .bootstrap()
+            val outcomes = loader(
+                RecordingPluginTelemetry(), FakeIndex(), keys, index, registry
+            ).bootstrap()
+
             assertTrue(
                 "resume must skip the isolated id ($isolated): $outcomes",
                 outcomes.any {
                     it is BundledPluginLoader.Outcome.Skipped &&
-                        it.id == "hijala" && it.reason.startsWith("posture")
+                        it.id == "newbie" && it.reason.startsWith("posture")
                 }
             )
             assertEquals(
                 "safety marker must survive boot resume ($isolated)",
                 isolated,
-                index.get("hijala")!!.status
+                index.get("newbie")!!.status
+            )
+            assertTrue(
+                "an isolated payload must not be registered ($isolated)",
+                !registry.isKnown("newbie")
             )
         }
     }

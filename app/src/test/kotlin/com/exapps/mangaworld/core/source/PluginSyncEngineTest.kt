@@ -219,7 +219,8 @@ class PluginSyncEngineTest {
         val h = harness(bodies)
         runCatching {
             h.engine.sync(
-                h.trust, h.host,
+                trustedKeys = h.trust, host = h.host,
+                indexUrl = "https://cdn.example/plugins/index.json",
                 killSwitchJson = "{not json at all",
                 baseDir = h.baseDir
             )
@@ -266,7 +267,11 @@ class PluginSyncEngineTest {
             manifestBytes("newsite", 1) { it.put("timeoutMs", 31000) }
         )
         val h = harness(bodies, registryIds = arrayOf("hijala", "lavascans"))
-        h.engine.sync(h.trust, h.host, baseDir = h.baseDir)
+        h.engine.sync(
+            trustedKeys = h.trust, host = h.host,
+            indexUrl = "https://cdn.example/plugins/index.json",
+            baseDir = h.baseDir
+        )
         assertTrue(
             "expected the persist rejection to be logged, got: ${h.logs}",
             h.logs.any { it.contains("persist rejected") }

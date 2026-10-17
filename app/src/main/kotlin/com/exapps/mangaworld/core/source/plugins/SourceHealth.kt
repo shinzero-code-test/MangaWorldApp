@@ -94,7 +94,11 @@ object SourceHealthPolicy {
         nowMs: Long,
         version: Int = 0
     ): Decision {
-        if (version != 0 && version != current.version) {
+        // Only a version that was ALREADY observed counts as a change: version 0
+        // is "unknown" (fixture registries, records without a version), and a
+        // fresh store returns initial() with 0 — adopting it must not wipe
+        // counters that are legitimately accumulating.
+        if (version != 0 && current.version != 0 && version != current.version) {
             return Decision.ResetForVersion(version)
         }
         if (current.state == HealthState.QUARANTINED) {

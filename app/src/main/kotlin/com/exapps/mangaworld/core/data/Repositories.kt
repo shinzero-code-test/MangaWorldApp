@@ -168,6 +168,14 @@ class MangaRepositoryImpl @Inject constructor(
         // Load cached version (with chapters) to return as immediate fallback
         val cached = runCatching { cacheDao.get(mangaId)?.toDetail(source) }.getOrNull()
 
+        // v9.2.5 (audit O-3): the cache-fallback tail below ends in
+        // `cached ?: throw e`, which re-threw the unavailable-source failure out
+        // of a function declared to RETURN a Result. Short-circuit first so the
+        // caller gets the ordinary failed result.
+        if (registry.scraperFor(source.value) == null) {
+            return Result.failure(SourceUnavailable(source.value))
+        }
+
         // Fetch fresh from scraper
         val networkResult = withScraper(source) { it.getMangaDetail(slug) }
         // Drift watch sees the scraper result, not the cache fallback below.
