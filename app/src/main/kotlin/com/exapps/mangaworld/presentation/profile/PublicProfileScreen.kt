@@ -68,7 +68,6 @@ import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.CustomUserList
 import com.exapps.mangaworld.domain.model.CustomUserListItem
 import com.exapps.mangaworld.domain.model.FavoriteManga
-import com.exapps.mangaworld.domain.model.MangaItem
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.LibraryRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
@@ -109,7 +108,7 @@ data class PublicProfileUiState(
  *  live source-name map, which arrives whenever the plugin registry changes). */
 private data class CombinedLibraryState(
     val selectedId: String?,
-    val items: List<com.exapps.mangaworld.domain.model.MangaItem>,
+    val items: List<CustomUserListItem>,
     val readingLists: Map<String, List<FavoriteManga>>,
     val libraryFailed: Boolean,
     val sourceNames: Map<String, String>
@@ -182,7 +181,8 @@ class PublicProfileViewModel @Inject constructor(
             CombinedLibraryState(selectedId, items, readingLists, libraryFailed, sourceNames)
         }
     ) { (profile, lists, activity), (selectedId, items, library) ->
-        val (readingLists, libraryFailed) = library
+        val readingLists = library.readingLists
+        val libraryFailed = library.libraryFailed
         val sourceNames = library.sourceNames
         // Soft-deleted anchors (blanked text) are thread scaffolding, not
         // activity worth headlining — drop them instead of blank rows.

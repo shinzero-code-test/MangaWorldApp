@@ -68,9 +68,11 @@ class RoomPluginIndexStore @Inject constructor(
         dao.getAll().map { it.toRecord() }
     }
 
-    override suspend fun put(record: PluginIndexRecord) = withContext(io) {
-        dao.upsert(record.toEntity())
-        _changes.tryEmit(Unit)
+    override suspend fun put(record: PluginIndexRecord) {
+        withContext(io) {
+            dao.upsert(record.toEntity())
+            _changes.tryEmit(Unit)
+        }
     }
 
     override suspend fun remove(id: String): Boolean = withContext(io) {
