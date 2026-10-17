@@ -21,7 +21,9 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoMap
 import dagger.multibindings.StringKey
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import javax.inject.Qualifier
 import com.exapps.mangaworld.core.firebase.FirebaseNetworkInterceptor
 import androidx.work.WorkManager
@@ -45,6 +47,16 @@ annotation class IoDispatcher
 @Retention(AnnotationRetention.BINARY)
 annotation class DefaultDispatcher
 
+/**
+ * Process-lifetime scope for singletons that must keep observing state
+ * independently of any screen (v9.2.3: `SourceUiMapper` re-reads the plugin
+ * index on every write, so rows are never stale for whichever consumer asks).
+ * A SupervisorJob so one failed observer cannot take the app down.
+ */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ApplicationScope
+
 @Module
 @InstallIn(SingletonComponent::class)
 object CoroutineModule {
@@ -57,6 +69,12 @@ object CoroutineModule {
     @Singleton
     @DefaultDispatcher
     fun provideDefaultDispatcher(): CoroutineDispatcher = Dispatchers.Default
+
+    @Provides
+    @Singleton
+    @ApplicationScope
+    fun provideApplicationScope(): CoroutineScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Default)
 }
 
 @Module

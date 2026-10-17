@@ -13,7 +13,6 @@ import com.exapps.mangaworld.core.data.local.entity.HomeCacheEntity
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
-import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
 import com.exapps.mangaworld.core.source.plugins.SourceUiMapper
@@ -81,24 +80,34 @@ class HomeViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settingsRepo.getAppSettings()
-                .map { settings ->
-                    val entries = sourceUiMapper.entries().filter { it.id in settings.enabledSources }
-                    settings to entries
+                // v9.2.3: pair each settings emission with the LIVE row stream.
+                // Reading `entries()` inside `map` froze membership at the first
+                // emission, so a source registered by boot resume (or by the user
+                // approving it on the Sources screen) never showed up here.
+                .flatMapLatest { settings ->
+                    sourceUiMapper.entriesFlow().map { rows ->
+                        settings to rows.filter { it.id in settings.enabledSources }
+                    }
                 }
-                // Key on content-affecting settings ONLY: loadHome persists
-                // lastSourceId on every load, and reacting to our own write
-                // re-fired a load of the stale activeSource that raced (and
-                // could beat) the user's tap.
+                // Key on content-affecting settings PLUS the visible row set:
+                // loadHome persists lastSourceId on every load, and reacting to
+                // our own write re-fired a load of the stale activeSource that
+                // raced (and could beat) the user's tap — but a row that
+                // appears must still refresh the list.
                 .distinctUntilChanged { old, new ->
                     old.first.enabledSources == new.first.enabledSources &&
-                        old.first.contentBlacklist == new.first.contentBlacklist
+                        old.first.contentBlacklist == new.first.contentBlacklist &&
+                        old.second.map { it.id } == new.second.map { it.id }
                 }
                 .collectLatest { (settings, enabledSources) ->
                     val current = _state.value.activeSource
                     _state.update { it.copy(availableSources = enabledSources) }
                     val enabledIds = enabledSources.map { it.id }.toSet()
+                    // Any ENABLED id counts as a restorable last source — the
+                    // builtin-only check permanently rejected installed plugin
+                    // sources, so Home could never reopen on one.
                     val lastOpened = settings.lastSourceId.takeIf {
-                        BuiltinSourceIds.isBuiltin(it) && it in enabledIds
+                        it in enabledIds
                     }?.let { SourceId(it) }
                     val currentKnown = current.takeIf { it.value in enabledIds }
                     val nextSource = when {

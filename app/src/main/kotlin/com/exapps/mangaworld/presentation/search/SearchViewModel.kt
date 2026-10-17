@@ -54,9 +54,17 @@ class SearchViewModel @Inject constructor(
     val source: StateFlow<SourceId?> = _source.asStateFlow()
     val filters: StateFlow<AdvancedSearchFilters> = _filters.asStateFlow()
     val showAdvancedFilters: StateFlow<Boolean> = _showAdvancedFilters.asStateFlow()
-    val enabledSources: StateFlow<List<SourceUiEntry>> = appSettings
-        .map { settings -> sourceUiMapper.entries().filter { it.id in settings.enabledSources } }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    /**
+     * v9.2.3: settings ⨯ live rows. Reading `entries()` inside the settings map
+     * froze the source list at the first emission, so sources registered later
+     * (boot resume / approval) were missing from Search too.
+     */
+    val enabledSources: StateFlow<List<SourceUiEntry>> = combine(
+        appSettings,
+        sourceUiMapper.entriesFlow()
+    ) { settings, rows ->
+        rows.filter { it.id in settings.enabledSources }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // Search history
     private val _searchHistory = MutableStateFlow<List<String>>(emptyList())

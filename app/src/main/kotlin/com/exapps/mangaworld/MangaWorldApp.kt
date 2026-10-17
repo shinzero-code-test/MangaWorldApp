@@ -100,9 +100,10 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
             // official overrides. Fails closed to builtins; never crashes startup.
             runCatching { bundledPluginLoader.bootstrap() }
                 .onFailure { android.util.Log.w("MangaWorldApp", "Pilot bootstrap failed: ${it.message}") }
-            // D4: the mapper snapshot feeds every non-Sources screen, and only
-            // the Sources screen refreshes it — seed it here so boot-resumed
-            // rows/states are visible app-wide from the first frame.
+            // D4/v9.2.3: seed the mapper snapshot right after bootstrap so the
+            // first frame already reflects resumed rows. The mapper now also
+            // re-reads itself on every registry/index change, so this seed is a
+            // latency optimisation, not the mechanism that keeps rows correct.
             runCatching { sourceUiMapper.refresh() }
                 .onFailure { android.util.Log.w("MangaWorldApp", "Plugin snapshot refresh failed: ${it.message}") }
         }

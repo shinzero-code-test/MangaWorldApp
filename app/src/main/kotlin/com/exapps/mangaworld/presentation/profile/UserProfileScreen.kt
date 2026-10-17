@@ -83,11 +83,11 @@ import com.exapps.mangaworld.domain.model.ReadingListStatus
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.LibraryRepository
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import com.exapps.mangaworld.presentation.auth.ensureSocialProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -111,9 +111,9 @@ class UserProfileViewModel @Inject constructor(
     sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 ) : ViewModel() {
     /** Resolved source display names (unknown ids absent — cards show R.string.unknown). */
-    val sourceNames: StateFlow<Map<String, String>> = flowOf(
-        sourceUiMapper.entries().associate { it.id to it.name }
-    ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+    val sourceNames: StateFlow<Map<String, String>> = sourceUiMapper.entriesFlow()
+        .map { rows -> rows.associate { it.id to it.name } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 

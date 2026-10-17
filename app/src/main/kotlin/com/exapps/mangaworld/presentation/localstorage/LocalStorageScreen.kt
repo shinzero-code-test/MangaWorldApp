@@ -54,9 +54,9 @@ class LocalStorageViewModel @Inject constructor(
     private val sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 ) : ViewModel() {
     /** Resolved source display names (unknown ids absent — callers show R.string.unknown). */
-    val sourceNames: StateFlow<Map<String, String>> = kotlinx.coroutines.flow.flowOf(
-        sourceUiMapper.entries().associate { it.id to it.name }
-    ).stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+    val sourceNames: StateFlow<Map<String, String>> = sourceUiMapper.entriesFlow()
+        .map { rows -> rows.associate { it.id to it.name } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     val downloadedMangas = manager.observeDownloadedMangas()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

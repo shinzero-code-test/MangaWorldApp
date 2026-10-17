@@ -42,9 +42,15 @@ class SettingsViewModel @Inject constructor(
 
     init { refreshCacheStats() }
 
-    /** Registry-driven source rows (names via resolver, never hardcoded). */
+    /**
+     * Registry-driven source rows (names via resolver, never hardcoded).
+     * v9.2.3: was `flowOf(entries())` — a single read at construction, so a
+     * source installed by boot resume or a later sweep could never appear in
+     * the toggles for that process lifetime (reported as "missing from
+     * settings"). Now it follows the live row stream.
+     */
     val sourceEntries: StateFlow<List<com.exapps.mangaworld.core.source.plugins.SourceUiEntry>> =
-        flowOf(sourceUiMapper.entries())
+        sourceUiMapper.entriesFlow()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Cloudflare-solver target (effective base URL + host) for a source id. */

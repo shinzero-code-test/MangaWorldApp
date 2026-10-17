@@ -68,6 +68,7 @@ import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.CustomUserList
 import com.exapps.mangaworld.domain.model.CustomUserListItem
 import com.exapps.mangaworld.domain.model.FavoriteManga
+import com.exapps.mangaworld.domain.model.MangaItem
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.exapps.mangaworld.domain.repository.LibraryRepository
 import com.exapps.mangaworld.presentation.theme.MangaColors
@@ -104,6 +105,16 @@ data class PublicProfileUiState(
     val sourceNames: Map<String, String> = emptyMap()
 )
 
+/** Second combine arm of the public-profile state (5-way: the 5th is the
+ *  live source-name map, which arrives whenever the plugin registry changes). */
+private data class CombinedLibraryState(
+    val selectedId: String?,
+    val items: List<com.exapps.mangaworld.domain.model.MangaItem>,
+    val readingLists: Map<String, List<FavoriteManga>>,
+    val libraryFailed: Boolean,
+    val sourceNames: Map<String, String>
+)
+
 @HiltViewModel
 class PublicProfileViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -114,9 +125,14 @@ class PublicProfileViewModel @Inject constructor(
 ) : ViewModel() {
     private val userId: String = savedStateHandle["userId"] ?: ""
 
-    /** Resolved display names (unknown ids stay absent — callers show R.string.unknown). */
-    private val sourceNames: Map<String, String> =
-        sourceUiMapper.entries().associate { entry -> entry.id to entry.name }
+    /**
+     * Resolved display names (unknown ids stay absent — callers show
+     * R.string.unknown). v9.2.3: read from the live row stream, so a source
+     * registered after this screen was built still shows its real name.
+     */
+    private val liveSourceNames: StateFlow<Map<String, String>> = sourceUiMapper.entriesFlow()
+        .map { rows -> rows.associate { entry -> entry.id to entry.name } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     // Reactive session (RA-6): a cold-start deep link into your own profile
     // must flip to the owner path once the session resolves, instead of
@@ -160,10 +176,14 @@ class PublicProfileViewModel @Inject constructor(
             _selectedListId,
             _listItems,
             _readingLists,
-            _libraryFailed
-        ) { selectedId, items, readingLists, libraryFailed -> Triple(selectedId, items, Pair(readingLists, libraryFailed)) }
+            _libraryFailed,
+            liveSourceNames
+        ) { selectedId, items, readingLists, libraryFailed, sourceNames ->
+            CombinedLibraryState(selectedId, items, readingLists, libraryFailed, sourceNames)
+        }
     ) { (profile, lists, activity), (selectedId, items, library) ->
         val (readingLists, libraryFailed) = library
+        val sourceNames = library.sourceNames
         // Soft-deleted anchors (blanked text) are thread scaffolding, not
         // activity worth headlining — drop them instead of blank rows.
         val visibleActivity = if (profile?.showActivityPublic == true) {

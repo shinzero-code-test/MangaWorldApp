@@ -100,7 +100,10 @@ class LatestUpdatesViewModel @Inject constructor(
             val result = runCatching {
                 val settings = settingsRepository.getAppSettings().first()
                 val enabled = settings.enabledSources
-                val sources = sourceUiMapper.entries().filter { it.id in enabled }
+                // v9.2.3: read the LIVE row stream's current value (first()
+                // on an already-current flow returns immediately) so a source
+                // registered after this ViewModel was built is included.
+                val sources = sourceUiMapper.entriesFlow().first().filter { it.id in enabled }
                 coroutineScope {
                     sources.map { entry ->
                         async {

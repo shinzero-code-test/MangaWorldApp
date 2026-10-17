@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.presentation.sources
 
 import android.content.Context
+import android.os.SystemClock
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
@@ -9,13 +10,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
+import com.exapps.mangaworld.core.source.plugins.PluginRowState
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -45,8 +50,8 @@ class SourceBrowseViewModel @Inject constructor(
     private val mangaRepository: MangaRepository,
     private val settingsRepository: SettingsRepository,
     savedStateHandle: SavedStateHandle,
-    sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper,
-    sourceRegistry: com.exapps.mangaworld.core.source.plugins.SourceRegistry
+    private val sourceUiMapper: com.exapps.mangaworld.core.source.plugins.SourceUiMapper,
+    private val sourceRegistry: com.exapps.mangaworld.core.source.plugins.SourceRegistry
 ) : ViewModel() {
 
     private val sourceId: String = savedStateHandle["sourceId"] ?: "azora"
@@ -55,20 +60,84 @@ class SourceBrowseViewModel @Inject constructor(
         SourceBrowseUiState(
             source = com.exapps.mangaworld.core.source.plugins.SourceId(sourceId),
             sourceEntry = sourceUiMapper.entry(sourceId),
-            solverBaseUrl = sourceRegistry.descriptorFor(sourceId)?.let {
-                com.exapps.mangaworld.domain.model.SourceDomainOverrides.baseUrlFor(sourceId, it.baseUrl)
-            }.orEmpty(),
-            solverHost = sourceRegistry.descriptorFor(sourceId)?.let {
-                com.exapps.mangaworld.core.source.plugins.HostPolicy.hostOf(
-                    com.exapps.mangaworld.domain.model.SourceDomainOverrides.baseUrlFor(sourceId, it.baseUrl)
-                )
-            }.orEmpty()
+            solverBaseUrl = solverTarget().first,
+            solverHost = solverTarget().second
         )
     )
     val uiState: StateFlow<SourceBrowseUiState> = _uiState.asStateFlow()
 
     init {
-        loadData()
+        // v9.2.3: the pinned-launcher-shortcut path (and any deep link) can
+        // land BEFORE boot resume finished registering an installed source.
+        // Reading the row once in the constructor froze "unknown source" in the
+        // title and fired the first load against an unregistered id, so the
+        // shortcut opened to an empty screen and stayed that way. Follow the
+        // live row stream and the live enablement setting instead.
+        //
+        // Enablement gate: this screen is reachable from OUTSIDE the app
+        // (launcher pin, exported deep link) and used to drive live traffic
+        // straight into the scraper, bypassing the `enabledSources` check every
+        // in-app list screen applies — so a source the user disabled (or never
+        // approved) still fetched and rendered through its shortcut.
+        viewModelScope.launch {
+            combine(
+                sourceUiMapper.entryFlow(sourceId),
+                settingsRepository.getAppSettings()
+            ) { entry, settings -> entry to settings.enabledSources }
+                .distinctUntilChanged()
+                .collect { (entry, enabled) ->
+                    val serving = entry != null &&
+                        sourceId in enabled &&
+                        entry.rowState == PluginRowState.SERVING
+                    val previous = _uiState.value.sourceEntry
+                    val (base, host) = solverTarget()
+                    _uiState.value = _uiState.value.copy(
+                        sourceEntry = entry,
+                        solverBaseUrl = base,
+                        solverHost = host,
+                        // Known but not serving (disabled / awaiting approval /
+                        // quarantined): say why instead of fetching anyway.
+                        // Unknown stays untouched — the grace watcher decides.
+                        errorText = when {
+                            serving -> null
+                            entry != null -> context.getString(R.string.plugin_source_not_serving)
+                            else -> _uiState.value.errorText
+                        }
+                    )
+                    if (serving && entry != previous) loadData()
+                }
+        }
+        // Fail closed (v9.2.3): an id the registry never claims — dead or
+        // removed source, or a pinned shortcut whose plugin was uninstalled —
+        // must say so instead of rendering an empty list that reads like a
+        // network failure. The grace window covers boot resume racing this
+        // screen; a source that registers later still drives the collector.
+        viewModelScope.launch {
+            val deadline = SystemClock.uptimeMillis() + REGISTRATION_GRACE_MS
+            while (!sourceRegistry.isKnown(sourceId) && SystemClock.uptimeMillis() < deadline) {
+                delay(REGISTRATION_POLL_MS)
+            }
+            if (!sourceRegistry.isKnown(sourceId) && _uiState.value.sourceEntry == null &&
+                _uiState.value.errorText == null
+            ) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    errorText = context.getString(R.string.source_unknown)
+                )
+            }
+        }
+    }
+
+    private fun solverTarget(): Pair<String, String> {
+        val descriptor = sourceRegistry.descriptorFor(sourceId) ?: return "" to ""
+        val base = com.exapps.mangaworld.domain.model.SourceDomainOverrides.baseUrlFor(sourceId, descriptor.baseUrl)
+        return base to com.exapps.mangaworld.core.source.plugins.HostPolicy.hostOf(base)
+    }
+
+    private companion object {
+        /** Boot resume budget to wait for registration before declaring the id dead. */
+        const val REGISTRATION_GRACE_MS = 8_000L
+        const val REGISTRATION_POLL_MS = 200L
     }
 
     fun setQuery(query: String) {

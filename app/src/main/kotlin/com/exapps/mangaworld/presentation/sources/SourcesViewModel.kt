@@ -22,6 +22,7 @@ import com.exapps.mangaworld.core.source.sync.PostSmoke
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
@@ -46,16 +47,17 @@ class SourcesViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
-    private val refreshTick = MutableStateFlow(0)
-
-    /** Registry-driven rows (names via resolver, never hardcoded). */
-    val entries: StateFlow<List<SourceUiEntry>> = refreshTick
-        .map { sourceUiMapper.entries() }
+    /**
+     * Registry-driven rows (names via resolver, never hardcoded).
+     * v9.2.3: the mapper stream, not a per-tick read — a source that registers
+     * during boot resume or a sweep appears on its own, instead of only after
+     * the user re-tapped refresh (the "tap it N times" bug).
+     */
+    val entries: StateFlow<List<SourceUiEntry>> = sourceUiMapper.entriesFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Consent-sheet facts for held/quarantined rows (manifest previews). */
-    val heldDetails: StateFlow<Map<String, ManifestPreview>> = refreshTick
-        .map { sourceUiMapper.heldDetails() }
+    val heldDetails: StateFlow<Map<String, ManifestPreview>> = sourceUiMapper.heldDetailsFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     private val _state = MutableStateFlow(SourceSettingsState())
@@ -87,12 +89,28 @@ class SourcesViewModel @Inject constructor(
 
     init {
         refresh()
-        // Observe per-source notification settings
+        // Observe per-source notification settings. v9.2.3: keyed off the live
+        // row stream so a source registered after this screen opened still gets
+        // its switch wired up — with one observer per id, torn down when the row
+        // leaves (a naive re-subscribe per emission would stack duplicates).
         viewModelScope.launch {
-            sourceUiMapper.entries().forEach { entry ->
-                settingsRepository.isSourceNotificationEnabled(entry.id).collect { enabled ->
-                    _state.update {
-                        it.copy(notificationStates = it.notificationStates + (entry.id to enabled))
+            val observers = mutableMapOf<String, Job>()
+            sourceUiMapper.entriesFlow().collect { rows ->
+                val ids = rows.map { it.id }.toSet()
+                (observers.keys - ids).forEach { gone ->
+                    observers.remove(gone)?.cancel()
+                    _state.update { it.copy(notificationStates = it.notificationStates - gone) }
+                }
+                rows.forEach { entry ->
+                    if (observers.containsKey(entry.id)) return@forEach
+                    observers[entry.id] = launch {
+                        settingsRepository.isSourceNotificationEnabled(entry.id).collect { enabled ->
+                            _state.update {
+                                it.copy(
+                                    notificationStates = it.notificationStates + (entry.id to enabled)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -103,7 +121,6 @@ class SourcesViewModel @Inject constructor(
     fun refresh() {
         viewModelScope.launch {
             sourceUiMapper.refresh()
-            refreshTick.emit(refreshTick.value + 1)
             val settings = settingsRepository.getAppSettings().first()
             _state.update {
                 it.copy(

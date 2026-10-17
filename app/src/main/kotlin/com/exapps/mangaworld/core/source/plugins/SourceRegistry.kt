@@ -1,6 +1,10 @@
 package com.exapps.mangaworld.core.source.plugins
 
 import com.exapps.mangaworld.core.data.remote.scraper.MangaScraper
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -32,6 +36,14 @@ import javax.inject.Singleton
  * - CUSTOM/LOCAL origins can never shadow a builtin/official id, verified or not.
  *
  * Thread-safe: readers (scraper IO threads, Coil, workers) share it freely.
+ *
+ * Registration is observable (v9.2.3): every membership change bumps
+ * [revision]. Consumers that snapshot the source list (UI rows, badges) read
+ * that flow instead of polling a mutable map, so a row can no longer depend on
+ * WHEN a screen happened to build its list relative to boot resume / sync /
+ * approval. Before this, a source registered after a screen's first read stayed
+ * invisible until something forced a re-read (the "tap refresh N times"
+ * report).
  */
 @Singleton
 class SourceRegistry @Inject constructor(
@@ -40,6 +52,15 @@ class SourceRegistry @Inject constructor(
     private val builtinMap: Map<String, SourcePlugin> = builtins.toMap()
     private val remote = ConcurrentHashMap<String, SourcePlugin>()
     private val verifiedOverrides = ConcurrentHashMap<String, VerifiedOverride>()
+
+    private val _revision = MutableStateFlow(0L)
+
+    /** Monotonic membership counter; a new value means the id set changed. */
+    val revision: StateFlow<Long> = _revision.asStateFlow()
+
+    private fun mutated() {
+        _revision.update { it + 1 }
+    }
 
     /** Verified official payload superseding a builtin (metadata from signed JSON). */
     data class VerifiedOverride(
@@ -80,8 +101,11 @@ class SourceRegistry @Inject constructor(
 
     /** Removes every registration for [id] (override AND remote). Kill/health
      * paths must clear both maps — clearing only one leaks the other serving. */
-    fun removeAll(id: String): Boolean =
-        (verifiedOverrides.remove(id) != null) || (remote.remove(id) != null)
+    fun removeAll(id: String): Boolean {
+        val removed = (verifiedOverrides.remove(id) != null) || (remote.remove(id) != null)
+        if (removed) mutated()
+        return removed
+    }
 
     fun descriptorFor(id: String): PluginManifest? = pluginFor(id)?.descriptor
 
@@ -96,7 +120,11 @@ class SourceRegistry @Inject constructor(
     /** True when [id] currently serves a verified official override (not the builtin). */
     fun isOverridden(id: String): Boolean = verifiedOverrides.containsKey(id)
 
-    fun unregisterRemote(id: String): Boolean = remote.remove(id) != null
+    fun unregisterRemote(id: String): Boolean {
+        val removed = remote.remove(id) != null
+        if (removed) mutated()
+        return removed
+    }
 
     /**
      * Phase 2A verified-install path: only OFFICIAL payloads may supersede a builtin;
@@ -112,19 +140,26 @@ class SourceRegistry @Inject constructor(
             if (builtin != null || verifiedOverrides.containsKey(id)) {
                 return RegisterOutcome.Refused("custom/local must not shadow $id")
             }
-            remote.putIfAbsent(id, plugin)
+            val added = remote.putIfAbsent(id, plugin) == null
+            if (added) mutated()
             return RegisterOutcome.Installed
         }
         val expanded = previous != null && hostsExpanded(previous.descriptor, plugin.descriptor)
         if (builtin == null && !verifiedOverrides.containsKey(id) && !remote.containsKey(id)) {
             verifiedOverrides[id] = VerifiedOverride(plugin, origin, expanded)
+            mutated()
             return RegisterOutcome.Installed
         }
         verifiedOverrides[id] = VerifiedOverride(plugin, origin, expanded)
+        mutated()
         return RegisterOutcome.Superseded(expanded)
     }
 
-    fun clearOverride(id: String): Boolean = verifiedOverrides.remove(id) != null
+    fun clearOverride(id: String): Boolean {
+        val removed = verifiedOverrides.remove(id) != null
+        if (removed) mutated()
+        return removed
+    }
 
     companion object {
         /** Host-set expansion (plan §8.9): growth surfaces a notice, contraction is silent. */

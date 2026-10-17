@@ -12,6 +12,7 @@ import com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
 
 /**
  * ViewModel-test doubles for the Phase 2 registry world. VMs under test resolve
@@ -47,6 +48,14 @@ object SourceUiTestFixtures {
         every { m.displayName(any(), any()) } answers { firstArg<String>() }
         coEvery { m.refresh() } returns Unit
         every { m.heldDetails() } returns emptyMap()
+        // v9.2.3: VMs read the observable variants. Stubs return the same fixed
+        // set, so existing VM assertions keep their meaning; the reactive
+        // behaviour itself is covered by SourceRowsReactiveTest.
+        every { m.entriesFlow() } returns flowOf(entries)
+        every { m.entriesFlow(any()) } returns flowOf(entries)
+        every { m.heldDetailsFlow() } returns flowOf(emptyMap())
+        every { m.entryFlow(any()) } answers { flowOf(entry(firstArg())) }
+        every { m.entryFlow(any(), any()) } answers { flowOf(entry(firstArg())) }
         return m
     }
 
@@ -87,4 +96,11 @@ object SourceUiTestFixtures {
     ): SourceRegistry = SourceRegistry(
         ids.associateWith { fakePlugin(it, scrapers[it]) }
     )
+
+    /**
+     * A standalone fake plugin for [id] — used by tests that register a source
+     * into an existing registry (late registration / observable rows).
+     */
+    fun newPlugin(id: String, scraper: MangaScraper? = null): SourcePlugin =
+        fakePlugin(id, scraper)
 }

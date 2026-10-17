@@ -34,6 +34,7 @@ import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 import com.exapps.mangaworld.domain.model.MangaItem
 import com.exapps.mangaworld.presentation.theme.MangaColors
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -117,7 +118,13 @@ class SuggestionsViewModel @Inject constructor(
     }
 
     init {
-        _sourceNames.value = sourceUiMapper.entries().associate { it.id to it.name }
+        // v9.2.3: live row stream — a source registered after this screen was
+        // built (boot resume, approval) resolves its name here too.
+        viewModelScope.launch {
+            sourceUiMapper.entriesFlow().collect { rows ->
+                _sourceNames.value = rows.associate { it.id to it.name }
+            }
+        }
         loadSuggestions()
     }
 }

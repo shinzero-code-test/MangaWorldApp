@@ -65,17 +65,31 @@ class BrowseViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            combine(settingsRepo.getAppSettings(), _uiState) { settings, ui -> Triple(settings.enabledSources, settings.contentBlacklist, ui.selectedSource) }
+            // v9.2.3: combine settings with the LIVE row stream — `entries()`
+            // inside the map froze list membership at the first emission, which
+            // hid sources registered by boot resume or approved later.
+            combine(
+                settingsRepo.getAppSettings(),
+                _uiState,
+                sourceUiMapper.entriesFlow()
+            ) { settings, ui, rows ->
+                Triple(
+                    rows.filter { it.id in settings.enabledSources },
+                    settings,
+                    ui.selectedSource
+                )
+            }
                 .distinctUntilChanged()
-                .collectLatest { (enabledSources, blacklist, selectedSource) ->
+                .collectLatest { (sourceRows, settings, selectedSource) ->
+                    val enabledSources = sourceRows.map { it.id }.toSet()
                     val loaded = repo.getGenres(source = selectedSource, enabledSourceIds = enabledSources)
                     val availableGenres = listOf(context.getString(R.string.browse_all)) + loaded
                     _uiState.update {
                         it.copy(
                             enabledSourceIds = enabledSources,
-                            blockedKeywords = blacklist,
+                            blockedKeywords = settings.contentBlacklist,
                             selectedSource = it.selectedSource?.takeIf { src -> src.value in enabledSources },
-                            sourceEntries = sourceUiMapper.entries().filter { entry -> entry.id in enabledSources },
+                            sourceEntries = sourceRows,
                             selectedGenre = it.selectedGenre?.takeIf { genre -> genre in loaded },
                             genres = availableGenres
                         )

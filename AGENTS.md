@@ -16,7 +16,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 9.2.2 (versionCode 252)
+- **Current version**: 9.2.3 (versionCode 253)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 36 · **Compile SDK**: 36
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -117,6 +117,17 @@ Adding a source = **one plugin class + one `@Binds` line** in `SourcePluginModul
 - RC `applyState()` re-seeds defaults from the live registry every run (dynamic ids), and domain overrides publish for builtins only (signed remote manifests pin their own baseUrl).
 - `BundledPluginLoader.bootstrapOne` never re-activates QUARANTINED/REVOKED/DISABLED records; freshness gates acquisition only, never stored bytes.
 - Quarantined new-ids stay visible (row + badge) and `reverify` rebuilds from disk; malformed index entries skip (whole-document Invalid is structural-only); pilot descriptors are frozen at v1 (corrections bump version).
+
+**Observable rows (v9.2.3):** registry membership and index status are now *streams*, because every screen previously read one snapshot and registration happens asynchronously (boot resume, sweep, approval) — the fleet report was "tap refresh N times until the source shows up, then it vanishes after a restart".
+- `SourceRegistry.revision: StateFlow<Long>` bumps on every membership change (`registerVerified`, `removeAll`, `unregisterRemote`, `clearOverride`); no-op paths (refused registration, removal of an unknown id) must NOT bump.
+- `PluginIndexStore.changes: Flow<Unit>` emits per committed `put`/`remove`. Default is `emptyFlow()`, so plain test fakes stay valid; `RoomPluginIndexStore` is the production implementation (conflated `MutableSharedFlow`, DROP_OLDEST).
+- `SourceUiMapper` re-reads the index snapshot itself (injected `@ApplicationScope`) and exposes `entriesFlow()` / `entryFlow(id)` / `heldDetailsFlow()`. Its snapshot is one immutable value swapped atomically — records + the extras derived from them can never be read torn.
+- **Rule: never snapshot rows in a ViewModel `init`.** `flowOf(mapper.entries())` and `settings.map { mapper.entries() }` both froze membership at first read (Settings, Home, Search, Browse, Latest, Suggestions, LocalStorage, UserProfile, PublicProfile all had it). Combine settings with `entriesFlow()` instead, and include row ids in any `distinctUntilChanged` key — a settings-only key silently drops row changes.
+- One-shot `mapper.entry(id)` stays correct because the mapper keeps its own snapshot current; it is the traffic gate (`isServing` in `MangaDetailViewModel`), so never bypass it for an unregistered/disabled row.
+- `SourceBrowseScreen` (the launcher-pin / exported-deep-link path) gates on `enabled ∈ settings.enabledSources` AND `rowState == SERVING`, and fails closed with `source_unknown` when the registry never claims the id (8 s boot-resume grace). No list screen may drive live traffic without those two checks.
+- `HomeViewModel.lastSourceId` accepts any ENABLED id (the builtin-only check made it impossible to reopen Home on an installed plugin source).
+
+**RegExp in the script sandbox (v9.2.2):** first touch of the lazy `RegExp` builtin runs `LazilyLoadedCtor.init` → `buildClassCtor` → a re-entrant read of the still-initializing slot, which throws `IllegalStateException("RegExp")` on R8 builds only (JVM never reproduces it). `ScriptBridge.install` therefore defines it eagerly via a **direct** `NativeRegExp.init` call (no string lookup → R8-proof) and reads it back like the host-root shadowing. When a device-only failure appears in a build that unit tests cannot reproduce, ship a class+stack logging line first, pull that build's mapping artifact, and decode frames from it.
 
 **Per-source audit evidence**: `tmp/analysis/` (2026-09-24, Chromium-verified). Treat HTTP/WAF behavior as dated; re-verify before trusting. Key corrections baked in: Starz fully working (audit 403s were egress-specific); StellarSaber is AES-**128**-GCM; Hijala cover = `.manga-info .thumb img[data-src]`, no default split-stitching; Leko/Lionz/Spark chapters via numeric `manga_get_chapters` (NOT slug-ajax); LekMangaOnline oEmbed thumbnail broken; Despair canonical = despair-world.com.
 
