@@ -125,7 +125,9 @@ class PluginConsentTest {
             val rec = PluginIndexRecord(
                 id = "orphan", activeVersion = 2, previousVersion = null,
                 origin = PluginOrigin.OFFICIAL, status = PluginStatus.ENABLED,
-                manifestJson = previewJson
+                // The preview's own `id` field drives the rendered row id, so it
+                // must match the record (the shared fixture is pinned to "gated").
+                manifestJson = previewJson.replace("\"id\":\"gated\"", "\"id\":\"orphan\"")
             )
             override suspend fun get(id: String) = rec.takeIf { it.id == id }
             override suspend fun getAll() = listOf(rec)

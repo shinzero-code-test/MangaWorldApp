@@ -98,6 +98,9 @@ class PluginBootstrapTelemetryTest {
             telemetry = telemetry,
             io = kotlinx.coroutines.Dispatchers.Unconfined
         )
+        // v9.2.4: boot emits per-record lines through a replaceable sink;
+        // raw android.util.Log throws on plain JVM.
+        .also { it.log = {} }
     }
 
     @Test

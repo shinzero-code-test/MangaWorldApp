@@ -48,15 +48,23 @@ class BundledPluginLoader @Inject constructor(
         data class Skipped(val id: String, val reason: String) : Outcome
     }
 
+    /**
+     * Log sink — raw `android.util.Log` throws on plain JVM (same reason as
+     * `PluginSyncEngine.log` / `PluginUpgradeReconciler.log`). Boot now emits
+     * per-record lines on EVERY start, so an uninjectable sink would break
+     * every JVM test of this class.
+     */
+    internal var log: (String) -> Unit = { line -> Log.i(TAG, line) }
+
     suspend fun bootstrap(): List<Outcome> = withContext(io) {
         val pilots = PILOT_IDS.map { id -> runCatching { bootstrapOne(id) }.getOrElse { e ->
-            Log.w(TAG, "pilot $id failed closed: ${e.message}")
+            log("pilot $id failed closed: ${e.message}")
             Outcome.Skipped(id, "exception")
         } }
         val installed = index.getAll()
             .filter { it.origin == PluginOrigin.OFFICIAL && it.activeVersion != null }
             .map { record -> runCatching { resumeInstalled(record) }.getOrElse { e ->
-                Log.w(TAG, "resume ${record.id} failed closed: ${e.message}")
+                log("resume ${record.id} failed closed: ${e.message}")
                 Outcome.Skipped(record.id, "exception")
             } }
         // D10: a concurrent sweep may have persisted records after the
@@ -73,11 +81,11 @@ class BundledPluginLoader @Inject constructor(
                     it.id !in handled && registry.pluginFor(it.id) == null
             }
             .map { record -> runCatching { resumeInstalled(record) }.getOrElse { e ->
-                Log.w(TAG, "resume ${record.id} failed closed: ${e.message}")
+                log("resume ${record.id} failed closed: ${e.message}")
                 Outcome.Skipped(record.id, "exception")
             } }
         val revived = runCatching { reconcileUpgrades() }.getOrElse { e ->
-            Log.w(TAG, "upgrade reconciliation failed closed: ${e.message}")
+            log("upgrade reconciliation failed closed: ${e.message}")
             0
         }
         // Gate 0 fleet telemetry: one aggregate line per boot (activated ids
@@ -90,20 +98,17 @@ class BundledPluginLoader @Inject constructor(
         // make "record present / dir missing / no runner" distinguishable from
         // logcat alone. Bounded, R8-stable ids, no user data.
         index.getAll().take(20).forEach { rec ->
-            Log.i(
-                TAG,
+            log(
                 "index ${rec.id}: status=${rec.status} active=${rec.activeVersion} " +
                     "prev=${rec.previousVersion} manifest=${rec.manifestJson != null}"
             )
         }
         outcomes.forEach { outcome ->
             when (outcome) {
-                is Outcome.Activated -> Log.i(
-                    TAG,
+                is Outcome.Activated -> log(
                     "boot ${outcome.id}: activated hostsExpanded=${outcome.hostsExpanded}"
                 )
-                is Outcome.Skipped -> Log.i(
-                    TAG,
+                is Outcome.Skipped -> log(
                     "boot ${outcome.id}: skipped (${outcome.reason}) ${payloadProbe(outcome.id)}"
                 )
             }
@@ -130,7 +135,7 @@ class BundledPluginLoader @Inject constructor(
         val current = BuildConfig.VERSION_NAME
         if (appVersionStore.get() == current) return 0
         val revived = reconciler.reconcile(current)
-        if (revived > 0) Log.i(TAG, "upgrade to $current revived $revived incompatible plugin(s)")
+        if (revived > 0) log("upgrade to $current revived $revived incompatible plugin(s)")
         appVersionStore.set(current)
         return revived
     }
@@ -398,7 +403,7 @@ class BundledPluginLoader @Inject constructor(
     private fun readAsset(path: String): ByteArray? = runCatching {
         context.assets.open(path).use { it.readBytes() }
     }.getOrNull().also {
-        if (it == null) Log.w(TAG, "bundled asset missing: $path")
+        if (it == null) log("bundled asset missing: $path")
     }
 
     companion object {
