@@ -39,7 +39,9 @@ fun SourceSettingsSheet(
     /** True while approve/re-check is in flight for this source. */
     busy: Boolean = false,
     onApprove: () -> Unit = {},
-    onRecheck: () -> Unit = {}
+    onRecheck: () -> Unit = {},
+    /** v9.2.4: re-download an unresolvable payload (registry has no runner). */
+    onResync: () -> Unit = onRecheck
 ) {
     val context = LocalContext.current
     var showClearConfirm by remember { mutableStateOf(false) }
@@ -91,6 +93,7 @@ fun SourceSettingsSheet(
                     busy = busy,
                     onApprove = onApprove,
                     onRecheck = onRecheck,
+                    onResync = onResync,
                     onKeepDisabled = onDismiss
                 )
                 HorizontalDivider(color = MangaColors.Muted.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 8.dp))
@@ -189,10 +192,16 @@ private fun PluginConsentSection(
     busy: Boolean,
     onApprove: () -> Unit,
     onRecheck: () -> Unit,
+    onResync: () -> Unit,
     onKeepDisabled: () -> Unit
 ) {
     val context = LocalContext.current
-    val held = source.rowState == com.exapps.mangaworld.core.source.plugins.PluginRowState.HELD
+    val rowState = source.rowState
+    val held = rowState == com.exapps.mangaworld.core.source.plugins.PluginRowState.HELD
+    // v9.2.4: unresolved = verified bytes that no runner backs. Approval can't
+    // help (there is nothing to activate); a re-sync is the only way forward,
+    // so the sheet offers that instead of a dead "approve" button.
+    val unresolved = rowState == com.exapps.mangaworld.core.source.plugins.PluginRowState.UNRESOLVED
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -200,8 +209,11 @@ private fun PluginConsentSection(
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
-            text = if (held) stringResource(R.string.plugin_needs_approval)
-            else stringResource(R.string.plugin_quarantined),
+            text = when {
+                held -> stringResource(R.string.plugin_needs_approval)
+                unresolved -> stringResource(R.string.plugin_unresolved_title)
+                else -> stringResource(R.string.plugin_quarantined)
+            },
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = if (held) MangaColors.Yellow else MangaColors.Error
@@ -236,11 +248,17 @@ private fun PluginConsentSection(
                 ) { Text(context.getString(R.string.plugin_approve)) }
             } else {
                 Button(
-                    onClick = onRecheck,
+                    onClick = if (unresolved) onResync else onRecheck,
                     enabled = !busy,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Primary)
-                ) { Text(context.getString(R.string.plugin_recheck)) }
+                ) {
+                    Text(
+                        context.getString(
+                            if (unresolved) R.string.plugin_resync else R.string.plugin_recheck
+                        )
+                    )
+                }
             }
             TextButton(
                 onClick = onKeepDisabled,

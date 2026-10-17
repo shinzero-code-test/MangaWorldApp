@@ -83,6 +83,31 @@ class BundledPluginLoader @Inject constructor(
         // Gate 0 fleet telemetry: one aggregate line per boot (activated ids
         // bounded; skips collapsed by reason) instead of per-id logcat only.
         val outcomes = pilots + installed + missed
+        // v9.2.4: the aggregate hid WHICH record stopped where — a boot resume
+        // that skips leaves the source simply absent (no row, no badge, no
+        // reason anywhere on device), which is exactly how the 9.2.3 fleet
+        // report was undiagnosable. Per-record lines with the payload probe
+        // make "record present / dir missing / no runner" distinguishable from
+        // logcat alone. Bounded, R8-stable ids, no user data.
+        index.getAll().take(20).forEach { rec ->
+            Log.i(
+                TAG,
+                "index ${rec.id}: status=${rec.status} active=${rec.activeVersion} " +
+                    "prev=${rec.previousVersion} manifest=${rec.manifestJson != null}"
+            )
+        }
+        outcomes.forEach { outcome ->
+            when (outcome) {
+                is Outcome.Activated -> Log.i(
+                    TAG,
+                    "boot ${outcome.id}: activated hostsExpanded=${outcome.hostsExpanded}"
+                )
+                is Outcome.Skipped -> Log.i(
+                    TAG,
+                    "boot ${outcome.id}: skipped (${outcome.reason}) ${payloadProbe(outcome.id)}"
+                )
+            }
+        }
         telemetry.logBootstrap(
             activatedIds = outcomes
                 .filterIsInstance<Outcome.Activated>()
@@ -181,6 +206,23 @@ class BundledPluginLoader @Inject constructor(
         return true
     }
 
+    /**
+     * Boot payload probe (v9.2.4): what the disk actually holds for a record,
+     * so "skipped" is actionable without root/adb file access. Sizes only.
+     */
+    private suspend fun payloadProbe(id: String): String {
+        val record = index.get(id) ?: return "probe: no-record"
+        val version = record.activeVersion
+            ?: return "probe: no-active-version status=${record.status}"
+        val dir = File(
+            PluginStorage.versionDir(File(context.filesDir, "plugins").path, id, version)
+        )
+        if (!dir.isDirectory) return "probe: v$version dir-missing status=${record.status}"
+        val manifest = File(dir, "plugin.json").takeIf { it.isFile }?.length() ?: -1L
+        val script = File(dir, "source.js").takeIf { it.isFile }?.length() ?: -1L
+        return "probe: v$version status=${record.status} manifest=$manifest script=$script"
+    }
+
     private suspend fun markEnabled(id: String) {
         index.get(id)?.let { rec ->
             index.put(rec.copy(status = PluginStatus.ENABLED))
@@ -200,7 +242,9 @@ class BundledPluginLoader @Inject constructor(
         data object NoPayload : DiskBuild
         data class Unverified(val reason: String) : DiskBuild
         data class Gated(val reason: String) : DiskBuild
-        data object NoRunner : DiskBuild
+
+        /** v9.2.4: carries the builder's reason — compile/hash failures were invisible. */
+        data class NoRunner(val reason: String) : DiskBuild
     }
 
     internal suspend fun buildPluginFromDisk(id: String): DiskBuild {
@@ -240,7 +284,9 @@ class BundledPluginLoader @Inject constructor(
                 isOverride = true
             )
         }
-        val scraper = buildResumeRunner(valid.manifest, dir) ?: return DiskBuild.NoRunner
+        val runner = buildResumeRunner(valid.manifest, dir)
+        val scraper = runner.scraperOrNull
+            ?: return DiskBuild.NoRunner(runner.failure("runner unavailable"))
         return DiskBuild.Ready(
             object : SourcePlugin {
                 override val descriptor = valid.manifest
@@ -288,7 +334,7 @@ class BundledPluginLoader @Inject constructor(
             is DiskBuild.NoPayload -> return Outcome.Skipped(id, "payload missing")
             is DiskBuild.Unverified -> return Outcome.Skipped(id, built.reason)
             is DiskBuild.Gated -> return Outcome.Skipped(id, built.reason)
-            is DiskBuild.NoRunner -> return Outcome.Skipped(id, "no runner")
+            is DiskBuild.NoRunner -> return Outcome.Skipped(id, "no runner (${built.reason})")
         }
         // D10: the sweep may have moved this id while we verified — re-read
         // and back off instead of registering stale metadata over fresh state.
@@ -310,20 +356,43 @@ class BundledPluginLoader @Inject constructor(
     }
 
     /** Runner rebuild for new ids: descriptor engines pair directly; scripts
-     * re-verify their hash against the manifest pin before loading. */
+     * re-verify their hash against the manifest pin before loading.
+     *
+     * v9.2.4: returns a typed outcome carrying the failure reason (hash
+     * mismatch, compile error, unsupported engine) instead of a bare null —
+     * "no runner" used to collapse every cause into the same invisible skip. */
+    private sealed interface RunnerBuild {
+        data class Ok(val scraper: com.exapps.mangaworld.core.data.remote.scraper.MangaScraper) : RunnerBuild
+        data class Failed(val reason: String) : RunnerBuild
+
+        /** Null-safe accessor used at the call sites. */
+        val scraperOrNull: com.exapps.mangaworld.core.data.remote.scraper.MangaScraper?
+            get() = (this as? Ok)?.scraper
+
+        fun failure(fallback: String): String = (this as? Failed)?.reason ?: fallback
+    }
+
     private fun buildResumeRunner(
         manifest: PluginManifest,
         dir: File
-    ): com.exapps.mangaworld.core.data.remote.scraper.MangaScraper? = when (manifest.engine) {
+    ): RunnerBuild = when (manifest.engine) {
         SourceEngine.MADARA, SourceEngine.MANGAREADER ->
             runnerFactory.createDescriptor(manifest)
+                ?.let { RunnerBuild.Ok(it) }
+                ?: RunnerBuild.Failed("descriptor runner refused ${manifest.engine.serialName}")
         SourceEngine.SCRIPT -> {
             val js = File(dir, "source.js").takeIf { it.isFile }
                 ?.let { runCatching { it.readBytes() }.getOrNull() }
-                ?: return null
-            runnerFactory.createScript(manifest, js)?.getOrNull()
+                ?: return RunnerBuild.Failed("source.js missing")
+            when (val built = runnerFactory.createScript(manifest, js)) {
+                null -> RunnerBuild.Failed("wrong engine ${manifest.engine.serialName}")
+                else -> built.fold(
+                    onSuccess = { RunnerBuild.Ok(it) },
+                    onFailure = { RunnerBuild.Failed("script build: ${it.message?.take(100)}") }
+                )
+            }
         }
-        else -> null
+        else -> RunnerBuild.Failed("no runner for ${manifest.engine.serialName}")
     }
 
     private fun readAsset(path: String): ByteArray? = runCatching {

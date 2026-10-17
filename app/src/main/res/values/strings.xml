@@ -720,6 +720,12 @@
     <!-- v9.2.3: deep link / launcher shortcut into a source that is known but
          not serving (disabled, awaiting approval, or quarantined). -->
     <string name="plugin_source_not_serving">هذا المصدر معطّل حاليًا. فعّله من قائمة المصادر أولًا.</string>
+    <!-- v9.2.4: a payload record exists but no runner backs it (payload pruned
+         or unverifiable). Visible with a reason, recoverable by re-syncing —
+         never a source that silently disappears from every list. -->
+    <string name="plugin_unresolved">يحتاج إعادة مزامنة</string>
+    <string name="plugin_unresolved_title">لا يمكن تشغيل هذا المصدر</string>
+    <string name="plugin_resync">إعادة المزامنة</string>
     <string name="plugin_engine">المحرك</string>
     <string name="plugin_hosts">النطاقات</string>
     <string name="plugin_version">الإصدار</string>

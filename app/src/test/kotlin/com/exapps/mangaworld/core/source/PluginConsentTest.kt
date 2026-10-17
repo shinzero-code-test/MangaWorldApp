@@ -92,6 +92,62 @@ class PluginConsentTest {
     }
 
     @Test
+    fun rowStateUnresolvedWhenRecordHasNoRunner() {
+        // v9.2.4: a record with verified bytes the registry could NOT resume
+        // (payload pruned, unverified, no runner) must be visibly broken, not
+        // silently absent — that invisibility is the fleet report's core bug.
+        assertEquals(
+            PluginRowState.UNRESOLVED,
+            rowStateFor(record(PluginStatus.ENABLED), unregistered = true)
+        )
+        assertEquals(
+            PluginRowState.UNRESOLVED,
+            rowStateFor(record(PluginStatus.INSTALLED), unregistered = true)
+        )
+        // Quarantine still wins (its action is re-smoke, not re-sync).
+        assertEquals(
+            PluginRowState.QUARANTINED,
+            rowStateFor(record(PluginStatus.QUARANTINED), unregistered = true)
+        )
+        // A registered record is never "unresolved" by definition.
+        assertEquals(
+            PluginRowState.SERVING,
+            rowStateFor(record(PluginStatus.ENABLED), unregistered = false)
+        )
+    }
+
+    @Test
+    fun mapperListsEnabledButUnregisteredRecordAsUnresolved() = runTest {
+        // The exact 9.2.3 device state: record ENABLED with bytes, registry
+        // empty. Pre-9.2.4 this produced NO row anywhere; now it is visible,
+        // badged, and carries its consent facts for the re-sync action.
+        val index = object : com.exapps.mangaworld.core.source.plugins.PluginIndexStore {
+            val rec = PluginIndexRecord(
+                id = "orphan", activeVersion = 2, previousVersion = null,
+                origin = PluginOrigin.OFFICIAL, status = PluginStatus.ENABLED,
+                manifestJson = previewJson
+            )
+            override suspend fun get(id: String) = rec.takeIf { it.id == id }
+            override suspend fun getAll() = listOf(rec)
+            override suspend fun put(record: PluginIndexRecord) = Unit
+            override suspend fun remove(id: String) = false
+        }
+        val context: android.content.Context = mockk {
+            every { getString(any<Int>()) } returns "?"
+        }
+        val mapper = SourceUiMapper(
+            registry = SourceUiTestFixtures.registry("hijala"),
+            resolver = SourceDisplayResolver(context),
+            indexStore = index
+        )
+        mapper.refresh()
+        val row = mapper.entries().single { it.id == "orphan" }
+        assertEquals(PluginRowState.UNRESOLVED, row.rowState)
+        assertEquals(PluginRowState.UNRESOLVED, mapper.entry("orphan")?.rowState)
+        assertEquals("orphan", mapper.heldDetails()["orphan"]!!.id)
+    }
+
+    @Test
     fun mapperListsQuarantinedExtrasWithBadge() = runTest {
         // F5: a quarantined new-id remote must stay visible (row + badge +
         // re-check facts) instead of going dark with no recovery path.

@@ -154,7 +154,10 @@ fun SourcesScreen(
                 detail = heldDetails[sourceId],
                 busy = busyId == sourceId,
                 onApprove = { viewModel.approve(sourceId) },
-                onRecheck = { viewModel.recheck(sourceId) }
+                onRecheck = { viewModel.recheck(sourceId) },
+                // v9.2.4: unresolvable rows recover through a sweep, which
+                // re-downloads the payload and re-registers the runner.
+                onResync = { viewModel.checkForUpdates() }
             )
         }
     }
@@ -278,6 +281,14 @@ private fun SourceGridCard(
                 )
                 PluginRowState.QUARANTINED -> Text(
                     stringResource(R.string.plugin_quarantined),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                    color = MangaColors.Error,
+                    fontWeight = FontWeight.Bold
+                )
+                // v9.2.4: verified bytes the registry could not resume. The row
+                // stays visible with a reason instead of vanishing everywhere.
+                PluginRowState.UNRESOLVED -> Text(
+                    stringResource(R.string.plugin_unresolved),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
                     color = MangaColors.Error,
                     fontWeight = FontWeight.Bold

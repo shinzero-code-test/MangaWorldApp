@@ -16,7 +16,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 9.2.3 (versionCode 253)
+- **Current version**: 9.2.4 (versionCode 254)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 36 · **Compile SDK**: 36
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -126,6 +126,8 @@ Adding a source = **one plugin class + one `@Binds` line** in `SourcePluginModul
 - One-shot `mapper.entry(id)` stays correct because the mapper keeps its own snapshot current; it is the traffic gate (`isServing` in `MangaDetailViewModel`), so never bypass it for an unregistered/disabled row.
 - `SourceBrowseScreen` (the launcher-pin / exported-deep-link path) gates on `enabled ∈ settings.enabledSources` AND `rowState == SERVING`, and fails closed with `source_unknown` when the registry never claims the id (8 s boot-resume grace). No list screen may drive live traffic without those two checks.
 - `HomeViewModel.lastSourceId` accepts any ENABLED id (the builtin-only check made it impossible to reopen Home on an installed plugin source).
+
+**Boot diagnostics + never-invisible states (v9.2.4):** a resume that skips used to leave the source absent from every list with no badge and no on-device trace, so the 9.2.3 fleet report was undiagnosable. `BundledPluginLoader.bootstrap()` now logs one `index <id>: status=… active=… manifest=…` line per record plus one `boot <id>: activated|skipped (<reason>) <payload probe>` line per outcome (bounded, no user data), and `DiskBuild.NoRunner` carries the builder's reason instead of a bare null. On the UI side `PluginRowState.UNRESOLVED` (`plugin_unresolved` badge, `plugin_resync` action) covers a payload record with no serving runner: `SourceUiMapper` renders an extra row for ANY unregistered record with bytes (not just DISABLED/QUARANTINED) and `heldDetails()` includes ENABLED/INSTALLED facts. **Rule: a state the user can reach must be visible with a reason and a recovery action — never silently absent.**
 
 **RegExp in the script sandbox (v9.2.2):** first touch of the lazy `RegExp` builtin runs `LazilyLoadedCtor.init` → `buildClassCtor` → a re-entrant read of the still-initializing slot, which throws `IllegalStateException("RegExp")` on R8 builds only (JVM never reproduces it). `ScriptBridge.install` therefore defines it eagerly via a **direct** `NativeRegExp.init` call (no string lookup → R8-proof) and reads it back like the host-root shadowing. When a device-only failure appears in a build that unit tests cannot reproduce, ship a class+stack logging line first, pull that build's mapping artifact, and decode frames from it.
 

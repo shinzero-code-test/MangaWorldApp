@@ -237,16 +237,32 @@ enum class PluginRowState {
     HELD,
 
     /** Isolated by drift watch or failed smoke: re-smoke to recover. */
-    QUARANTINED
+    QUARANTINED,
+
+    /**
+     * v9.2.4: an activation record with verified bytes that the registry could
+     * NOT resume (payload pruned, unverified bytes, no runner). It used to
+     * render nothing at all — the source simply disappeared from every list
+     * with no badge and no explanation, which is indistinguishable from
+     * "never installed". Now it stays visible with a re-sync action.
+     */
+    UNRESOLVED
 }
 
 /**
  * Maps an index record to its row posture. Pure logic (unit-tested); the
  * mapper feeds it from its record snapshot, the sync engine from live reads.
+ *
+ * [unregistered] marks the v9.2.4 case: a payload record whose id has no
+ * serving plugin. Posture follows the record; registration decides only
+ * whether the row is an extra or the registry's own row.
  */
-fun rowStateFor(record: PluginIndexRecord?): PluginRowState = when {
+fun rowStateFor(record: PluginIndexRecord?, unregistered: Boolean = false): PluginRowState = when {
     record == null -> PluginRowState.SERVING
     record.status == PluginStatus.QUARANTINED -> PluginRowState.QUARANTINED
+    // Verified bytes on disk but no runner behind them: re-sync is the action,
+    // and hiding the row (the pre-9.2.4 behaviour) is never correct.
+    unregistered -> PluginRowState.UNRESOLVED
     record.status == PluginStatus.DISABLED &&
         record.activeVersion != null && record.manifestJson != null ->
         PluginRowState.HELD
