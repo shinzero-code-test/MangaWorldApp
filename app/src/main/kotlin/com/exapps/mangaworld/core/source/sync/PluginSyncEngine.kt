@@ -967,10 +967,10 @@ class PluginSyncEngine @Inject constructor(
             // v9.2.5 (audit B10): a swallowed rejection here means the payload
             // never landed while the row looks perfectly fine — the next boot
             // then reports NoPayload/UNRESOLVED with no trail back to the cause.
-            is PluginStore.InstallResult.Rejected ->
+            is rejected@PluginStore.InstallResult.Rejected ->
                 log(
-                    "sync ${entry.id}: persist rejected (${persisted.reason}) " +
-                        persisted.message.take(120)
+                    "sync ${entry.id}: persist rejected (${rejected.reason}) " +
+                        rejected.message.take(120)
                 )
         }
     }
