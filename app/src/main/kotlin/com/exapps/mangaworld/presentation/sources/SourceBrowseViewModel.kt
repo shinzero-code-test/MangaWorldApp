@@ -1,7 +1,6 @@
 package com.exapps.mangaworld.presentation.sources
 
 import android.content.Context
-import android.os.SystemClock
 import com.exapps.mangaworld.R
 import androidx.compose.ui.res.stringResource
 
@@ -125,8 +124,11 @@ class SourceBrowseViewModel @Inject constructor(
         // network failure. The grace window covers boot resume racing this
         // screen; a source that registers later still drives the collector.
         viewModelScope.launch {
-            val deadline = SystemClock.uptimeMillis() + REGISTRATION_GRACE_MS
-            while (!sourceRegistry.isKnown(sourceId) && SystemClock.uptimeMillis() < deadline) {
+            // System.nanoTime, NOT android.os.SystemClock: the Android clock
+            // throws on JVM unit tests ("not mocked") and this watcher runs in
+            // viewModelScope, i.e. inside every ViewModel test.
+            val deadline = System.nanoTime() + REGISTRATION_GRACE_MS
+            while (!sourceRegistry.isKnown(sourceId) && System.nanoTime() < deadline) {
                 delay(REGISTRATION_POLL_MS)
             }
             if (!sourceRegistry.isKnown(sourceId) && _uiState.value.sourceEntry == null &&
@@ -148,7 +150,7 @@ class SourceBrowseViewModel @Inject constructor(
 
     private companion object {
         /** Boot resume budget to wait for registration before declaring the id dead. */
-        const val REGISTRATION_GRACE_MS = 8_000L
+        const val REGISTRATION_GRACE_MS = 8_000_000_000L // 8s in nanos
         const val REGISTRATION_POLL_MS = 200L
     }
 
