@@ -66,6 +66,15 @@ class SourceBrowseViewModel @Inject constructor(
     )
     val uiState: StateFlow<SourceBrowseUiState> = _uiState.asStateFlow()
 
+    /**
+     * First successful load marker. The constructor already seeds
+     * `sourceEntry`, so "row unchanged" cannot also mean "already loaded" —
+     * without this the initial emission looked identical and nothing ever
+     * loaded. Reloads still happen when the row itself changes (re-verify,
+     * status flip) or when the source becomes servable after a hold.
+     */
+    private var hasLoadedOnce = false
+
     init {
         // v9.2.3: the pinned-launcher-shortcut path (and any deep link) can
         // land BEFORE boot resume finished registering an installed source.
@@ -104,7 +113,10 @@ class SourceBrowseViewModel @Inject constructor(
                             else -> _uiState.value.errorText
                         }
                     )
-                    if (serving && entry != previous) loadData()
+                    if (serving && (!hasLoadedOnce || entry != previous)) {
+                        hasLoadedOnce = true
+                        loadData()
+                    }
                 }
         }
         // Fail closed (v9.2.3): an id the registry never claims — dead or
