@@ -180,7 +180,7 @@ class PublicProfileViewModel @Inject constructor(
         ) { selectedId, items, readingLists, libraryFailed, sourceNames ->
             CombinedLibraryState(selectedId, items, readingLists, libraryFailed, sourceNames)
         }
-    ) { (profile, lists, activity), (selectedId, items, library) ->
+    ) { (profile, lists, activity), library ->
         val readingLists = library.readingLists
         val libraryFailed = library.libraryFailed
         val sourceNames = library.sourceNames
@@ -193,8 +193,8 @@ class PublicProfileViewModel @Inject constructor(
             profile = profile,
             lists = if (profile?.showListsPublic == true) lists else emptyList(),
             activity = visibleActivity,
-            selectedListId = selectedId,
-            listItems = items,
+            selectedListId = library.selectedId,
+            listItems = library.items,
             readingLists = if (profile?.showLibraryPublic == true) readingLists else emptyMap(),
             libraryFailed = profile?.showLibraryPublic == true && libraryFailed,
             sourceNames = sourceNames
