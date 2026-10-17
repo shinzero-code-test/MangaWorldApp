@@ -13,6 +13,7 @@ import com.exapps.mangaworld.core.data.local.entity.HomeCacheEntity
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseTelemetry
+import com.exapps.mangaworld.core.source.plugins.PluginRowState
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
 import com.exapps.mangaworld.core.source.plugins.SourceUiMapper
@@ -86,7 +87,12 @@ class HomeViewModel @Inject constructor(
                 // approving it on the Sources screen) never showed up here.
                 .flatMapLatest { settings ->
                     sourceUiMapper.entriesFlow().map { rows ->
-                        settings to rows.filter { it.id in settings.enabledSources }
+                        // v9.2.5 (audit B13): enabled is NOT servable. A row that is
+                        // held / unresolved / quarantined must not drive home reads
+                        // (the repository throws for a missing scraper).
+                        settings to rows.filter {
+                            it.id in settings.enabledSources && it.rowState == PluginRowState.SERVING
+                        }
                     }
                 }
                 // Key on content-affecting settings PLUS the visible row set:

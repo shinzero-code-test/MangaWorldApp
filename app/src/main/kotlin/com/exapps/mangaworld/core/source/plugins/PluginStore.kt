@@ -102,8 +102,23 @@ class PluginStore @Inject constructor(
             )
         }
         val versionDir = File(PluginStorage.versionDir(baseDir.path, id, manifest.version))
+        // Stage → move, ALWAYS. A present-but-incomplete version dir (torn
+        // install, or eviction racing an install) previously fell through the
+        // branch below with nothing written and then got its pointer activated —
+        // leaving a record that claims a version whose payload is not on disk,
+        // which is exactly the UNRESOLVED source the user could not recover
+        // (audit B2/B3, and the enabler for B6's re-drive). v9.2.5: immutability
+        // is still absolute — differing bytes are refused — but an INCOMPLETE
+        // dir is repaired from the staged, hash-verified copy.
+        val staging = File(PluginStorage.stagingDir(baseDir.path, id))
+        staging.mkdirs()
+        val staged = File(staging, "plugin.json")
+        staged.writeBytes(manifestBytes)
+        if (scriptBytes != null) {
+            File(staging, "source.js").writeBytes(scriptBytes)
+        }
         if (versionDir.isDirectory) {
-            // Immutable versions: same bytes = idempotent success, different bytes = refuse.
+            // Immutable versions: same bytes = idempotent, different bytes = refuse.
             val existing = File(versionDir, "plugin.json").takeIf { it.isFile }?.readBytes()
             if (existing != null && !existing.contentEquals(manifestBytes)) {
                 return@withContext InstallResult.Rejected(
@@ -112,37 +127,24 @@ class PluginStore @Inject constructor(
             }
             if (scriptBytes != null) {
                 val existingJs = File(versionDir, "source.js").takeIf { it.isFile }?.readBytes()
-                if (existingJs == null || !existingJs.contentEquals(scriptBytes)) {
+                // v9.2.5: a MISSING script is repairable (nothing contradicts
+                // it); only present-and-differing bytes are an immutability
+                // violation. Refusing the missing case made a re-drive unable to
+                // ever fix the payload it was called to fix.
+                if (existingJs != null && !existingJs.contentEquals(scriptBytes)) {
                     return@withContext InstallResult.Rejected(
                         ManifestInvalidReason.SCHEMA_VIOLATION, "version immutable: script bytes differ"
                     )
                 }
             }
-        } else {
-            // Stage → move. Partial/corrupt staging never becomes visible.
-            val staging = File(PluginStorage.stagingDir(baseDir.path, id))
-            staging.mkdirs()
-            val staged = File(staging, "plugin.json")
-            staged.writeBytes(manifestBytes)
-            if (scriptBytes != null) {
-                File(staging, "source.js").writeBytes(scriptBytes)
-            }
-            versionDir.mkdirs()
-            val target = File(versionDir, "plugin.json")
-            if (!staged.renameTo(target)) {
-                staged.copyTo(target, overwrite = true)
-                staged.delete()
-            }
-            if (scriptBytes != null) {
-                val stagedJs = File(staging, "source.js")
-                val targetJs = File(versionDir, "source.js")
-                if (!stagedJs.renameTo(targetJs)) {
-                    stagedJs.copyTo(targetJs, overwrite = true)
-                    stagedJs.delete()
-                }
-            }
-            deleteRecursively(staging)
         }
+        // Partial/corrupt staging never becomes visible: move only complete files.
+        versionDir.mkdirs()
+        moveInto(staged, File(versionDir, "plugin.json"))
+        if (scriptBytes != null) {
+            moveInto(File(staging, "source.js"), File(versionDir, "source.js"))
+        }
+        deleteRecursively(staging)
         val prev = index.get(id)
         val next = PluginStorage.activate(
             PluginStorage.ActivationState(prev?.activeVersion, prev?.previousVersion),
@@ -238,5 +240,13 @@ class PluginStore @Inject constructor(
     private fun deleteRecursively(file: File) {
         if (file.isDirectory) file.listFiles()?.forEach { deleteRecursively(it) }
         file.delete()
+    }
+
+    /** Rename-if-possible, else copy + delete. Never leaves a partial target. */
+    private fun moveInto(from: File, to: File) {
+        if (!from.renameTo(to)) {
+            from.copyTo(to, overwrite = true)
+            from.delete()
+        }
     }
 }

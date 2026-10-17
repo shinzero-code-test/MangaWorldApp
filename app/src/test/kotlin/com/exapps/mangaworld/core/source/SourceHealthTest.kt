@@ -105,6 +105,29 @@ class SourceHealthTest {
     }
 
     @Test
+    fun versionChangeResetsCountersAndQuarantineLatch() {
+        // v9.2.5 (audit B5): counters were keyed by id alone, so the terminal
+        // QUARANTINED latch survived into the next version — and since the latch
+        // never lifts on traffic, a second broken version of the same id could
+        // never even reach the quarantine threshold.
+        val quarantined = SourceHealthPolicy.Observation(
+            anomalies = 10, state = HealthState.QUARANTINED, lastQuarantinedAt = 1_000, version = 1
+        )
+        val d = SourceHealthPolicy.observe(quarantined, failed = true, emptyPrimary = false, nowMs = 2_000, version = 2)
+        assertTrue(d is SourceHealthPolicy.Decision.ResetForVersion)
+        assertEquals(2, (d as SourceHealthPolicy.Decision.ResetForVersion).version)
+        // Same version: the latch still holds (no oscillation via traffic).
+        val same = SourceHealthPolicy.observe(quarantined, failed = false, emptyPrimary = false, nowMs = 3_000, version = 1)
+        assertTrue(same is SourceHealthPolicy.Decision.Hold)
+        // Unknown version (0) must never silently discard counters.
+        val unknown = SourceHealthPolicy.observe(
+            SourceHealthPolicy.Observation(4, HealthState.OK, 0, version = 1),
+            failed = true, emptyPrimary = false, nowMs = 4_000, version = 0
+        )
+        assertTrue(unknown is SourceHealthPolicy.Decision.Hold)
+    }
+
+    @Test
     fun quarantineCooldownSuppressesChurn() {
         val obs = SourceHealthPolicy.Observation(10, HealthState.DEGRADED, 1_000)
         // 10 anomalies but quarantined 1s ago → hold degraded, not re-quarantine.
@@ -267,10 +290,56 @@ class SourceHealthTest {
         val scraper: MangaScraper = mockk()
         coEvery { scraper.getHomeData() } returns home("A")
         val registry = SourceUiTestFixtures.registry("hijala", "lavascans", scrapers = mapOf("hijala" to scraper))
-        val m = SourceHealthMonitor(health, index, registry, RecordingPluginTelemetry(), mockk(relaxed = true), mockk(relaxed = true), io)
+        // v9.2.5 (audit B4): reverify always rebuilds the candidate from the
+        // retained payload and smokes THAT — never whatever the registry
+        // currently resolves to.
+        val loader: com.exapps.mangaworld.core.source.plugins.BundledPluginLoader = mockk {
+            coEvery { buildPluginFromDisk("hijala") } returns
+                com.exapps.mangaworld.core.source.plugins.BundledPluginLoader.DiskBuild.Ready(
+                    registry.pluginFor("hijala")!!, true
+                )
+        }
+        val m = SourceHealthMonitor(health, index, registry, RecordingPluginTelemetry(), loader, mockk(relaxed = true), io)
         assertEquals(true, m.reverify("hijala"))
         assertEquals(HealthState.OK, m.snapshot("hijala"))
         assertEquals(PluginStatus.INSTALLED, index.get("hijala")!!.status)
+    }
+
+    @Test
+    fun reverifySmokesTheStoredPayloadNotTheBuiltinFallback() = runTest {
+        // v9.2.5 (audit B4): after a quarantine unregisters an override, the
+        // registry resolves the id to its BUILTIN. Re-check used to smoke that
+        // healthy builtin and clear the badge for a payload that was never
+        // tested — the next boot then re-registered the drifted descriptor with
+        // no smoke at all. The stored payload is empty here, so a correct
+        // implementation must REFUSE.
+        val health = FakeHealth()
+        val index = FakeIndex()
+        index.put(PluginIndexRecord("hijala", 2, 1, PluginOrigin.OFFICIAL, PluginStatus.QUARANTINED, null))
+        val builtinScraper: MangaScraper = mockk()
+        coEvery { builtinScraper.getHomeData() } returns home("healthy builtin")
+        val payloadScraper: MangaScraper = mockk()
+        coEvery { payloadScraper.getHomeData() } returns emptyHome()
+        val registry = SourceUiTestFixtures.registry(
+            "hijala", "lavascans", scrapers = mapOf("hijala" to builtinScraper)
+        )
+        val storedPlugin = object : com.exapps.mangaworld.core.source.plugins.SourcePlugin {
+            override val descriptor = registry.descriptorFor("hijala")!!
+            override val display = com.exapps.mangaworld.core.source.plugins.SourceDisplay(0, 0)
+            override val scraper = payloadScraper
+        }
+        val loader: com.exapps.mangaworld.core.source.plugins.BundledPluginLoader = mockk {
+            coEvery { buildPluginFromDisk("hijala") } returns
+                com.exapps.mangaworld.core.source.plugins.BundledPluginLoader.DiskBuild.Ready(storedPlugin, true)
+        }
+        val m = SourceHealthMonitor(
+            health, index, registry, RecordingPluginTelemetry(), loader, mockk(relaxed = true), io
+        )
+        assertEquals(
+            "a drifted payload must not be cleared by the healthy builtin",
+            false, m.reverify("hijala")
+        )
+        assertEquals(PluginStatus.QUARANTINED, index.get("hijala")!!.status)
     }
 
     @Test

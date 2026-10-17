@@ -7,6 +7,7 @@ import com.exapps.mangaworld.BuildConfig
 import com.exapps.mangaworld.core.source.plugins.BundledPluginLoader
 import com.exapps.mangaworld.core.source.plugins.PluginIndexRecord
 import com.exapps.mangaworld.core.source.plugins.PluginIndexStore
+import com.exapps.mangaworld.core.source.plugins.SourceRegistry
 import com.exapps.mangaworld.core.source.plugins.PluginStore
 import com.exapps.mangaworld.core.source.plugins.PluginTrust
 import com.exapps.mangaworld.core.source.plugins.PluginTrustKeys
@@ -63,7 +64,9 @@ class PluginBootstrapTelemetryTest {
     private fun loader(
         telemetry: RecordingPluginTelemetry,
         index: FakeIndex = FakeIndex(),
-        keys: Map<String, ByteArray>? = null
+        keys: Map<String, ByteArray>? = null,
+        indexStore: PluginIndexStore = index,
+        registry: SourceRegistry = SourceUiTestFixtures.registry("hijala", "lavascans")
     ): BundledPluginLoader {
         val assetManager: AssetManager = mockk()
         every { assetManager.open(any()) } answers {
@@ -83,9 +86,9 @@ class PluginBootstrapTelemetryTest {
         }
         return BundledPluginLoader(
             context = context,
-            registry = SourceUiTestFixtures.registry("hijala", "lavascans"),
+            registry = registry,
             store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined),
-            index = index,
+            index = indexStore,
             trustKeys = trustKeys,
             runnerFactory = mockk(relaxed = true),
             reconciler = PluginUpgradeReconciler(
@@ -101,6 +104,64 @@ class PluginBootstrapTelemetryTest {
         // v9.2.4: boot emits per-record lines through a replaceable sink;
         // raw android.util.Log throws on plain JVM.
         .also { it.log = {} }
+    }
+
+    /**
+     * Index whose boot snapshot ([getAll]) predates a live status change that the
+     * guard read ([get]) sees — exactly the race where a sweep quarantines or
+     * revokes an id while boot resume is verifying its bytes. Deterministic
+     * without threads.
+     */
+    private class FlippingIndex(
+        private val bootSnapshot: MutableMap<String, PluginIndexRecord>,
+        private val live: MutableMap<String, PluginIndexRecord>
+    ) : PluginIndexStore {
+        override suspend fun get(id: String) = live[id]
+        override suspend fun getAll() = bootSnapshot.values.toList()
+        override suspend fun put(record: PluginIndexRecord) {
+            bootSnapshot[record.id] = record
+            live[record.id] = record
+        }
+
+        override suspend fun remove(id: String): Boolean = live.remove(id) != null
+    }
+
+    @Test
+    fun resumeDoesNotResurrectOrRelabelSafetyStates() = runTest {
+        // v9.2.5 (audit B1, the one P0): quarantine and revocation KEEP
+        // `activeVersion`, so the old pointer-only re-read guard passed and the
+        // resume then re-registered the isolated payload and rewrote its status
+        // to ENABLED — erasing the safety marker the app had just set.
+        for (isolated in listOf(
+            com.exapps.mangaworld.core.source.plugins.PluginStatus.QUARANTINED,
+            com.exapps.mangaworld.core.source.plugins.PluginStatus.REVOKED
+        )) {
+            val bootRecord = PluginIndexRecord(
+                "hijala", 1, null,
+                com.exapps.mangaworld.core.source.plugins.PluginOrigin.OFFICIAL,
+                com.exapps.mangaworld.core.source.plugins.PluginStatus.ENABLED, null
+            )
+            val liveRecord = bootRecord.copy(status = isolated)
+            val index = FlippingIndex(
+                mutableMapOf("hijala" to bootRecord),
+                mutableMapOf("hijala" to liveRecord)
+            )
+            val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+            val outcomes = loader(RecordingPluginTelemetry(), FakeIndex(), null, index, registry)
+                .bootstrap()
+            assertTrue(
+                "resume must skip the isolated id ($isolated): $outcomes",
+                outcomes.any {
+                    it is BundledPluginLoader.Outcome.Skipped &&
+                        it.id == "hijala" && it.reason.startsWith("posture")
+                }
+            )
+            assertEquals(
+                "safety marker must survive boot resume ($isolated)",
+                isolated,
+                index.get("hijala")!!.status
+            )
+        }
     }
 
     @Test

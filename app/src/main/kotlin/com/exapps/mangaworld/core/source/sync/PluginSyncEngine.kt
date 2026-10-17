@@ -309,7 +309,17 @@ class PluginSyncEngine @Inject constructor(
         allowInsecure: Boolean = false,
         baseDir: File
     ): SyncResult = withContext(io) {
-        val policy = PluginKillSwitch.parse(killSwitchJson)
+        val policy = when (val parsed = PluginKillSwitch.parseResult(killSwitchJson)) {
+            is PluginKillSwitch.ParseResult.Valid -> parsed.policy
+            PluginKillSwitch.ParseResult.Absent -> PluginKillSwitch.Policy.EMPTY
+            // v9.2.5 (audit B11): a kill-switch that exists but cannot be read
+            // must NOT degrade into "no policy" — that silently disables every
+            // revocation and engine kill. Abort the sweep loudly instead (the
+            // `sync()` tail records the abort + telemetry); nothing is installed
+            // under an unreadable safety policy.
+            is PluginKillSwitch.ParseResult.Malformed ->
+                throw IllegalStateException("kill-switch malformed: ${parsed.reason}")
+        }
         // Revocations first (cheap, local, fail-closed), then engine kills on
         // actives: an UpToDate short-circuit must never let a killed engine
         // keep serving until the next version bump (F-review).
@@ -494,7 +504,20 @@ class PluginSyncEngine @Inject constructor(
         val current = record?.activeVersion
             ?: registry.descriptorFor(entry.id)?.version
         if (current != null) {
-            if (entry.version == current) return EntryOutcome.UpToDate
+            if (entry.version == current) {
+                // v9.2.5 (audit B6): a record that claims an active version while
+                // the registry has no plugin for the id cannot back a runner —
+                // the UNRESOLVED posture (payload pruned or torn by an install
+                // racing eviction). Answering UpToDate here made the Sources
+                // "re-sync" action a dead end: the user asked to repair and the
+                // sweep declared there was nothing to do. Re-drive the install
+                // instead; persistVerified repairs the torn dir idempotently.
+                if (registry.pluginFor(entry.id) != null) return EntryOutcome.UpToDate
+                log(
+                    "sync ${entry.id}: record claims v$current but nothing is " +
+                        "registered — re-driving the install"
+                )
+            }
             // Downgrades ride the explicit rollback path (previously-signed
             // version re-point), never the forward sync.
             if (entry.version < current) {
@@ -941,7 +964,14 @@ class PluginSyncEngine @Inject constructor(
                     )
                 }
             }
-            is PluginStore.InstallResult.Rejected -> Unit
+            // v9.2.5 (audit B10): a swallowed rejection here means the payload
+            // never landed while the row looks perfectly fine — the next boot
+            // then reports NoPayload/UNRESOLVED with no trail back to the cause.
+            is PluginStore.InstallResult.Rejected ->
+                log(
+                    "sync ${entry.id}: persist rejected (${persisted.reason}) " +
+                        persisted.message.take(120)
+                )
         }
     }
 
@@ -1058,6 +1088,15 @@ class PluginSyncEngine @Inject constructor(
         killSwitchJson: String? = null,
         postSmoke: PostSmoke = PostSmoke.Network()
     ): ApproveOutcome = withContext(io) {
+        // v9.2.5 (audit B11): the policy is read FIRST, before any record or
+        // payload inspection — an unreadable kill-switch must block approval
+        // outright, not only when the rest of the state happens to line up.
+        val policy = when (val parsed = PluginKillSwitch.parseResult(killSwitchJson)) {
+            is PluginKillSwitch.ParseResult.Valid -> parsed.policy
+            PluginKillSwitch.ParseResult.Absent -> PluginKillSwitch.Policy.EMPTY
+            is PluginKillSwitch.ParseResult.Malformed ->
+                return@withContext ApproveOutcome.Held("kill-switch unreadable")
+        }
         val record = indexStore.get(id) ?: return@withContext ApproveOutcome.Unknown
         val version = record.activeVersion
             ?: return@withContext ApproveOutcome.Failed("no payload")
@@ -1072,7 +1111,6 @@ class PluginSyncEngine @Inject constructor(
                 null
             }
             ) ?: return@withContext ApproveOutcome.Failed("payload missing")
-        val policy = PluginKillSwitch.parse(killSwitchJson)
         if (PluginKillSwitch.isRevoked(policy, id, version)) {
             applyKillSwitch(
                 PluginKillSwitch.Policy(
@@ -1086,7 +1124,12 @@ class PluginSyncEngine @Inject constructor(
                 manifestBytes = manifestBytes,
                 trustedKeys = trustedKeys,
                 host = host,
-                enforceFreshness = true
+                // v9.2.5 (audit B7): these are STORED bytes already verified at
+                // acquisition. Freshness gates acquisition only — enforcing it here
+                // made any held payload older than the 90-day anchor permanently
+                // unapprovable, while the sweep kept calling that same version
+                // `UpToDate`, so nothing could ever re-drive it.
+                enforceFreshness = false
             )
         ) {
             is ManifestResult.Invalid -> return@withContext ApproveOutcome.Failed("${v.reason}: ${v.message.take(120)}")

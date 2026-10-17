@@ -103,7 +103,11 @@ class LatestUpdatesViewModel @Inject constructor(
                 // v9.2.3: read the LIVE row stream's current value (first()
                 // on an already-current flow returns immediately) so a source
                 // registered after this ViewModel was built is included.
-                val sources = sourceUiMapper.entriesFlow().first().filter { it.id in enabled }
+                val sources = sourceUiMapper.entriesFlow().first().filter {
+                    // v9.2.5 (audit B13): enabled AND servable.
+                    it.id in enabled &&
+                        it.rowState == com.exapps.mangaworld.core.source.plugins.PluginRowState.SERVING
+                }
                 coroutineScope {
                     sources.map { entry ->
                         async {

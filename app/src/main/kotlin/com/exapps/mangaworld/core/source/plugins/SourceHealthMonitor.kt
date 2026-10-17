@@ -60,15 +60,16 @@ class SourceHealthMonitor @Inject constructor(
      * self-clears into serving).
      */
     suspend fun reverify(id: String): Boolean = kotlinx.coroutines.withContext(io) {
-        var scraper = registry.scraperFor(id)
-        // C-4: quarantine unregisters new ids, so there is nothing to smoke.
-        // Rebuild the registration from the retained on-disk payload (same
-        // verified bytes the boot path trusts) and smoke THAT — never the
-        // builtin/whatever happens to be registered instead.
-        var revived = false
-        if (scraper == null) {
-            val built = loader.buildPluginFromDisk(id)
-            if (built !is BundledPluginLoader.DiskBuild.Ready) return@withContext false
+        // v9.2.5 (audit B4): ALWAYS rebuild the candidate from the retained
+        // on-disk payload and smoke THAT. The previous `registry.scraperFor(id)`
+        // shortcut resolved to the BUILTIN whenever an override had been
+        // unregistered by the quarantine — so "re-check" rubber-stamped the
+        // healthy builtin and cleared the badge for a payload that was never
+        // tested, which the next boot then re-registered without a smoke.
+        val built = loader.buildPluginFromDisk(id)
+        if (built !is BundledPluginLoader.DiskBuild.Ready) return@withContext false
+        val revived = registry.pluginFor(id) == null
+        if (revived) {
             if (registry.registerVerified(
                     built.plugin,
                     PluginOrigin.OFFICIAL
@@ -76,9 +77,8 @@ class SourceHealthMonitor @Inject constructor(
             ) {
                 return@withContext false
             }
-            revived = true
-            scraper = registry.scraperFor(id) ?: return@withContext false
         }
+        val scraper = built.plugin.scraper
         val ok = runCatching { scraper.getHomeData().getOrThrow() }
             .map { !it.isHomeEmpty() }
             .getOrDefault(false)
@@ -114,26 +114,39 @@ class SourceHealthMonitor @Inject constructor(
 
     private suspend fun observe(id: String, failed: Boolean, emptyPrimary: Boolean): HealthState =
         kotlinx.coroutines.withContext(io) {
+            // v9.2.5 (audit B5): counters are version-scoped, so a newly
+            // activated version starts on a fresh slate instead of inheriting the
+            // previous version's anomaly count and quarantine latch — which,
+            // being terminal, made a second broken version of the same id
+            // unreachable for quarantine forever.
+            val version = registry.descriptorFor(id)?.version ?: 0
             // One atomic transition (F-review: the decision reads the same
             // value it writes). Quarantine application runs AFTER the store
             // write, outside any store lock — re-running it is idempotent, so
             // a crash between write and apply self-heals on the next anomaly.
             val now = nowMs()
             val (state, quarantined, from) = store.update(id) { current ->
-                when (val d = SourceHealthPolicy.observe(current, failed, emptyPrimary, now)) {
+                when (val d = SourceHealthPolicy.observe(current, failed, emptyPrimary, now, version)) {
                     is SourceHealthPolicy.Decision.Reset ->
                         SourceHealthPolicy.Observation(
                             anomalies = 0,
                             state = HealthState.OK,
-                            lastQuarantinedAt = current.lastQuarantinedAt
+                            // Preserve quarantine memory (F-review): the cooldown must still
+                            // apply to the NEXT quarantine after a recovery.
+                            lastQuarantinedAt = current.lastQuarantinedAt,
+                            version = current.version
                         ) to Triple(HealthState.OK, false, current.state)
+                    // Fresh artifact: nothing carries over, not even the cooldown.
+                    is SourceHealthPolicy.Decision.ResetForVersion ->
+                        SourceHealthPolicy.initial().copy(version = d.version) to
+                            Triple(HealthState.OK, false, current.state)
                     is SourceHealthPolicy.Decision.Hold ->
                         SourceHealthPolicy.Observation(
-                            d.anomalies, d.state, current.lastQuarantinedAt
+                            d.anomalies, d.state, current.lastQuarantinedAt, version
                         ) to Triple(d.state, false, current.state)
                     is SourceHealthPolicy.Decision.Quarantine ->
                         SourceHealthPolicy.Observation(
-                            d.anomalies, HealthState.QUARANTINED, now
+                            d.anomalies, HealthState.QUARANTINED, now, version
                         ) to Triple(HealthState.QUARANTINED, true, current.state)
                 }
             }

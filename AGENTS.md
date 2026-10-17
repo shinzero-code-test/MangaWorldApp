@@ -16,7 +16,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 9.2.4 (versionCode 254)
+- **Current version**: 9.2.5 (versionCode 255)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 36 · **Compile SDK**: 36
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -128,6 +128,18 @@ Adding a source = **one plugin class + one `@Binds` line** in `SourcePluginModul
 - `HomeViewModel.lastSourceId` accepts any ENABLED id (the builtin-only check made it impossible to reopen Home on an installed plugin source).
 
 **Boot diagnostics + never-invisible states (v9.2.4):** a resume that skips used to leave the source absent from every list with no badge and no on-device trace, so the 9.2.3 fleet report was undiagnosable. `BundledPluginLoader.bootstrap()` now logs one `index <id>: status=… active=… manifest=…` line per record plus one `boot <id>: activated|skipped (<reason>) <payload probe>` line per outcome (bounded, no user data), and `DiskBuild.NoRunner` carries the builder's reason instead of a bare null. On the UI side `PluginRowState.UNRESOLVED` (`plugin_unresolved` badge, `plugin_resync` action) covers a payload record with no serving runner: `SourceUiMapper` renders an extra row for ANY unregistered record with bytes (not just DISABLED/QUARANTINED) and `heldDetails()` includes ENABLED/INSTALLED facts. **Rule: a state the user can reach must be visible with a reason and a recovery action — never silently absent.**
+
+**Train 1 — state-machine safety (v9.2.5, 255)** — the audit's 1 P0 + P1 cluster, landed before any soak because soak data is untrustworthy while these are open:
+- **Resume posture guard** (`BundledPluginLoader.resumeInstalled`): re-reads pointer **and** status; `RESUMABLE_STATUSES` = INSTALLED/ENABLED/DISABLED. `markEnabled` refuses `SAFETY_STATUSES` (QUARANTINED/REVOKED). Boot logs `posture <status>` when it backs off.
+- **`persistVerified` repairs a torn version dir**: staging+move always runs; immutability now refuses only *present-and-differing* bytes (a missing manifest/script is repaired). This is also what makes the UNRESOLVED re-drive work.
+- **UNRESOLVED re-drive** (`syncEntry`): `UpToDate` is only returned when `registry.pluginFor(id) != null`; a record claiming a version with nothing registered logs `re-driving` and reinstalls. The Sources "re-sync" action is no longer a dead end.
+- **`reverify` always builds from disk** (`buildPluginFromDisk`) and smokes that — never `registry.scraperFor(id)`, which resolves to the builtin for an override id.
+- **Health counters are version-scoped** (`Observation.version`, persisted as `v`; `Decision.ResetForVersion`). A new version gets a fresh slate including the quarantine latch, so a second broken version of the same id can still be quarantined.
+- **Freshness gates acquisition only** — `approveHeld` verifies stored bytes with `enforceFreshness = false`.
+- **`PluginKillSwitch.parseResult`** distinguishes `Absent` from `Malformed`; the sweep ABORTS on a malformed policy and `approveHeld` HOLDS, instead of degrading to "no policy" (which silently disabled every revocation/engine kill).
+- **`persistQuietly` rejections are logged** (they used to vanish, leaving a clean-looking row and a `NoPayload` boot report with no trail).
+- **`Repositories.scraper()` throws a typed `SourceUnavailable` inside `withScraper`** — every read returns a failed `Result` instead of crashing (four call sites were outside `runCatching`).
+- **Home/Search/Browse/Latest filter on `enabledSources` AND `rowState == SERVING`** before touching the registry.
 
 **Plugin state-machine invariants (audit 2026-10-18, register in `tmp/review/phase4-issues-and-plan-2026-10-18.md`):** enforced by Train 1 (v9.2.5) onward — do not regress these.
 - **Resume may never resurrect or re-label a safety state.** The re-read guard in `resumeInstalled` compares `activeVersion` **and** a status allow-list; `markEnabled` never overwrites QUARANTINED/REVOKED. Quarantine/kill-switch keep `activeVersion`, so a pointer-only guard does not protect them.

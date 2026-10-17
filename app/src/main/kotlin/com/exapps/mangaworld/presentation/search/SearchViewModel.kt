@@ -9,6 +9,7 @@ import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeExcepti
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
+import com.exapps.mangaworld.core.source.plugins.PluginRowState
 import com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.MangaRepository
@@ -63,7 +64,10 @@ class SearchViewModel @Inject constructor(
         appSettings,
         sourceUiMapper.entriesFlow()
     ) { settings, rows ->
-        rows.filter { it.id in settings.enabledSources }
+        // v9.2.5 (audit B13): enabled AND servable.
+        rows.filter {
+            it.id in settings.enabledSources && it.rowState == PluginRowState.SERVING
+        }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // Search history

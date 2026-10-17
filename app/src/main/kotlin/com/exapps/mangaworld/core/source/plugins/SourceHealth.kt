@@ -50,13 +50,32 @@ object SourceHealthPolicy {
     data class Observation(
         val anomalies: Int,
         val state: HealthState,
-        val lastQuarantinedAt: Long
+        val lastQuarantinedAt: Long,
+        /**
+         * Manifest version these counters describe (v9.2.5, audit B5).
+         *
+         * The latch used to be keyed by id alone, so a QUARANTINED record was
+         * never cleared by installing a *new* version — and
+         * [SourceHealthPolicy.observe] latches QUARANTINED forever, which meant a
+         * second broken version of the same id could never even reach the
+         * quarantine threshold. Version-scoped counters give every version its
+         * own honest slate.
+         */
+        val version: Int = 0
     )
 
     sealed interface Decision {
         data class Hold(val anomalies: Int, val state: HealthState) : Decision
         data class Quarantine(val anomalies: Int) : Decision
         data object Reset : Decision
+
+        /**
+         * v9.2.5 (audit B5): a different manifest version is a different
+         * artifact — previous counters, including the quarantine latch and its
+         * cooldown, must not follow it. Distinct from [Reset] (which deliberately
+         * preserves the cooldown) so the caller cannot accidentally keep them.
+         */
+        data class ResetForVersion(val version: Int) : Decision
     }
 
     fun initial(): Observation = Observation(0, HealthState.OK, 0L)
@@ -65,13 +84,19 @@ object SourceHealthPolicy {
      * @param failed true on error (already filtered: cancellations, CF
      *   challenges and chapter locks never arrive here).
      * @param emptyPrimary true on success with an empty primary payload.
+     * @param version active manifest version, or 0 when unknown (then the
+     *   existing counters are kept — never silently discarded).
      */
     fun observe(
         current: Observation,
         failed: Boolean,
         emptyPrimary: Boolean,
-        nowMs: Long
+        nowMs: Long,
+        version: Int = 0
     ): Decision {
+        if (version != 0 && version != current.version) {
+            return Decision.ResetForVersion(version)
+        }
         if (current.state == HealthState.QUARANTINED) {
             // Quarantine lifts only via explicit re-smoke, never via traffic.
             return Decision.Hold(current.anomalies, HealthState.QUARANTINED)
@@ -153,7 +178,8 @@ class PrefsHealthStore @Inject constructor(
                 } catch (_: Exception) {
                     HealthState.OK
                 },
-                lastQuarantinedAt = o.optLong("q", 0L).coerceAtLeast(0L)
+                lastQuarantinedAt = o.optLong("q", 0L).coerceAtLeast(0L),
+                version = o.optInt("v", 0).coerceAtLeast(0)
             )
         } catch (_: Exception) {
             SourceHealthPolicy.initial()
@@ -165,6 +191,7 @@ class PrefsHealthStore @Inject constructor(
             .put("a", observation.anomalies)
             .put("s", observation.state.name)
             .put("q", observation.lastQuarantinedAt)
+            .put("v", observation.version)
         prefs().edit().putString(key(id), o.toString()).apply()
     }
 

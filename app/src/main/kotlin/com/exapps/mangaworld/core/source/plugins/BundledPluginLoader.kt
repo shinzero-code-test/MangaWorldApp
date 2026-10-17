@@ -230,6 +230,11 @@ class BundledPluginLoader @Inject constructor(
 
     private suspend fun markEnabled(id: String) {
         index.get(id)?.let { rec ->
+            // v9.2.5 (audit B1): belt-and-braces. Even if a caller reaches here
+            // with stale intent, a safety state is never overwritten — losing
+            // QUARANTINED/REVOKED would re-admit a payload the app deliberately
+            // isolated.
+            if (rec.status in SAFETY_STATUSES) return@let
             index.put(rec.copy(status = PluginStatus.ENABLED))
         }
     }
@@ -343,9 +348,19 @@ class BundledPluginLoader @Inject constructor(
         }
         // D10: the sweep may have moved this id while we verified — re-read
         // and back off instead of registering stale metadata over fresh state.
-        // (Pointer moves only; a status flip alone does not invalidate bytes.)
-        if (index.get(id)?.activeVersion != record.activeVersion) {
+        // v9.2.5 (audit B1): the guard checks the POINTER *and* the posture.
+        // A pointer-only guard is not enough: quarantine and kill-switch
+        // revocation deliberately keep `activeVersion`, so a sweep that
+        // isolated this payload mid-resume passed the old check — and the
+        // resume then re-registered it and marked it ENABLED, erasing the
+        // safety marker. Resume acts only on the statuses it may act on.
+        val fresh = index.get(id) ?: return Outcome.Skipped(id, "record gone mid-resume")
+        if (fresh.activeVersion != record.activeVersion) {
             return Outcome.Skipped(id, "superseded mid-resume")
+        }
+        if (fresh.status !in RESUMABLE_STATUSES) {
+            log("boot $id: posture changed to ${fresh.status} mid-resume — not registering")
+            return Outcome.Skipped(id, "posture ${fresh.status}")
         }
         return when (val reg = registry.registerVerified(plugin, PluginOrigin.OFFICIAL)) {
             is SourceRegistry.RegisterOutcome.Refused -> Outcome.Skipped(id, reg.reason)
@@ -409,5 +424,15 @@ class BundledPluginLoader @Inject constructor(
     companion object {
         private const val TAG = "BundledPlugins"
         val PILOT_IDS = listOf("hijala", "lavascans")
+
+        /** Statuses boot resume may register + re-label (v9.2.5 audit B1). */
+        private val RESUMABLE_STATUSES = setOf(
+            PluginStatus.INSTALLED, PluginStatus.ENABLED, PluginStatus.DISABLED
+        )
+
+        /** Never rewritten by resume; a payload isolated here stays isolated. */
+        private val SAFETY_STATUSES = setOf(
+            PluginStatus.QUARANTINED, PluginStatus.REVOKED
+        )
     }
 }

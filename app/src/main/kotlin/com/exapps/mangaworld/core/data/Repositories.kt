@@ -99,8 +99,28 @@ class MangaRepositoryImpl @Inject constructor(
     private val health: com.exapps.mangaworld.core.source.plugins.SourceHealthMonitor
 ) : MangaRepository {
 
+    /**
+     * Typed "no serving plugin for this id" failure (v9.2.5, audit O-3).
+     *
+     * This used to be `error(...)`, and four read methods called it OUTSIDE a
+     * `runCatching` — so a source that was removed, quarantined or unregistered
+     * between list render and click **crashed the screen** instead of surfacing
+     * an ordinary failed result the UI already knows how to render.
+     */
+    private class SourceUnavailable(val id: String) :
+        IllegalStateException("source unavailable: $id")
+
     private fun scraper(source: com.exapps.mangaworld.core.source.plugins.SourceId): MangaScraper =
-        registry.scraperFor(source.value) ?: error("No scraper for ${source.value}. This source does not support online operations.")
+        registry.scraperFor(source.value) ?: throw SourceUnavailable(source.value)
+
+    /** Wraps the no-plugin lookup so every read returns a failed [Result]. */
+    private inline fun <T> withScraper(
+        source: com.exapps.mangaworld.core.source.plugins.SourceId,
+        block: (MangaScraper) -> Result<T>
+    ): Result<T> = runCatching { scraper(source) }.fold(
+        onSuccess = block,
+        onFailure = { Result.failure(it) }
+    )
 
     override suspend fun getHomeData(source: com.exapps.mangaworld.core.source.plugins.SourceId) =
         runCatching {
@@ -118,7 +138,7 @@ class MangaRepositoryImpl @Inject constructor(
 
     override suspend fun searchMangaDirect(query: String, source: com.exapps.mangaworld.core.source.plugins.SourceId, page: Int): Result<List<MangaItem>> {
         if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
-        return scraper(source).searchManga(query, page)
+        return withScraper(source) { it.searchManga(query, page) }
     }
 
     override suspend fun browseMangaDirect(
@@ -127,12 +147,12 @@ class MangaRepositoryImpl @Inject constructor(
         type: MangaType?, sortBy: SortBy
     ): Result<List<MangaItem>> {
         if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
-        return scraper(source).browseManga(page, genre, status, type, sortBy)
+        return withScraper(source) { it.browseManga(page, genre, status, type, sortBy) }
     }
 
     override suspend fun getMangaByGenre(genre: String, source: com.exapps.mangaworld.core.source.plugins.SourceId, page: Int): Result<List<MangaItem>> {
         if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
-        return scraper(source).getMangaByGenre(genre, page)
+        return withScraper(source) { it.getMangaByGenre(genre, page) }
     }
 
     /**
@@ -149,7 +169,7 @@ class MangaRepositoryImpl @Inject constructor(
         val cached = runCatching { cacheDao.get(mangaId)?.toDetail(source) }.getOrNull()
 
         // Fetch fresh from scraper
-        val networkResult = scraper(source).getMangaDetail(slug)
+        val networkResult = withScraper(source) { it.getMangaDetail(slug) }
         // Drift watch sees the scraper result, not the cache fallback below.
         runCatching { health.observeDetail(source.value, networkResult) }
 
@@ -176,14 +196,14 @@ class MangaRepositoryImpl @Inject constructor(
 
     override suspend fun getChapterPages(mangaSlug: String, chapterUrl: String, source: com.exapps.mangaworld.core.source.plugins.SourceId): Result<List<ChapterPage>> {
         if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
-        val result = scraper(source).getChapterPages(chapterUrl)
+        val result = withScraper(source) { it.getChapterPages(chapterUrl) }
         runCatching { health.observePages(source.value, result) }
         return result
     }
 
     override suspend fun getPopularManga(source: com.exapps.mangaworld.core.source.plugins.SourceId): Result<List<MangaItem>> {
         if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
-        return scraper(source).getPopularManga()
+        return withScraper(source) { it.getPopularManga() }
     }
 
     override suspend fun getSuggestedManga(candidates: List<MangaItem>, limit: Int): List<MangaItem> {

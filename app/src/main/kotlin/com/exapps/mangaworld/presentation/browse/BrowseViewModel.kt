@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
+import com.exapps.mangaworld.core.source.plugins.PluginRowState
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
 import com.exapps.mangaworld.core.source.plugins.SourceUiMapper
@@ -74,7 +75,10 @@ class BrowseViewModel @Inject constructor(
                 sourceUiMapper.entriesFlow()
             ) { settings, ui, rows ->
                 Triple(
-                    rows.filter { it.id in settings.enabledSources },
+                    // v9.2.5 (audit B13): enabled AND servable.
+                    rows.filter {
+                        it.id in settings.enabledSources && it.rowState == PluginRowState.SERVING
+                    },
                     settings,
                     ui.selectedSource
                 )

@@ -28,6 +28,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
 import java.time.Instant
 
 /**
@@ -441,6 +442,47 @@ class PluginScriptSyncTest {
         )
         e.log = { }
         return e
+    }
+
+    @Test
+    fun approveStaleStoredPayloadStillWorks() = runTest {
+        // v9.2.5 (audit B7): freshness gates ACQUISITION. A payload held while it
+        // was fresh must remain approvable past the 90-day window — otherwise the
+        // sweep keeps calling that version `UpToDate` (so nothing re-drives it)
+        // and the consent hold becomes permanent. Bytes are placed exactly as an
+        // earlier-accepted hold sits on disk, with a fresh-enough-at-acquisition
+        // date that is now old.
+        val staleIso = Instant.now().minusSeconds(120L * 24 * 60 * 60).toString()
+        val staleBytes = manifestBytes("gated", 1) {
+            it.put("engine", "mangareader")
+            it.put("baseUrl", "https://gated.example")
+            it.put("requiresPermission", true)
+            it.put("issuedAt", staleIso)
+        }
+        val dir = File(
+            com.exapps.mangaworld.core.source.plugins.PluginStorage
+                .versionDir(tmp.root.path, "gated", 1)
+        )
+        dir.mkdirs()
+        File(dir, "plugin.json").writeBytes(staleBytes)
+        val index = FakeIndex()
+        index.put(
+            PluginIndexRecord(
+                "gated", 1, null, PluginOrigin.OFFICIAL, PluginStatus.DISABLED,
+                staleBytes.toString(Charsets.UTF_8)
+            )
+        )
+        val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+        val e = approvalEngine(mutableMapOf(), index, registry)
+        val outcome = e.approveHeld(
+            id = "gated",
+            baseDir = tmp.root,
+            trustedKeys = trust,
+            host = host,
+            postSmoke = PostSmoke.Custom({ true })
+        )
+        assertEquals(PluginSyncEngine.ApproveOutcome.Approved, outcome)
+        assertEquals(PluginStatus.ENABLED, index.get("gated")!!.status)
     }
 
     @Test

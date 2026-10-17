@@ -154,6 +154,46 @@ class PluginStoreTest {
     }
 
     @Test
+    fun repairsTornVersionDirInsteadOfActivatingAMissingPayload() = runTest {
+        // v9.2.5 (audit B2): a version dir that EXISTS but lost its payload
+        // (torn install, or eviction racing an install) used to skip the write
+        // and still activate the pointer — leaving a record claiming a version
+        // whose bytes are not on disk, i.e. the unrecoverable UNRESOLVED state.
+        val index = FakeIndex()
+        val s = store(index)
+        val bytes = manifestBytes(7)
+        assertTrue(s.install(tmp.root, bytes, PluginOrigin.OFFICIAL, trust, host, enforceFreshness = false)
+                is PluginStore.InstallResult.Installed)
+        val dir = File(tmp.root, "starz/versions/7")
+        assertTrue(dir.isDirectory)
+        // Simulate the tear: the pointer stays, the bytes vanish.
+        File(dir, "plugin.json").delete()
+        assertTrue(!File(dir, "plugin.json").exists())
+
+        val repaired = s.install(tmp.root, bytes, PluginOrigin.OFFICIAL, trust, host, enforceFreshness = false)
+        assertTrue(repaired is PluginStore.InstallResult.Installed)
+        assertEquals(7, index.get("starz")!!.activeVersion)
+        assertTrue("payload restored", File(dir, "plugin.json").isFile)
+        assertTrue(bytes.contentEquals(File(dir, "plugin.json").readBytes()))
+    }
+
+    @Test
+    fun immutabilityStillRefusesDifferingBytesForTheSameVersion() = runTest {
+        // The repair above must NOT weaken immutability: same version, different
+        // signed bytes is still refused.
+        val s = store(FakeIndex())
+        assertTrue(
+            s.install(tmp.root, manifestBytes(8), PluginOrigin.OFFICIAL, trust, host, enforceFreshness = false)
+                is PluginStore.InstallResult.Installed
+        )
+        val second = s.install(
+            tmp.root, manifestBytes(8, timeoutMs = 20000), PluginOrigin.OFFICIAL, trust, host,
+            enforceFreshness = false
+        )
+        assertTrue(second is PluginStore.InstallResult.Rejected)
+    }
+
+    @Test
     fun quotaNeverEvictsActiveOrPrevious() = runTest {
         val index = FakeIndex()
         val s = store(index)

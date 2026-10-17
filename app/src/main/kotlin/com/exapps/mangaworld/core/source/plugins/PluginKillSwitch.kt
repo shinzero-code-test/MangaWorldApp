@@ -42,13 +42,34 @@ object PluginKillSwitch {
     const val MAX_REVOCATIONS = 256
     private val ID_REGEX = Regex("^[a-z0-9][a-z0-9_-]{0,63}$")
 
-    /** Parses the RC payload; any malformation fails closed to [Policy.EMPTY]. */
-    fun parse(rcJson: String?): Policy {
-        if (rcJson.isNullOrBlank()) return Policy.EMPTY
-        if (rcJson.toByteArray(Charsets.UTF_8).size > MAX_KILLSWITCH_JSON_BYTES) return Policy.EMPTY
+    /**
+     * Parse outcome, and the difference that matters (v9.2.5, audit B11).
+     *
+     * "No kill-switch configured" and "kill-switch present but unreadable" are
+     * NOT the same thing: both used to collapse to [Policy.EMPTY], so a
+     * corrupted or hostile RC payload silently disabled every revocation and
+     * engine kill while looking identical to "nothing configured". Callers must
+     * refuse to act on [Malformed].
+     */
+    sealed interface ParseResult {
+        data object Absent : ParseResult
+        data class Valid(val policy: Policy) : ParseResult
+        data class Malformed(val reason: String) : ParseResult
+    }
+
+    /**
+     * Strict parse for decision points. Absent → no policy; anything present
+     * but unreadable → [ParseResult.Malformed] so callers fail closed instead of
+     * silently acting as if no kill-switch existed.
+     */
+    fun parseResult(rcJson: String?): ParseResult {
+        if (rcJson.isNullOrBlank()) return ParseResult.Absent
+        if (rcJson.toByteArray(Charsets.UTF_8).size > MAX_KILLSWITCH_JSON_BYTES) {
+            return ParseResult.Malformed("payload exceeds ${MAX_KILLSWITCH_JSON_BYTES}B")
+        }
         return runCatching {
             val root = mapper.readTree(rcJson)
-            if (!root.isObject) return Policy.EMPTY
+            if (!root.isObject) return ParseResult.Malformed("not an object")
             val revoked = root.get("revoked")?.takeIf { it.isArray }
                 ?.takeIf { it.size() <= MAX_REVOCATIONS }
                 ?.mapNotNull { node ->
@@ -65,8 +86,21 @@ object PluginKillSwitch {
                 }?.toSet().orEmpty()
             val customs = root.get("disableAllCustoms")?.takeIf { it.isBoolean }?.asBoolean()
                 ?: false
-            Policy(revoked = revoked, disabledEngines = engines, disableAllCustoms = customs)
-        }.getOrDefault(Policy.EMPTY)
+            ParseResult.Valid(
+                Policy(revoked = revoked, disabledEngines = engines, disableAllCustoms = customs)
+            )
+        }.getOrElse { e -> ParseResult.Malformed(e.message?.take(80) ?: e.javaClass.simpleName) }
+    }
+
+    /**
+     * Convenience parse for non-decision call sites (tests, diagnostics):
+     * collapses Absent and Malformed to [Policy.EMPTY]. NEVER use it where a
+     * revocation must be enforced — use [parseResult].
+     */
+    fun parse(rcJson: String?): Policy = when (val r = parseResult(rcJson)) {
+        is ParseResult.Valid -> r.policy
+        ParseResult.Absent -> Policy.EMPTY
+        is ParseResult.Malformed -> Policy.EMPTY
     }
 
     /** True when [id]/[version] is revoked (null version revokes all versions). */

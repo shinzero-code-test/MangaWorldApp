@@ -177,6 +177,102 @@ class PluginSyncEngineTest {
         return Harness(engine, index, fetcher, registry, trust, host, tmp.root, logs, telemetry)
     }
 
+    @Test
+    fun reDrivesUnresolvedRecordInsteadOfReportingUpToDate() = runTest {
+        // v9.2.5 (audit B6): a record claiming an active version while NOTHING is
+        // registered for that id is the UNRESOLVED posture (payload pruned or
+        // torn). The sweep used to answer UpToDate there, which made the Sources
+        // "re-sync" button a dead end — the user asked to repair and the sweep
+        // reported there was nothing to do.
+        val manifestUrl = "https://cdn.example/plugins/newbie/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson(Triple("newbie", 1, manifestUrl)),
+            manifestUrl to manifestBytes("newbie", 1)
+        )
+        val index = FakeIndex()
+        // Record claims v1 (so version comparison says "same"), but the registry
+        // has no plugin for the id — exactly the unresolved case.
+        index.put(PluginIndexRecord("newbie", 1, null, PluginOrigin.OFFICIAL, PluginStatus.ENABLED, null))
+        val h = harness(bodies, registryIds = arrayOf("hijala", "lavascans"), index = index)
+        val result = h.engine.sync(h.trust, h.host, baseDir = h.baseDir)
+        val outcome = result.outcomes["newbie"]
+        assertTrue(
+            "expected a re-drive, got $outcome",
+            outcome != null && outcome !is PluginSyncEngine.EntryOutcome.UpToDate
+        )
+        assertTrue(
+            "the re-drive must be logged so logcat names the repair",
+            h.logs.any { it.contains("re-driving") }
+        )
+    }
+
+    @Test
+    fun malformedKillSwitchAbortsTheSweep() = runTest {
+        // v9.2.5 (audit B11): a kill-switch payload that exists but cannot be
+        // parsed used to collapse to "no policy" — silently disabling every
+        // revocation and engine kill. A sweep must refuse to act instead.
+        val manifestUrl = "https://cdn.example/plugins/hijala/v2/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson(Triple("hijala", 2, manifestUrl)),
+            manifestUrl to manifestBytes("hijala", 2)
+        )
+        val h = harness(bodies)
+        runCatching {
+            h.engine.sync(
+                h.trust, h.host,
+                killSwitchJson = "{not json at all",
+                baseDir = h.baseDir
+            )
+        }.onSuccess { fail("a malformed kill-switch must abort the sweep") }
+    }
+
+    @Test
+    fun malformedKillSwitchHoldsApproval() = runTest {
+        // Same rule on the approval lane: never activate under an unreadable
+        // safety policy.
+        val h = harness(mutableMapOf())
+        val outcome = h.engine.approveHeld(
+            id = "hijala",
+            baseDir = h.baseDir,
+            trustedKeys = h.trust,
+            host = h.host,
+            killSwitchJson = "[[[",
+            postSmoke = PostSmoke.Disabled
+        )
+        assertTrue(
+            "approval must hold, got $outcome",
+            outcome is PluginSyncEngine.ApproveOutcome.Held
+        )
+    }
+
+    @Test
+    fun persistRejectionIsLoggedNotSwallowed() = runTest {
+        // v9.2.5 (audit B10): persistQuietly discarded InstallResult.Rejected, so
+        // a payload that never landed still produced a clean-looking row and left
+        // no trace at all — the next boot then reported NoPayload with nothing to
+        // connect it back to.
+        val manifestUrl = "https://cdn.example/plugins/newsite/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson(Triple("newsite", 1, manifestUrl)),
+            manifestUrl to manifestBytes("newsite", 1)
+        )
+        // Pre-seed v1 with DIFFERENT validly-signed bytes → immutability refusal.
+        val dir = File(
+            com.exapps.mangaworld.core.source.plugins.PluginStorage
+                .versionDir(tmp.root.path, "newsite", 1)
+        )
+        dir.mkdirs()
+        File(dir, "plugin.json").writeBytes(
+            manifestBytes("newsite", 1) { it.put("timeoutMs", 31000) }
+        )
+        val h = harness(bodies, registryIds = arrayOf("hijala", "lavascans"))
+        h.engine.sync(h.trust, h.host, baseDir = h.baseDir)
+        assertTrue(
+            "expected the persist rejection to be logged, got: ${h.logs}",
+            h.logs.any { it.contains("persist rejected") }
+        )
+    }
+
     // ─── Drills ─────────────────────────────────────────────────────────────
 
     @Test
