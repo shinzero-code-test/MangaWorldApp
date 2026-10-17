@@ -954,7 +954,10 @@ class PluginSyncEngine @Inject constructor(
         enabled: Boolean = false,
         scriptBytes: ByteArray? = null
     ) {
-        when (pluginStore.persistVerified(baseDir, entry.id, manifest, manifestBytes, PluginOrigin.OFFICIAL, scriptBytes)) {
+        val persisted = pluginStore.persistVerified(
+            baseDir, entry.id, manifest, manifestBytes, PluginOrigin.OFFICIAL, scriptBytes
+        )
+        when (persisted) {
             is PluginStore.InstallResult.Installed -> {
                 indexStore.get(entry.id)?.let { rec ->
                     indexStore.put(
@@ -967,10 +970,10 @@ class PluginSyncEngine @Inject constructor(
             // v9.2.5 (audit B10): a swallowed rejection here means the payload
             // never landed while the row looks perfectly fine — the next boot
             // then reports NoPayload/UNRESOLVED with no trail back to the cause.
-            is rejected@PluginStore.InstallResult.Rejected ->
+            is PluginStore.InstallResult.Rejected ->
                 log(
-                    "sync ${entry.id}: persist rejected (${rejected.reason}) " +
-                        rejected.message.take(120)
+                    "sync ${entry.id}: persist rejected (${persisted.reason}) " +
+                        persisted.message.take(120)
                 )
         }
     }
