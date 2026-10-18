@@ -1,5 +1,5 @@
 /**
- * manonga.online — official script canary v1 (bridge API v1).
+ * manonga.online — official script canary v6 (post-drill) (bridge API v1).
  *
  * Pipeline-proving source: small, server-rendered, no Cloudflare, no auth.
  * Custom theme (fixed engine walks cannot express its routes), so a script is
@@ -55,6 +55,8 @@ function pickSrc(doc, selector, index) {
 }
 
 function home(ctx) {
+  log("info", "manonga-canary", "payload v3 home");
+
   var doc = parse(fetch(ctx.baseUrl + "/"), ctx.baseUrl);
   var titles = selectText(doc, ".manga-item .manga-heading a");
   var hrefs = selectAttr(doc, ".manga-item .manga-heading a", "href");
