@@ -806,11 +806,18 @@ class PluginSyncEngineTest {
             PluginIndexRecord("newbie", 1, null, PluginOrigin.OFFICIAL, PluginStatus.ENABLED, null)
         )
         val h = harness(bodies, registryIds = arrayOf("hijala", "lavascans"), index = index)
-        assertTrue(h.sync().outcomes["newbie"] is PluginSyncEngine.EntryOutcome.Updated)
+        val first = h.sync()
+        assertTrue(
+            "install: expected Updated, got ${first.outcomes["newbie"]} (all=${first.outcomes})",
+            first.outcomes["newbie"] is PluginSyncEngine.EntryOutcome.Updated
+        )
 
         h.etags.set(null)
         val killed = h.sync(kill = """{"revoked":[{"id":"newbie"}]}""")
-        assertEquals(PluginSyncEngine.EntryOutcome.Revoked, killed.outcomes["newbie"])
+        assertEquals(
+            "kill: got ${killed.outcomes["newbie"]} revocations=${killed.revocationsApplied}",
+            PluginSyncEngine.EntryOutcome.Revoked, killed.outcomes["newbie"]
+        )
         assertEquals(PluginStatus.REVOKED, h.index.get("newbie")!!.status)
         assertNull("kill must drop the only runner", h.registry.pluginFor("newbie"))
 
