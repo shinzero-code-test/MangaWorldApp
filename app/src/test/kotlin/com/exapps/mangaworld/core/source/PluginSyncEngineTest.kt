@@ -799,7 +799,13 @@ class PluginSyncEngineTest {
             "https://cdn.example/plugins/index.json" to indexJson(Triple("newbie", 1, manifestUrl)),
             manifestUrl to manifestBytes("newbie", 1)
         )
-        val h = harness(bodies, registryIds = arrayOf("hijala", "lavascans"))
+        // Pre-seed the record (as the late-remote-id test does): a BRAND NEW id is
+        // consent-held by design, which is a different code path than the one under test.
+        val index = FakeIndex()
+        index.put(
+            PluginIndexRecord("newbie", 1, null, PluginOrigin.OFFICIAL, PluginStatus.ENABLED, null)
+        )
+        val h = harness(bodies, registryIds = arrayOf("hijala", "lavascans"), index = index)
         assertTrue(h.sync().outcomes["newbie"] is PluginSyncEngine.EntryOutcome.Updated)
 
         h.etags.set(null)
