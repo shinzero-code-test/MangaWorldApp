@@ -403,11 +403,26 @@ class PluginSyncEngine @Inject constructor(
         // D8: same cancellation discipline as the outcome report above —
         // retry bookkeeping must survive a mid-sweep screen exit.
         kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-            etags.setUnresolved(
-                outcomes
-                    .filterValues { it is EntryOutcome.Failed || it is EntryOutcome.RolledBack }
-                    .keys
-            )
+            // Failures/rollbacks must be retried, so they block the 304 shortcut.
+            val retry = outcomes
+                .filterValues { it is EntryOutcome.Failed || it is EntryOutcome.RolledBack }
+                .keys
+            // So must records this policy no longer forbids (drill 3, 2026-10-18):
+            // a REVOKED record is otherwise invisible to the sweep, and with an
+            // unchanged index the 304 short-circuit means lifting the kill-switch
+            // never re-drives it — the source stays dead until the publisher ships a
+            // new version. Revocation without a recovery path is a one-way door.
+            // Judged per RECORD version: isRevoked(policy, id, null) only matches
+            // all-version revocations, so a version-specific kill would look lifted
+            // and cause a re-drive on every single sweep.
+            val lifted = indexStore.getAll()
+                .filter { it.status == PluginStatus.REVOKED }
+                .filterNot { PluginKillSwitch.isRevoked(policy, it.id, it.activeVersion) }
+                .map { it.id }
+            if (lifted.isNotEmpty()) {
+                log("kill-switch no longer forbids ${lifted.joinToString(",")} — re-driving")
+            }
+            etags.setUnresolved(retry + lifted)
         }
         SyncResult(outcomes = outcomes, revocationsApplied = revocations, evictedVersions = evicted)
     }

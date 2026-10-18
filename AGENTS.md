@@ -16,7 +16,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 9.3.2 (versionCode 258)
+- **Current version**: 9.3.3 (versionCode 259)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 36 · **Compile SDK**: 36
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -138,6 +138,8 @@ Adding a source = **one plugin class + one `@Binds` line** in `SourcePluginModul
 **Kill-switch containment latency (measured 2026-10-18, drill log):** RC publishes instantly, but `FirebaseRemoteConfigManager` sets `setMinimumFetchIntervalInSeconds(3600)` and the SDK persists that window — the Sources **refresh button does NOT bypass it** (it re-reads the activated local value). So containment = ≤1 h RC throttle + ≤24 h sweep (worst case ~25 h), and a published kill-switch is NOT evidence of containment: the proof is `revoked=[…]` in `PluginSync`. Correcting a prior doc claim. Procedure: `tmp/review/plugin-key-compromise-runbook.md`; drills: `tmp/review/gate-drill-log-2026-10-18.md`.
 
 **Hardcoded `Dispatchers.IO` in a ViewModel (v9.3.2, F-1 — root-caused, not guessed):** `MangaDetailViewModel` hopped to the real `Dispatchers.IO` in 8 places. A real hop is NOT drained by `advanceUntilIdle()`, so the test finished, `Dispatchers.resetMain()` restored Android's Main dispatcher, and the resuming IO coroutine hit *"Main dispatcher had failed to initialize / getMainLooper not mocked"* → the coroutine machinery died on a worker thread → whichever unrelated `runTest` ran next failed with `UncaughtExceptionsBeforeTest`. It looked like two random flaky tests (`DetailReaderViewModelTest`, `HomeViewModelTest.init_restoresLastOpenedSource`); the real culprit was a third ViewModel's leak. **Never hardcode a dispatcher in a ViewModel** — inject `@IoDispatcher`. When a test fails with an exception that looks like it belongs to another test, read the worker's `system-out` in the `unit-test-results` artifact for the *originating* frame; the attributed test is a victim.
+
+**Lifted revocation must re-drive (v9.3.3, drill 3):** `Revoked` is not in the unresolved set, so with an unchanged index the 304 short-circuit skipped the id entirely — lifting a kill-switch left the source dead until the publisher shipped a new version. The sweep now marks a `REVOKED` record unresolved when the current policy no longer forbids **that record's version** (judged per-version: a version-scoped kill must not look lifted, or every sweep re-drives it). Revocation without a recovery path is a one-way door. Note the recovered posture is `DISABLED`, not serving: with the runner gone the record is indistinguishable from a new arrival, so consent applies again — a revoked source must never silently resume.
 
 **Snackbar reasons (v9.3.1, audit B14):** `SourcesViewModel.notice` is `SharedFlow<SourceNotice(resId, reason)>`; the engine's typed reason (`ApproveOutcome.Held/Failed(reason)`, reverify failure) is formatted into the snackbar. A bare "تعذر الاعتماد" with no reason is a diagnosable state presented as unexplained — never do that.
 

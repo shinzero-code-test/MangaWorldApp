@@ -853,4 +853,64 @@ class PluginSyncEngineTest {
         assertEquals(PluginStatus.DISABLED, h.index.get("newbie")!!.status)
     }
 
+
+    /**
+     * A lifted revocation must be re-driven WITHOUT a publisher action (drill 3).
+     * `Revoked` is not in the unresolved set, so with an unchanged index the 304
+     * short-circuit skipped the id entirely and the source stayed dead. Proves the
+     * escape hatch: second sweep with no policy re-drives even behind a 304.
+     */
+    @Test
+    fun liftedRevocationReDrivesDespiteUnchangedIndex() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/newbie/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson(Triple("newbie", 1, manifestUrl)),
+            manifestUrl to manifestBytes("newbie", 1)
+        )
+        val h = harness(bodies, registryIds = arrayOf("hijala", "lavascans"), runners = scrapingRunners())
+        assertTrue(h.sync().outcomes["newbie"] is PluginSyncEngine.EntryOutcome.Updated)
+
+        h.etags.set(null)
+        assertEquals(
+            PluginSyncEngine.EntryOutcome.Revoked,
+            h.sync(kill = """{"revoked":[{"id":"newbie"}]}""").outcomes["newbie"]
+        )
+
+        // No etag clearing here on purpose: the index is unchanged, so a 304 would
+        // otherwise short-circuit the whole sweep and the id would never be revisited.
+        val recovered = h.sync(kill = null)
+        assertTrue(
+            "a lifted revocation must re-drive past the 304, got ${recovered.outcomes["newbie"]}",
+            recovered.outcomes["newbie"] is PluginSyncEngine.EntryOutcome.Updated
+        )
+        assertNotNull("recovery must re-register a runner", h.registry.pluginFor("newbie"))
+    }
+
+    /**
+     * A version-scoped kill must NOT look lifted: otherwise every sweep re-drives a
+     * still-forbidden payload forever.
+     */
+    @Test
+    fun stillRevokedRecordIsNotMarkedUnresolved() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/newbie/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson(Triple("newbie", 1, manifestUrl)),
+            manifestUrl to manifestBytes("newbie", 1)
+        )
+        val h = harness(bodies, registryIds = arrayOf("hijala", "lavascans"), runners = scrapingRunners())
+        assertTrue(h.sync().outcomes["newbie"] is PluginSyncEngine.EntryOutcome.Updated)
+        h.etags.set(null)
+        val kill = """{"revoked":[{"id":"newbie","version":1}]}"""
+        assertEquals(
+            PluginSyncEngine.EntryOutcome.Revoked, h.sync(kill = kill).outcomes["newbie"]
+        )
+        // Still forbidden: the id must NOT be queued for re-drive.
+        h.etags.set(null)
+        h.sync(kill = kill)
+        assertFalse(
+            "a still-revoked record must not be marked unresolved",
+            h.etags.unresolvedIds.contains("newbie")
+        )
+    }
+
 }
