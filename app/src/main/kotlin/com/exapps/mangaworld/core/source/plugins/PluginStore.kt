@@ -26,6 +26,18 @@ class PluginStore @Inject constructor(
     @com.exapps.mangaworld.core.di.IoDispatcher private val io: kotlinx.coroutines.CoroutineDispatcher
 ) {
 
+    /**
+     * Serializes every payload-directory mutation in-process (v9.3.0, audit B3).
+     *
+     * Quota eviction walked the version tree and deleted entries with no lock,
+     * so a concurrent install could have its version dir removed between the
+     * immutability check and the pointer activation — producing exactly the torn
+     * directory that left a record claiming a payload that was not on disk.
+     * Installs and evictions are rare and short; one mutex is the correct
+     * trade-off (per-id keys would still race on the shared index rows).
+     */
+    private val payloadLock = kotlinx.coroutines.sync.Mutex()
+
     /** Outcome of an install attempt. Fail-closed: any gate refuses the candidate. */
     sealed interface InstallResult {
         data class Installed(val manifest: PluginManifest, val isUpdate: Boolean) : InstallResult
@@ -78,26 +90,29 @@ class PluginStore @Inject constructor(
         origin: PluginOrigin,
         scriptBytes: ByteArray? = null
     ): InstallResult = withContext(io) {
+        // v9.3.0 (audit B3): serialize against quota eviction so a version dir
+        // cannot be deleted between the immutability check and pointer activation.
+        payloadLock.withLock {
         if (manifest.engine == SourceEngine.SCRIPT) {
             if (scriptBytes == null) {
-                return@withContext InstallResult.Rejected(
+                return@withLock InstallResult.Rejected(
                     ManifestInvalidReason.SCHEMA_VIOLATION, "script payload missing"
                 )
             }
             if (scriptBytes.size > com.exapps.mangaworld.core.source.script.ScriptContract.SCRIPT_MAX_BYTES) {
-                return@withContext InstallResult.Rejected(
+                return@withLock InstallResult.Rejected(
                     ManifestInvalidReason.SCHEMA_VIOLATION, "source.js exceeds byte cap"
                 )
             }
             val expected = manifest.scriptSha256
             val actual = ScriptPluginLoader.sha256Hex(scriptBytes)
             if (expected == null || !actual.equals(expected, ignoreCase = true)) {
-                return@withContext InstallResult.Rejected(
+                return@withLock InstallResult.Rejected(
                     ManifestInvalidReason.SCHEMA_VIOLATION, "script hash mismatch"
                 )
             }
         } else if (scriptBytes != null) {
-            return@withContext InstallResult.Rejected(
+            return@withLock InstallResult.Rejected(
                 ManifestInvalidReason.SCHEMA_VIOLATION, "unexpected script payload"
             )
         }
@@ -121,7 +136,7 @@ class PluginStore @Inject constructor(
             // Immutable versions: same bytes = idempotent, different bytes = refuse.
             val existing = File(versionDir, "plugin.json").takeIf { it.isFile }?.readBytes()
             if (existing != null && !existing.contentEquals(manifestBytes)) {
-                return@withContext InstallResult.Rejected(
+                return@withLock InstallResult.Rejected(
                     ManifestInvalidReason.SCHEMA_VIOLATION, "version immutable: bytes differ"
                 )
             }
@@ -132,7 +147,7 @@ class PluginStore @Inject constructor(
                 // violation. Refusing the missing case made a re-drive unable to
                 // ever fix the payload it was called to fix.
                 if (existingJs != null && !existingJs.contentEquals(scriptBytes)) {
-                    return@withContext InstallResult.Rejected(
+                    return@withLock InstallResult.Rejected(
                         ManifestInvalidReason.SCHEMA_VIOLATION, "version immutable: script bytes differ"
                     )
                 }
@@ -145,6 +160,24 @@ class PluginStore @Inject constructor(
             moveInto(File(staging, "source.js"), File(versionDir, "source.js"))
         }
         deleteRecursively(staging)
+        // v9.3.0 (audit B2, hard invariant): the pointer is moved ONLY after the
+        // bytes it names are verifiably on disk. A record claiming an active
+        // version with no payload is the unrecoverable UNRESOLVED state, so the
+        // post-condition is checked here rather than trusted to the move.
+        val landed = File(versionDir, "plugin.json").takeIf { it.isFile }?.readBytes()
+        if (landed == null || !landed.contentEquals(manifestBytes)) {
+            return@withLock InstallResult.Rejected(
+                ManifestInvalidReason.SCHEMA_VIOLATION, "payload did not land"
+            )
+        }
+        if (manifest.engine == SourceEngine.SCRIPT) {
+            val landedJs = File(versionDir, "source.js").takeIf { it.isFile }?.readBytes()
+            if (scriptBytes == null || landedJs == null || !landedJs.contentEquals(scriptBytes)) {
+                return@withLock InstallResult.Rejected(
+                    ManifestInvalidReason.SCHEMA_VIOLATION, "script payload did not land"
+                )
+            }
+        }
         val prev = index.get(id)
         val next = PluginStorage.activate(
             PluginStorage.ActivationState(prev?.activeVersion, prev?.previousVersion),
@@ -161,6 +194,7 @@ class PluginStore @Inject constructor(
             )
         )
         InstallResult.Installed(manifest, isUpdate = prev?.activeVersion != null)
+        }
     }
 
     /**
@@ -216,6 +250,8 @@ class PluginStore @Inject constructor(
         baseDir: File,
         budgetBytes: Long
     ): PluginStorage.EvictionPlan = withContext(io) {
+        // v9.3.0 (audit B3): same lock as persistVerified.
+        payloadLock.withLock {
         val records = index.getAll()
         val active = records.mapNotNull { r -> r.activeVersion?.let { SourceId(r.id) to it } }.toMap()
         val previous = records.mapNotNull { r -> r.previousVersion?.let { SourceId(r.id) to it } }.toMap()
@@ -235,6 +271,7 @@ class PluginStore @Inject constructor(
             deleteRecursively(File(PluginStorage.versionDir(baseDir.path, v.id.value, v.version)))
         }
         plan
+        }
     }
 
     private fun deleteRecursively(file: File) {

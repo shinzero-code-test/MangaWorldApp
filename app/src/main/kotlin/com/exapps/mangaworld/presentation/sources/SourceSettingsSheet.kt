@@ -202,6 +202,13 @@ private fun PluginConsentSection(
     // help (there is nothing to activate); a re-sync is the only way forward,
     // so the sheet offers that instead of a dead "approve" button.
     val unresolved = rowState == com.exapps.mangaworld.core.source.plugins.PluginRowState.UNRESOLVED
+    // v9.3.0 (audit O-16/B12): these three had no row anywhere before. All of
+    // them recover by re-syncing — INCOMPATIBLE/AVAILABLE need a sweep that
+    // re-evaluates compatibility, and REVOKED is terminal for that version by
+    // design (a publisher re-issue is picked up by the next sweep).
+    val resyncOnly = rowState == com.exapps.mangaworld.core.source.plugins.PluginRowState.INCOMPATIBLE ||
+        rowState == com.exapps.mangaworld.core.source.plugins.PluginRowState.AVAILABLE ||
+        rowState == com.exapps.mangaworld.core.source.plugins.PluginRowState.REVOKED
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -209,9 +216,17 @@ private fun PluginConsentSection(
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
-            text = when {
-                held -> stringResource(R.string.plugin_needs_approval)
-                unresolved -> stringResource(R.string.plugin_unresolved_title)
+            text = when (rowState) {
+                com.exapps.mangaworld.core.source.plugins.PluginRowState.HELD ->
+                    stringResource(R.string.plugin_needs_approval)
+                com.exapps.mangaworld.core.source.plugins.PluginRowState.UNRESOLVED ->
+                    stringResource(R.string.plugin_unresolved_title)
+                com.exapps.mangaworld.core.source.plugins.PluginRowState.INCOMPATIBLE ->
+                    stringResource(R.string.plugin_incompatible_title)
+                com.exapps.mangaworld.core.source.plugins.PluginRowState.AVAILABLE ->
+                    stringResource(R.string.plugin_available_title)
+                com.exapps.mangaworld.core.source.plugins.PluginRowState.REVOKED ->
+                    stringResource(R.string.plugin_revoked_title)
                 else -> stringResource(R.string.plugin_quarantined)
             },
             style = MaterialTheme.typography.titleSmall,
@@ -248,14 +263,15 @@ private fun PluginConsentSection(
                 ) { Text(context.getString(R.string.plugin_approve)) }
             } else {
                 Button(
-                    onClick = if (unresolved) onResync else onRecheck,
+                    onClick = if (unresolved || resyncOnly) onResync else onRecheck,
                     enabled = !busy,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = MangaColors.Primary)
                 ) {
                     Text(
                         context.getString(
-                            if (unresolved) R.string.plugin_resync else R.string.plugin_recheck
+                            if (unresolved || resyncOnly) R.string.plugin_resync
+                            else R.string.plugin_recheck
                         )
                     )
                 }

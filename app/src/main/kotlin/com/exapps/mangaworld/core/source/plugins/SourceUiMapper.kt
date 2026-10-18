@@ -92,17 +92,23 @@ class SourceUiMapper @Inject constructor(
         val records = all.associateBy { it.id }
         val known = registry.allDescriptors().map { it.id.value }.toSet()
         // v9.2.4: ANY payload record whose id has no serving plugin renders as a
-        // row — never only DISABLED/QUARANTINED. An ENABLED/INSTALLED record
-        // the registry failed to resume used to produce no row at all: the
-        // source vanished from Sources, Settings and Home simultaneously, with
-        // no badge and no way back except a sweep. Visible + labelled beats
-        // invisible in every failure mode.
+        // row. v9.3.0 (audit O-16/B12): that includes the marker records that
+        // carry NO active version — INCOMPATIBLE/AVAILABLE/REVOKED previously
+        // produced no row at all, so "declined by this app version" and "never
+        // published" looked identical. Visible + labelled beats invisible in
+        // every failure mode.
         val extras = all
-            .filter {
-                it.id !in known &&
-                    it.activeVersion != null && it.manifestJson != null &&
-                    (it.status == PluginStatus.DISABLED || it.status == PluginStatus.QUARANTINED ||
-                        it.status == PluginStatus.ENABLED || it.status == PluginStatus.INSTALLED)
+            .filter { rec ->
+                if (rec.id in known) return@filter false
+                if (rec.manifestJson == null) return@filter false
+                when (rec.status) {
+                    PluginStatus.DISABLED, PluginStatus.QUARANTINED,
+                    PluginStatus.ENABLED, PluginStatus.INSTALLED ->
+                        rec.activeVersion != null
+                    PluginStatus.INCOMPATIBLE, PluginStatus.AVAILABLE,
+                    PluginStatus.REVOKED -> true
+                    else -> false
+                }
             }
             .mapNotNull { rec -> parseManifestPreview(rec.manifestJson)?.toExtraEntry(rec.status) }
         snapshot.value = Snapshot(records, extras)
@@ -177,10 +183,12 @@ class SourceUiMapper @Inject constructor(
     private fun detailsFrom(snap: Snapshot): Map<String, ManifestPreview> =
         snap.records.values
             .filter {
+                // v9.3.0: every non-serving posture gets its facts (version,
+                // engine, hosts, requiresPermission) so the sheet can explain
+                // itself and offer the right action.
                 (it.status == PluginStatus.DISABLED || it.status == PluginStatus.QUARANTINED ||
                     it.status == PluginStatus.INCOMPATIBLE || it.status == PluginStatus.AVAILABLE ||
-                    // v9.2.4: unresolved rows need the same facts (version,
-                    // engine, hosts) so the sheet can explain and re-sync.
+                    it.status == PluginStatus.REVOKED ||
                     it.status == PluginStatus.ENABLED || it.status == PluginStatus.INSTALLED) &&
                     it.manifestJson != null
             }
@@ -198,11 +206,12 @@ class SourceUiMapper @Inject constructor(
             engine = engine,
             requiresVerification = false,
             hostHint = HostPolicy.hostOf(baseUrl).takeIf { it.isNotBlank() } ?: id,
-            rowState = when {
-                status == PluginStatus.QUARANTINED -> PluginRowState.QUARANTINED
-                // Registered-nothing: DISABLED/QUARANTINED are handled above and
-                // below; everything else here is the v9.2.4 unresolvable case.
-                status == PluginStatus.DISABLED -> PluginRowState.HELD
+            rowState = when (status) {
+                PluginStatus.QUARANTINED -> PluginRowState.QUARANTINED
+                PluginStatus.DISABLED -> PluginRowState.HELD
+                PluginStatus.INCOMPATIBLE -> PluginRowState.INCOMPATIBLE
+                PluginStatus.AVAILABLE -> PluginRowState.AVAILABLE
+                PluginStatus.REVOKED -> PluginRowState.REVOKED
                 else -> PluginRowState.UNRESOLVED
             }
         )

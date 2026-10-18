@@ -16,7 +16,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 9.2.5 (versionCode 255)
+- **Current version**: 9.3.0 (versionCode 256)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 36 · **Compile SDK**: 36
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -128,6 +128,12 @@ Adding a source = **one plugin class + one `@Binds` line** in `SourcePluginModul
 - `HomeViewModel.lastSourceId` accepts any ENABLED id (the builtin-only check made it impossible to reopen Home on an installed plugin source).
 
 **Boot diagnostics + never-invisible states (v9.2.4):** a resume that skips used to leave the source absent from every list with no badge and no on-device trace, so the 9.2.3 fleet report was undiagnosable. `BundledPluginLoader.bootstrap()` now logs one `index <id>: status=… active=… manifest=…` line per record plus one `boot <id>: activated|skipped (<reason>) <payload probe>` line per outcome (bounded, no user data), and `DiskBuild.NoRunner` carries the builder's reason instead of a bare null. On the UI side `PluginRowState.UNRESOLVED` (`plugin_unresolved` badge, `plugin_resync` action) covers a payload record with no serving runner: `SourceUiMapper` renders an extra row for ANY unregistered record with bytes (not just DISABLED/QUARANTINED) and `heldDetails()` includes ENABLED/INSTALLED facts. **Rule: a state the user can reach must be visible with a reason and a recovery action — never silently absent.**
+
+**Train 2 — visibility + storage integrity (v9.3.0, 256)**:
+- **Every record status is a visible row.** `PluginRowState` gained `INCOMPATIBLE` / `AVAILABLE` / `REVOKED`; the mapper renders marker records that carry **no** `activeVersion` (the reconciler's INCOMPATIBLE marker always has none) with badge + `plugin_resync` action. `rowStateFor` maps each status explicitly; `heldDetails()` exposes their facts.
+- **Bounded reads** (`CappedBytes.read`): both fetchers stream through a fixed buffer and throw the moment the cap is passed. The old `body.bytes()` + post-check buffered the whole body first, and a **chunked** response has no `Content-Length` for the pre-check.
+- **Activation post-condition** (`persistVerified`): the pointer moves only after the manifest (and `source.js`) are read back and byte-compared on disk. Refuses with `payload did not land` otherwise — a record can never claim a version whose bytes are absent.
+- **`payloadLock` mutex** serializes `persistVerified` and `evictIfOverBudget`, so quota eviction cannot delete a version dir between the immutability check and the pointer move (that race produced exactly the torn dirs above).
 
 **Train 1 — state-machine safety (v9.2.5, 255)** — the audit's 1 P0 + P1 cluster, landed before any soak because soak data is untrustworthy while these are open:
 - **Resume posture guard** (`BundledPluginLoader.resumeInstalled`): re-reads pointer **and** status; `RESUMABLE_STATUSES` = INSTALLED/ENABLED/DISABLED. `markEnabled` refuses `SAFETY_STATUSES` (QUARANTINED/REVOKED). Boot logs `posture <status>` when it backs off.

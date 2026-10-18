@@ -246,7 +246,29 @@ enum class PluginRowState {
      * with no badge and no explanation, which is indistinguishable from
      * "never installed". Now it stays visible with a re-sync action.
      */
-    UNRESOLVED
+    UNRESOLVED,
+
+    /**
+     * v9.3.0 (audit O-16/B12): the payload declares `minAppVersion` above this
+     * build, so the upgrade reconciler declined it. Previously invisible: an
+     * INCOMPATIBLE marker record carries NO active version, and the mapper only
+     * rendered records that had one — so "needs a newer app" looked identical to
+     * "not published yet".
+     */
+    INCOMPATIBLE,
+
+    /**
+     * v9.3.0 (audit O-16): revived by an app upgrade and awaiting explicit
+     * opt-in (the reconciler's target state). Visible so the user can act.
+     */
+    AVAILABLE,
+
+    /**
+     * v9.3.0 (audit O-16/B12): kill-switch revoked. Terminal BY DESIGN for that
+     * version — recovery is a publisher re-issue at a higher version, which is
+     * why the action offered is a re-sync rather than an approve.
+     */
+    REVOKED
 }
 
 /**
@@ -260,6 +282,12 @@ enum class PluginRowState {
 fun rowStateFor(record: PluginIndexRecord?, unregistered: Boolean = false): PluginRowState = when {
     record == null -> PluginRowState.SERVING
     record.status == PluginStatus.QUARANTINED -> PluginRowState.QUARANTINED
+    // v9.3.0 (audit O-16/B12): these three had NO row anywhere, because the
+    // mapper only rendered records carrying an active version — and an
+    // INCOMPATIBLE marker never has one.
+    record.status == PluginStatus.INCOMPATIBLE -> PluginRowState.INCOMPATIBLE
+    record.status == PluginStatus.AVAILABLE -> PluginRowState.AVAILABLE
+    record.status == PluginStatus.REVOKED -> PluginRowState.REVOKED
     // Verified bytes on disk but no runner behind them: re-sync is the action,
     // and hiding the row (the pre-9.2.4 behaviour) is never correct.
     unregistered -> PluginRowState.UNRESOLVED

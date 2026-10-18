@@ -293,6 +293,27 @@ private fun SourceGridCard(
                     color = MangaColors.Error,
                     fontWeight = FontWeight.Bold
                 )
+                // v9.3.0 (audit O-16/B12): marker records that used to render no
+                // row anywhere — "declined by this app version", "revived,
+                // awaiting opt-in", and "kill-switch revoked".
+                PluginRowState.INCOMPATIBLE -> Text(
+                    stringResource(R.string.plugin_incompatible),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                    color = MangaColors.Muted,
+                    fontWeight = FontWeight.Bold
+                )
+                PluginRowState.AVAILABLE -> Text(
+                    stringResource(R.string.plugin_available),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                    color = MangaColors.Cyan,
+                    fontWeight = FontWeight.Bold
+                )
+                PluginRowState.REVOKED -> Text(
+                    stringResource(R.string.plugin_revoked),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                    color = MangaColors.Error,
+                    fontWeight = FontWeight.Bold
+                )
                 PluginRowState.SERVING -> Unit
             }
         }

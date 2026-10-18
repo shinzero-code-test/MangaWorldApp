@@ -725,7 +725,14 @@
          never a source that silently disappears from every list. -->
     <string name="plugin_unresolved">يحتاج إعادة مزامنة</string>
     <string name="plugin_unresolved_title">لا يمكن تشغيل هذا المصدر</string>
-    <string name="plugin_resync">إعادة المزامنة</string>
+<string name="plugin_resync">إعادة المزامنة</string>
+    <!-- v9.3.0: the marker-record postures that previously rendered no row at all. -->
+    <string name="plugin_incompatible">يتطلب إصدارًا أحدث</string>
+    <string name="plugin_incompatible_title">هذا المصدر يتطلب إصدارًا أحدث من التطبيق</string>
+    <string name="plugin_available">متاح للتثبيت</string>
+    <string name="plugin_available_title">هذا المصدر متاح الآن</string>
+    <string name="plugin_revoked">ملغى</string>
+    <string name="plugin_revoked_title">تم إلغاء هذا المصدر</string>
     <string name="plugin_engine">المحرك</string>
     <string name="plugin_hosts">النطاقات</string>
     <string name="plugin_version">الإصدار</string>

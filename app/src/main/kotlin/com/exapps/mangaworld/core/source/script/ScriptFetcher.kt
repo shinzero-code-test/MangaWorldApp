@@ -136,12 +136,18 @@ class OkHttpScriptFetcher @Inject constructor(
                     runCatching { raw.close() }
                     throw ScriptHttpException("response exceeds budget")
                 }
-                val bytes = runCatching { body.bytes() }.getOrElse { e ->
+                // v9.3.0 (audit B8): stream through a bounded buffer instead of buffering the
+                // whole body and checking afterwards — a chunked response has no
+                // Content-Length, so the pre-check above cannot catch it.
+                val bytes = runCatching {
+                    body.byteStream().use { stream ->
+                        com.exapps.mangaworld.core.source.plugins.CappedBytes.read(stream, maxBytes)
+                    }
+                }.getOrElse { e ->
                     runCatching { raw.close() }
                     throw ScriptHttpException("read failed (${e.message?.take(120)})")
                 }
                 runCatching { raw.close() }
-                if (bytes.size > maxBytes) throw ScriptHttpException("response exceeds budget")
                 response = ScriptFetcher.Response(
                     status = code,
                     headers = raw.headers.toMultimap().mapValues { it.value.firstOrNull().orEmpty() },

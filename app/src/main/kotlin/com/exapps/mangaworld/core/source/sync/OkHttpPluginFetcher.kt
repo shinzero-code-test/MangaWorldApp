@@ -146,11 +146,17 @@ class OkHttpPluginFetcher(
         if (declared > maxBytes) {
             throw PluginFetcher.FetchFailure.TooLarge(declared)
         }
-        val bytes = body.bytes()
-        if (bytes.size > maxBytes) {
-            throw PluginFetcher.FetchFailure.TooLarge(bytes.size.toLong())
+        // v9.3.0 (audit B8): the previous body.bytes() + post-check buffered the
+        // WHOLE response first, and a chunked response has no Content-Length to
+        // pre-check — so the cap was enforced only after the memory was already
+        // spent. Stream through a bounded buffer instead: peak memory is O(cap).
+        return try {
+            body.byteStream().use { stream ->
+                com.exapps.mangaworld.core.source.plugins.CappedBytes.read(stream, maxBytes)
+            }
+        } catch (e: com.exapps.mangaworld.core.source.plugins.CappedBytes.TooLarge) {
+            throw PluginFetcher.FetchFailure.TooLarge(e.read)
         }
-        return bytes
     }
 
     /** Internal 304 signal: translated to a null body upstream, never an error. */
