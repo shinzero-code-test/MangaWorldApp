@@ -147,6 +147,8 @@ class PluginVisibilityAndStorageTest {
             supportedBridgeApi = 9
         )
         val js = "function entry(){ return [] }".toByteArray()
+        // script manifests must declare NO config keys (schema rule) — same shape
+        // PluginScriptSyncTest signs.
         val node = PluginTestFixtures.manifestTree {
             it.put("id", "runner")
             it.put("version", 1)
@@ -155,6 +157,8 @@ class PluginVisibilityAndStorageTest {
             it.put("bridgeApi", 1)
             it.put("scriptSha256", sha256Hex(js))
             it.put("baseUrl", "https://runner.example")
+            it.putArray("allowedHosts").add("runner.example")
+            it.remove("config")
         }
         val manifestBytes = PluginTestFixtures.signManifest(node, "k1", kp.private)
         val manifest = com.exapps.mangaworld.core.source.plugins.ManifestParser(

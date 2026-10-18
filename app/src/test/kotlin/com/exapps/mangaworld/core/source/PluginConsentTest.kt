@@ -85,10 +85,14 @@ class PluginConsentTest {
             PluginRowState.QUARANTINED,
             rowStateFor(record(PluginStatus.QUARANTINED))
         )
-        // Terminal/incompatible states render as normal rows (builtin serving).
-        assertEquals(PluginRowState.SERVING, rowStateFor(record(PluginStatus.REVOKED)))
-        assertEquals(PluginRowState.SERVING, rowStateFor(record(PluginStatus.INCOMPATIBLE)))
-        assertEquals(PluginRowState.SERVING, rowStateFor(record(PluginStatus.AVAILABLE)))
+        // v9.3.0 (audit O-16/B12): these three were asserted as plain SERVING
+        // rows here — which is exactly the invisibility being fixed: a revoked,
+        // declined or revived record had no badge and (for the marker records,
+        // which carry no activeVersion) no row at all. They are first-class
+        // postures now, asserted in PluginVisibilityAndStorageTest too.
+        assertEquals(PluginRowState.REVOKED, rowStateFor(record(PluginStatus.REVOKED)))
+        assertEquals(PluginRowState.INCOMPATIBLE, rowStateFor(record(PluginStatus.INCOMPATIBLE)))
+        assertEquals(PluginRowState.AVAILABLE, rowStateFor(record(PluginStatus.AVAILABLE)))
     }
 
     @Test
