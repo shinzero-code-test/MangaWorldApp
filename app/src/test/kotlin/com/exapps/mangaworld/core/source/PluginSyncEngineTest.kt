@@ -135,6 +135,16 @@ class PluginSyncEngineTest {
     private fun nullRunners(): PluginRunnerFactory = mockk {
         every { createDescriptor(any()) } returns null
     }
+
+    /** A factory that CAN pair a runner — needed by paths that build one from bytes. */
+    private fun scrapingRunners(): PluginRunnerFactory = mockk {
+        every { createDescriptor(any()) } returns
+            mockk<com.exapps.mangaworld.core.data.remote.scraper.MangaScraper>(relaxed = true)
+        // createScript returns Result<MangaScraper>? — a success, not a bare scraper.
+        every { createScript(any(), any()) } returns Result.success(
+            mockk<com.exapps.mangaworld.core.data.remote.scraper.MangaScraper>(relaxed = true)
+        )
+    }
     private fun silentSettings(): SettingsRepository = mockk(relaxed = true)
 
     private data class Harness(
@@ -170,12 +180,13 @@ class PluginSyncEngineTest {
         registryIds: Array<String> = arrayOf("hijala", "lavascans"),
         index: FakeIndex = FakeIndex(),
         etags: FakeEtag = FakeEtag(),
-        fetcher: FakeFetcher = FakeFetcher(bodies)
+        fetcher: FakeFetcher = FakeFetcher(bodies),
+        runners: PluginRunnerFactory = nullRunners()
     ): Harness {
         val registry = SourceUiTestFixtures.registry(*registryIds)
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
         val telemetry = RecordingPluginTelemetry()
-        val engine = PluginSyncEngine(index, store, registry, fetcher, etags, nullRunners(), silentSettings(), telemetry, kotlinx.coroutines.Dispatchers.Unconfined)
+        val engine = PluginSyncEngine(index, store, registry, fetcher, etags, runners, silentSettings(), telemetry, kotlinx.coroutines.Dispatchers.Unconfined)
         val logs = mutableListOf<String>()
         engine.log = { logs += it }
         return Harness(engine, index, fetcher, registry, trust, host, tmp.root, etags, logs, telemetry)
@@ -786,11 +797,11 @@ class PluginSyncEngineTest {
      * Containment recovery leg (drill 3, 2026-10-18): once the kill policy is
      * removed, the next sweep must RE-DRIVE the install and serve again.
      *
-     * It does, because the kill dropped the registry entry, so the record has no
-     * backing runner and the `UpToDate` short-circuit can no longer shield it
-     * (v9.2.5 B6). Modelled on a REMOTE id on purpose: for a builtin the APK
-     * scraper remains registered, so `pluginFor` is non-null and the test would
-     * pass for the wrong reason.
+     * It does, because the kill dropped the only runner, so the record has nothing
+     * backing it and the `UpToDate` short-circuit can no longer shield it (v9.2.5 B6).
+     * Modelled on a REMOTE id on purpose: for a builtin, `pluginFor` falls back to the
+     * APK scraper, so the test would pass for the wrong reason. A runner factory that can
+     * actually build one is required too — with `nullRunners()` any re-drive simply defers.
      */
     @Test
     fun liftedRevocationReDrivesAndResumesServing() = runTest {
@@ -799,19 +810,19 @@ class PluginSyncEngineTest {
             "https://cdn.example/plugins/index.json" to indexJson(Triple("newbie", 1, manifestUrl)),
             manifestUrl to manifestBytes("newbie", 1)
         )
-        // Pre-seed the record (as the late-remote-id test does): a BRAND NEW id is
-        // consent-held by design, which is a different code path than the one under test.
-        val index = FakeIndex()
-        index.put(
-            PluginIndexRecord("newbie", 1, null, PluginOrigin.OFFICIAL, PluginStatus.ENABLED, null)
+        val h = harness(
+            bodies,
+            registryIds = arrayOf("hijala", "lavascans"),
+            runners = scrapingRunners()
         )
-        val h = harness(bodies, registryIds = arrayOf("hijala", "lavascans"), index = index)
-        val first = h.sync()
+        val installed = h.sync()
         assertTrue(
-            "install: expected Updated, got ${first.outcomes["newbie"]} (all=${first.outcomes})",
-            first.outcomes["newbie"] is PluginSyncEngine.EntryOutcome.Updated
+            "install: expected Updated, got ${installed.outcomes["newbie"]}",
+            installed.outcomes["newbie"] is PluginSyncEngine.EntryOutcome.Updated
         )
+        assertNotNull("install must register a runner", h.registry.pluginFor("newbie"))
 
+        // Containment: kill the id outright.
         h.etags.set(null)
         val killed = h.sync(kill = """{"revoked":[{"id":"newbie"}]}""")
         assertEquals(
