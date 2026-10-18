@@ -325,13 +325,28 @@ class PluginSyncEngine @Inject constructor(
         // keep serving until the next version bump (F-review).
         val revocations = applyKillSwitch(policy) + enforceEngineKills(policy)
 
+        // A REVOKED record this policy no longer forbids must be revisited NOW:
+        // `Revoked` is not in the persisted unresolved set, so with an unchanged
+        // index the 304 below would skip the id entirely and lifting the kill-switch
+        // would leave the source dead until the publisher shipped a new version
+        // (drill 3). Judged per RECORD version: a version-scoped kill must not look
+        // lifted, or every sweep re-drives a still-forbidden payload.
+        val lifted = indexStore.getAll()
+            .filter { it.status == PluginStatus.REVOKED }
+            .filterNot { PluginKillSwitch.isRevoked(policy, it.id, it.activeVersion) }
+            .map { it.id }
+            .toSet()
+        if (lifted.isNotEmpty()) {
+            log("kill-switch no longer forbids ${lifted.sorted().joinToString(",")} — re-driving")
+        }
+
         val indexHost = hostOf(indexUrl)
             ?: throw PluginFetcher.FetchFailure.Insecure(indexUrl)
         // v9.1.5: a 304 short-circuit returns EMPTY outcomes, so entries that
         // failed/rolled-back would never be retried (nor even re-logged) until
         // the index changes again — the on-device canary went dark exactly
         // this way. While anything is unresolved, skip the validator.
-        val unresolved = etags.getUnresolved()
+        val unresolved = etags.getUnresolved() + lifted
         if (unresolved.isNotEmpty()) {
             log("sync forcing full fetch (${unresolved.size} unresolved: ${unresolved.sorted().joinToString(",").take(120)})")
         }
@@ -407,21 +422,9 @@ class PluginSyncEngine @Inject constructor(
             val retry = outcomes
                 .filterValues { it is EntryOutcome.Failed || it is EntryOutcome.RolledBack }
                 .keys
-            // So must records this policy no longer forbids (drill 3, 2026-10-18):
-            // a REVOKED record is otherwise invisible to the sweep, and with an
-            // unchanged index the 304 short-circuit means lifting the kill-switch
-            // never re-drives it — the source stays dead until the publisher ships a
-            // new version. Revocation without a recovery path is a one-way door.
-            // Judged per RECORD version: isRevoked(policy, id, null) only matches
-            // all-version revocations, so a version-specific kill would look lifted
-            // and cause a re-drive on every single sweep.
-            val lifted = indexStore.getAll()
-                .filter { it.status == PluginStatus.REVOKED }
-                .filterNot { PluginKillSwitch.isRevoked(policy, it.id, it.activeVersion) }
-                .map { it.id }
-            if (lifted.isNotEmpty()) {
-                log("kill-switch no longer forbids ${lifted.joinToString(",")} — re-driving")
-            }
+            // Persist both reasons to revisit an entry: this sweep's failures, and
+            // records whose revocation the policy no longer carries (computed above,
+            // before the 304 gate, so a lifted revocation recovers in ONE sweep).
             etags.setUnresolved(retry + lifted)
         }
         SyncResult(outcomes = outcomes, revocationsApplied = revocations, evictedVersions = evicted)
