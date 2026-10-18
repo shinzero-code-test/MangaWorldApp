@@ -678,21 +678,32 @@ def cmd_sign(manifest_path, js_path, key_path, out_path):
 
 
 def resolve_staging_dir(pid):
-    """Staging is FLAT today (`_incoming/<id>/`, which `ScriptCanaryTest` hardcodes);
-    `_incoming/<id>/v<version>/` is accepted too because the README documents it."""
+    """Resolves the ONE staged candidate for `pid`.
+
+    Both layouts are supported: the flat `_incoming/<id>/plugin.json` that
+    `ScriptCanaryTest` hardcodes, and the versioned `_incoming/<id>/v<n>/`. When
+    BOTH are present the flat copy is a stale leftover that would otherwise
+    shadow the versioned candidate (its manifest still carries the
+    COMPUTE_AT_PROMOTE sentinel, so the promotion dies with a confusing
+    "bad signature shape"). Prefer the versioned dir, and say so.
+    """
     base = os.path.join(REPO, STAGING_DIR, pid)
-    if os.path.isfile(os.path.join(base, "plugin.json")):
-        return base
+    versioned = []
     if os.path.isdir(base):
         versioned = sorted(
             d for d in os.listdir(base)
             if VERSION_DIR_RE.match(d) and os.path.isfile(os.path.join(base, d, "plugin.json"))
         )
-        if len(versioned) == 1:
-            return os.path.join(base, versioned[0])
-        if len(versioned) > 1:
-            refuse("ambiguous staging: %s contains %s — keep ONE candidate there"
-                   % (os.path.join(STAGING_DIR, pid), ", ".join(versioned)))
+    if len(versioned) > 1:
+        refuse("ambiguous staging: %s contains %s — keep ONE candidate there"
+               % (os.path.join(STAGING_DIR, pid), ", ".join(versioned)))
+    if len(versioned) == 1:
+        if os.path.isfile(os.path.join(base, "plugin.json")):
+            print("note: ignoring the stale flat candidate at %s/%s/plugin.json"
+                  % (STAGING_DIR, pid))
+        return os.path.join(base, versioned[0])
+    if os.path.isfile(os.path.join(base, "plugin.json")):
+        return base
     refuse("no staged payload for '%s' (expected %s/%s/plugin.json)"
            % (pid, STAGING_DIR, pid))
 

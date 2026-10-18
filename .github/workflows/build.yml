@@ -253,7 +253,6 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
     env:
       PLUGIN_INDEX_URL: https://mangaworld-admin.vercel.app/plugins/index.json
-      PLUGIN_MIRROR: ${{ runner.temp }}/deployed-plugins
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -277,6 +276,10 @@ jobs:
           python3 dashboard/scripts/sign-plugin.py --check-published
 
       - name: Verify served distribution
+        # `runner.temp` is NOT available in job-level env (GitHub rejects the
+        # workflow file outright), so the mirror path is a step-level env.
+        env:
+          PLUGIN_MIRROR: ${{ runner.temp }}/deployed-plugins
         run: |
           set -euo pipefail
           mkdir -p "$PLUGIN_MIRROR"

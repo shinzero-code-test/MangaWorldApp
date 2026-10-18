@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-10-03T12:41:03Z",
+  "updatedAt": "2026-10-18T11:28:37Z",
   "entries": [
     {
       "id": "hijala",
@@ -18,10 +18,10 @@
     },
     {
       "id": "manonga",
-      "version": 2,
+      "version": 3,
       "kind": "script",
       "minAppVersion": "9.1.0",
-      "manifestUrl": "https://mangaworld-admin.vercel.app/plugins/manonga/v2/plugin.json"
+      "manifestUrl": "https://mangaworld-admin.vercel.app/plugins/manonga/v3/plugin.json"
     }
   ]
 }
