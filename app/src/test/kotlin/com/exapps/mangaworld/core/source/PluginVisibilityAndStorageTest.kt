@@ -137,18 +137,19 @@ class PluginVisibilityAndStorageTest {
 
     // ─── B2: activation requires the bytes to have landed ───────────────────
 
-    @Test
-    fun scriptInstallRefusesToActivateWithoutItsScriptBytes() = runTest {
+    /** Signed SCRIPT manifest + its script bytes, shaped like PluginScriptSyncTest. */
+    private data class ScriptCase(
+        val manifest: com.exapps.mangaworld.core.source.plugins.PluginManifest,
+        val manifestBytes: ByteArray,
+        val scriptBytes: ByteArray,
+        val trust: Map<String, ByteArray>
+    )
+
+    private fun scriptCase(): ScriptCase {
         val kp = PluginTestFixtures.generateKeyPair()
         val trust = mapOf("k1" to PluginTestFixtures.rawPublicKey(kp.public))
-        val host = HostCapabilities(
-            appVersion = "9.3.0",
-            supportedEngines = SourceEngine.entries.associateWith { 1..99 },
-            supportedBridgeApi = 9
-        )
         val js = "function entry(){ return [] }".toByteArray()
-        // script manifests must declare NO config keys (schema rule) — same shape
-        // PluginScriptSyncTest signs.
+        // script manifests declare NO config keys (schema rule).
         val node = PluginTestFixtures.manifestTree {
             it.put("id", "runner")
             it.put("version", 1)
@@ -161,24 +162,63 @@ class PluginVisibilityAndStorageTest {
             it.remove("config")
         }
         val manifestBytes = PluginTestFixtures.signManifest(node, "k1", kp.private)
-        val manifest = com.exapps.mangaworld.core.source.plugins.ManifestParser(
+        val host = HostCapabilities(
+            appVersion = "9.3.0",
+            supportedEngines = SourceEngine.entries.associateWith { 1..99 },
+            supportedBridgeApi = 9
+        )
+        val parsed = com.exapps.mangaworld.core.source.plugins.ManifestParser(
             trustedKeys = trust, host = host
-        ).parseAndVerify(manifestBytes).let {
-            (it as com.exapps.mangaworld.core.source.plugins.ManifestResult.Valid).manifest
-        }
+        ).parseAndVerify(manifestBytes)
+        val manifest = (parsed as com.exapps.mangaworld.core.source.plugins.ManifestResult.Valid).manifest
+        return ScriptCase(manifest, manifestBytes, js, trust)
+    }
+
+    @Test
+    fun scriptInstallRepairsAMissingScriptPayload() = runTest {
+        // v9.2.5/B2: a version dir that exists but lost source.js is REPAIRED
+        // from the staged, hash-verified copy — immutability only refuses bytes
+        // that are present and differ.
+        val c = scriptCase()
         val index = FakeIndex()
         val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
-        // Pre-seed the version dir with the manifest but NO source.js: the
-        // post-condition must refuse rather than activate a half-payload.
         val dir = File(PluginStorage.versionDir(tmp.root.path, "runner", 1))
         dir.mkdirs()
-        File(dir, "plugin.json").writeBytes(manifestBytes)
+        File(dir, "plugin.json").writeBytes(c.manifestBytes)
+        assertTrue(!File(dir, "source.js").exists())
+
         val result = store.persistVerified(
-            baseDir = tmp.root, id = "runner", manifest = manifest,
-            manifestBytes = manifestBytes, origin = PluginOrigin.OFFICIAL, scriptBytes = js
+            baseDir = tmp.root, id = "runner", manifest = c.manifest,
+            manifestBytes = c.manifestBytes, origin = PluginOrigin.OFFICIAL,
+            scriptBytes = c.scriptBytes
+        )
+        assertTrue("expected the torn dir to be repaired, got $result",
+            result is PluginStore.InstallResult.Installed)
+        assertEquals(1, index.get("runner")!!.activeVersion)
+        assertTrue("script bytes must land", File(dir, "source.js").isFile)
+        assertTrue(c.scriptBytes.contentEquals(File(dir, "source.js").readBytes()))
+    }
+
+    @Test
+    fun activationRefusesWhenTheBytesCannotLand() = runTest {
+        // v9.3.0/B2 post-condition: the pointer moves only after the bytes it
+        // names are read back and byte-compared. Block the version path with a
+        // FILE so mkdirs fails — the read-back then sees no payload and the
+        // install is refused instead of activating a dangling pointer.
+        val c = scriptCase()
+        val index = FakeIndex()
+        val store = PluginStore(index, kotlinx.coroutines.Dispatchers.Unconfined)
+        val versionPath = File(PluginStorage.versionDir(tmp.root.path, "runner", 1))
+        versionPath.parentFile.mkdirs()
+        versionPath.writeText("not a directory")
+
+        val result = store.persistVerified(
+            baseDir = tmp.root, id = "runner", manifest = c.manifest,
+            manifestBytes = c.manifestBytes, origin = PluginOrigin.OFFICIAL,
+            scriptBytes = c.scriptBytes
         )
         assertTrue(
-            "a script payload that did not land must not activate: $result",
+            "an install whose bytes never landed must be refused: $result",
             result is PluginStore.InstallResult.Rejected
         )
         assertTrue("no pointer may be written", index.get("runner") == null)
