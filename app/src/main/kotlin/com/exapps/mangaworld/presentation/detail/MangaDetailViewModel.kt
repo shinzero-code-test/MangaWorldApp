@@ -76,7 +76,16 @@ class MangaDetailViewModel @Inject constructor(
     private val analyticsManager: FirebaseAnalyticsManager,
     private val firebaseTelemetry: FirebaseTelemetry,
     private val sourceUiMapper: SourceUiMapper,
-    private val sourceRegistry: SourceRegistry
+    private val sourceRegistry: SourceRegistry,
+    /**
+     * Injected, never `Dispatchers.IO` hardcoded (F-1, 2026-10-18): a real IO hop
+     * escapes the test scheduler, so `advanceUntilIdle()` does not wait for it. The
+     * test then finished, `Dispatchers.resetMain()` restored the Android Main
+     * dispatcher, and the resuming IO coroutine hit "Main dispatcher had failed to
+     * initialize" — killing the coroutine on a worker thread and surfacing as
+     * `UncaughtExceptionsBeforeTest` in whichever unrelated test ran next.
+     */
+    @dagger.hilt.android.qualifiers.IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DetailUiState())
@@ -168,7 +177,7 @@ class MangaDetailViewModel @Inject constructor(
                                 }
                         }
                         launch {
-                            val downloaded = withContext(Dispatchers.IO) {
+                            val downloaded = withContext(ioDispatcher) {
                                 chapters.filter { ch ->
                                     downloadQueueManager.isChapterDownloaded(mangaId, ch.url)
                                 }.map { it.url }.toSet()
@@ -231,7 +240,7 @@ class MangaDetailViewModel @Inject constructor(
     }
 
     /** Check whether a manga directory with metadata.json exists on disk. */
-    private suspend fun hasLocalData(mangaId: String): Boolean = withContext(Dispatchers.IO) {
+    private suspend fun hasLocalData(mangaId: String): Boolean = withContext(ioDispatcher) {
         val dir = File(downloadQueueManager.getMangaDirPath(mangaId))
         dir.exists() && File(dir, "metadata.json").exists()
     }
@@ -244,7 +253,7 @@ class MangaDetailViewModel @Inject constructor(
         loadJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             // Metadata read + recursive directory scans belong on IO (M-review).
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
             try {
                 val mangaDirPath = downloadQueueManager.getMangaDirPath(currentMangaId)
                 val mangaDir = File(mangaDirPath)
@@ -327,7 +336,7 @@ class MangaDetailViewModel @Inject constructor(
                             .collect { read -> _state.update { it.copy(readChapters = read) } }
                     }
                     launch {
-                        val downloaded = withContext(Dispatchers.IO) {
+                        val downloaded = withContext(ioDispatcher) {
                             chapters.filter { ch ->
                                 downloadQueueManager.isChapterDownloaded(currentMangaId, ch.url)
                             }.map { it.url }.toSet()
@@ -351,7 +360,7 @@ class MangaDetailViewModel @Inject constructor(
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false, error = context.getString(R.string.local_manga_load_error)) }
             }
-            } // withContext(Dispatchers.IO)
+            } // withContext(ioDispatcher)
         }
     }
 
@@ -610,7 +619,7 @@ class MangaDetailViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val pages = withContext(Dispatchers.IO) {
+                val pages = withContext(ioDispatcher) {
                     mangaRepo.getChapterPages(currentSlug, chapter.url, currentSource)
                         .getOrDefault(emptyList())
                 }
@@ -680,7 +689,7 @@ class MangaDetailViewModel @Inject constructor(
 
                 for (chapter in selected) {
                     ensureActive()
-                    val result = withContext(Dispatchers.IO) {
+                    val result = withContext(ioDispatcher) {
                         mangaRepo.getChapterPages(mangaSlug, chapter.url, source)
                     }
                     val chapterTitle = chapter.title
@@ -818,7 +827,7 @@ class MangaDetailViewModel @Inject constructor(
     private suspend fun refreshDownloadedSet(mangaId: String = currentMangaId) {
         if (mangaId != currentMangaId) return
         val chapters = _state.value.manga?.chapters ?: return
-        val downloaded = withContext(Dispatchers.IO) {
+        val downloaded = withContext(ioDispatcher) {
             chapters.filter { ch ->
                 downloadQueueManager.isChapterDownloaded(mangaId, ch.url)
             }.map { it.url }.toSet()

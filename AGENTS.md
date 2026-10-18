@@ -16,7 +16,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 9.3.1 (versionCode 257)
+- **Current version**: 9.3.2 (versionCode 258)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 36 · **Compile SDK**: 36
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -136,6 +136,8 @@ Adding a source = **one plugin class + one `@Binds` line** in `SourcePluginModul
 - The production signing **private key is NOT in any Vercel env var** (removed 2026-10-18; signing is offline by design). Compromise procedure: `tmp/review/plugin-key-compromise-runbook.md` — containment via kill-switch first, rotate, re-sign at **new versions** (a same-version re-sign is impossible by design).
 
 **Kill-switch containment latency (measured 2026-10-18, drill log):** RC publishes instantly, but `FirebaseRemoteConfigManager` sets `setMinimumFetchIntervalInSeconds(3600)` and the SDK persists that window — the Sources **refresh button does NOT bypass it** (it re-reads the activated local value). So containment = ≤1 h RC throttle + ≤24 h sweep (worst case ~25 h), and a published kill-switch is NOT evidence of containment: the proof is `revoked=[…]` in `PluginSync`. Correcting a prior doc claim. Procedure: `tmp/review/plugin-key-compromise-runbook.md`; drills: `tmp/review/gate-drill-log-2026-10-18.md`.
+
+**Hardcoded `Dispatchers.IO` in a ViewModel (v9.3.2, F-1 — root-caused, not guessed):** `MangaDetailViewModel` hopped to the real `Dispatchers.IO` in 8 places. A real hop is NOT drained by `advanceUntilIdle()`, so the test finished, `Dispatchers.resetMain()` restored Android's Main dispatcher, and the resuming IO coroutine hit *"Main dispatcher had failed to initialize / getMainLooper not mocked"* → the coroutine machinery died on a worker thread → whichever unrelated `runTest` ran next failed with `UncaughtExceptionsBeforeTest`. It looked like two random flaky tests (`DetailReaderViewModelTest`, `HomeViewModelTest.init_restoresLastOpenedSource`); the real culprit was a third ViewModel's leak. **Never hardcode a dispatcher in a ViewModel** — inject `@IoDispatcher`. When a test fails with an exception that looks like it belongs to another test, read the worker's `system-out` in the `unit-test-results` artifact for the *originating* frame; the attributed test is a victim.
 
 **Snackbar reasons (v9.3.1, audit B14):** `SourcesViewModel.notice` is `SharedFlow<SourceNotice(resId, reason)>`; the engine's typed reason (`ApproveOutcome.Held/Failed(reason)`, reverify failure) is formatted into the snackbar. A bare "تعذر الاعتماد" with no reason is a diagnosable state presented as unexplained — never do that.
 

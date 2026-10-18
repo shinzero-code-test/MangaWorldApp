@@ -147,7 +147,12 @@ class DetailReaderViewModelTest {
         analyticsManager = analyticsManager,
         firebaseTelemetry = firebaseTelemetry,
         sourceUiMapper = SourceUiTestFixtures.mapper(),
-        sourceRegistry = SourceUiTestFixtures.registry()
+        sourceRegistry = SourceUiTestFixtures.registry(),
+        // Test dispatcher, not Dispatchers.IO (F-1): a real hop escapes advanceUntilIdle(),
+        // then resumes onto a Main dispatcher that resetMain() already restored -> the
+        // coroutine dies on a worker thread and an unrelated test reports
+        // UncaughtExceptionsBeforeTest.
+        ioDispatcher = kotlinx.coroutines.test.UnconfinedTestDispatcher()
     )
 
     private fun createReaderViewModel(dispatcher: CoroutineDispatcher) = ReaderViewModel(
