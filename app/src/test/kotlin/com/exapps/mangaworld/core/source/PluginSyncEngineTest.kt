@@ -846,7 +846,11 @@ class PluginSyncEngineTest {
             recovered.outcomes["newbie"] is PluginSyncEngine.EntryOutcome.Updated
         )
         assertNotNull("recovery must re-register a runner", h.registry.pluginFor("newbie"))
-        assertEquals(PluginStatus.ENABLED, h.index.get("newbie")!!.status)
+        // It comes back DISABLED, not serving: with the runner gone the record is
+        // indistinguishable from a new arrival, so the new-id consent rule applies
+        // again (syncEntry -> `existing == null` -> manifest.enabledByDefault).
+        // Pinned deliberately — a revoked source must NOT silently resume serving.
+        assertEquals(PluginStatus.DISABLED, h.index.get("newbie")!!.status)
     }
 
 }
