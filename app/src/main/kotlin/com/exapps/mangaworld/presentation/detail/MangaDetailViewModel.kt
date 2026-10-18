@@ -85,7 +85,7 @@ class MangaDetailViewModel @Inject constructor(
      * initialize" — killing the coroutine on a worker thread and surfacing as
      * `UncaughtExceptionsBeforeTest` in whichever unrelated test ran next.
      */
-    @dagger.hilt.android.qualifiers.IoDispatcher private val ioDispatcher: CoroutineDispatcher
+    @com.exapps.mangaworld.core.di.IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DetailUiState())
