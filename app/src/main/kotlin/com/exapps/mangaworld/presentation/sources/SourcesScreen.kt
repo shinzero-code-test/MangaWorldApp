@@ -54,8 +54,13 @@ fun SourcesScreen(
 
     // One-shot result notices (approve / re-check outcomes).
     LaunchedEffect(Unit) {
-        viewModel.notice.collect { resId ->
-            runCatching { snackbar.showSnackbar(context.getString(resId)) }
+        viewModel.notice.collect { notice ->
+            // v9.3.1 (audit B14): format with the engine's reason when present.
+            val text = notice.reason
+                ?.takeIf { it.isNotBlank() }
+                ?.let { runCatching { context.getString(notice.resId, it) }.getOrNull() }
+                ?: context.getString(notice.resId)
+            runCatching { snackbar.showSnackbar(text) }
         }
     }
 

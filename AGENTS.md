@@ -16,7 +16,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 9.3.0 (versionCode 256)
+- **Current version**: 9.3.1 (versionCode 257)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 36 · **Compile SDK**: 36
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -128,6 +128,14 @@ Adding a source = **one plugin class + one `@Binds` line** in `SourcePluginModul
 - `HomeViewModel.lastSourceId` accepts any ENABLED id (the builtin-only check made it impossible to reopen Home on an installed plugin source).
 
 **Boot diagnostics + never-invisible states (v9.2.4):** a resume that skips used to leave the source absent from every list with no badge and no on-device trace, so the 9.2.3 fleet report was undiagnosable. `BundledPluginLoader.bootstrap()` now logs one `index <id>: status=… active=… manifest=…` line per record plus one `boot <id>: activated|skipped (<reason>) <payload probe>` line per outcome (bounded, no user data), and `DiskBuild.NoRunner` carries the builder's reason instead of a bare null. On the UI side `PluginRowState.UNRESOLVED` (`plugin_unresolved` badge, `plugin_resync` action) covers a payload record with no serving runner: `SourceUiMapper` renders an extra row for ANY unregistered record with bytes (not just DISABLED/QUARANTINED) and `heldDetails()` includes ENABLED/INSTALLED facts. **Rule: a state the user can reach must be visible with a reason and a recovery action — never silently absent.**
+
+**Train 3 — ops/distribution (no app version bump; dashboard + CI only):**
+- `dashboard-checks` (sign-plugin `--selftest`/`--check-published`) is in the `needs:` of `build-release` / `create-release` / `build-summary`; the tag-push escape hatch is preserved (a red gate blocks branch pushes and PRs).
+- `verify-deployed-plugins` (read-only, push/PR/**daily schedule**, no secrets) fetches the LIVE index + every manifest + `source.js`, verifies Ed25519 against the committed pin, hash-pins scripts chunked-safe, and fails when any anchor is within 30 days of the 90-day window. Absence of this check is how distribution sat undeployed and unnoticed.
+- `sign-plugin.py`: validate-before-write (engine↔`--js`, future `issuedAt`, `scriptSha256` match, pinned-key match, byte-level self-check), `--promote [--dry-run]`, `_archive` coverage, and the anchor calendar. `--selftest` oracle follows `index.json` (never hardcode a published id).
+- The production signing **private key is NOT in any Vercel env var** (removed 2026-10-18; signing is offline by design). Compromise procedure: `tmp/review/plugin-key-compromise-runbook.md` — containment via kill-switch first, rotate, re-sign at **new versions** (a same-version re-sign is impossible by design).
+
+**Snackbar reasons (v9.3.1, audit B14):** `SourcesViewModel.notice` is `SharedFlow<SourceNotice(resId, reason)>`; the engine's typed reason (`ApproveOutcome.Held/Failed(reason)`, reverify failure) is formatted into the snackbar. A bare "تعذر الاعتماد" with no reason is a diagnosable state presented as unexplained — never do that.
 
 **Train 2 — visibility + storage integrity (v9.3.0, 256)**:
 - **Every record status is a visible row.** `PluginRowState` gained `INCOMPATIBLE` / `AVAILABLE` / `REVOKED`; the mapper renders marker records that carry **no** `activeVersion` (the reconciler's INCOMPATIBLE marker always has none) with badge + `plugin_resync` action. `rowStateFor` maps each status explicitly; `heldDetails()` exposes their facts.

@@ -715,6 +715,11 @@
     <string name="plugin_recheck">إعادة الفحص</string>
     <string name="plugin_approved">تم اعتماد المصدر</string>
     <string name="plugin_approve_failed">تعذر الاعتماد</string>
+    <!-- v9.3.1 (audit B14): the engine returns a typed reason for every
+         hold/rejection; surfacing it is the difference between "تعذر" and a
+         diagnosable state. Kept generic-free: the reason is a code string. -->
+    <string name="plugin_approve_failed_reason">تعذر الاعتماد: %1$s</string>
+    <string name="plugin_recheck_failed_reason">فشل الفحص: %1$s</string>
     <string name="plugin_rechecked">الفحص سليم</string>
     <string name="plugin_recheck_failed">ما زال معطلًا</string>
     <!-- v9.2.3: deep link / launcher shortcut into a source that is known but

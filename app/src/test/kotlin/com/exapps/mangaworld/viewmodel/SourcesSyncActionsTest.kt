@@ -22,6 +22,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -121,12 +122,12 @@ class SourcesSyncActionsTest {
         val scheduler = PluginSyncScheduler(schedCtx)
         val viewModel = vm(engine = engine, scheduler = scheduler)
         advanceUntilIdle()
-        val notices = mutableListOf<Int>()
+        val notices = mutableListOf<com.exapps.mangaworld.presentation.sources.SourceNotice>()
         val collect = launch { viewModel.notice.collect { notices += it } }
         advanceUntilIdle()
         viewModel.checkForUpdates()
         advanceUntilIdle()
-        assertTrue(notices.contains(com.exapps.mangaworld.R.string.plugin_check_updated))
+        assertTrue(notices.any { it.resId == com.exapps.mangaworld.R.string.plugin_check_updated })
         assertEquals(false, viewModel.syncing.value)
         // D8: a finished manual sweep resets the boot-stale window.
         coVerify { editor.putLong("last_sync_ms", any()) }
@@ -141,12 +142,12 @@ class SourcesSyncActionsTest {
         } throws RuntimeException("boom")
         val viewModel = vm(engine = engine)
         advanceUntilIdle()
-        val notices = mutableListOf<Int>()
+        val notices = mutableListOf<com.exapps.mangaworld.presentation.sources.SourceNotice>()
         val collect = launch { viewModel.notice.collect { notices += it } }
         advanceUntilIdle()
         viewModel.checkForUpdates()
         advanceUntilIdle()
-        assertTrue(notices.contains(com.exapps.mangaworld.R.string.plugin_check_failed))
+        assertTrue(notices.any { it.resId == com.exapps.mangaworld.R.string.plugin_check_failed })
         assertEquals(false, viewModel.syncing.value)
         collect.cancel()
     }
@@ -172,7 +173,7 @@ class SourcesSyncActionsTest {
         val store = FakeIndexStore(mutableMapOf("gated" to held))
         val viewModel = vm(engine = engine, index = store, settings = settings)
         advanceUntilIdle()
-        val notices = mutableListOf<Int>()
+        val notices = mutableListOf<com.exapps.mangaworld.presentation.sources.SourceNotice>()
         val collect = launch { viewModel.notice.collect { notices += it } }
         advanceUntilIdle()
         viewModel.toggleSource("gated", true)
@@ -183,7 +184,7 @@ class SourcesSyncActionsTest {
         // The settings flip lives inside the real approveHeld (mocked here);
         // the VM's job is routing + notice. The flip itself is covered by
         // PluginScriptSyncTest.approveDescriptorHoldRegistersAndEnables.
-        assertTrue(notices.contains(com.exapps.mangaworld.R.string.plugin_approved))
+        assertTrue(notices.any { it.resId == com.exapps.mangaworld.R.string.plugin_approved })
         collect.cancel()
     }
 
@@ -204,12 +205,21 @@ class SourcesSyncActionsTest {
         )
         val viewModel = vm(engine = engine, index = FakeIndexStore(mutableMapOf("gated" to held)), settings = settings)
         advanceUntilIdle()
-        val notices = mutableListOf<Int>()
+        val notices = mutableListOf<com.exapps.mangaworld.presentation.sources.SourceNotice>()
         val collect = launch { viewModel.notice.collect { notices += it } }
         advanceUntilIdle()
         viewModel.toggleSource("gated", true)
         advanceUntilIdle()
-        assertTrue(notices.contains(com.exapps.mangaworld.R.string.plugin_approve_failed))
+        // v9.3.1 (audit B14): the snackbar must carry the engine's reason, not
+        // just "could not approve".
+        val failed = notices.firstOrNull {
+            it.resId == com.exapps.mangaworld.R.string.plugin_approve_failed_reason
+        }
+        assertNotNull("expected a reason-carrying failure notice", failed)
+        assertTrue(
+            "the engine's reason must reach the user",
+            !failed!!.reason.isNullOrBlank()
+        )
         coVerify(exactly = 0) { settings.toggleSource("gated", true) }
         collect.cancel()
     }

@@ -28,6 +28,16 @@ import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
 
+/**
+ * One-shot result notice for the snackbar (v9.3.1, audit B14).
+ *
+ * [reason] carries the engine's typed rejection code when there is one. The
+ * engine has always returned a reason (`ApproveOutcome.Held/Failed(reason)`,
+ * `reverify` failures); the UI dropped it and showed only "تعذر الاعتماد", which
+ * made a diagnosable state look like an unexplained one.
+ */
+data class SourceNotice(val resId: Int, val reason: String? = null)
+
 data class SourceSettingsState(
     val enabledSources: Map<String, Boolean> = BuiltinSourceIds.ALL.associateWith { true },
     val notificationStates: Map<String, Boolean> = BuiltinSourceIds.ALL.associateWith { true }
@@ -73,10 +83,10 @@ class SourcesViewModel @Inject constructor(
     /** True while an on-demand sweep runs inline in the foreground. */
     val syncing: StateFlow<Boolean> = _syncing.asStateFlow()
 
-    private val _notice = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    private val _notice = MutableSharedFlow<SourceNotice>(extraBufferCapacity = 1)
 
-    /** One-shot string-resource ids for snackbars. */
-    val notice: SharedFlow<Int> = _notice.asSharedFlow()
+    /** One-shot snackbar notices (string resource + optional engine reason). */
+    val notice: SharedFlow<SourceNotice> = _notice.asSharedFlow()
 
     /**
      * Refresh-tap lifecycle sink (v9.1.8): the on-device 9.1.7 refresh
@@ -150,9 +160,11 @@ class SourcesViewModel @Inject constructor(
             _busyId.value = null
             when (outcome) {
                 is com.exapps.mangaworld.core.source.sync.PluginToggleReconciler.ToggleOutcome.Approved ->
-                    _notice.emit(R.string.plugin_approved)
+                    _notice.emit(SourceNotice(R.string.plugin_approved))
                 is com.exapps.mangaworld.core.source.sync.PluginToggleReconciler.ToggleOutcome.ApprovalFailed ->
-                    _notice.emit(R.string.plugin_approve_failed)
+                    _notice.emit(
+                        SourceNotice(R.string.plugin_approve_failed_reason, outcome.reason)
+                    )
                 else -> Unit
             }
             _state.update {
@@ -197,10 +209,15 @@ class SourcesViewModel @Inject constructor(
             }
             _busyId.value = null
             _notice.emit(
-                if (outcome is PluginSyncEngine.ApproveOutcome.Approved) {
-                    R.string.plugin_approved
-                } else {
-                    R.string.plugin_approve_failed
+                when (outcome) {
+                    is PluginSyncEngine.ApproveOutcome.Approved ->
+                        SourceNotice(R.string.plugin_approved)
+                    is PluginSyncEngine.ApproveOutcome.Held ->
+                        SourceNotice(R.string.plugin_approve_failed_reason, outcome.reason)
+                    is PluginSyncEngine.ApproveOutcome.Failed ->
+                        SourceNotice(R.string.plugin_approve_failed_reason, outcome.reason)
+                    PluginSyncEngine.ApproveOutcome.Unknown ->
+                        SourceNotice(R.string.plugin_approve_failed_reason, "unknown source")
                 }
             )
             refresh()
@@ -211,9 +228,18 @@ class SourcesViewModel @Inject constructor(
     fun recheck(id: String) {
         viewModelScope.launch {
             _busyId.value = id
-            val ok = runCatching { health.reverify(id) }.getOrDefault(false)
+            val ok = runCatching { health.reverify(id) }
             _busyId.value = null
-            _notice.emit(if (ok) R.string.plugin_rechecked else R.string.plugin_recheck_failed)
+            _notice.emit(
+                if (ok.getOrDefault(false)) {
+                    SourceNotice(R.string.plugin_rechecked)
+                } else {
+                    SourceNotice(
+                        R.string.plugin_recheck_failed_reason,
+                        ok.exceptionOrNull()?.message?.take(80) ?: "smoke failed"
+                    )
+                }
+            )
             refresh()
         }
     }
@@ -264,21 +290,21 @@ class SourcesViewModel @Inject constructor(
                 scheduler.recordSyncCompleted()
                 val updated = result.outcomes.count { it.value is PluginSyncEngine.EntryOutcome.Updated }
                 _notice.emit(
-                    if (updated > 0) R.string.plugin_check_updated
-                    else R.string.plugin_check_done
+                    if (updated > 0) SourceNotice(R.string.plugin_check_updated)
+                    else SourceNotice(R.string.plugin_check_done)
                 )
             } catch (e: kotlinx.coroutines.CancellationException) {
                 log("sweep cancelled")
                 throw e
             } catch (e: com.exapps.mangaworld.core.source.sync.PluginFetcher.FetchFailure.Network) {
                 log("sweep transport failure (not marking complete)")
-                _notice.emit(R.string.plugin_check_failed)
+                _notice.emit(SourceNotice(R.string.plugin_check_failed))
             } catch (e: Exception) {
                 // Deterministic abort counts as checked (worker parity) so a
                 // failed sweep does not suppress the boot-stale lane.
                 scheduler.recordSyncCompleted()
                 log("sweep threw ${e.javaClass.name}: ${e.message?.take(160)}")
-                _notice.emit(R.string.plugin_check_failed)
+                _notice.emit(SourceNotice(R.string.plugin_check_failed))
             } finally {
                 log("sweep finally: resetting syncing")
                 _syncing.value = false
