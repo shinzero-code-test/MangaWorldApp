@@ -141,7 +141,8 @@ class PluginSyncEngineTest {
      * bytes. Relaxed, because install also reads `remoteDisplay()`; a strict mock
      * fails with "no answer found" instead of testing the path under test.
      */
-    private fun scrapingRunners(): PluginRunnerFactory = mockk(relaxed = true).also { factory ->
+    private fun scrapingRunners(): PluginRunnerFactory =
+        mockk<PluginRunnerFactory>(relaxed = true).also { factory ->
         every { factory.createDescriptor(any()) } returns
             mockk<com.exapps.mangaworld.core.data.remote.scraper.MangaScraper>(relaxed = true)
         // createScript returns Result<MangaScraper>? — a success, not a bare scraper.
