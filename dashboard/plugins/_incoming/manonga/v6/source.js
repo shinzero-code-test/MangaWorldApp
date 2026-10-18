@@ -1,5 +1,5 @@
 /**
- * manonga.online — official script canary v3 (bridge API v1).
+ * manonga.online — official script canary v6 (post-drill) (bridge API v1).
  *
  * Pipeline-proving source: small, server-rendered, no Cloudflare, no auth.
  * Custom theme (fixed engine walks cannot express its routes), so a script is

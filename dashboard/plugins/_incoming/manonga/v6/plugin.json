@@ -1,8 +1,8 @@
 {
   "id": "manonga",
-  "version": 3,
+  "version": 6,
   "minAppVersion": "9.1.0",
-  "issuedAt": "2026-10-18T11:27:15Z",
+  "issuedAt": "2026-10-18T11:51:27Z",
   "bridgeApi": 1,
   "names": {
     "ar": "مانجا اون لاين",
@@ -22,6 +22,6 @@
   ],
   "timeoutMs": 15000,
   "maxResponseMb": 10,
-  "scriptSha256": "cd1c316a77ff0eac6569137b5b54e6c7866fdaab8219db9f093a6f1a3e6f13aa",
-  "signature": "ed25519:official-1:1ldyN5b+qd2okveHZE5k+8M6EAfx5T8ds80pHUMsuBwSsigJ47H6OLcZkDYPBW9nx8dFFiQUJxc5GIOMFLZgDg=="
+  "scriptSha256": "3244dfd41f7eaa8ddae2ac9726e00fa49965f905b665adfd6a7d8841ebb319ac",
+  "signature": "ed25519:official-1:WvvUDh3zwLSp2AaJmNjZR9h7IOaeLsx2ZV1ibs7jZRnFNK47k2Pelqs1BkmisiXHXWl83nsd1KpKbxnjHYe0BQ=="
 }
