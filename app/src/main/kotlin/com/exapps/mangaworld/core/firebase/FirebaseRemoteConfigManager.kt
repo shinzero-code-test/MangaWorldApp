@@ -40,6 +40,15 @@ class FirebaseRemoteConfigManager @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
+    /**
+     * Replaceable log sink (same pattern as `BundledPluginLoader.log`): this class
+     * is constructed directly by JVM tests with a fake [FirebaseRemoteConfig], and
+     * `android.util.Log` throws "not mocked" there — so no log statement in
+     * [refresh]/[applyState] may call it directly.
+     */
+    @Volatile
+    internal var log: (String) -> Unit = { line -> Log.i(TAG, line) }
+
     private val _disabledSourceIds = MutableStateFlow<Set<String>>(emptySet())
     val disabledSourceIds: StateFlow<Set<String>> = _disabledSourceIds.asStateFlow()
 
@@ -149,10 +158,10 @@ class FirebaseRemoteConfigManager @Inject constructor(
             // that has not landed yet then looks exactly like a policy bug —
             // which is exactly how the 2026-10-18 engine-kill drill stalled.
             val status = remoteConfig.fetchAndActivate().await()
-            Log.i(TAG, "Remote config fetch status: $status")
+            log("Remote config fetch status: $status")
             applyState()
         }.onFailure { e ->
-            Log.w(TAG, "Remote config fetch failed: ${e.message}", e)
+            log("Remote config fetch failed: ${e.message}")
         }
     }
 
@@ -238,7 +247,7 @@ class FirebaseRemoteConfigManager @Inject constructor(
         }
     }.getOrElse { e ->
         // Malformed JSON must not silently wipe all selector overrides.
-        android.util.Log.w("RemoteConfig", "parseOverrides failed, keeping previous: ${e.message}")
+        log("parseOverrides failed, keeping previous: ${e.message}")
         RemoteSelectorOverridesStore.snapshot()
     }
 }
