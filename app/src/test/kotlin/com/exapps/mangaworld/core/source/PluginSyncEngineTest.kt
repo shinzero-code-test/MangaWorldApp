@@ -806,7 +806,7 @@ class PluginSyncEngineTest {
         val killed = h.sync(kill = """{"revoked":[{"id":"newbie"}]}""")
         assertEquals(PluginSyncEngine.EntryOutcome.Revoked, killed.outcomes["newbie"])
         assertEquals(PluginStatus.REVOKED, h.index.get("newbie")!!.status)
-        assertNull(h.registry.pluginFor("newbie"), "kill must drop the only runner")
+        assertNull("kill must drop the only runner", h.registry.pluginFor("newbie"))
 
         // Policy lifted (RC restored): must not leave the source permanently dead.
         h.etags.set(null)
@@ -815,7 +815,7 @@ class PluginSyncEngineTest {
             "lifted revocation must re-drive and resume serving, got ${recovered.outcomes["newbie"]}",
             recovered.outcomes["newbie"] is PluginSyncEngine.EntryOutcome.Updated
         )
-        assertNotNull(h.registry.pluginFor("newbie"), "recovery must re-register a runner")
+        assertNotNull("recovery must re-register a runner", h.registry.pluginFor("newbie"))
         assertEquals(PluginStatus.ENABLED, h.index.get("newbie")!!.status)
     }
 
