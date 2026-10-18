@@ -155,12 +155,24 @@ class PluginStore @Inject constructor(
             }
         }
         // Partial/corrupt staging never becomes visible: move only complete files.
-        versionDir.mkdirs()
-        moveInto(staged, File(versionDir, "plugin.json"))
-        if (scriptBytes != null) {
-            moveInto(File(staging, "source.js"), File(versionDir, "source.js"))
+        // v9.3.0: a filesystem-level failure here (unwritable dir, full disk,
+        // a path blocked by a file) used to throw out of persistVerified and
+        // surface as an opaque sync abort. Fail closed with a typed rejection
+        // instead, and clean up staging on every path.
+        val written = runCatching {
+            versionDir.mkdirs()
+            moveInto(staged, File(versionDir, "plugin.json"))
+            if (scriptBytes != null) {
+                moveInto(File(staging, "source.js"), File(versionDir, "source.js"))
+            }
         }
-        deleteRecursively(staging)
+        runCatching { deleteRecursively(staging) }
+        if (written.isFailure) {
+            return@withLock InstallResult.Rejected(
+                ManifestInvalidReason.SCHEMA_VIOLATION,
+                "payload write failed: ${written.exceptionOrNull()?.javaClass?.simpleName}"
+            )
+        }
         // v9.3.0 (audit B2, hard invariant): the pointer is moved ONLY after the
         // bytes it names are verifiably on disk. A record claiming an active
         // version with no payload is the unrecoverable UNRESOLVED state, so the
