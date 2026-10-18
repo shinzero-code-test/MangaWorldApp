@@ -21,14 +21,23 @@ on:
           - debug
           - release
           - both
+  # Daily drift watch for the deployed plugin distribution. Promotion is a manual
+  # `vercel --prod`, so drift can appear (or a fix can go missing) with no commit
+  # at all — the scheduled run is the only check that notices on a quiet day.
+  schedule:
+    - cron: '17 6 * * *'
 
 env:
   JAVA_VERSION: '17'
   GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # github.event_name in the group: the daily schedule lands on refs/heads/main,
+  # the same ref as a main push, so with the old group the 06:17 drift run and a
+  # real build cancelled each other (only one survives). Separate groups per event;
+  # the schedule additionally never cancels and is never cancelled.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   # ─── Lint & Unit Tests ──────────────────────────────────────────────────────
@@ -37,8 +46,11 @@ jobs:
     runs-on: ubuntu-latest
     # Tag pushes only cut the release: the same commit already passed
     # lint/tests/debug on its main-branch push, so re-running them here just
-    # burns runners and delays the release.
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    # burns runners and delays the release. The daily `schedule` trigger exists
+    # for the deployed-distribution drift check alone (which is a few public GETs),
+    # so the Android pipeline stands down for it — every push/PR/tag path is
+    # unchanged.
+    if: "github.event_name != 'schedule' && !startsWith(github.ref, 'refs/tags/')"
     env:
       GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
     steps:
@@ -141,8 +153,10 @@ jobs:
   dashboard-checks:
     name: Dashboard Typecheck & Lint
     runs-on: ubuntu-latest
-    # Tag pushes only cut the release (same rationale as lint-and-test).
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    # Tag pushes only cut the release (same rationale as lint-and-test). The
+    # daily schedule skips it too, but re-runs the signature gate it owns through
+    # verify-deployed-plugins so the committed tree stays covered on quiet days.
+    if: "github.event_name != 'schedule' && !startsWith(github.ref, 'refs/tags/')"
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -182,11 +196,12 @@ jobs:
   # Boots the Firestore emulator with the shipped rules + indexes and replays
   # the app's exact public-library query (visitor/owner/denied/legacy/anon).
   # A rules change that breaks provability or privacy fails here instead of in
-  # prod (PL-1). Tag pushes skip like every other check job.
+  # prod (PL-1). Tag pushes skip like every other check job, and so does the daily
+  # schedule (an emulator boot per day for a plugin-drift watch is not a trade).
   firestore-rules:
     name: Firestore Rules Verification
     runs-on: ubuntu-latest
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: "github.event_name != 'schedule' && !startsWith(github.ref, 'refs/tags/')"
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -214,6 +229,75 @@ jobs:
       - name: Verify rules in emulator
         run: firebase emulators:exec --only firestore "node scripts/verify-firestore-rules.mjs"
         working-directory: dashboard
+
+  # ─── Deployed Plugin Distribution ───────────────────────────────────────────
+  # --check-published proves the COMMITTED tree is signed and well-formed. It
+  # cannot see what is actually SERVED: vercel.json sets deploymentEnabled:false
+  # and promotion is a manual `vercel --prod`, so the distribution once "had NEVER
+  # been live" with every repository-side check green. This job is the other half
+  # — it reads the live bytes and re-verifies them with the same JCS/Ed25519 code
+  # path and the same committed public pin the app uses, so a tampered payload, a
+  # manifest host swap, a swapped source.js, a missing promotion or an expiring
+  # trust anchor fails CI even when nobody pushes.
+  # READ-ONLY: public GETs, no secrets (the distribution is public and the pin is
+  # a committed public key), no deploy, no write outside the runner's temp dir.
+  # NOT in build-release's needs on purpose: served state is an external service,
+  # and a Vercel hiccup must not be able to block a release that is otherwise
+  # green. Drift surfaces here (red on push/PR, red daily) instead.
+  verify-deployed-plugins:
+    name: Verify Deployed Plugins
+    runs-on: ubuntu-latest
+    # Tag pushes only cut the release. Every other trigger runs it: main pushes,
+    # PRs (so a distribution change can never be reviewed blind) and the daily
+    # schedule (so drift is caught on a quiet day, not just on a commit).
+    if: "!startsWith(github.ref, 'refs/tags/')"
+    env:
+      PLUGIN_INDEX_URL: https://mangaworld-admin.vercel.app/plugins/index.json
+      PLUGIN_MIRROR: ${{ runner.temp }}/deployed-plugins
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install crypto dependency
+        # Same single dependency the existing signature gate uses (Ed25519).
+        run: python3 -m pip install --quiet --disable-pip-version-check cryptography
+
+      # Committed-tree side of the plugin gate. Redundant with dashboard-checks on
+      # push/PR (identical command, identical signal), but the daily schedule does
+      # not run that job — so without this step the distribution would only be
+      # re-checked on days somebody happened to push.
+      - name: Committed distribution + pin agreement
+        run: |
+          python3 dashboard/scripts/sign-plugin.py --selftest
+          python3 dashboard/scripts/sign-plugin.py --check-published
+
+      - name: Verify served distribution
+        run: |
+          set -euo pipefail
+          mkdir -p "$PLUGIN_MIRROR"
+          python3 dashboard/scripts/verify-deployed-plugins.py \
+            --index-url "$PLUGIN_INDEX_URL" \
+            --pin-source dashboard/lib/plugin-keys.ts \
+            --mirror "$PLUGIN_MIRROR" \
+            --archive-dir dashboard/plugins/_archive \
+            --trust-window-days 90 \
+            --warn-window-days 30
+
+      - name: Upload served bytes (failure forensics)
+        # The exact bytes that were served, so a promotion that shipped something
+        # else cannot hide behind a green re-run.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployed-plugins-mirror
+          path: ${{ env.PLUGIN_MIRROR }}
+          if-no-files-found: ignore
+          retention-days: 30
 
   # ─── Debug Build ────────────────────────────────────────────────────────────
   build-debug:
@@ -383,12 +467,16 @@ jobs:
   build-release:
     name: Build Release APKs (All ABIs)
     runs-on: ubuntu-latest
-    needs: [lint-and-test, firestore-rules]
+    # dashboard-checks owns the plugin signature gate (--selftest /
+    # --check-published): without it here, a mis-signed or tampered promoted
+    # manifest shipped in a release APK with every check green (audit C1).
+    needs: [lint-and-test, dashboard-checks, firestore-rules]
     # A skipped check (tag pushes) must NOT gate the release: needs.*.result
     # would otherwise skip this job too. Branch pushes still require green
-    # lint/tests/rules; tag pushes (already validated on main) proceed regardless.
+    # lint/tests/dashboard(signature gate)/rules; tag pushes (already validated on
+    # main) proceed regardless. A `failure` result blocks branch pushes and PRs.
     if: |
-      always() && ((needs.lint-and-test.result == 'success' && needs.firestore-rules.result == 'success') || startsWith(github.ref, 'refs/tags/')) && (
+      always() && ((needs.lint-and-test.result == 'success' && needs.dashboard-checks.result == 'success' && needs.firestore-rules.result == 'success') || startsWith(github.ref, 'refs/tags/')) && (
         github.event_name == 'push' ||
         startsWith(github.ref, 'refs/tags/v') ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both'))
@@ -585,11 +673,18 @@ jobs:
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: build-release
+    # build-release already gates on dashboard-checks; naming it here too records
+    # the plugin signature gate on the publishing job itself, so a future edit to
+    # build-release's condition cannot silently unhook it from the release DAG.
+    needs: [build-release, dashboard-checks]
     # always(): without it, the skipped lint job on tag pushes transitively
     # skips this job before its condition is even evaluated (same trap as
     # build-release had). The signed-gate lives in a step below so an
     # unsigned build warns loudly instead of vanishing silently.
+    # Deliberately NOT `needs.dashboard-checks.result == 'success'` here: on tag
+    # pushes that job is skipped by design (the tagged commit already passed it on
+    # main), and requiring success would block every release. Its failure blocks
+    # earlier, in build-release, which is where branch pushes and PRs are held.
     if: always() && startsWith(github.ref, 'refs/tags/') && needs.build-release.result == 'success'
     permissions:
       contents: write
@@ -716,7 +811,7 @@ jobs:
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [ lint-and-test, firestore-rules, build-debug, verify-debug-artifacts, build-release, verify-release-artifacts, create-release ]
+    needs: [ lint-and-test, dashboard-checks, firestore-rules, verify-deployed-plugins, build-debug, verify-debug-artifacts, build-release, verify-release-artifacts, create-release ]
     if: always()
     steps:
       - name: Debug release gating contexts
@@ -731,7 +826,9 @@ jobs:
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Lint & Tests | ${{ needs.lint-and-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dashboard & Plugin Signature Gate | ${{ needs.dashboard-checks.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Firestore Rules | ${{ needs.firestore-rules.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deployed Plugin Distribution | ${{ needs.verify-deployed-plugins.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Debug APKs | ${{ needs.build-debug.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ABIs Built" >> $GITHUB_STEP_SUMMARY

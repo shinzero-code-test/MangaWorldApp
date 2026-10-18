@@ -168,9 +168,10 @@ Adding a source = **one plugin class + one `@Binds` line** in `SourcePluginModul
 Each scraper must:
 1. Extend `BaseScraperImpl`, `MadaraBaseScraper`, or `MangaReaderBaseScraper`
 2. Wrap it in a `SourcePlugin` (see above) — do NOT touch `MangaSource` beyond the enum entry, do NOT add a `Modules.kt` provider
-3. Add entry to `MangaSource` enum in `domain/model/Models.kt` (deprecated bridge until Phase 2)
-4. Place logo PNG in `res/drawable/` (underscore naming)
-5. Ship a captured-style fixture under `app/src/test/resources/scrapers/` + a test driving the REAL parser (never re-implement selectors inline — tautological fixtures pass while prod breaks)
+3. **Add the id to `BuiltinSourceIds.ALL`** — this set is the registry's ownership map AND the default value of `settings.enabledSources` (`AppPreferences`). An id that is bound but absent from it is a **bound-but-invisible source**: it never appears in any list (Home/Browse/Search/Sources filter on `enabledSources`), and the failure is silent. `BuiltinSourceIds.isBuiltin/isLocal` also branch on it.
+4. Add entry to `MangaSource` enum in `domain/model/Models.kt` (deprecated bridge until Phase 2)
+5. Place logo PNG in `res/drawable/` (underscore naming)
+6. Ship a captured-style fixture under `app/src/test/resources/scrapers/` + a test driving the REAL parser (never re-implement selectors inline — tautological fixtures pass while prod breaks)
 
 **3asq chapters**: `{mangaUrl}/ajax/chapters/` endpoint (NOT wp-admin/admin-ajax.php)
 
