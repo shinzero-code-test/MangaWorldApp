@@ -135,6 +135,8 @@ Adding a source = **one plugin class + one `@Binds` line** in `SourcePluginModul
 - `sign-plugin.py`: validate-before-write (engine↔`--js`, future `issuedAt`, `scriptSha256` match, pinned-key match, byte-level self-check), `--promote [--dry-run]`, `_archive` coverage, and the anchor calendar. `--selftest` oracle follows `index.json` (never hardcode a published id).
 - The production signing **private key is NOT in any Vercel env var** (removed 2026-10-18; signing is offline by design). Compromise procedure: `tmp/review/plugin-key-compromise-runbook.md` — containment via kill-switch first, rotate, re-sign at **new versions** (a same-version re-sign is impossible by design).
 
+**Kill-switch containment latency (measured 2026-10-18, drill log):** RC publishes instantly, but `FirebaseRemoteConfigManager` sets `setMinimumFetchIntervalInSeconds(3600)` and the SDK persists that window — the Sources **refresh button does NOT bypass it** (it re-reads the activated local value). So containment = ≤1 h RC throttle + ≤24 h sweep (worst case ~25 h), and a published kill-switch is NOT evidence of containment: the proof is `revoked=[…]` in `PluginSync`. Correcting a prior doc claim. Procedure: `tmp/review/plugin-key-compromise-runbook.md`; drills: `tmp/review/gate-drill-log-2026-10-18.md`.
+
 **Snackbar reasons (v9.3.1, audit B14):** `SourcesViewModel.notice` is `SharedFlow<SourceNotice(resId, reason)>`; the engine's typed reason (`ApproveOutcome.Held/Failed(reason)`, reverify failure) is formatted into the snackbar. A bare "تعذر الاعتماد" with no reason is a diagnosable state presented as unexplained — never do that.
 
 **Train 2 — visibility + storage integrity (v9.3.0, 256)**:
