@@ -143,7 +143,13 @@ class FirebaseRemoteConfigManager @Inject constructor(
 
     suspend fun refresh() {
         runCatching {
-            remoteConfig.fetchAndActivate().await()
+            // Log the FetchStatus: the SDK's minimum-fetch-interval throttle
+            // (3600s, set below) is SILENT, so "throttled" and "fetched, value
+            // unchanged" are indistinguishable from the outside. A kill-switch
+            // that has not landed yet then looks exactly like a policy bug —
+            // which is exactly how the 2026-10-18 engine-kill drill stalled.
+            val status = remoteConfig.fetchAndActivate().await()
+            Log.i(TAG, "Remote config fetch status: $status")
             applyState()
         }.onFailure { e ->
             Log.w(TAG, "Remote config fetch failed: ${e.message}", e)
