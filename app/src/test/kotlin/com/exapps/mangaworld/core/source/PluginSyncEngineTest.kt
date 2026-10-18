@@ -136,15 +136,20 @@ class PluginSyncEngineTest {
         every { createDescriptor(any()) } returns null
     }
 
-    /** A factory that CAN pair a runner — needed by paths that build one from bytes. */
-    private fun scrapingRunners(): PluginRunnerFactory = mockk {
-        every { createDescriptor(any()) } returns
+    /**
+     * A factory that CAN pair a runner — needed by every path that builds one from
+     * bytes. Relaxed, because install also reads `remoteDisplay()`; a strict mock
+     * fails with "no answer found" instead of testing the path under test.
+     */
+    private fun scrapingRunners(): PluginRunnerFactory = mockk(relaxed = true).also { factory ->
+        every { factory.createDescriptor(any()) } returns
             mockk<com.exapps.mangaworld.core.data.remote.scraper.MangaScraper>(relaxed = true)
         // createScript returns Result<MangaScraper>? — a success, not a bare scraper.
-        every { createScript(any(), any()) } returns Result.success(
+        every { factory.createScript(any(), any()) } returns Result.success(
             mockk<com.exapps.mangaworld.core.data.remote.scraper.MangaScraper>(relaxed = true)
         )
     }
+
     private fun silentSettings(): SettingsRepository = mockk(relaxed = true)
 
     private data class Harness(
