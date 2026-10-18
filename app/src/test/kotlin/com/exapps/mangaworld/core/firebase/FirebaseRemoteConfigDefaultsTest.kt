@@ -62,7 +62,11 @@ class FirebaseRemoteConfigDefaultsTest {
         ioDispatcher = UnconfinedTestDispatcher(),
         registryProvider = Provider { registry },
         remoteConfig = fake.rc
-    )
+    ).also {
+        // JVM: android.util.Log stubs throw "not mocked", and refresh() now logs the
+        // FetchStatus. Same sink-injection convention as PluginSyncEngineTest/BundledPluginLoader.
+        it.log = {}
+    }
 
     private fun remotePlugin(id: String): SourcePlugin {
         val scraper: MangaScraper = mockk(relaxed = true)
