@@ -22,6 +22,8 @@ import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Rule
@@ -143,6 +145,8 @@ class PluginSyncEngineTest {
         val trust: Map<String, ByteArray>,
         val host: HostCapabilities,
         val baseDir: java.io.File,
+        /** Exposed so tests can clear the 304 shortcut and force a full fetch. */
+        val etags: FakeEtag,
         /** Collects engine log notices (host-expansion, skew, rollback). */
         val logs: MutableList<String> = mutableListOf(),
         /** Gate 0: records what the fleet would observe for this sweep. */
@@ -174,7 +178,7 @@ class PluginSyncEngineTest {
         val engine = PluginSyncEngine(index, store, registry, fetcher, etags, nullRunners(), silentSettings(), telemetry, kotlinx.coroutines.Dispatchers.Unconfined)
         val logs = mutableListOf<String>()
         engine.log = { logs += it }
-        return Harness(engine, index, fetcher, registry, trust, host, tmp.root, logs, telemetry)
+        return Harness(engine, index, fetcher, registry, trust, host, tmp.root, etags, logs, telemetry)
     }
 
     @Test
@@ -777,4 +781,42 @@ class PluginSyncEngineTest {
         assertEquals(null, rec.activeVersion)
         assertFalse(h.registry.isKnown("futurex"))
     }
+
+    /**
+     * Containment recovery leg (drill 3, 2026-10-18): once the kill policy is
+     * removed, the next sweep must RE-DRIVE the install and serve again.
+     *
+     * It does, because the kill dropped the registry entry, so the record has no
+     * backing runner and the `UpToDate` short-circuit can no longer shield it
+     * (v9.2.5 B6). Modelled on a REMOTE id on purpose: for a builtin the APK
+     * scraper remains registered, so `pluginFor` is non-null and the test would
+     * pass for the wrong reason.
+     */
+    @Test
+    fun liftedRevocationReDrivesAndResumesServing() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/newbie/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson(Triple("newbie", 1, manifestUrl)),
+            manifestUrl to manifestBytes("newbie", 1)
+        )
+        val h = harness(bodies, registryIds = arrayOf("hijala", "lavascans"))
+        assertTrue(h.sync().outcomes["newbie"] is PluginSyncEngine.EntryOutcome.Updated)
+
+        h.etags.set(null)
+        val killed = h.sync(kill = """{"revoked":[{"id":"newbie"}]}""")
+        assertEquals(PluginSyncEngine.EntryOutcome.Revoked, killed.outcomes["newbie"])
+        assertEquals(PluginStatus.REVOKED, h.index.get("newbie")!!.status)
+        assertNull(h.registry.pluginFor("newbie"), "kill must drop the only runner")
+
+        // Policy lifted (RC restored): must not leave the source permanently dead.
+        h.etags.set(null)
+        val recovered = h.sync(kill = null)
+        assertTrue(
+            "lifted revocation must re-drive and resume serving, got ${recovered.outcomes["newbie"]}",
+            recovered.outcomes["newbie"] is PluginSyncEngine.EntryOutcome.Updated
+        )
+        assertNotNull(h.registry.pluginFor("newbie"), "recovery must re-register a runner")
+        assertEquals(PluginStatus.ENABLED, h.index.get("newbie")!!.status)
+    }
+
 }
