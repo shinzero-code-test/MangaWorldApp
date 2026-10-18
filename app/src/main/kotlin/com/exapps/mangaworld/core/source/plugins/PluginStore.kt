@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.source.plugins
 
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
