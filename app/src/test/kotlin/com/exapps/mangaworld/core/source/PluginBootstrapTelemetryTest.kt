@@ -302,8 +302,9 @@ class PluginBootstrapTelemetryTest {
                     it.id == "hijala" && it.reason.contains("newer than bundled")
             }
         )
+        // activeVersion is Int?; compare the concrete value so the assertion has an overload.
         assertEquals(
-            2, index.get("hijala")!!.activeVersion,
+            2, index.get("hijala")!!.activeVersion ?: -1,
             "pointer must stay at the synced version"
         )
     }
