@@ -1,0 +1,27 @@
+{
+  "id": "manonga",
+  "version": 7,
+  "minAppVersion": "9.1.0",
+  "issuedAt": "2026-10-19T10:28:50Z",
+  "bridgeApi": 1,
+  "names": {
+    "ar": "مانجا اون لاين",
+    "en": "Manonga"
+  },
+  "logo": null,
+  "engine": "script",
+  "engineApi": 1,
+  "baseUrl": "https://manonga.online",
+  "requiresVerification": false,
+  "enabledByDefault": false,
+  "requiresPermission": false,
+  "config": {},
+  "allowedHosts": [
+    "manonga.online",
+    "www.onma.top"
+  ],
+  "timeoutMs": 15000,
+  "maxResponseMb": 10,
+  "scriptSha256": "226ea9cc30b336840cf7c75ad6fb2ddbb162ba7e46a146b7f039d6c694933873",
+  "signature": "ed25519:official-1:V4s6dkw6ssJRzA4izmhYAMpXK9b0jvbe4rPdhZdhruLvh3LIPt/0DSWA2ZSkEQVmuYanZGgx88aWoDe6YNnKBA=="
+}
