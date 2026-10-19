@@ -1,0 +1,25 @@
+{
+  "allowedHosts": [
+    "lavascans.com"
+  ],
+  "baseUrl": "https://lavascans.com",
+  "config": {
+    "listPath": "/browse-manga/"
+  },
+  "enabledByDefault": true,
+  "engine": "mangareader",
+  "engineApi": 1,
+  "id": "lavascans",
+  "issuedAt": "2026-10-19T10:18:49Z",
+  "logo": null,
+  "maxResponseMb": 10,
+  "minAppVersion": "8.9.0",
+  "names": {
+    "ar": "لاڤا سكانز",
+    "en": "LavaScans"
+  },
+  "requiresVerification": true,
+  "timeoutMs": 30000,
+  "version": 2,
+  "signature": "ed25519:official-1:wAzKG8YPrV8MG4fw3F6iM0adRo9NK+eJfsGTAvWmx7TFHY1cnX1pr4tnLCX4rV/RoHXpLeNrKkxWE6DBSvAaBw=="
+}

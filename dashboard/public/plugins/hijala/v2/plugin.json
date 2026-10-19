@@ -1,0 +1,26 @@
+{
+  "allowedHosts": [
+    "hijala.com",
+    "blogger.googleusercontent.com"
+  ],
+  "baseUrl": "https://hijala.com",
+  "config": {
+    "listPath": "/manga/"
+  },
+  "enabledByDefault": true,
+  "engine": "mangareader",
+  "engineApi": 1,
+  "id": "hijala",
+  "issuedAt": "2026-10-19T10:18:49Z",
+  "logo": null,
+  "maxResponseMb": 10,
+  "minAppVersion": "8.9.0",
+  "names": {
+    "ar": "حجالة مانجا",
+    "en": "Hijala"
+  },
+  "requiresVerification": true,
+  "timeoutMs": 30000,
+  "version": 2,
+  "signature": "ed25519:official-1:sXtiDDxugbMbCYvkDUXCDp3LlylAmqs5CCGXOOcwB/MJz73+rsAA12YsYcxPVu6PxSGjB1EwOSPb7WAZKMW3Dw=="
+}
