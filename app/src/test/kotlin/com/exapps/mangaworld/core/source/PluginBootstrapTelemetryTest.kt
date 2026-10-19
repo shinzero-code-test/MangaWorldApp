@@ -302,10 +302,11 @@ class PluginBootstrapTelemetryTest {
                     it.id == "hijala" && it.reason.contains("newer than bundled")
             }
         )
-        // activeVersion is Int?; compare the concrete value so the assertion has an overload.
+        // JUnit takes the message FIRST (there is no (Object, Object, String) overload),
+        // and Kotlin will not implicitly widen Int to the (long, long, String) form.
         assertEquals(
-            2, index.get("hijala")!!.activeVersion ?: -1,
-            "pointer must stay at the synced version"
+            "pointer must stay at the synced version",
+            2L, (index.get("hijala")!!.activeVersion ?: -1).toLong()
         )
     }
 
