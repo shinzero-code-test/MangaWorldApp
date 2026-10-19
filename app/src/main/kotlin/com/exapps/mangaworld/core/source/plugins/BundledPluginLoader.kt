@@ -156,6 +156,21 @@ class BundledPluginLoader @Inject constructor(
             ) {
                 return Outcome.Skipped(id, "blocked: ${rec.status}")
             }
+            // The APK asset is the FLOOR, not the ceiling (found on a 2-device
+            // cohort, 2026-10-19): the guard above protects safety states, but an
+            // ENABLED record pointing at a NEWER synced version was still
+            // overwritten by the bundled v1 on every cold start -- so a remote
+            // update silently reverted, and the device churned v2 -> v1 -> v2.
+            // Observed as `active=1 prev=2` right after `sync hijala -> Updated`.
+            val bundledVersion = bundledAssetVersion(bytes)
+            if (bundledVersion != null && rec.activeVersion != null &&
+                rec.activeVersion > bundledVersion
+            ) {
+                return Outcome.Skipped(
+                    id,
+                    "record v${rec.activeVersion} is newer than bundled v$bundledVersion"
+                )
+            }
         }
         val baseDir = File(context.filesDir, "plugins")
         val result = store.install(
@@ -215,6 +230,12 @@ class BundledPluginLoader @Inject constructor(
      * Boot payload probe (v9.2.4): what the disk actually holds for a record,
      * so "skipped" is actionable without root/adb file access. Sizes only.
      */
+    /** Lenient version read from APK asset bytes (packaging metadata, not trust). */
+    private fun bundledAssetVersion(bytes: ByteArray): Int? = runCatching {
+        com.fasterxml.jackson.databind.ObjectMapper()
+            .readTree(bytes)["version"]?.takeIf { it.isIntegralNumber }?.asInt()
+    }.getOrNull()
+
     private suspend fun payloadProbe(id: String): String {
         val record = index.get(id) ?: return "probe: no-record"
         val version = record.activeVersion

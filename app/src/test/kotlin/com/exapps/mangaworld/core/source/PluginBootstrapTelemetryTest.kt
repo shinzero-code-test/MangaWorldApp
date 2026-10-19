@@ -274,4 +274,38 @@ class PluginBootstrapTelemetryTest {
         assertEquals(0, report.reconciled)
         assertEquals(BuildConfig.VERSION_NAME, report.appVersion)
     }
+
+    /**
+     * A bundled APK pilot must never move a synced pointer BACKWARDS
+     * (2026-10-19, found on a 2-device cohort). The safety-status guard only
+     * covered QUARANTINED/REVOKED/DISABLED, so an ENABLED record at a newer
+     * version was overwritten by the bundled v1 on every cold start: the sync
+     * engine reported `Updated`, and the next boot reverted it.
+     */
+    @Test
+    fun bootstrapKeepsPointerNewerThanBundledAsset() = runTest {
+        val telemetry = RecordingPluginTelemetry()
+        val index = FakeIndex()
+        index.put(
+            PluginIndexRecord(
+                "hijala", 2, 1,
+                com.exapps.mangaworld.core.source.plugins.PluginOrigin.OFFICIAL,
+                com.exapps.mangaworld.core.source.plugins.PluginStatus.ENABLED, null
+            )
+        )
+        val registry = SourceUiTestFixtures.registry("hijala", "lavascans")
+        val outcomes = loader(telemetry, index).bootstrap()
+        assertTrue(
+            "bundled v1 must not overwrite a synced v2: $outcomes",
+            outcomes.any {
+                it is BundledPluginLoader.Outcome.Skipped &&
+                    it.id == "hijala" && it.reason.contains("newer than bundled")
+            }
+        )
+        assertEquals(
+            2, index.get("hijala")!!.activeVersion,
+            "pointer must stay at the synced version"
+        )
+    }
+
 }
