@@ -134,7 +134,10 @@ class FirebaseRemoteConfigManager @Inject constructor(
         "engagement_tier_active_ms" to 3600000L,
         "engagement_tier_avid_ms" to 36000000L,
         "plugin_key_rotation" to "",
-        "plugin_kill_switch" to ""
+        "plugin_kill_switch" to "",
+        // Read by a dependency via getValue(), which logs a warning on EVERY launch
+        // when the key is absent from both the template and the defaults.
+        "enable_push_monitor_broadcast" to false
     )
 
     /**

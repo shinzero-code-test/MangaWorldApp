@@ -16,7 +16,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 9.4.0 (versionCode 262)
+- **Current version**: 9.4.1 (versionCode 263)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 36 · **Compile SDK**: 36
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -146,6 +146,8 @@ Adding a source = **one plugin class + one `@Binds` line** in `SourcePluginModul
 **The plugin bootstrap must not queue behind the network (v9.3.5, found on the 2-device cohort):** `bundledPluginLoader.bootstrap()` is LOCAL work (APK assets + Room + prefs) but it ran *after* `firebaseStartupCoordinator.initialize()`, which awaits a Firebase session and an RC fetch. A stalled Firebase init therefore left the app with **no signed plugin overrides for the whole session** — and no diagnostic, because the coordinator never returned. Observed: boot logs after ~50 s, then not at all for 150 s+ while Auth was still in flight. The bootstrap and the mapper snapshot now run in their own coroutine, first. **Never sequence local, security-relevant initialization behind network work** — and never let a network stall silently disable a subsystem.
 
 **`minAppVersion` must be judged by the SIGNED manifest (v9.4.0):** `syncEntry` used to return `Skipped("requires app X")` *before* fetching the manifest, which short-circuited the whole upgrade-reconcile mechanism: no manifest reached the verifier, so no `INCOMPATIBLE` marker was written, so the source was **invisible** (no row, no badge, no reason) and the reconciler had nothing to revive. The gate now lives in `ManifestParser` → `EngineCompatibility` (the signed authority — the index is untrusted), the marker is written, and `PluginUpgradeReconciler` revives it on the next app upgrade. **An early return that skips the manifest skips the marker, the badge, and the recovery.**
+
+**Remote Config throttle is not directly observable (v9.4.1 correction):** the v9.3.1 status line logs `FetchStatus`, which the current Firebase SDK defines as a typealias for `Boolean` — it prints `true`/`false`, so it separates success from failure but **cannot** tell THROTTLED from SUCCESS. The public API exposes nothing richer. Do not claim the throttle is visible; the honest signal is "the value did not change", and the only real fix is a remote-config *version* probe.
 
 **Snackbar reasons (v9.3.1, audit B14):** `SourcesViewModel.notice` is `SharedFlow<SourceNotice(resId, reason)>`; the engine's typed reason (`ApproveOutcome.Held/Failed(reason)`, reverify failure) is formatted into the snackbar. A bare "تعذر الاعتماد" with no reason is a diagnosable state presented as unexplained — never do that.
 
