@@ -956,10 +956,15 @@ class PluginSyncEngineTest {
         assertEquals(PluginStatus.INCOMPATIBLE, h.index.get("futurex")!!.status)
 
         // A newer app still cannot satisfy minAppVersion 99.0.0.
+        val trustKeys = io.mockk.mockk<
+            com.exapps.mangaworld.core.source.plugins.PluginTrustKeys
+        > {
+            every { current() } returns h.trust
+        }
         val reconciler = com.exapps.mangaworld.core.source.plugins.PluginUpgradeReconciler(
             h.index,
             PluginStore(h.index, kotlinx.coroutines.Dispatchers.Unconfined),
-            h.trust,
+            trustKeys,
             kotlinx.coroutines.Dispatchers.Unconfined
         )
         // An app that is still too old must NOT revive the marker.
