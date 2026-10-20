@@ -1,5 +1,5 @@
 /**
- * manonga.online — official script canary v5 (DRILL: home returns empty by design) (bridge API v1).
+ * manonga.online — official script canary v8 (DRILL: detail throws by design) (bridge API v1).
  *
  * Pipeline-proving source: small, server-rendered, no Cloudflare, no auth.
  * Custom theme (fixed engine walks cannot express its routes), so a script is
@@ -58,9 +58,9 @@ function home(ctx) {
   log("info", "manonga-canary", "payload v3 home");
 
   var doc = parse(fetch(ctx.baseUrl + "/"), ctx.baseUrl);
-  var titles = selectText(doc, ".drill-intentionally-missing-selector a");
-  var hrefs = selectAttr(doc, ".drill-intentionally-missing-selector a", "href");
-  var chTexts = selectText(doc, ".drill-intentionally-missing-selector a");
+  var titles = selectText(doc, ".manga-item .manga-heading a");
+  var hrefs = selectAttr(doc, ".manga-item .manga-heading a", "href");
+  var chTexts = selectText(doc, ".manga-item .manga-chapter a");
   var chHrefs = selectAttr(doc, ".manga-item .manga-chapter a", "href");
   var bySlug = {};
   var featured = [];
@@ -75,7 +75,6 @@ function home(ctx) {
     });
   }
   var latest = [];
-  return { featured: [], latestChapters: [], trending: [] };
   for (var j = 0; j < chTexts.length; j++) {
     var n = firstNum(chTexts[j]);
     var curl = resolveUrl(doc, chHrefs[j] || "");
@@ -138,6 +137,8 @@ function h3Value(lines, label) {
 }
 
 function detail(ctx) {
+  throw new Error("DRILL: detail read fails by design"); // DRILL
+
   var doc = parse(fetch(ctx.baseUrl + "/manga/" + ctx.slug + "/"), ctx.baseUrl);
   var rawTitle = selectText(doc, "title")[0] || "";
   var title = trim(rawTitle.replace(/^مانجا\s+/, "").replace(/\s*مترجمة\s*\|\s*مانجا اون لاين\s*$/, ""));
