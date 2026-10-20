@@ -512,12 +512,18 @@ class PluginSyncEngine @Inject constructor(
         if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(entry.id)) {
             return EntryOutcome.Skipped("local id")
         }
-        if (com.exapps.mangaworld.core.source.plugins.EngineCompatibility.compareVersions(
-                host.appVersion, entry.minAppVersion
-            ) < 0
-        ) {
-            return EntryOutcome.Skipped("requires app ${entry.minAppVersion}")
-        }
+        // NOTE: the app-version gate is NOT applied here. It used to return
+        // Skipped("requires app X") before the manifest was ever fetched, and
+        // that short-circuit broke the whole upgrade-reconcile mechanism:
+        //   - no manifest reached the verifier, so no INCOMPATIBLE marker was
+        //     written, so the source was INVISIBLE (no row, no badge, no
+        //     "needs a newer app version" reason) -- the user just never saw it;
+        //   - with no marker, PluginUpgradeReconciler had nothing to revive, so
+        //     the source could not come back on an app upgrade.
+        // The SIGNED manifest decides instead (ManifestParser -> EngineCompatibility
+        // -> INCOMPATIBLE -> marker), which is also the better authority: the
+        // index is untrusted, the manifest is not. Cost: one small manifest
+        // download per gated entry until the app catches up.
         val record = indexStore.get(entry.id)
         val current = record?.activeVersion
             ?: registry.descriptorFor(entry.id)?.version

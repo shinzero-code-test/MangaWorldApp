@@ -913,4 +913,64 @@ class PluginSyncEngineTest {
         )
     }
 
+
+    /**
+     * A manifest gated by `minAppVersion` must leave an INCOMPATIBLE marker, so the
+     * source is VISIBLE with a reason and the upgrade reconciler has something to
+     * revive. The early "Skipped(requires app X)" short-circuit in syncEntry
+     * prevented both (2026-10-20, found while planning the upgrade-reconcile drill).
+     */
+    @Test
+    fun minAppVersionGatedCandidateLeavesIncompatibleMarker() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/futurex/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson(Triple("futurex", 1, manifestUrl)),
+            manifestUrl to manifestBytes("futurex", 1) { it.put("minAppVersion", "99.0.0") }
+        )
+        val h = harness(bodies)
+        val result = h.sync()
+        assertTrue(
+            "gated candidate must be rejected, got ${result.outcomes["futurex"]}",
+            result.outcomes["futurex"] is PluginSyncEngine.EntryOutcome.Rejected
+        )
+        val rec = h.index.get("futurex")!!
+        assertEquals(PluginStatus.INCOMPATIBLE, rec.status)
+        assertEquals(null, rec.activeVersion)
+        assertTrue("the marker must carry the manifest so it can be re-verified", !rec.manifestJson.isNullOrEmpty())
+        assertFalse(h.registry.isKnown("futurex"))
+    }
+
+    /**
+     * The other half: once the app is new enough, the upgrade reconciler revives
+     * the marker to AVAILABLE (the app upgrade is the recovery path).
+     */
+    @Test
+    fun upgradeReconcilerRevivesMinAppVersionMarker() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/futurex/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson(Triple("futurex", 1, manifestUrl)),
+            manifestUrl to manifestBytes("futurex", 1) { it.put("minAppVersion", "99.0.0") }
+        )
+        val h = harness(bodies)
+        h.sync()
+        assertEquals(PluginStatus.INCOMPATIBLE, h.index.get("futurex")!!.status)
+
+        // A newer app still cannot satisfy minAppVersion 99.0.0.
+        val reconciler = com.exapps.mangaworld.core.source.plugins.PluginUpgradeReconciler(
+            h.index,
+            PluginStore(h.index, kotlinx.coroutines.Dispatchers.Unconfined),
+            h.trust,
+            kotlinx.coroutines.Dispatchers.Unconfined
+        )
+        // An app that is still too old must NOT revive the marker.
+        assertEquals(
+            "an app that is still too old must NOT revive the marker",
+            0, reconciler.reconcile("1.0.0")
+        )
+        assertEquals(PluginStatus.INCOMPATIBLE, h.index.get("futurex")!!.status)
+        // A new enough app revives it — this is the upgrade-reconcile recovery.
+        assertEquals("a new enough app must revive the marker", 1, reconciler.reconcile("99.0.0"))
+        assertEquals(PluginStatus.AVAILABLE, h.index.get("futurex")!!.status)
+    }
+
 }
