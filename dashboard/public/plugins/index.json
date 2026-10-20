@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-10-20T19:43:51Z",
+  "updatedAt": "2026-10-20T20:21:37Z",
   "entries": [
     {
       "id": "hijala",
@@ -22,13 +22,6 @@
       "kind": "script",
       "minAppVersion": "9.1.0",
       "manifestUrl": "https://mangaworld-admin.vercel.app/plugins/manonga/v9/plugin.json"
-    },
-    {
-      "id": "canary",
-      "version": 2,
-      "kind": "descriptor",
-      "minAppVersion": "9.4.1",
-      "manifestUrl": "https://mangaworld-admin.vercel.app/plugins/canary/v2/plugin.json"
     }
   ]
 }
