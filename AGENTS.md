@@ -16,7 +16,7 @@
 
 Arabic manga reader Android app (Kotlin + Jetpack Compose). Single-module `:app` project.
 - **Package**: `com.exapps.mangaworld`
-- **Current version**: 9.3.4 (versionCode 260)
+- **Current version**: 9.3.5 (versionCode 261)
 - **Min SDK**: 26 (Android 8.0) · **Target SDK**: 36 · **Compile SDK**: 36
 - **JDK**: 17 (required by CI and build)
 - **Typography**: Cairo Bold for display/headline/title; IBM Plex Sans Arabic for body/label/UI/button text. Fonts are bundled in `res/font`; Glance cannot use bundled custom fonts.
@@ -142,6 +142,8 @@ Adding a source = **one plugin class + one `@Binds` line** in `SourcePluginModul
 **Lifted revocation must re-drive (v9.3.3, drill 3):** `Revoked` is not in the unresolved set, so with an unchanged index the 304 short-circuit skipped the id entirely — lifting a kill-switch left the source dead until the publisher shipped a new version. The sweep now marks a `REVOKED` record unresolved when the current policy no longer forbids **that record's version** (judged per-version: a version-scoped kill must not look lifted, or every sweep re-drives it). Revocation without a recovery path is a one-way door. Note the recovered posture is `DISABLED`, not serving: with the runner gone the record is indistinguishable from a new arrival, so consent applies again — a revoked source must never silently resume.
 
 **Bundled pilots are a floor, not a ceiling (v9.3.4, found on the 2-device cohort):** `hijala`/`lavascans` ship as APK assets at v1. The boot guard skipped only QUARANTINED/REVOKED/DISABLED, so an ENABLED record pointing at a **newer** synced version was overwritten by the bundled v1 on every cold start — `sync hijala -> Updated`, then the next boot logged `active=1 prev=2` and the device churned v2→v1→v2 forever. `bootstrapOne` now also skips when `record.activeVersion > bundledVersion`. **Never let an APK asset move a pointer backwards**; any shipped payload is the floor a remote update must be allowed to exceed.
+
+**The plugin bootstrap must not queue behind the network (v9.3.5, found on the 2-device cohort):** `bundledPluginLoader.bootstrap()` is LOCAL work (APK assets + Room + prefs) but it ran *after* `firebaseStartupCoordinator.initialize()`, which awaits a Firebase session and an RC fetch. A stalled Firebase init therefore left the app with **no signed plugin overrides for the whole session** — and no diagnostic, because the coordinator never returned. Observed: boot logs after ~50 s, then not at all for 150 s+ while Auth was still in flight. The bootstrap and the mapper snapshot now run in their own coroutine, first. **Never sequence local, security-relevant initialization behind network work** — and never let a network stall silently disable a subsystem.
 
 **Snackbar reasons (v9.3.1, audit B14):** `SourcesViewModel.notice` is `SharedFlow<SourceNotice(resId, reason)>`; the engine's typed reason (`ApproveOutcome.Held/Failed(reason)`, reverify failure) is formatted into the snackbar. A bare "تعذر الاعتماد" with no reason is a diagnosable state presented as unexplained — never do that.
 

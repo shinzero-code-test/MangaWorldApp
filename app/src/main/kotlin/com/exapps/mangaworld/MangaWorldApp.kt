@@ -87,6 +87,21 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
         widgetRefreshScheduler.schedule()
         scheduleFirebaseSync()
         scheduleAutoDownload()
+        // The signed-pilot bootstrap is LOCAL work (APK assets + Room + prefs, no
+        // network) and it gates every plugin override the app serves. It used to
+        // run AFTER firebaseStartupCoordinator.initialize(), so a stalled
+        // Firebase session left the app with NO plugin overrides for the whole
+        // session -- and no diagnostic, because the coordinator never returned.
+        // Observed on the 2-device cohort: boot logs appeared after ~50s, then
+        // not at all for 150s+, while Firebase Auth was still in flight.
+        // Independent launch + first in its own coroutine: the plugin subsystem
+        // must never wait on the network.
+        applicationScope.launch {
+            runCatching { bundledPluginLoader.bootstrap() }
+                .onFailure { android.util.Log.w("MangaWorldApp", "Pilot bootstrap failed: ${it.message}") }
+            runCatching { sourceUiMapper.refresh() }
+                .onFailure { android.util.Log.w("MangaWorldApp", "Plugin snapshot refresh failed: ${it.message}") }
+        }
         applicationScope.launch {
             appShortcutManager.refreshDynamicShortcuts()
             firebaseStartupCoordinator.initialize()
@@ -96,16 +111,9 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
                 .onFailure { android.util.Log.w("MangaWorldApp", "Download recovery failed: ${it.message}") }
             // Bound daily reading-stat maps (no-op when nothing to prune).
             runCatching { readingStatsStore.pruneOldStats() }
-            // Phase 2A pilots: verify bundled signed descriptors and activate them as
-            // official overrides. Fails closed to builtins; never crashes startup.
-            runCatching { bundledPluginLoader.bootstrap() }
-                .onFailure { android.util.Log.w("MangaWorldApp", "Pilot bootstrap failed: ${it.message}") }
-            // D4/v9.2.3: seed the mapper snapshot right after bootstrap so the
-            // first frame already reflects resumed rows. The mapper now also
-            // re-reads itself on every registry/index change, so this seed is a
-            // latency optimisation, not the mechanism that keeps rows correct.
-            runCatching { sourceUiMapper.refresh() }
-                .onFailure { android.util.Log.w("MangaWorldApp", "Plugin snapshot refresh failed: ${it.message}") }
+            // The pilot bootstrap and the mapper snapshot moved to their own
+            // coroutine above: they are local work and must not queue behind
+            // the network-bound Firebase startup.
         }
     }
 
