@@ -364,8 +364,15 @@ jobs:
       - name: Run on-device plugin invariants
         run: |
           set -euo pipefail
-          app_apk=$(ls app/build/outputs/apk/debug/*universal*.apk | head -n 1)
-          test_apk=$(ls app/build/outputs/apk/androidTest/debug/*universal*androidTest.apk | head -n 1)
+          # Discover by name, not by a guessed path: AGP's androidTest output name
+          # differs from the app's, and a wrong glob fails the run before Test Lab
+          # is even reached.
+          echo "apk outputs:"; find app/build/outputs/apk -name "*.apk" || true
+          app_apk=$(find app/build/outputs/apk/debug -name "*.apk" ! -name "*androidTest*" | head -n 1)
+          test_apk=$(find app/build/outputs/apk/androidTest -name "*androidTest*.apk" | head -n 1)
+          if [[ -z "$app_apk" || -z "$test_apk" ]]; then
+            echo "::error::could not locate the app/test APKs"; exit 1
+          fi
           echo "app=$app_apk"
           echo "test=$test_apk"
           # No --results-bucket: the CLI provisions its own staging/results bucket.
