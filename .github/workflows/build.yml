@@ -371,11 +371,10 @@ jobs:
           # Prefer the universal APK (one artifact for every ABI the device may be);
           # fall back to whatever the build produced.
           app_apk=$(find app/build/outputs/apk/debug -name "app-universal-debug.apk" | head -n 1)
-          [[ -z "$app_apk" ]] && app_apk=$(find app/build/outputs/apk/debug -name "*.apk" ! -name "*androidTest*" | head -n 1)
+          if [[ -z "$app_apk" ]]; then
+            app_apk=$(find app/build/outputs/apk/debug -name "*.apk" ! -name "*androidTest*" | head -n 1)
+          fi
           test_apk=$(find app/build/outputs/apk/androidTest -name "*androidTest*.apk" | head -n 1)
-          # --directories-to-pull resolves against the WORKING DIRECTORY: the path
-          # must exist or the run is rejected before a device is even allocated.
-          mkdir -p files
           if [[ -z "$app_apk" || -z "$test_apk" ]]; then
             echo "::error::could not locate the app/test APKs"; exit 1
           fi
@@ -391,7 +390,6 @@ jobs:
             --test "$test_apk" \
             --device "$TESTLAB_DEVICE" \
             --timeout 25m \
-            --directories-to-pull=files \
             --results-dir="testlab/$(date -u +%Y%m%d-%H%M%S)-${{ github.sha }}"
           echo "TEST_LAB_PASSED=1" >> "$GITHUB_ENV"
 
