@@ -302,6 +302,88 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  # ─── Firebase Test Lab ──────────────────────────────────────────────────────
+  # On-device plugin invariants. The JVM suite cannot touch the real APK assets,
+  # the real Room index or the real boot path -- which is exactly where the
+  # "source vanished from every list" class of bug lives (a record with a version
+  # but no runner is filtered out of Home/Browse/Search, so the user sees nothing
+  # and no error). Test Lab installs the app FRESH on every run, so this is also
+  # the only place the first-install path is exercised continuously.
+  #
+  # NOT in build-release's needs: a release must not be blocked by device
+  # infrastructure. It is reported in the summary and fails the branch on a real
+  # regression. Promote it to a release gate once it has proven stable.
+  firebase-test-lab:
+    name: Firebase Test Lab (on-device plugin invariants)
+    runs-on: ubuntu-latest
+    needs: [lint-and-test]
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      # Virtual device: cheap, and the invariants are not device-specific.
+      # Physical models (Pixel 10 Pro, Galaxy S25 Ultra) cost real quota.
+      TESTLAB_DEVICE: model=MediumPhone.arm,version=34
+    if: |
+      (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')) ||
+      github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-testlab-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-testlab-${{ runner.os }}-
+
+      - name: Build debug + androidTest APKs
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+
+      - name: Activate the service account
+        run: |
+          set -euo pipefail
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+          gcloud auth activate-service-account --key-file="$RUNNER_TEMP/sa.json" --quiet
+          gcloud config set project mangaworld-live-260519
+
+      - name: Run on-device plugin invariants
+        run: |
+          set -euo pipefail
+          app_apk=$(ls app/build/outputs/apk/debug/*universal*.apk | head -n 1)
+          test_apk=$(ls app/build/outputs/apk/androidTest/debug/*universal*androidTest.apk | head -n 1)
+          echo "app=$app_apk"
+          echo "test=$test_apk"
+          # No --results-bucket: the CLI provisions its own staging/results bucket.
+          # A named bucket in this project cannot be created (the project's
+          # billing account is not in an enabled state), so the default path is
+          # the only one that works here.
+          gcloud firebase test android run \
+            --type instrumentation \
+            --app "$app_apk" \
+            --test "$test_apk" \
+            --device "$TESTLAB_DEVICE" \
+            --timeout 25m \
+            --directories-to-pull=files \
+            --results-dir="testlab/$(date -u +%Y%m%d-%H%M%S)-${{ github.sha }}"
+          echo "TEST_LAB_PASSED=1" >> "$GITHUB_ENV"
+
+      - name: Upload on-device test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testlab-results
+          path: testlab/
+          if-no-files-found: ignore
+          retention-days: 30
+
   # ─── Debug Build ────────────────────────────────────────────────────────────
   build-debug:
     name: Build Debug APKs (All ABIs)
@@ -814,7 +896,7 @@ jobs:
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [ lint-and-test, dashboard-checks, firestore-rules, verify-deployed-plugins, build-debug, verify-debug-artifacts, build-release, verify-release-artifacts, create-release ]
+    needs: [ lint-and-test, dashboard-checks, firestore-rules, verify-deployed-plugins, firebase-test-lab, build-debug, verify-debug-artifacts, build-release, verify-release-artifacts, create-release ]
     if: always()
     steps:
       - name: Debug release gating contexts
