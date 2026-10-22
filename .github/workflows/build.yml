@@ -391,7 +391,8 @@ jobs:
             --test "$test_apk" \
             --device "$TESTLAB_DEVICE" \
             --timeout 25m \
-            --results-dir="testlab/$(date -u +%Y%m%d-%H%M%S)-${{ github.sha }}"
+            --results-dir="testlab/$(date -u +%Y%m%d-%H%M%S)-${{ github.sha }}" \
+            2>&1 | tee testlab-run.log
           echo "TEST_LAB_PASSED=1" >> "$GITHUB_ENV"
 
       - name: Collect the on-device test report
@@ -402,9 +403,9 @@ jobs:
           # bucket cannot be created in this project), so find it by prefix and
           # pull the report out of it -- otherwise a failure leaves no evidence
           # beyond the console URL.
-          bucket=$(gcloud storage buckets list --project=mangaworld-live-260519 \
-            --filter="name:test-lab-" --sort-by="~creationTime" --limit=1 \
-            --format="value(name)" 2>/dev/null | head -n 1)
+          # The CLI prints the bucket it used ("Raw results will be stored in your
+          # GCS bucket at [...]"); buckets.list does NOT show it, so parse the log.
+          bucket=$(grep -oE "test-lab-[a-z0-9-]+" testlab-run.log 2>/dev/null | head -n 1)
           echo "results bucket: ${bucket:-none}"
           if [[ -n "${bucket:-}" ]]; then
             mkdir -p testlab
