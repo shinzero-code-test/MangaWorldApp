@@ -21,6 +21,11 @@ on:
           - debug
           - release
           - both
+      testlab_device:
+        description: 'Test Lab device override (blank = the default virtual matrix). Physical models cost real quota.'
+        required: false
+        default: ''
+        type: string
   # Daily drift watch for the deployed plugin distribution. Promotion is a manual
   # `vercel --prod`, so drift can appear (or a fix can go missing) with no commit
   # at all — the scheduled run is the only check that notices on a quiet day.
@@ -328,6 +333,9 @@ jobs:
         model=MediumPhone.arm,version=26
         model=MediumPhone.arm,version=30
         model=MediumPhone.arm,version=34
+      # A dispatch can override the matrix with a single physical model, so a drill
+      # can be re-run on real hardware on demand (Pixel 10 Pro, Galaxy S25 Ultra…).
+      TESTLAB_DEVICE_OVERRIDE: ${{ inputs.testlab_device }}
     if: |
       (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')) ||
       github.event_name == 'pull_request' ||
@@ -394,7 +402,7 @@ jobs:
             --type instrumentation \
             --app "$app_apk" \
             --test "$test_apk" \
-            $(printf -- '--device %s ' $TESTLAB_DEVICES) \
+            $(printf -- '--device %s ' ${TESTLAB_DEVICE_OVERRIDE:-$TESTLAB_DEVICES}) \
             --timeout 25m \
             --results-dir="testlab/$(date -u +%Y%m%d-%H%M%S)-${{ github.sha }}" \
             2>&1 | tee testlab-run.log
