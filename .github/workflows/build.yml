@@ -407,6 +407,17 @@ jobs:
             --timeout 25m \
             --results-dir="testlab/$(date -u +%Y%m%d-%H%M%S)-${{ github.sha }}" \
             2>&1 | tee testlab-run.log
+          # A quota limit is a RESOURCE state, not a test failure: the shared daily
+          # budget can be exhausted by an on-demand physical run, and the virtual
+          # matrix then cannot even be allocated. Failing the branch on that would
+          # make a green pipeline mean "we ran out of minutes", not "we are correct".
+          # Skip loudly instead: the day has no on-device coverage, and the summary
+          # says so.
+          if grep -q "TEST_QUOTA_EXCEEDED\|Insufficient testing quota" testlab-run.log; then
+            echo "::warning::Firebase Test Lab quota exhausted — on-device coverage SKIPPED for this run"
+            echo "TEST_LAB_SKIPPED=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
           echo "TEST_LAB_PASSED=1" >> "$GITHUB_ENV"
 
       - name: Collect the on-device test report
