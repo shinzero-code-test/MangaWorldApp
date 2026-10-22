@@ -325,7 +325,8 @@ jobs:
       TESTLAB_DEVICE: model=MediumPhone.arm,version=34
     if: |
       (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')) ||
-      github.event_name == 'pull_request'
+      github.event_name == 'pull_request' ||
+      github.event_name == 'schedule'
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -392,6 +393,23 @@ jobs:
             --timeout 25m \
             --results-dir="testlab/$(date -u +%Y%m%d-%H%M%S)-${{ github.sha }}"
           echo "TEST_LAB_PASSED=1" >> "$GITHUB_ENV"
+
+      - name: Collect the on-device test report
+        if: always()
+        run: |
+          set -uo pipefail
+          # The CLI provisions its own RANDOM staging/results bucket (a named
+          # bucket cannot be created in this project), so find it by prefix and
+          # pull the report out of it -- otherwise a failure leaves no evidence
+          # beyond the console URL.
+          bucket=$(gcloud storage buckets list --project=mangaworld-live-260519 \
+            --filter="name:test-lab-" --sort-by="~creationTime" --limit=1 \
+            --format="value(name)" 2>/dev/null | head -n 1)
+          echo "results bucket: ${bucket:-none}"
+          if [[ -n "${bucket:-}" ]]; then
+            mkdir -p testlab
+            gcloud storage cp --recursive "gs://${bucket}/testlab" testlab/ || true
+          fi
 
       - name: Upload on-device test reports
         if: always()
