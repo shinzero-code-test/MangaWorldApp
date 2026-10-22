@@ -410,6 +410,11 @@ jobs:
           if [[ -n "${bucket:-}" ]]; then
             mkdir -p testlab
             gcloud storage cp --recursive "gs://${bucket}/testlab" testlab/ || true
+            # The raw results include the device video and screenshots: ~130 MB of
+            # incompressible media that would drown the artifact. The report and
+            # the logcat are what a failure is actually read from.
+            find testlab -name "*.mp4" -delete 2>/dev/null || true
+            find testlab -type f -size +8M -delete 2>/dev/null || true
           fi
 
       - name: Upload on-device test reports
