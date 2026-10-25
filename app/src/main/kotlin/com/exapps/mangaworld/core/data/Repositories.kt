@@ -113,12 +113,26 @@ class MangaRepositoryImpl @Inject constructor(
     private fun scraper(source: com.exapps.mangaworld.core.source.plugins.SourceId): MangaScraper =
         registry.scraperFor(source.value) ?: throw SourceUnavailable(source.value)
 
-    /** Wraps the no-plugin lookup so every read returns a failed [Result]. */
+    /**
+     * Wraps the no-plugin lookup so every read returns a failed [Result].
+     *
+     * Also LOGS the failure (v9.5.2). Before this, only `getMangaDetail` reported
+     * anything (`logScraperFailure(source, "detail", e)`); browse/search/genre
+     * failures were folded into a bare `Result.failure` and vanished. With
+     * Crashlytics non-fatals unreachable through the API, every "this source
+     * shows a load error" report had no readable cause. One funnel, one line,
+     * every read.
+     */
     private inline fun <T> withScraper(
         source: com.exapps.mangaworld.core.source.plugins.SourceId,
+        stage: String,
         block: (MangaScraper) -> Result<T>
     ): Result<T> = runCatching { scraper(source) }.fold(
-        onSuccess = block,
+        onSuccess = { scraper ->
+            block(scraper).onFailure { e ->
+                runCatching { firebaseTelemetry.logScraperFailure(source.value, stage, e) }
+            }
+        },
         onFailure = { Result.failure(it) }
     )
 
@@ -138,7 +152,7 @@ class MangaRepositoryImpl @Inject constructor(
 
     override suspend fun searchMangaDirect(query: String, source: com.exapps.mangaworld.core.source.plugins.SourceId, page: Int): Result<List<MangaItem>> {
         if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
-        return withScraper(source) { it.searchManga(query, page) }
+        return withScraper(source, "search") { it.searchManga(query, page) }
     }
 
     override suspend fun browseMangaDirect(
@@ -147,12 +161,12 @@ class MangaRepositoryImpl @Inject constructor(
         type: MangaType?, sortBy: SortBy
     ): Result<List<MangaItem>> {
         if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
-        return withScraper(source) { it.browseManga(page, genre, status, type, sortBy) }
+        return withScraper(source, "browse") { it.browseManga(page, genre, status, type, sortBy) }
     }
 
     override suspend fun getMangaByGenre(genre: String, source: com.exapps.mangaworld.core.source.plugins.SourceId, page: Int): Result<List<MangaItem>> {
         if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
-        return withScraper(source) { it.getMangaByGenre(genre, page) }
+        return withScraper(source, "genre") { it.getMangaByGenre(genre, page) }
     }
 
     /**
@@ -177,7 +191,7 @@ class MangaRepositoryImpl @Inject constructor(
         }
 
         // Fetch fresh from scraper
-        val networkResult = withScraper(source) { it.getMangaDetail(slug) }
+        val networkResult = withScraper(source, "detail") { it.getMangaDetail(slug) }
         // Drift watch sees the scraper result, not the cache fallback below.
         runCatching { health.observeDetail(source.value, networkResult) }
 
@@ -196,7 +210,7 @@ class MangaRepositoryImpl @Inject constructor(
                 runCatching { cacheDao.insert(detail.toCacheEntity()) }
             }
             .recoverCatching { e ->
-                firebaseTelemetry.logScraperFailure(source.value, "detail", e)
+                // Failure already logged by withScraper("detail").
                 // Network failed — return cache if available, else re-throw
                 cached ?: throw e
             }
@@ -204,14 +218,14 @@ class MangaRepositoryImpl @Inject constructor(
 
     override suspend fun getChapterPages(mangaSlug: String, chapterUrl: String, source: com.exapps.mangaworld.core.source.plugins.SourceId): Result<List<ChapterPage>> {
         if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
-        val result = withScraper(source) { it.getChapterPages(chapterUrl) }
+        val result = withScraper(source, "pages") { it.getChapterPages(chapterUrl) }
         runCatching { health.observePages(source.value, result) }
         return result
     }
 
     override suspend fun getPopularManga(source: com.exapps.mangaworld.core.source.plugins.SourceId): Result<List<MangaItem>> {
         if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
-        return withScraper(source) { it.getPopularManga() }
+        return withScraper(source, "popular") { it.getPopularManga() }
     }
 
     override suspend fun getSuggestedManga(candidates: List<MangaItem>, limit: Int): List<MangaItem> {
