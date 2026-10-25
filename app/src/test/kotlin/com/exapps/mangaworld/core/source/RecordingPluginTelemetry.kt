@@ -24,13 +24,17 @@ class RecordingPluginTelemetry : PluginTelemetry {
         val entry: String,
         val success: Boolean,
         val durationMs: Long,
-        val failureClass: String?
+        val failureClass: String?,
+        val version: Int
     )
+
+    data class TrustReject(val id: String, val reason: String)
 
     val syncs = mutableListOf<PluginSyncReport>()
     val bootstraps = mutableListOf<Bootstrap>()
     val healths = mutableListOf<Health>()
     val scriptCalls = mutableListOf<ScriptCall>()
+    val trustRejects = mutableListOf<TrustReject>()
 
     override fun logSync(report: PluginSyncReport) {
         syncs += report
@@ -54,9 +58,14 @@ class RecordingPluginTelemetry : PluginTelemetry {
         entry: String,
         success: Boolean,
         durationMs: Long,
-        failureClass: String?
+        failureClass: String?,
+        version: Int
     ) {
-        scriptCalls += ScriptCall(id, entry, success, durationMs, failureClass)
+        scriptCalls += ScriptCall(id, entry, success, durationMs, failureClass, version)
+    }
+
+    override fun logTrustReject(id: String, reason: String) {
+        trustRejects += TrustReject(id, reason)
     }
 
     fun clear() {
@@ -64,5 +73,6 @@ class RecordingPluginTelemetry : PluginTelemetry {
         bootstraps.clear()
         healths.clear()
         scriptCalls.clear()
+        trustRejects.clear()
     }
 }

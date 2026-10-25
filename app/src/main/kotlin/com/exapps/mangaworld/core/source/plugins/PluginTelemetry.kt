@@ -44,8 +44,20 @@ interface PluginTelemetry {
         entry: String,
         success: Boolean,
         durationMs: Long,
-        failureClass: String?
+        failureClass: String?,
+        /** Payload version — Gate 0 query 3 is `script_call × entry × version`. */
+        version: Int
     )
+
+    /**
+     * A downloaded manifest failed trust/compat verification.
+     *
+     * Gate 0 query 4 (`trust_reject × reason`) had NO emitter at all before this:
+     * the only record was a Crashlytics breadcrumb on the rejection path. A
+     * non-zero rate in steady state means the distribution or the anchor calendar
+     * is wrong, so it has to be queryable, not just visible in a crash report.
+     */
+    fun logTrustReject(id: String, reason: String)
 }
 
 /**
@@ -55,7 +67,8 @@ interface PluginTelemetry {
  */
 @Singleton
 class FirebasePluginTelemetry @Inject constructor(
-    private val telemetry: FirebaseTelemetry
+    private val telemetry: FirebaseTelemetry,
+    private val analytics: com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 ) : PluginTelemetry {
 
     override fun logSync(report: PluginSyncReport) {
@@ -68,6 +81,25 @@ class FirebasePluginTelemetry @Inject constructor(
         telemetry.setTelemetryKey("plugin_sync_failed", report.failedIds.take(10).joinToString(","))
         telemetry.setTelemetryKey("plugin_sync_rejected", report.rejectedIds.take(10).joinToString(","))
         telemetry.setTelemetryKey("plugin_sync_revoked", report.revocations.take(10).joinToString(","))
+        // Gate 0 query 1 is `sweep_outcome x outcome`, so emit one event per
+        // outcome rather than a packed string: a string needs parsing at query
+        // time and cannot be grouped by GA4/BigQuery.
+        report.outcomeCounts.forEach { (outcome, count) ->
+            if (count <= 0) return@forEach
+            analytics.logEvent(
+                name = "plugin_sync_outcome",
+                params = mapOf("outcome" to outcome.take(40), "count" to count.toLong())
+            )
+        }
+        analytics.logEvent(
+            name = "plugin_sweep",
+            params = mapOf(
+                "not_modified" to if (report.indexNotModified) 1L else 0L,
+                "revoked" to report.revocations.size.toLong(),
+                "evicted" to report.evictedVersions.toLong(),
+                "duration_ms" to report.durationMs.coerceAtLeast(0L)
+            )
+        )
     }
 
     override fun logBootstrap(
@@ -83,11 +115,23 @@ class FirebasePluginTelemetry @Inject constructor(
                 "skipped={$skipped} reconciled=$reconciled"
         )
         telemetry.setTelemetryKey("plugin_bootstrap_revived", reconciled.toString())
+        analytics.logEvent(
+            name = "plugin_bootstrap",
+            params = mapOf(
+                "activated" to activatedIds.size.toLong(),
+                "skipped" to skippedByReason.values.sum().toLong(),
+                "reconciled" to reconciled.toLong()
+            )
+        )
     }
 
     override fun logHealth(id: String, from: HealthState, to: HealthState) {
         telemetry.crashlyticsLog("plugin_health id=$id $from->$to")
         telemetry.setTelemetryKey("plugin_health_last", "$id:$to")
+        analytics.logEvent(
+            name = "plugin_health",
+            params = mapOf("plugin_id" to id, "from" to from.name, "to" to to.name)
+        )
     }
 
     override fun logScriptCall(
@@ -95,13 +139,33 @@ class FirebasePluginTelemetry @Inject constructor(
         entry: String,
         success: Boolean,
         durationMs: Long,
-        failureClass: String?
+        failureClass: String?,
+        version: Int
     ) {
         // Per-call volume: failures always log; successes log (duration sample
         // for the perf budget) — both are single lines, no exceptions.
         telemetry.crashlyticsLog(
-            "script_call id=$id entry=$entry success=$success " +
+            "script_call id=$id entry=$entry v=$version success=$success " +
                 "tookMs=$durationMs failure=${failureClass ?: "-"}"
+        )
+        analytics.logEvent(
+            name = "plugin_script_call",
+            params = mapOf(
+                "plugin_id" to id,
+                "entry" to entry.take(24),
+                "version" to version.toLong(),
+                "success" to if (success) 1L else 0L,
+                "duration_ms" to durationMs.coerceAtLeast(0L),
+                "failure" to (failureClass ?: "-").take(40)
+            )
+        )
+    }
+
+    override fun logTrustReject(id: String, reason: String) {
+        telemetry.crashlyticsLog("plugin_trust_reject id=$id reason=$reason")
+        analytics.logEvent(
+            name = "plugin_trust_reject",
+            params = mapOf("plugin_id" to id, "reason" to reason.take(40))
         )
     }
 }

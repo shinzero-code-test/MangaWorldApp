@@ -585,6 +585,9 @@ class PluginSyncEngine @Inject constructor(
             )
         ) {
             is ManifestResult.Invalid -> {
+                // Gate 0 query 4: a distribution payload that failed trust/compat
+                // must be countable per reason, not just a Crashlytics breadcrumb.
+                telemetry.logTrustReject(entry.id, v.reason.name)
                 // Incompatible-but-signed manifests leave a marker (F-review):
                 // without a record the upgrade reconciler has nothing to revive
                 // (a daily re-download of the declined candidate is the price —
@@ -1159,7 +1162,10 @@ class PluginSyncEngine @Inject constructor(
                 enforceFreshness = false
             )
         ) {
-            is ManifestResult.Invalid -> return@withContext ApproveOutcome.Failed("${v.reason}: ${v.message.take(120)}")
+            is ManifestResult.Invalid -> {
+                telemetry.logTrustReject(id, v.reason.name)
+                return@withContext ApproveOutcome.Failed("${v.reason}: ${v.message.take(120)}")
+            }
             is ManifestResult.Valid -> v.manifest
         }
         if (manifest.engine in policy.disabledEngines) {

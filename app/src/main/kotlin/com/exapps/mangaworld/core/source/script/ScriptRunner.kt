@@ -166,7 +166,8 @@ class ScriptScraper internal constructor(
             val result = Result.success(map(raw))
             telemetry.logScriptCall(
                 sourceId, entry, success = true,
-                System.currentTimeMillis() - start, failureClass = null
+                System.currentTimeMillis() - start, failureClass = null,
+                version = manifest.version
             )
             result
         } catch (e: CancellationException) {
@@ -176,14 +177,16 @@ class ScriptScraper internal constructor(
             telemetry.logScriptCall(
                 sourceId, entry, success = false,
                 System.currentTimeMillis() - start,
-                failureClass = e.javaClass.simpleName
+                failureClass = e.javaClass.simpleName,
+                version = manifest.version
             )
             throw e
         } catch (e: Exception) {
             telemetry.logScriptCall(
                 sourceId, entry, success = false,
                 System.currentTimeMillis() - start,
-                failureClass = e.javaClass.simpleName
+                failureClass = e.javaClass.simpleName,
+                version = manifest.version
             )
             Result.failure(e)
         }

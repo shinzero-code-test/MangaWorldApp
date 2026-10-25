@@ -978,4 +978,28 @@ class PluginSyncEngineTest {
         assertEquals(PluginStatus.AVAILABLE, h.index.get("futurex")!!.status)
     }
 
+
+    /**
+     * Gate 0 query 4 (`trust_reject x reason`) had NO emitter before v9.5.0 — the
+     * only trace of a rejected distribution payload was a Crashlytics breadcrumb,
+     * which is not aggregatable. This pins the signal at the download path.
+     */
+    @Test
+    fun badSignatureIsReportedAsATrustRejection() = runTest {
+        val manifestUrl = "https://cdn.example/plugins/badsig/v1/plugin.json"
+        val bodies = mutableMapOf(
+            "https://cdn.example/plugins/index.json" to indexJson(Triple("badsig", 1, manifestUrl)),
+            // Tamper after signing: the signature no longer covers these bytes.
+            manifestUrl to manifestBytes("badsig", 1) { it.put("baseUrl", "https://evil.example") }
+        )
+        val h = harness(bodies)
+        h.sync()
+        assertTrue(
+            "expected a trust rejection for the tampered payload, got ${h.telemetry.trustRejects}",
+            h.telemetry.trustRejects.any {
+                it.id == "badsig" && it.reason == "BAD_SIGNATURE"
+            }
+        )
+    }
+
 }
