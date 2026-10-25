@@ -25,6 +25,17 @@ class FirebaseTelemetry @Inject constructor(
     fun logScraperFailure(sourceId: String, stage: String, throwable: Throwable) {
         setActiveSource(sourceId)
         refreshNetworkTypeKey()
+        // Also emit to logcat (v9.5.1). Crashlytics is the right home for
+        // aggregates, but its non-fatals are NOT queryable through the public API
+        // (the v1alpha discovery document exposes only generateAlertPolicy, and the
+        // reports resource is a descriptor), so on-device triage of "source X shows
+        // a load error" had no readable cause at all. This is the single funnel for
+        // every scraper failure, so one line makes all of them diagnosable.
+        android.util.Log.w(
+            "ScraperFail",
+            "source=$sourceId stage=$stage ${throwable.javaClass.simpleName}: " +
+                (throwable.message ?: "-").take(300)
+        )
         crashlytics.log("scraper_failure source=$sourceId stage=$stage error=${throwable.javaClass.simpleName}")
         crashlytics.setCustomKey("scraper_source", sourceId)
         crashlytics.setCustomKey("scraper_stage", stage)
