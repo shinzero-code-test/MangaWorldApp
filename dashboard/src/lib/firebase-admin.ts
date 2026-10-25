@@ -72,7 +72,17 @@ export function getAdminRemoteConfig(): RemoteConfig {
  * Get an OAuth2 access token from the Firebase Admin SDK service account.
  * Used for calling Google Cloud REST APIs (Crashlytics, Performance, Analytics).
  */
-export async function getAccessToken(): Promise<string> {
+/**
+ * Google API access token for the Firebase service account.
+ *
+ * [scope] matters: `cloud-platform` does NOT authorize the GA4 Data API —
+ * requesting it against `analyticsdata.googleapis.com` returns
+ * `ACCESS_TOKEN_SCOPE_INSUFFICIENT`. Callers must ask for the scope their API
+ * needs (`analytics.readonly` for GA4, the default for BigQuery).
+ */
+export async function getAccessToken(
+  scope: string = "https://www.googleapis.com/auth/cloud-platform"
+): Promise<string> {
   const cred = parsedServiceAccount();
   if (!cred) throw new Error("No Firebase credentials configured");
 
@@ -84,7 +94,7 @@ export async function getAccessToken(): Promise<string> {
       client_email: cred.clientEmail,
       private_key: cred.privateKey,
     },
-    scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+    scopes: [scope],
   });
   const client = await auth.getClient();
   const tokenResponse = await client.getAccessToken();

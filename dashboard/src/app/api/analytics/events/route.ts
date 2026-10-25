@@ -22,7 +22,10 @@ export async function GET() {
       });
     }
 
-    const token = await getAccessToken();
+    // The GA4 Data API rejects `cloud-platform` with ACCESS_TOKEN_SCOPE_INSUFFICIENT,
+    // so this route could never have returned data with the shared helper's default
+    // scope. Ask for the scope the API actually accepts.
+    const token = await getAccessToken("https://www.googleapis.com/auth/analytics.readonly");
 
     // Fetch recent events from GA4 Data API
     let events: any[] = [];
