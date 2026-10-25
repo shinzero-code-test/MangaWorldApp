@@ -484,7 +484,7 @@ class AzoraScraper @Inject constructor(
 
     override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
         val enc = java.net.URLEncoder.encode(genre, "UTF-8")
-        parseMangaListPage(fetchDocument("${resolvedBaseUrl}/series?genres=%2B$enc&page=$page"))
+        parseMangaListPage(fetchDocument("${resolvedBaseUrl}/series/?genres=%2B$enc&page=$page"))
     }
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
@@ -513,7 +513,7 @@ class AzoraScraper @Inject constructor(
             }
             result
         } else {
-            parseMangaListPage(fetchDocument("${resolvedBaseUrl}/series"))
+            parseMangaListPage(fetchDocument("${resolvedBaseUrl}/series/"))
         }
     }
 
@@ -525,7 +525,7 @@ class AzoraScraper @Inject constructor(
         sortBy: SortBy
     ): Result<List<MangaItem>> = runCatching {
         val baseUrl = buildString {
-            append("${resolvedBaseUrl}/series?page=$page")
+            append("${resolvedBaseUrl}/series/?page=$page")
             genre?.takeIf { it.isNotBlank() }?.let {
                 append("&genres=%2B")
                 append(java.net.URLEncoder.encode(it, "UTF-8"))

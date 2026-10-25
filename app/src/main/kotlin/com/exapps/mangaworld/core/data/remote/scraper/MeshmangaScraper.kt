@@ -16,7 +16,11 @@ class MeshmangaScraper @Inject constructor(
     settingsRepo: SettingsRepository
 ) : BaseScraperImpl(client, "meshmanga", "https://meshmanga.com", settingsRepo) {
 
-    private val apiBase = "https://appswat.com/v2/api/v2 // NOTE: hardcoded API host — NOT covered by source_<id>_base_url Remote Config overrides"
+    // NOTE: hardcoded API host — NOT covered by source_<id>_base_url RC overrides.
+    // (The comment used to be INSIDE the string literal, so every API call hit a
+    // malformed URL and meshmanga reported "API unavailable" while the live API
+    // returned 200 with 1690 series.)
+    private val apiBase = "https://appswat.com/v2/api/v2"
     @Volatile private var genreIdCache: Map<String, Int>? = null
 
     override suspend fun getHomeData(): Result<HomeData> = runCatching {
@@ -257,6 +261,7 @@ runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() ?: Scrape
     }
 
     private suspend fun apiGetObject(url: String): JSONObject? = withContext(Dispatchers.IO) {
+        require(!url.contains(' ')) { "malformed API URL (whitespace): ${url.take(120)}" }
         runCatching {
             val cookies = getCookiesForDomain(url)
             val request = Request.Builder()
