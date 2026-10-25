@@ -987,10 +987,16 @@ class PluginSyncEngineTest {
     @Test
     fun badSignatureIsReportedAsATrustRejection() = runTest {
         val manifestUrl = "https://cdn.example/plugins/badsig/v1/plugin.json"
+        // Tamper AFTER signing: manifestBytes() signs the mutated tree, so mutating
+        // before the call would produce a perfectly valid signature (the first
+        // version of this test did exactly that and asserted against an empty list).
+        // Flip one character of the host in the already-signed bytes instead.
+        val signed = String(manifestBytes("badsig", 1), Charsets.UTF_8)
+        val tampered = signed.replace("starzmanga.com", "starzmanga.con")
+        assertTrue("fixture must contain the host to tamper", tampered != signed)
         val bodies = mutableMapOf(
             "https://cdn.example/plugins/index.json" to indexJson(Triple("badsig", 1, manifestUrl)),
-            // Tamper after signing: the signature no longer covers these bytes.
-            manifestUrl to manifestBytes("badsig", 1) { it.put("baseUrl", "https://evil.example") }
+            manifestUrl to tampered.toByteArray(Charsets.UTF_8)
         )
         val h = harness(bodies)
         h.sync()
