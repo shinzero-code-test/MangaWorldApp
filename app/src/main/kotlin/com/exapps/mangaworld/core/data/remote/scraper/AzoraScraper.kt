@@ -513,12 +513,12 @@ class AzoraScraper @Inject constructor(
     private fun rscInitialChapters(html: String, slug: String): List<Chapter> {
         // RSC flight embeds initialChapters as [{"number":N,"slug":"chapter-N",...}].
         // Scalar match only — never re-implements selectors inline in tests.
-        val m = Regex("initialChapters[^]]*\[(.*?)\]", RegexOption.DOT_MATCHES_ALL).find(html)
+        val m = Regex("initialChapters[^]]*\\[(.*?)\\]", RegexOption.DOT_MATCHES_ALL).find(html)
             ?: return emptyList()
         val inner = m.groupValues[1]
         val rows = mutableListOf<Chapter>()
         // Parse number/slug pairs in order (bounded).
-        val numRx = Regex("number[^0-9]*(\d+(?:\.\d+)?)")
+        val numRx = Regex("number[^0-9]*(\\d+(?:\\.\\d+)?)")
         val slugRx = Regex("slug[^a-zA-Z0-9_-]*([a-zA-Z0-9][a-zA-Z0-9_-]*)")
         val nums = numRx.findAll(inner).map { it.groupValues[1].toFloatOrNull() }.toList()
         val slugs = slugRx.findAll(inner).map { it.groupValues[1].trimEnd(',', '"', '\'' ) }.toList()
@@ -534,7 +534,7 @@ class AzoraScraper @Inject constructor(
     }
 
     private fun rscTotalChapterCount(html: String): Int? =
-        Regex("totalChapterCount[^0-9]*(\d+)").find(html)?.groupValues?.getOrNull(1)?.toIntOrNull()
+        Regex("totalChapterCount[^0-9]*(\\d+)").find(html)?.groupValues?.getOrNull(1)?.toIntOrNull()
 
     // ─── Chapter pages ────────────────────────────────────────────────────────
     //
