@@ -209,4 +209,16 @@ class PluginStoreTest {
         assertTrue(File(tmp.root, "starz/versions/5/plugin.json").isFile)
         assertTrue(!File(tmp.root, "starz/versions/2/plugin.json").exists())
     }
+    @Test
+    fun olderVersionNeverMovesPointerBackwards() = runTest {
+        val index = FakeIndex()
+        val s = store(index)
+        s.install(tmp.root, manifestBytes(5), PluginOrigin.OFFICIAL, trust, host, enforceFreshness = false)
+        assertEquals(5, index.get("starz")!!.activeVersion)
+        val result = s.install(tmp.root, manifestBytes(4), PluginOrigin.OFFICIAL, trust, host, enforceFreshness = false)
+        assertTrue(result is PluginStore.InstallResult.Rejected)
+        // Pointer untouched (fresh install == null allowed; downgrade is not).
+        assertEquals(5, index.get("starz")!!.activeVersion)
+    }
+
 }

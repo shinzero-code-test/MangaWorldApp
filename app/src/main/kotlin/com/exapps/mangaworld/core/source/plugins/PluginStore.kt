@@ -192,6 +192,18 @@ class PluginStore @Inject constructor(
             }
         }
         val prev = index.get(id)
+        // v9.5.6 (Test Lab 2026-11-06: hijala v2 -> v1): the bootstrap guard
+        // reads the record OUTSIDE this lock (read-check-write race with a
+        // concurrent boot sweep), so a bundled/older payload could still move
+        // the pointer backwards. Enforce monotonicity atomically here: an
+        // OLDER candidate never activates over a NEWER active pointer.
+        // Rollback (explicit) uses rollback(), never persistVerified.
+        if (prev?.activeVersion != null && manifest.version < prev.activeVersion) {
+            return@withLock InstallResult.Rejected(
+                ManifestInvalidReason.SCHEMA_VIOLATION,
+                "older version ${manifest.version} than active ${prev.activeVersion}: refused"
+            )
+        }
         val next = PluginStorage.activate(
             PluginStorage.ActivationState(prev?.activeVersion, prev?.previousVersion),
             manifest.version
