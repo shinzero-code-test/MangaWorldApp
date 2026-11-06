@@ -290,8 +290,7 @@ class AzoraScraper @Inject constructor(
             return@runCatching detailFromIsland(islandProps, rawHtml, slug, url)
         }
         val doc = fetchDocument(url)
-        return@runCatching detailFromStaticHtml(doc, slug, url)
-
+        detailFromStaticHtml(doc, slug, url)
     }
 
     private fun detailFromIsland(
