@@ -390,7 +390,7 @@ class AzoraScraper @Inject constructor(
             }.distinctBy { it.id }
         }
 
-        MangaDetail(
+        return MangaDetail(
             id           = "azora_$slug",
             slug         = slug,
             title        = title.ifBlank { slug },
