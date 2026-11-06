@@ -521,7 +521,7 @@ class AzoraScraper @Inject constructor(
         val numRx = Regex("number[^0-9]*(\d+(?:\.\d+)?)")
         val slugRx = Regex("slug[^a-zA-Z0-9_-]*([a-zA-Z0-9][a-zA-Z0-9_-]*)")
         val nums = numRx.findAll(inner).map { it.groupValues[1].toFloatOrNull() }.toList()
-        val slugs = slugRx.findAll(inner).map { it.groupValues[1].trimEnd('\', '"', ''', ',') }.toList()
+        val slugs = slugRx.findAll(inner).map { it.groupValues[1].trimEnd('\\', '"', '\'', ',') }.toList()
         val n = minOf(nums.size, slugs.size)
         for (i in 0 until n) {
             val num = nums[i] ?: continue
