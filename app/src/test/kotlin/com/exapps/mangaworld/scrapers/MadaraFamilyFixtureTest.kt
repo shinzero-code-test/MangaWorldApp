@@ -85,4 +85,18 @@ class MadaraFamilyFixtureTest {
         val title = chapters[12f]?.title.orEmpty()
         assertTrue(!title.contains("الفصل"))
     }
+    @Test
+    fun `live mangalik admin-ajax HTML chapters parse through real parser`() {
+        // Live capture: mangalik.net manga_get_chapters returns RAW HTML
+        // (verified 2026-11-06), not JSON. tryAjaxChapters must accept it.
+        val ajaxHtml = javaClass.getResource("/scrapers/mangalik-manga_get_chapters.html")!!.readText()
+        val doc = Jsoup.parse(ajaxHtml, "https://mangalik.net")
+        val chapters = doc.select("li.wp-manga-chapter, li")
+            .mapNotNull { scraper.parseChapterLi(it, "dao-of-the-bizarre-immortal") }
+
+        assertTrue("live AJAX HTML yields chapters", chapters.isNotEmpty())
+        assertTrue(chapters.all { it.url.startsWith("https://mangalik.net/manga/dao-of-the-bizarre-immortal/") })
+        assertTrue(chapters.map { it.number }.maxOrNull() == 98f) // live max
+    }
+
 }

@@ -61,11 +61,15 @@ open class MadaraBaseScraper(
         // Check for DETAIL-SPECIFIC elements (not just any Madara element) to avoid
         // matching library/list pages which may have .post-title in manga cards.
         val isMangaDetailPage: (org.jsoup.nodes.Document?) -> Boolean = { d ->
-            d != null && (
-                // Must have a summary_image OR h1.entry-title AND chapters listing
-                (d.selectFirst(".summary_image, .profile-manga .summary_image") != null) ||
+            if (d == null) return@isMangaDetailPage false
+            // Reject CF interstitials that wear a 200 status: no summary_image
+            // AND the title IS the interstitial (avoids accepting a blockout
+            // page as a manga detail, which then shows "Access Denied" + 0 ch).
+            val t = d.title().lowercase()
+            if (t.contains("just a moment") || t.contains("attention required") ||
+                t.contains("access denied")) return@isMangaDetailPage false
+            d.selectFirst(".summary_image, .profile-manga .summary_image") != null ||
                 (d.selectFirst("h1.entry-title") != null && d.selectFirst(".listing-chapters_wrap, .eplister, #chapterlist") != null)
-            )
         }
         val pathsToTry = listOf("/manga/", "/comics/", "/manhwa/")
         var url = ""
@@ -97,7 +101,15 @@ open class MadaraBaseScraper(
         val coverUrl = doc.selectFirst(".summary_image img, .profile-manga img, img.wp-post-image, .thumb img, img.img-responsive")
             ?.let { img -> img.preferredImageUrl()?.absoluteUrl() } ?: ""
 
-        val title = doc.selectFirst(".post-title h1, .post-title, h1.entry-title, h1")?.text()?.cleanText() ?: slug
+        // Prefer the canonical .post-title h1; never take an h1 inside
+        // <noscript> (Madara CF "Access Denied" noscript block is first in
+        // DOM order and would win selectFirst, verified live 2026-11-06).
+        val titleCandidates = doc.select(".post-title h1, .post-title, h1.entry-title, h1")
+        val title = titleCandidates.firstOrNull { el ->
+            el.parents().none { it.tagName().equals("noscript", ignoreCase = true) }
+        }?.text()?.cleanText()
+            ?.takeUnless { it.equals("Access Denied", ignoreCase = true) }
+            ?: slug
 
         val description = doc.selectFirst(".description-summary p, .summary__content p, .manga-excerpt, .summary__content h4")
             ?.text()?.cleanText()

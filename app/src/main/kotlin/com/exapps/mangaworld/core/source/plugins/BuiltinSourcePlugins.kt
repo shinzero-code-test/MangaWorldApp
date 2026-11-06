@@ -275,7 +275,7 @@ class AreaScansPlugin @Inject constructor(
     override val scraper: MangaScraper = AreaScansScraper(client, settingsRepo, context)
     override val display = SourceDisplay(R.string.source_areascans, R.drawable.ar_kenmanga_com_logo)
     override val descriptor = builtinDescriptor(
-        "areascans", "https://ar.kenmanga.com", false, SourceEngine.CUSTOM,
+        "areascans", "https://ar.kenmanga.com", true, SourceEngine.CUSTOM,
         allowedHosts = setOf("ar.kenmanga.com", "i0.wp.com")
     )
 }
