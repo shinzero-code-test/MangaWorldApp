@@ -61,15 +61,17 @@ open class MadaraBaseScraper(
         // Check for DETAIL-SPECIFIC elements (not just any Madara element) to avoid
         // matching library/list pages which may have .post-title in manga cards.
         val isMangaDetailPage: (org.jsoup.nodes.Document?) -> Boolean = { d ->
-            if (d == null) return@isMangaDetailPage false
-            // Reject CF interstitials that wear a 200 status: no summary_image
-            // AND the title IS the interstitial (avoids accepting a blockout
-            // page as a manga detail, which then shows "Access Denied" + 0 ch).
-            val t = d.title().lowercase()
-            if (t.contains("just a moment") || t.contains("attention required") ||
-                t.contains("access denied")) return@isMangaDetailPage false
-            d.selectFirst(".summary_image, .profile-manga .summary_image") != null ||
-                (d.selectFirst("h1.entry-title") != null && d.selectFirst(".listing-chapters_wrap, .eplister, #chapterlist") != null)
+            // Reject CF interstitials that wear a 200 status (blockout page
+            // accepted as detail then shows "Access Denied" + 0 chapters).
+            if (d == null) false else {
+                val t = d.title().lowercase()
+                val isInterstitial = t.contains("just a moment") || t.contains("attention required") ||
+                    t.contains("access denied")
+                !isInterstitial && (
+                    d.selectFirst(".summary_image, .profile-manga .summary_image") != null ||
+                        (d.selectFirst("h1.entry-title") != null && d.selectFirst(".listing-chapters_wrap, .eplister, #chapterlist") != null)
+                    )
+            }
         }
         val pathsToTry = listOf("/manga/", "/comics/", "/manhwa/")
         var url = ""
