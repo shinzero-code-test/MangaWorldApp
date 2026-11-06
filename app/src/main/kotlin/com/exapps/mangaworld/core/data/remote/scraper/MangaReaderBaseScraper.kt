@@ -95,7 +95,7 @@ open class MangaReaderBaseScraper(
         )?.let { img ->
             // For lazy-loaded images, src may be a base64 placeholder or SVG.
             // Always prefer data-src if present, otherwise use abs:src but skip data: URIs.
-            val dataSrc = img.attr("data-src").ifEmpty { null }
+            val dataSrc = img.attr("data-src").ifEmpty { null }?.takeIf { !it.startsWith("data:") }
             val absSrc = img.attr("abs:src").ifEmpty { null }
             val src = img.attr("src").ifEmpty { null }
             val realSrc = dataSrc
@@ -213,7 +213,7 @@ open class MangaReaderBaseScraper(
             .mapNotNull { img ->
                 // For lazy-loaded images, src may be a base64 placeholder or SVG.
                 // Always prefer data-src if present, otherwise use abs:src but skip data: URIs.
-                val dataSrc = img.attr("data-src").ifEmpty { null }
+                val dataSrc = img.attr("data-src").ifEmpty { null }?.takeIf { !it.startsWith("data:") }
                 val absSrc = img.attr("abs:src").ifEmpty { null }
                 val src = img.attr("src").ifEmpty { null }
                 val actualSrc = dataSrc
@@ -384,7 +384,7 @@ open class MangaReaderBaseScraper(
                 id = "${sourceId}_$slug",
                 slug = slug,
                 title = title,
-                coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() },
+                coverUrl = img.preferredImageUrl()?.absoluteUrl().orEmpty(),
                 source = SourceId(sourceId),
                 url = href
             )

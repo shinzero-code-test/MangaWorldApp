@@ -353,7 +353,7 @@ class ProComicScraper @Inject constructor(
             val img = a.selectFirst("img")
             val title = a.selectFirst("h3")?.text()?.cleanText() ?: slug
             // Extract cover URL from img src (app.procomic.pro/series-cards/...)
-            val coverUrl = img?.attr("src")?.takeIf { it.isNotBlank() } ?: ""
+            val coverUrl = img?.preferredImageUrl()?.takeIf { it.isNotBlank() } ?: ""
             MangaItem(
                 id = "procomic_$slug", slug = slug, title = title,
                 coverUrl = coverUrl.encodeForUrl(),

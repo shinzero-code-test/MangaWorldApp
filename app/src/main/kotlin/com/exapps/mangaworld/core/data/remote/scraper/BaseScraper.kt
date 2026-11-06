@@ -121,8 +121,13 @@ abstract class BaseScraperImpl(
                 title.contains("attention required") ||
                 title.contains("access denied") ||
                 body.contains("cf-chl", ignoreCase = true) ||
+                body.contains("__cf_chl_", ignoreCase = true) ||
+                body.contains("challenges.cloudflare.com", ignoreCase = true) ||
+                body.contains("cdn-cgi/challenge-platform", ignoreCase = true) ||
+                body.contains("/cdn-cgi/", ignoreCase = true) ||
                 body.contains("cf-turnstile", ignoreCase = true) ||
-                body.contains("__cf_bm", ignoreCase = true)
+                body.contains("__cf_bm", ignoreCase = true) ||
+                body.contains("orchestrate", ignoreCase = true)
             if (isCf) {
                 throw CloudflareChallengeException(resolvedBaseUrl.removePrefix("https://").removePrefix("http://"), url)
             }

@@ -76,10 +76,12 @@ open class MadaraBaseScraper(
         val pathsToTry = listOf("/manga/", "/comics/", "/manhwa/")
         var url = ""
         var doc: org.jsoup.nodes.Document? = null
-
+        var cfException: CloudflareChallengeException? = null
         for (path in pathsToTry) {
             val tryUrl = "${resolvedBaseUrl}$path$slug/"
-            val tryDoc = runCatching { fetchDocument(tryUrl) }.getOrNull()
+            val tryDoc = runCatching { fetchDocument(tryUrl) }
+                .onFailure { e -> if (cfException == null && e is CloudflareChallengeException) cfException = e }
+                .getOrNull()
             if (tryDoc != null) {
                 val isExplicit404 = tryDoc.selectFirst("body.error-404, body.page-not-found, .page-404, .error-page") != null
                 if (!isExplicit404 && isMangaDetailPage(tryDoc)) {
@@ -92,12 +94,15 @@ open class MadaraBaseScraper(
         // Last resort: try the slug directly on the base URL (for hijala-like sites)
         if (doc == null) {
             val bareUrl = "${resolvedBaseUrl}/$slug/"
-            val bareDoc = runCatching { fetchDocument(bareUrl) }.getOrNull()
+            val bareDoc = runCatching { fetchDocument(bareUrl) }
+                .onFailure { e -> if (cfException == null && e is CloudflareChallengeException) cfException = e }
+                .getOrNull()
             if (bareDoc != null && isMangaDetailPage(bareDoc)) {
                 url = bareUrl
                 doc = bareDoc
             }
         }
+        if (doc == null && cfException != null) throw cfException!!
         doc ?: error("Could not load manga detail for $slug")
 
         val coverUrl = doc.selectFirst(".summary_image img, .profile-manga img, img.wp-post-image, .thumb img, img.img-responsive")
@@ -359,7 +364,7 @@ open class MadaraBaseScraper(
                 id = "${sourceId}_$slug",
                 slug = slug,
                 title = title,
-                coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() },
+                coverUrl = img.preferredImageUrl()?.absoluteUrl().orEmpty(),
                 source = SourceId(sourceId),
                 url = href
             )
@@ -389,9 +394,7 @@ open class MadaraBaseScraper(
                 id = "${sourceId}_$slug",
                 slug = slug,
                 title = title,
-                coverUrl = imgEl.attr("abs:src").ifEmpty {
-                    (imgEl.attr("data-src").ifEmpty { imgEl.attr("src") }).absoluteUrl()
-                },
+                coverUrl = imgEl.preferredImageUrl()?.absoluteUrl().orEmpty(),
                 source = SourceId(sourceId),
                 url = href
             )
@@ -462,7 +465,7 @@ open class MadaraBaseScraper(
                     }
 
                 if (!postId.isNullOrBlank()) {
-                    for (action in listOf("wp-manga-get-chapters", "manga-get-chapters")) {
+                    for (action in listOf("manga_get_chapters", "wp_manga_get_chapters", "wp-manga-get-chapters", "manga-get-chapters")) {
                         val formBody = FormBody.Builder()
                             .add("action", action)
                             .add("manga", postId)

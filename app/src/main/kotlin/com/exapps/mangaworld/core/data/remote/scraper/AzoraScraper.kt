@@ -674,7 +674,7 @@ class AzoraScraper @Inject constructor(
                 link.nextElementSibling()?.text()?.cleanText() ?: slug
             }
             val typeSpan = link.selectFirst("span.text-white")
-            val coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() }
+            val coverUrl = img.preferredImageUrl()?.absoluteUrl().orEmpty()
 
             // Status and type live in sibling elements after the link
             val parent   = link.parent() ?: link

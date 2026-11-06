@@ -95,7 +95,7 @@ class OlympusScraper @Inject constructor(
                     mangaId = mangaId,
                     mangaSlug = slug,
                     mangaTitle = titleEl.text().cleanText(),
-                    coverUrl = imgEl.attr("abs:src").ifEmpty { imgEl.attr("src").absoluteUrl() }.encodeForUrl(),
+                    coverUrl = imgEl.preferredImageUrl()?.absoluteUrl().orEmpty().encodeForUrl(),
                     chapterNumber = chapterNumber,
                     chapterUrl = chapterHref,
                     timeAgo = timeText,
@@ -118,7 +118,7 @@ class OlympusScraper @Inject constructor(
                     id = "olympus_$slug",
                     slug = slug,
                     title = titleEl.text().cleanText(),
-                    coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() }.encodeForUrl(),
+                    coverUrl = img.preferredImageUrl()?.absoluteUrl().orEmpty().encodeForUrl(),
                     source = SourceId(sourceId),
                     url = href
                 )
@@ -359,7 +359,7 @@ class OlympusScraper @Inject constructor(
             val slug = ScraperText.slugFromHref(href) ?: return@mapNotNull null
             MangaItem(
                 id = "olympus_$slug", slug = slug, title = titleEl.text().cleanText(),
-                coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() },
+                coverUrl = img.preferredImageUrl()?.absoluteUrl().orEmpty(),
                 source = SourceId(sourceId), url = href
             )
         }

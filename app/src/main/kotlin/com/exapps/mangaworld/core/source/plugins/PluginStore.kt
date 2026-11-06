@@ -250,21 +250,38 @@ class PluginStore @Inject constructor(
 
     /** Pointer-only rollback to the previous verified version. No byte copying. */
     suspend fun rollback(id: String): PluginIndexRecord? = withContext(io) {
-        val current = index.get(id) ?: return@withContext null
-        val next = PluginStorage.rollback(
-            PluginStorage.ActivationState(current.activeVersion, current.previousVersion)
-        )
-        if (next == PluginStorage.ActivationState(current.activeVersion, current.previousVersion)) {
-            return@withContext current
+        payloadLock.withLock {
+            val current = index.get(id) ?: return@withLock null
+            val next = PluginStorage.rollback(
+                PluginStorage.ActivationState(current.activeVersion, current.previousVersion)
+            )
+            if (next == PluginStorage.ActivationState(current.activeVersion, current.previousVersion)) {
+                return@withLock current
+            }
+            val updated = current.copy(
+                activeVersion = next.active,
+                previousVersion = next.previous,
+                status = PluginStatus.INSTALLED,
+                updatedAt = System.currentTimeMillis()
+            )
+            index.put(updated)
+            updated
         }
-        val updated = current.copy(
-            activeVersion = next.active,
-            previousVersion = next.previous,
-            status = PluginStatus.INSTALLED,
-            updatedAt = System.currentTimeMillis()
-        )
-        index.put(updated)
-        updated
+    }
+
+    /**
+     * Status-only mutation under the same payload lock (v9.5.7, audit F1).
+     * Callers that historically did get->put(copy(status)) outside any lock
+     * can clobber a concurrent persistVerified pointer move. Route new
+     * status flips here; null-safe (missing record is a no-op).
+     */
+    suspend fun withStatus(id: String, status: PluginStatus): PluginIndexRecord? = withContext(io) {
+        payloadLock.withLock {
+            val current = index.get(id) ?: return@withLock null
+            val updated = current.copy(status = status, updatedAt = System.currentTimeMillis())
+            index.put(updated)
+            updated
+        }
     }
 
     /**

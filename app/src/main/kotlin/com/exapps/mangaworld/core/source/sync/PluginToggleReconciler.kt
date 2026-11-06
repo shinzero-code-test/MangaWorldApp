@@ -77,12 +77,19 @@ class PluginToggleReconciler @Inject constructor(
                     ToggleOutcome.ApprovalFailed("unknown source")
             }
         }
-        settingsRepo.toggleSource(id, true)
-        // 9.1.1 badge parity (previously Sources-only): enabling a DISABLED
-        // row clears the stale "needs approval" badge.
-        if (rec != null && rec.status == PluginStatus.DISABLED) {
-            runCatching { indexStore.put(rec.copy(status = PluginStatus.ENABLED)) }
+        // v9.5.7 (audit F3): AVAILABLE carries no bytes (manifest marker only) —
+        // a bare enable would phantom-enable with nothing to run. QUARANTINED /
+        // REVOKED must not become servable via a settings flip (health /
+        // kill-switch escape). Both require the explicit approve/reverify
+        // surface, not a silent Enabled.
+        val status = rec?.status
+        if (status == PluginStatus.AVAILABLE && rec?.activeVersion == null) {
+            return ToggleOutcome.ApprovalFailed("available without payload: sync required")
         }
+        if (status == PluginStatus.QUARANTINED || status == PluginStatus.REVOKED) {
+            return ToggleOutcome.ApprovalFailed("held for safety: reverify required")
+        }
+        settingsRepo.toggleSource(id, true)
         return ToggleOutcome.Enabled
     }
 }

@@ -304,7 +304,18 @@ class HomeViewModel @Inject constructor(
         seq: Long
     ) {
         val filteredFeatured = data.featured.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.id }
-        val filteredLatest = data.latestChapters.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.chapterUrl }
+        // v9.5.7 (audit A1): non-script scrapers return latest items with blank
+        // coverUrl while featured knows the cover. Backfill by slug here so the
+        // Latest section is never cover-less when a cover is known.
+        val coverBySlug = filteredFeatured.associate { it.slug to it.coverUrl }
+        val filteredLatest = data.latestChapters.filterNot { it.isBlockedBy(blockedKeywords) }
+            .distinctBy { it.chapterUrl }
+            .map { item ->
+                if (item.coverUrl.isBlank()) {
+                    val c = coverBySlug[item.mangaSlug]
+                    if (!c.isNullOrBlank()) item.copy(coverUrl = c) else item
+                } else item
+            }
         val filteredTrending = data.trending.filterNot { it.isBlockedBy(blockedKeywords) }.distinctBy { it.id }
         // Candidates must be id-distinct BEFORE scoring: a manga that
         // appears in both featured and trending otherwise comes back

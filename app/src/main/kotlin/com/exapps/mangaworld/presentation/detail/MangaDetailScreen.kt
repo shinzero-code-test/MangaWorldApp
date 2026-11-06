@@ -386,7 +386,9 @@ private fun DetailContent(
                             }
                             Spacer(Modifier.height(10.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                                StatItem(Icons.Filled.MenuBook, "${manga.totalChapters}", stringResource(R.string.chapter))
+                                // v9.5.7 (audit B1): never show 0 when chapters are loaded
+                                // (network path previously never coerced totalChapters).
+                                StatItem(Icons.Filled.MenuBook, "${manga.totalChapters.coerceAtLeast(sortedChapters.size)}", stringResource(R.string.chapter))
                                 if (manga.views != null) {
                                     StatItem(Icons.Filled.Visibility, manga.views, stringResource(R.string.watch))
                                 }

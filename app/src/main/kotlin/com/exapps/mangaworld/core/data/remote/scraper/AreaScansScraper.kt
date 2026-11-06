@@ -50,11 +50,12 @@ class AreaScansScraper @Inject constructor(
         val doc = fetchDocument(url)
 
         val coverUrl = doc.selectFirst(".manga-poster img, .hero-backdrop, .header-bg img")
-            ?.let { 
-                val style = it.attr("style")
-                val bgUrl = Regex("url\\('([^']+)\\'\\)").find(style)?.groupValues?.get(1)
-                bgUrl?.ifEmpty { null }
-                    ?: it.attr("abs:src").ifEmpty { it.attr("data-src").absoluteUrl() }
+            ?.let {
+                it.preferredImageUrl()?.absoluteUrl()?.takeIf { u -> u.isNotBlank() }
+                    ?: run {
+                        val style = it.attr("style")
+                        Regex("url\\((?:['\"]?)([^'\\\")]+)(?:['\"]?)\\)").find(style)?.groupValues?.get(1)?.ifBlank { null }
+                    }
             } ?: ""
 
         val title = doc.selectFirst(".manga-title-large, .manga-title, h1")?.text()?.cleanText() ?: slug
@@ -335,9 +336,7 @@ class AreaScansScraper @Inject constructor(
                 ?: imgEl?.attr("alt")?.cleanText()
                 ?: slug
 
-            val coverUrl = imgEl?.let {
-                it.attr("abs:src").ifEmpty { it.attr("data-src").absoluteUrl() }
-            }.orEmpty()
+            val coverUrl = imgEl?.preferredImageUrl()?.absoluteUrl().orEmpty()
 
             val typeText = card.selectFirst(".manga-meta span:first-child")?.text()?.cleanText()
             val type = MangaType.from(typeText)

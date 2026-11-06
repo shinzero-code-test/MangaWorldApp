@@ -76,9 +76,7 @@ class StarzScraper @Inject constructor(
             val href = linkEl.attr("abs:href").ifEmpty { linkEl.attr("href").absoluteUrl() }
             val slug = ScraperText.slugFromHref(href) ?: return@forEach
 
-            val coverUrl = imgEl.attr("abs:src").ifEmpty {
-                (imgEl.attr("data-src").ifEmpty { imgEl.attr("src") }).absoluteUrl()
-            }
+            val coverUrl = imgEl.preferredImageUrl()?.absoluteUrl().orEmpty()
             val title = titleEl?.text()?.cleanText() ?: slug
             val mangaId = "starz_$slug"
 
@@ -118,7 +116,7 @@ class StarzScraper @Inject constructor(
             val slug = ScraperText.slugFromHref(href) ?: return@mapNotNull null
             MangaItem(
                 id = "starz_$slug", slug = slug, title = title,
-                coverUrl = img.attr("abs:src").ifEmpty { img.attr("src").absoluteUrl() },
+                coverUrl = img.preferredImageUrl()?.absoluteUrl().orEmpty(),
                 source = SourceId(sourceId), url = href
             )
         }
@@ -149,11 +147,7 @@ class StarzScraper @Inject constructor(
         val doc = resolvedDoc ?: fetchDocument(url)
 
         val coverUrl = doc.selectFirst(".summary_image img, .profile-manga img")
-            ?.let { img ->
-                img.attr("abs:src").ifEmpty {
-                    (img.attr("data-src").ifEmpty { img.attr("src") }).absoluteUrl()
-                }
-            } ?: ""
+            ?.let { img -> img.preferredImageUrl()?.absoluteUrl() } ?: ""
 
         val title = doc.selectFirst(".post-title h1")?.text()?.cleanText()
             ?: doc.selectFirst("h1.entry-title, .manga-title")?.text()?.cleanText()
@@ -514,9 +508,7 @@ class StarzScraper @Inject constructor(
             if (title.isEmpty()) return@mapNotNull null
             MangaItem(
                 id = "starz_$slug", slug = slug, title = title,
-                coverUrl = imgEl.attr("abs:src").ifEmpty {
-                    (imgEl.attr("data-src").ifEmpty { imgEl.attr("src") }).absoluteUrl()
-                },
+                coverUrl = imgEl.preferredImageUrl()?.absoluteUrl().orEmpty(),
                 source = SourceId(sourceId), url = href
             )
         }

@@ -171,7 +171,12 @@ class MangaSidScraper @Inject constructor(
 
         doc.select(".manga-page img[src], .manga-page img[data-src], img.block.relative.z-20.w-full.h-auto")
             .mapNotNull { img ->
-                val raw = img.preferredImageUrl() ?: return@mapNotNull null
+                // Live contract (04-mangasid.md): reader uses data-url for the
+                // hashed page path; preferredImageUrl never reads it (S-09).
+                val raw = img.attr("data-url").ifEmpty { null }
+                    ?.takeIf { !it.startsWith("data:") }
+                    ?: img.preferredImageUrl()
+                    ?: return@mapNotNull null
                 if (raw.isBlank()) return@mapNotNull null
                 
                 val src = when {
