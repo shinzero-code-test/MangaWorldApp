@@ -534,7 +534,7 @@ class AzoraScraper @Inject constructor(
     }
 
     private fun rscTotalChapterCount(html: String): Int? =
-        Regex("totalChapterCount[^0-9]*(\d+)").find(html)?.groupValues?.getOr(1)?.toIntOrNull()
+        Regex("totalChapterCount[^0-9]*(\d+)").find(html)?.groupValues?.getOrNull(1)?.toIntOrNull()
 
     // ─── Chapter pages ────────────────────────────────────────────────────────
     //
