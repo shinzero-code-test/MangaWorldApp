@@ -461,18 +461,26 @@ open class MadaraBaseScraper(
                             .header("X-Requested-With", "XMLHttpRequest")
                             .post(formBody)
                             .build()
-                        val (bodyStr, json) = withContext(Dispatchers.IO) {
+                        val body = withContext(Dispatchers.IO) {
                             val response = client.newCall(ajaxRequest).execute()
-                            val body = response.use { it.body?.string() ?: "{}" }
-                            // Non-JSON (CF block page / truncated body) is transport-unexpected:
-                            // skip without telemetry instead of logging a JSONException as an app bug.
-                            if (body.trimStart().startsWith("{").not()) error("Unexpected non-JSON AJAX body")
-                            body to JSONObject(body)
+                            response.use { it.body?.string() ?: "" }
                         }
-                        if (json.optBoolean("success", false)) {
-                            val html = json.optString("data", "")
-                            val chapDoc = Jsoup.parse(html, resolvedBaseUrl)
-                            val ajaxChapters = chapDoc.select("li").mapNotNull { li -> parseChapterLi(li, slug) }
+                        // mangalik-family returns RAW HTML (<ul class="main version-chap">),
+                        // not JSON {success,data}. Parse whichever the site served.
+                        val htmlPayload = if (body.trimStart().startsWith("{")) {
+                            runCatching {
+                                val json = JSONObject(body)
+                                if (json.optBoolean("success", false)) json.optString("data", "") else ""
+                            }.getOrDefault("")
+                        } else {
+                            // Raw HTML (or a CF interstitial — Jsoup yields no chapters
+                            // and the loop continues; no telemetry noise for CF).
+                            body
+                        }
+                        if (htmlPayload.isNotBlank()) {
+                            val chapDoc = Jsoup.parse(htmlPayload, resolvedBaseUrl)
+                            val ajaxChapters = chapDoc.select("li.wp-manga-chapter, li")
+                                .mapNotNull { li -> parseChapterLi(li, slug) }
                             if (ajaxChapters.isNotEmpty()) {
                                 allChapters.addAll(ajaxChapters)
                                 break

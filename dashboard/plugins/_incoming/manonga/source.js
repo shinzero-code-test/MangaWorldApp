@@ -15,7 +15,7 @@
  * - detail: `/manga/<slug>` (title tag, h3 meta, img.img-responsive, ul.chapters)
  * - pages: bare `img[src*="onma.top/uploads"]` (trimmed, deduped)
  * - search: GET /search?query= → {"suggestions":[{"value","data"}]}
- * Hosts: manonga.online (+ images), www.onma.top (images/covers) — literal
+ * Hosts: manonga.online (+ images), www.onma.me (covers, ex-www.onma.top), www.onma.top (legacy) — literal
  * allow-list, no wildcards (plan v1 rule).
  */
 
@@ -74,6 +74,12 @@ function home(ctx) {
       coverUrl: pickSrc(doc, ".manga-item .right-image img", i)
     });
   }
+  // v11 covers: index featured covers by slug so latest never renders cover-less.
+  var coverBySlug = {};
+  for (var k = 0; k < featured.length; k++) {
+    var ck = lastSegment(resolveUrl(doc, hrefs[k] || ""));
+    if (ck) coverBySlug[ck] = featured[k].coverUrl || "";
+  }
   var latest = [];
   for (var j = 0; j < chTexts.length; j++) {
     var n = firstNum(chTexts[j]);
@@ -84,6 +90,7 @@ function home(ctx) {
     latest.push({
       mangaSlug: mslug,
       mangaTitle: bySlug[mslug] || mslug,
+      coverUrl: coverBySlug[mslug] || "",
       chapterNumber: n,
       chapterUrl: curl
     });
@@ -169,7 +176,7 @@ function detail(ctx) {
   return {
     id: ctx.slug, slug: ctx.slug, title: title, coverUrl: cover,
     authorName: author, artistName: artist, status: status, type: type,
-    genres: genres, views: views, chapters: chapters
+    genres: genres, views: views, totalChapters: chapters.length, chapters: chapters
   };
 }
 

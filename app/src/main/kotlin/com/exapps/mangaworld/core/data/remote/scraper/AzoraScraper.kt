@@ -281,15 +281,25 @@ class AzoraScraper @Inject constructor(
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
         val url     = "${resolvedBaseUrl}/series/$slug/"
+        // Static HTML since the site dropped astro-islands (verified 2026-11-06:
+        // zero <astro-island> in a live detail page). Keep the island path as a
+        // fallback for any cached HTML that still carries it.
         val rawHtml = fetchRawHtml(url)
+        val islandProps = extractIslandProps(rawHtml, "SeriesChaptersPanelIsland")
+        if (islandProps != null) {
+            return@runCatching detailFromIsland(islandProps, rawHtml, slug, url)
+        }
+        val doc = fetchDocument(url)
+        return@runCatching detailFromStaticHtml(doc, slug, url)
 
-        // ── SeriesChaptersPanelIsland ──────────────────────────────────────────
-        //   props.post      → full post object (all manga metadata)
-        //   props.initialChap → ALL chapters pre-embedded in the HTML (no API call!)
-        //   props.totalChapterCount → Int
-        val props = extractIslandProps(rawHtml, "SeriesChaptersPanelIsland")
-            ?: error("SeriesChaptersPanelIsland not found in $url")
+    }
 
+    private fun detailFromIsland(
+        props: org.json.JSONObject,
+        rawHtml: String,
+        slug: String,
+        url: String
+    ): MangaDetail {
         // ── Post / manga metadata ──────────────────────────────────────────────
         val postRaw     = props.opt("post")
         val postDecoded = decodeWire(postRaw)
@@ -400,6 +410,64 @@ class AzoraScraper @Inject constructor(
             chapters     = chapters.sortedByDescending { it.number },
             relatedManga = related,
             url          = url
+        )
+    }
+
+    /**
+     * Static HTML detail — the live detail page (verified 2026-11-06) is plain
+     * SSR: h1[itemProp=name], og meta, and a[href*="/series/{slug}/chapter-N"]
+     * chapter links. Length-bounded, no island wire format.
+     */
+    private fun detailFromStaticHtml(
+        doc: org.jsoup.nodes.Document,
+        slug: String,
+        url: String
+    ): MangaDetail {
+        val title = doc.selectFirst("h1[itemprop=name], h1")?.text()?.cleanText()
+            ?.ifBlank { null }
+            ?: doc.selectFirst("meta[property=og:title]")?.attr("content")?.cleanText()
+            ?.ifBlank { null }
+            ?: slug
+        val coverUrl = doc.selectFirst("meta[property=og:image]")?.attr("content")?.cleanText()
+            ?.takeIf { it.isNotBlank() }
+            ?: doc.selectFirst("img[src*='storage.azorafly.com']")?.let {
+                it.attr("abs:src").ifEmpty { it.attr("src") }.absoluteUrl()
+            }.orEmpty()
+        val description = doc.selectFirst("meta[property=og:description]")?.attr("content")?.cleanText()
+            ?: doc.selectFirst("meta[name=description]")?.attr("content")?.cleanText()
+            ?: ""
+        // Genres: filter pills/links near the header (best-effort; empty is fine).
+        val genres = doc.select("a[href*='/series?genres='], .badge, [class*=genre]")
+            .map { it.text().cleanText() }
+            .filter { it.isNotBlank() && it.length in 2..24 }
+            .distinct().take(12)
+        // Chapters: the server lists every chapter as /series/{slug}/chapter-N.
+        val prefix = "/series/$slug/chapter-"
+        val chapters = doc.select("a[href*='$prefix']")
+            .mapNotNull { a ->
+                val href = a.attr("abs:href").ifEmpty { a.attr("href").absoluteUrl() }
+                val tail = href.substringAfter(prefix).substringBefore("?").substringBefore("/")
+                val num = tail.toFloatOrNull() ?: ScraperText.firstChapterNumber(a.text()) ?: return@mapNotNull null
+                Chapter(
+                    id = "${slug}_$num",
+                    mangaId = "azora_$slug",
+                    number = num,
+                    title = a.text().cleanText().takeIf { it.isNotBlank() },
+                    url = href
+                )
+            }.distinctBy { it.url }.sortedByDescending { it.number }
+        return MangaDetail(
+            id = "azora_$slug",
+            slug = slug,
+            title = title.ifBlank { slug },
+            coverUrl = coverUrl,
+            source = SourceId(sourceId),
+            description = description,
+            genres = genres,
+            tags = genres,
+            totalChapters = chapters.size,
+            chapters = chapters,
+            url = url
         )
     }
 
