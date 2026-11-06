@@ -333,14 +333,14 @@ open class MangaReaderBaseScraper(
             val title = card.selectFirst(".tt, .bigor .adds .epxs")?.text()?.cleanText()
                 ?: linkEl.attr("title").cleanText().ifBlank { slug }
 
-            // Home cards on this theme usually link to the SERIES page while
-            // posing as chapters ("الفصل N" chip, no chapter URL). Emitting them
-            // produced fake "chapter 0" entries routed at a manga URL — broken
-            // reader loads and poisoned continue-reading shortcuts. Only emit
-            // when an explicit chapter link exists on the card (M-review).
+            // Home cards may link to the SERIES page with a "الفصل N" chip (no
+            // explicit chapter URL). Previously we dropped these (regression:
+            // latest always empty on Hijala/Lava). Now emit them with the series
+            // URL as chapterUrl and the chip number — the reader resolves the
+            // exact chapter via detail. Only drop when we have NEITHER a chapter
+            // link NOR a chip number.
             val chapterLink = card.selectFirst("a[href*='chapter'], .chapter-item a[href], .eplast a[href]")
-                ?: return@forEach
-            val chapterUrl = chapterLink.attr("abs:href").ifEmpty { chapterLink.attr("href") }
+            val chapterUrl = (chapterLink?.attr("abs:href")?.ifEmpty { chapterLink.attr("href") } ?: href)
             if (chapterUrl.isBlank()) return@forEach
 
             val chapterNumber = chapterLink.attr("data-num").toFloatOrNull()

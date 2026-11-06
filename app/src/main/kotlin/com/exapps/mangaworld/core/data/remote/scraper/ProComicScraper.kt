@@ -31,10 +31,15 @@ class ProComicScraper @Inject constructor(
     /** HTML fallbacks must trigger the WebView solver like apiGet does — a Turnstile
      * interstitial parses as content otherwise and surfaces as an "empty chapter". */
     private fun throwIfTurnstile(html: String, url: String) {
-        if (html.contains("__cf_chl_", ignoreCase = true) ||
-            html.contains("turnstile", ignoreCase = true) ||
-            html.contains("challenges.cloudflare.com", ignoreCase = true)
-        ) {
+        // Only an actual interstitial counts — Next.js bundles contain the
+        // substring "turnstile" even when not gated (false positive broke
+        // browse/home on a non-CF site, Finding 7). Require the challenge
+        // marker AND a CF title (or an explicit challenge host link).
+        val isInterstitial = html.contains("__cf_chl_", ignoreCase = true) ||
+            html.contains("challenges.cloudflare.com/turnstile", ignoreCase = true) ||
+            html.contains("Just a moment", ignoreCase = true) ||
+            html.contains("Attention Required", ignoreCase = true)
+        if (isInterstitial) {
             throw CloudflareChallengeException(
                 resolvedBaseUrl.removePrefix("https://").removePrefix("http://"),
                 url

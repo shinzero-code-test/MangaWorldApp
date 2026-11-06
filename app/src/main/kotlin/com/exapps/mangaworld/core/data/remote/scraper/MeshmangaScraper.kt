@@ -51,9 +51,9 @@ class MeshmangaScraper @Inject constructor(
             title = series.optString("title").cleanText().ifBlank { seriesId },
             coverUrl = extractPosterUrl(series),
             source = SourceId(sourceId),
-            alternativeTitles = series.optString("alternative").split("/", ",", "،").map { it.cleanText() }.filter { it.isNotBlank() },
-            authorName = series.optString("author").cleanText().ifBlank { null },
-            artistName = series.optString("artist").cleanText().ifBlank { null },
+            alternativeTitles = extractAlternative(series),
+            authorName = extractPerson(series.optJSONObject("author"), series.optString("author")),
+            artistName = extractPerson(series.optJSONObject("artist"), series.optString("artist")),
             description = series.optString("story").cleanText(),
             genres = extractGenres(series),
             tags = extractGenres(series),
@@ -61,7 +61,7 @@ class MeshmangaScraper @Inject constructor(
             type = MangaType.from(series.optJSONObject("type")?.optString("name")),
             rating = series.optString("rating").toFloatOrNull(),
             totalChapters = series.optInt("chapters_count").takeIf { it > 0 } ?: chapters.size,
-            views = series.opt("views_count")?.toString(),
+            views = series.optLong("views_count").takeIf { it > 0 }?.toString(),
             lastUpdated = series.optString("updated_at_humanized").ifBlank { null },
             chapters = chapters,
             url = "${resolvedBaseUrl}/series/$seriesId"
@@ -258,6 +258,26 @@ runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() ?: Scrape
         val genres = obj.optJSONArray("genres") ?: return emptyList()
         return (0 until genres.length())
             .mapNotNull { i -> genres.optJSONObject(i)?.optString("name")?.cleanText()?.ifBlank { null } }
+    }
+
+    internal fun extractPerson(obj: JSONObject?, raw: String): String? {
+        // Live API returns author/artist as {"id":..,"name":".."} or null.
+        obj?.optString("name")?.cleanText()?.takeIf { it.isNotBlank() && !it.startsWith("{") }?.let { return it }
+        if (raw.isBlank() || raw == "null" || raw.startsWith("{") || obj == null && raw.isBlank()) return null
+        return raw.cleanText().ifBlank { null }
+    }
+
+    internal fun extractAlternative(series: JSONObject): List<String> {
+        val alt = series.optString("alternative")
+        if (alt.isBlank() || alt == "null") return emptyList()
+        // Could be a string or a JSON array encoded as string.
+        if (alt.trimStart().startsWith("[")) {
+            return runCatching {
+                val arr = org.json.JSONArray(alt)
+                (0 until arr.length()).mapNotNull { i -> arr.optString(i).cleanText().ifBlank { null } }
+            }.getOrDefault(emptyList())
+        }
+        return alt.split("/", ",", "،").map { it.cleanText() }.filter { it.isNotBlank() }
     }
 
     private suspend fun apiGetObject(url: String): JSONObject? = withContext(Dispatchers.IO) {

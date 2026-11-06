@@ -489,7 +489,17 @@ private fun DetailContent(
             }
         }
 
-        if (manga.authorName != null || manga.artistName != null || manga.alternativeTitles.isNotEmpty()) {
+        // Defensive (Finding 10): never render raw JSON / "null" / placeholders
+        // as person names — scrapers must filter, but the UI never shows "{...}".
+        fun cleanPerson(v: String?): String? {
+            val t = v?.trim().orEmpty()
+            if (t.isBlank() || t == "null" || t == "{}" || t == "[]" || t.startsWith("{") ||
+                t.equals("Updating", true)) return null
+            return t
+        }
+        val cleanAuthor = cleanPerson(manga.authorName)
+        val cleanArtist = cleanPerson(manga.artistName)
+        if (cleanAuthor != null || cleanArtist != null || manga.alternativeTitles.isNotEmpty()) {
             item {
                 NeonGlassPanel(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -498,8 +508,8 @@ private fun DetailContent(
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(stringResource(R.string.additional_info), style = MaterialTheme.typography.titleSmall, color = MangaColors.PrimaryLight, fontWeight = FontWeight.Bold)
-                        manga.authorName?.let { InfoRow(stringResource(R.string.author), it) }
-                        manga.artistName?.let { InfoRow(stringResource(R.string.artist), it) }
+                        cleanAuthor?.let { InfoRow(stringResource(R.string.author), it) }
+                        cleanArtist?.let { InfoRow(stringResource(R.string.artist), it) }
                         if (manga.alternativeTitles.isNotEmpty()) InfoRow(stringResource(R.string.alternative_names), manga.alternativeTitles.joinToString(" • "))
                     }
                 }

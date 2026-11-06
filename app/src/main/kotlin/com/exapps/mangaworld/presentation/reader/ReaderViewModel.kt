@@ -194,7 +194,7 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    fun loadChapter(chapterUrl: String, mangaId: String, source: SourceId) {
+    fun loadChapter(chapterUrl: String, mangaId: String, source: SourceId, startPage: Int = 0) {
         if (_state.value.chapterUrl != chapterUrl) {
             finishSessionAsync()
             stopCommunityPresenceAsync(_state.value.mangaId, _state.value.chapterUrl)
@@ -234,16 +234,17 @@ class ReaderViewModel @Inject constructor(
                 if (localPages.isNotEmpty()) {
                     val indexed = localPages.mapIndexed { i, p -> p.copy(index = i) }
                     val chNum = parseFallbackChapterNumber(chapterUrl)
-                    // Offline disk reads restore progress exactly like online
-                    // ones — previously they always restarted at page 0.
-                    val (savedPage, _) = libraryRepo.getReadingProgress(mangaId, chNum)
-                    val startPage = savedPage.coerceIn(0, maxOf(0, indexed.size - 1))
+                    // Open always starts on the first page (Finding 1, v9.5.4). Progress
+                    // is still saved on every page change, but opening never restores
+                    // it — startPage (default 0) is the only entry point for resume
+                    // (continue-reading must pass an explicit startPage).
+                    val startPageCoerced = startPage.coerceIn(0, maxOf(0, indexed.size - 1))
                     _state.update {
                         it.copy(
                             isLoading = false,
                             pages = indexed,
                             totalPages = indexed.size,
-                            currentPage = startPage,
+                            currentPage = startPageCoerced,
                             chapterNumber = chNum,
                             chapterRanges = listOf(
                                 ReaderChapterRange(
@@ -254,7 +255,7 @@ class ReaderViewModel @Inject constructor(
                                     endIndexExclusive = indexed.size
                                 )
                             ),
-                            pageInChapter = startPage,
+                            pageInChapter = startPageCoerced,
                             chapterPageCount = indexed.size,
                             downloadMessage = context.getString(R.string.read_offline)
                         )
@@ -306,10 +307,8 @@ class ReaderViewModel @Inject constructor(
             if (localPages.isNotEmpty()) {
                 val currentChapterNumber = chapterMeta?.number ?: parseFallbackChapterNumber(chapterUrl)
                 val indexed = localPages.mapIndexed { i, p -> p.copy(index = i) }
-                // Downloaded chapters restore progress exactly like streamed
-                // ones — previously they always restarted at page 0.
-                val (savedLocalPage, _) = libraryRepo.getReadingProgress(mangaId, currentChapterNumber)
-                val localStartPage = savedLocalPage.coerceIn(0, maxOf(0, indexed.size - 1))
+                // Open always starts on the first page (Finding 1, v9.5.4).
+                val localStartPage = startPage.coerceIn(0, maxOf(0, indexed.size - 1))
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -341,17 +340,16 @@ class ReaderViewModel @Inject constructor(
             }
             mangaRepo.getChapterPages("", chapterUrl, source)
                 .onSuccess { pages ->
-                    // Restore saved progress
+                    // Open always starts on the first page (Finding 1, v9.5.4).
                     val chNum = chapterMeta?.number ?: parseFallbackChapterNumber(chapterUrl)
-                    val (savedPage, _) = libraryRepo.getReadingProgress(mangaId, chNum)
                     val indexed = pages.mapIndexed { i, p -> p.copy(index = i) }
-                    val startPage = savedPage.coerceIn(0, maxOf(0, indexed.size - 1))
+                    val startPageCoerced = startPage.coerceIn(0, maxOf(0, indexed.size - 1))
                     _state.update {
                         it.copy(
                             isLoading = false,
                             pages = indexed,
                             totalPages = indexed.size,
-                            currentPage = startPage,
+                            currentPage = startPageCoerced,
                             chapterNumber = chNum,
                             chapterTitle = chapterMeta?.title,
                             chapterRanges = listOf(
@@ -363,7 +361,7 @@ class ReaderViewModel @Inject constructor(
                                     endIndexExclusive = indexed.size
                                 )
                             ),
-                            pageInChapter = startPage,
+                            pageInChapter = startPageCoerced,
                             chapterPageCount = indexed.size
                         )
                     }

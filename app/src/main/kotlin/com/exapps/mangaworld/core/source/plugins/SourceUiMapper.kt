@@ -90,7 +90,10 @@ class SourceUiMapper @Inject constructor(
     private suspend fun loadSnapshot() {
         val all = indexStore.getAll()
         val records = all.associateBy { it.id }
-        val known = registry.allDescriptors().map { it.id.value }.toSet()
+        // v9.5.4 (Finding 2): case-insensitive known set — an index record with
+        // "Hijala" vs registry "hijala" previously escaped the dedupe and rendered
+        // as a second row (letter avatar, no logo). Same for entriesWith below.
+        val known = registry.allDescriptors().map { it.id.value.lowercase() }.toSet()
         // v9.2.4: ANY payload record whose id has no serving plugin renders as a
         // row. v9.3.0 (audit O-16/B12): that includes the marker records that
         // carry NO active version — INCOMPATIBLE/AVAILABLE/REVOKED previously
@@ -99,7 +102,7 @@ class SourceUiMapper @Inject constructor(
         // every failure mode.
         val extras = all
             .filter { rec ->
-                if (rec.id in known) return@filter false
+                if (rec.id.lowercase() in known) return@filter false
                 if (rec.manifestJson == null) return@filter false
                 when (rec.status) {
                     PluginStatus.DISABLED, PluginStatus.QUARANTINED,
@@ -176,7 +179,14 @@ class SourceUiMapper @Inject constructor(
 
     private fun entriesWith(snap: Snapshot, locale: String): List<SourceUiEntry> {
         val registryRows = registry.all().mapNotNull { entry(it.descriptor.id.value, locale, snap) }
-        val extras = snap.heldExtras.filter { extra -> registryRows.none { it.id == extra.id } }
+        // Dedupe case-insensitively by id AND by display name (Finding 2): a held
+        // record whose manifest preview name matches a registry row is the same
+        // source with a different id casing/alias — never show it twice.
+        val registryIds = registryRows.map { it.id.lowercase() }.toSet()
+        val registryNames = registryRows.map { it.name.trim().lowercase() }.toSet()
+        val extras = snap.heldExtras.filter { extra ->
+            extra.id.lowercase() !in registryIds && extra.name.trim().lowercase() !in registryNames
+        }
         return (registryRows + extras).sortedBy { it.name }
     }
 

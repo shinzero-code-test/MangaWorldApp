@@ -91,6 +91,7 @@
     <string name="search_empty">لا توجد نتائج</string>
     <string name="search_cloudflare_required">تحقق Cloudflare مطلوب</string>
     <string name="search_cloudflare_button">تحقق الآن</string>
+    <string name="cloudflare_timeout">انتهت مهلة التحقق. يعمل المصدر ببطء أو لا يستجيب. حاول مجدداً.</string>
     <string name="browse_results_count">%d نتيجة</string>
     <string name="browse_filter">تصفية</string>
     <string name="browse_all">الكل</string>

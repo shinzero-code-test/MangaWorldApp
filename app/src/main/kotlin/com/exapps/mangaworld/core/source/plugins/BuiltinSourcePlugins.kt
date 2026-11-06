@@ -330,7 +330,7 @@ class ProComicPlugin @Inject constructor(
     override val scraper: MangaScraper = ProComicScraper(client, settingsRepo)
     override val display = SourceDisplay(R.string.source_procomic, R.drawable.procomic_pro_logo)
     override val descriptor = builtinDescriptor(
-        "procomic", "https://procomic.pro", true, SourceEngine.API,
+        "procomic", "https://procomic.pro", false, SourceEngine.API,
         allowedHosts = setOf(
             "procomic.pro", "app.procomic.pro", "app.prochan.net",
             "app.procomic.net", "cdn2.procomic.pro"

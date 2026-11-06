@@ -133,6 +133,15 @@ private fun CloudflareWebView(
     var isLoading by remember { mutableStateOf(true) }
     var progress  by remember { mutableFloatStateOf(0f) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var solverTimedOut by remember { mutableStateOf(false) }
+    var solverStatus by remember { mutableStateOf("") }
+    // cf_clearance is domain-scoped — always solve on the origin, not a deep
+    // failing URL (e.g. /api/... or /?s=... returns JSON/blank in WebView).
+    val solverUrl = "https://$domain/"
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(30_000)
+        if (!solverTimedOut) solverTimedOut = true
+    }
 
     Column(Modifier.fillMaxSize().background(MangaColors.Background)) {
 
@@ -159,6 +168,27 @@ private fun CloudflareWebView(
                 color = MangaColors.Primary,
                 trackColor = MangaColors.SurfaceContainer
             )
+        }
+
+        if (solverTimedOut) {
+            Row(
+                Modifier.fillMaxWidth().background(MangaColors.SurfaceContainer).padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    stringResource(R.string.cloudflare_timeout),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MangaColors.OnSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = {
+                    solverTimedOut = false
+                    solverStatus = ""
+                    webViewRef?.reload()
+                }) {
+                    Text(stringResource(R.string.retry), color = MangaColors.Cyan)
+                }
+            }
         }
 
         AndroidView(
@@ -209,14 +239,28 @@ private fun CloudflareWebView(
                             val title = view?.title ?: ""
                             val isCfPage = title.contains("Just a moment", ignoreCase = true) ||
                                            title.contains("Attention Required", ignoreCase = true)
+                            val status = title
+                            solverStatus = status
                             // Exact host match: "evil.com/?x=<domain>".contains(domain)
                             // is true, and its cookies must never be stored under ours.
                             val pageHost = runCatching { android.net.Uri.parse(pageUrl).host?.lowercase() }.getOrNull()
                             if (!isCfPage && pageHost == domain.lowercase()) {
-                                val cookies = cm.getCookie(pageUrl) ?: ""
+                                // Harvest from the origin (cf_clearance is domain-scoped);
+                                // pageUrl may be a challenge or interstitial that never
+                                // carries the cookie itself.
+                                val cookies = (cm.getCookie("https://$domain") ?: "") +
+                                    cm.getCookie(pageUrl).orEmpty()
+                                // Some Turnstile variants use cf_chl_* or cf_clearance under
+                                // a different name — any cf_ cookie means progress, so keep
+                                // waiting; only cf_clearance (or a non-CF page with cookies)
+                                // verifies.
                                 if (cookies.contains("cf_clearance")) {
                                     cm.flush()
                                     onVerified(cookies)
+                                } else if (cookies.isNotEmpty() && title.isNotBlank() &&
+                                    !title.contains("Just a moment", ignoreCase = true)) {
+                                    // Non-CF page reached with cookies but no clearance yet:
+                                    // do NOT verify — the origin is still gating.
                                 }
                             }
                         }
@@ -235,7 +279,7 @@ private fun CloudflareWebView(
                         }
                     }
 
-                    wv.loadUrl(url)
+                    wv.loadUrl(solverUrl)
                 }
             },
             modifier = Modifier.fillMaxSize()

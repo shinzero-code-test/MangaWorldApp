@@ -95,11 +95,7 @@ open class MadaraBaseScraper(
         doc ?: error("Could not load manga detail for $slug")
 
         val coverUrl = doc.selectFirst(".summary_image img, .profile-manga img, img.wp-post-image, .thumb img, img.img-responsive")
-            ?.let { img ->
-                img.attr("abs:src").ifEmpty {
-                    (img.attr("data-src").ifEmpty { img.attr("src") }).absoluteUrl()
-                }
-            } ?: ""
+            ?.let { img -> img.preferredImageUrl()?.absoluteUrl() } ?: ""
 
         val title = doc.selectFirst(".post-title h1, .post-title, h1.entry-title, h1")?.text()?.cleanText() ?: slug
 
@@ -128,8 +124,12 @@ open class MadaraBaseScraper(
             ?.filter { it.isNotBlank() }
             ?.distinct() ?: emptyList()
 
+        // Madara sites render "Updating"/"غير متوفر" placeholders — never surface
+        // them as person names (Finding 11, v9.5.4).
         val authorName = metaValue("الكاتب") ?: metaValue("Author")
+            ?.takeUnless { it.equals("Updating", true) || it.isBlank() }
         val artistName = metaValue("الرسام") ?: metaValue("Artist")
+            ?.takeUnless { it.equals("Updating", true) || it.isBlank() }
 
         val genres = doc.select(".genres-content a, .c-cat-list a").map { it.text().cleanText() }
             .ifEmpty {
@@ -294,9 +294,7 @@ open class MadaraBaseScraper(
             val slug = href.substringBefore("?").trimEnd('/').substringAfterLast('/').trimEnd('/')
             if (slug.isEmpty()) return@forEach
 
-            val coverUrl = imgEl.attr("abs:src").ifEmpty {
-                (imgEl.attr("data-src").ifEmpty { imgEl.attr("src") }).absoluteUrl()
-            }
+            val coverUrl = imgEl.preferredImageUrl()?.absoluteUrl().orEmpty()
             val title = titleEl?.text()?.cleanText() ?: slug
             val mangaId = "${sourceId}_$slug"
 

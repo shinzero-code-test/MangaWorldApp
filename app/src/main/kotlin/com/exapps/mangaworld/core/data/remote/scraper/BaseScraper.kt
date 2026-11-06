@@ -119,7 +119,10 @@ abstract class BaseScraperImpl(
             val isCf = code == 403 || code == 503 ||
                 title.contains("just a moment") ||
                 title.contains("attention required") ||
-                body.contains("cf-chl", ignoreCase = true)
+                title.contains("access denied") ||
+                body.contains("cf-chl", ignoreCase = true) ||
+                body.contains("cf-turnstile", ignoreCase = true) ||
+                body.contains("__cf_bm", ignoreCase = true)
             if (isCf) {
                 throw CloudflareChallengeException(resolvedBaseUrl.removePrefix("https://").removePrefix("http://"), url)
             }

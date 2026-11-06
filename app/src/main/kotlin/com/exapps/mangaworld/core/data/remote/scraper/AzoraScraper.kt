@@ -280,7 +280,7 @@ class AzoraScraper @Inject constructor(
     // ─── Manga Detail ─────────────────────────────────────────────────────────
 
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
-        val url     = "${resolvedBaseUrl}/series/$slug"
+        val url     = "${resolvedBaseUrl}/series/$slug/"
         val rawHtml = fetchRawHtml(url)
 
         // ── SeriesChaptersPanelIsland ──────────────────────────────────────────
