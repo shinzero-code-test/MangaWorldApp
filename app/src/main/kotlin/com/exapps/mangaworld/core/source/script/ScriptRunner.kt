@@ -363,9 +363,21 @@ class ScriptScraper internal constructor(
 
     private fun mapHome(raw: Any?): HomeData {
         val m = asMap(raw, "home")
+        val featured = m.optList("featured").take(MAX_ITEMS).map { mapManga(asMap(it, "manga")) }
+        // v9.5.4 (Finding 5): scripts may omit latest.coverUrl (manonga v10 does).
+        // Backfill from featured covers by slug so the Latest section is never
+        // cover-less when the script knows the cover.
+        val coverBySlug = featured.associate { it.slug to it.coverUrl }
+        val latest = m.optList("latest").take(MAX_ITEMS).map { raw ->
+            val lc = mapLatest(asMap(raw, "chapter"))
+            if (lc.coverUrl.isBlank()) {
+                val c = coverBySlug[lc.mangaSlug]
+                if (!c.isNullOrBlank()) lc.copy(coverUrl = c) else lc
+            } else lc
+        }
         return HomeData(
-            featured = m.optList("featured").take(MAX_ITEMS).map { mapManga(asMap(it, "manga")) },
-            latestChapters = m.optList("latest").take(MAX_ITEMS).map { mapLatest(asMap(it, "chapter")) },
+            featured = featured,
+            latestChapters = latest,
             trending = m.optList("trending").take(MAX_ITEMS).map { mapManga(asMap(it, "manga")) }
         )
     }
@@ -408,7 +420,10 @@ class ScriptScraper internal constructor(
             status = MangaStatus.from(m.optString("status")),
             type = MangaType.from(m.optString("type")),
             rating = m.optFinite("rating")?.toFloat(),
-            totalChapters = m.optFinite("totalChapters")?.toInt() ?: 0,
+            // v9.5.4 (Finding 5): scripts return chapters[] without totalChapters
+            // (manonga v10). Derive it — otherwise the detail header always shows 0.
+            totalChapters = m.optFinite("totalChapters")?.toInt()
+                ?: m.optList("chapters").size,
             views = m.optString("views", 64),
             lastUpdated = m.optString("lastUpdated", 64),
             chapters = m.optList("chapters").take(MAX_ITEMS).map { mapChapter(asMap(it, "chapter"), mangaId) },

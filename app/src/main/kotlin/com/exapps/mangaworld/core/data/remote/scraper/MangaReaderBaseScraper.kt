@@ -340,11 +340,11 @@ open class MangaReaderBaseScraper(
             // exact chapter via detail. Only drop when we have NEITHER a chapter
             // link NOR a chip number.
             val chapterLink = card.selectFirst("a[href*='chapter'], .chapter-item a[href], .eplast a[href]")
-            val chapterUrl = (chapterLink?.attr("abs:href")?.ifEmpty { chapterLink.attr("href") } ?: href)
+            val chapterUrl = (chapterLink?.attr("abs:href")?.ifEmpty { chapterLink?.attr("href").orEmpty() } ?: href)
             if (chapterUrl.isBlank()) return@forEach
 
-            val chapterNumber = chapterLink.attr("data-num").toFloatOrNull()
-                ?: ScraperText.firstChapterNumber(chapterLink.text())
+            val chapterNumber = chapterLink?.attr("data-num")?.toFloatOrNull()
+                ?: chapterLink?.text()?.let { ScraperText.firstChapterNumber(it) }
                 ?: ScraperText.firstChapterNumber(card.selectFirst(".epxs, .chapternum, .ch-num")?.text())
                 ?: ScraperText.lastSegmentNumber(chapterUrl)
                 ?: return@forEach
