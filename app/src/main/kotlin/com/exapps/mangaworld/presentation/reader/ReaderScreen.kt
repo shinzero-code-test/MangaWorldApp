@@ -695,24 +695,29 @@ private fun WebtoonReader(
 
     // Kotatsu-style center tracking: the middle of the visible range owns the
     // reading position (firstVisible alone never reaches a short last page).
-    // pages.size is an effect key — without it the closure goes stale after
-    // chapters are appended and the counter gets stuck (the reported bug).
-    // Reports LIVE (also mid-scroll, not only after settling): the settle-only
-    // filter left the counter/slider/progress visibly behind while scrolling
-    // and skipped read-marks for chapters flung straight through.
-    LaunchedEffect(listState, pages.size) {
+    // v9.5.8 (review 2026-11-07): the previous version keyed on pages.size and
+    // reported as soon as any items were visible. On a slow load, unmeasured
+    // items collapse (0-height) so the visible range is 0..3, centre=1, and
+    // the first frame reports page 1 (2/N) and locks it in. Now we only
+    // report once the layout has actually measured items (visibleItemsInfo
+    // non-empty) — never from a collapsed transient layout.
+    LaunchedEffect(listState) {
         snapshotFlow {
             val info = listState.layoutInfo
+            if (info.visibleItemsInfo.isEmpty()) return@snapshotFlow null
             val first = listState.firstVisibleItemIndex
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: first
             first to last
         }
             .distinctUntilChanged()
-            .collect { (first, last) ->
-                if (pages.isNotEmpty()) onVisibleRangeChanged(
-                    first.coerceIn(0, pages.size - 1),
-                    last.coerceIn(0, pages.size - 1)
-                )
+            .collect { pair ->
+                if (pair != null && pages.isNotEmpty()) {
+                    val (first, last) = pair
+                    onVisibleRangeChanged(
+                        first.coerceIn(0, pages.size - 1),
+                        last.coerceIn(0, pages.size - 1)
+                    )
+                }
             }
     }
 

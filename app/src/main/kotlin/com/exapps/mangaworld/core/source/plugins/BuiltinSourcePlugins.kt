@@ -73,7 +73,7 @@ class OlympusPlugin @Inject constructor(
     override val scraper: MangaScraper = OlympusScraper(client, settingsRepo)
     override val display = SourceDisplay(R.string.source_olympus, R.drawable.olympustaff_com_logo)
     override val descriptor = builtinDescriptor(
-        "olympus", "https://olympustaff.com", true, SourceEngine.CUSTOM,
+        "olympus", "https://olympustaff.com", false, SourceEngine.CUSTOM,
         allowedHosts = setOf("olympustaff.com")
     )
 }
@@ -142,7 +142,7 @@ class Asq3Plugin @Inject constructor(
     override val scraper: MangaScraper = Asq3Scraper(client, settingsRepo)
     override val display = SourceDisplay(R.string.source_asq3, R.drawable.asq3_org_logo)
     override val descriptor = builtinDescriptor(
-        "asq3", "https://3asq.online", true, SourceEngine.MADARA,
+        "asq3", "https://3asq.online", false, SourceEngine.MADARA,
         allowedHosts = setOf("3asq.online"),
         config = mapOf(
             PluginConfigKeys.CHAPTER_LIST_STRATEGY to ChapterListStrategy.SLUG_AJAX,
@@ -302,7 +302,7 @@ class LavaScansPlugin @Inject constructor(
     override val scraper: MangaScraper = LavaScansScraper(client, settingsRepo)
     override val display = SourceDisplay(R.string.source_lavascans, R.drawable.lavascans_com_logo)
     override val descriptor = builtinDescriptor(
-        "lavascans", "https://lavascans.com", true, SourceEngine.MANGAREADER,
+        "lavascans", "https://lavascans.com", false, SourceEngine.MANGAREADER,
         allowedHosts = setOf("lavascans.com"),
         config = mapOf(PluginConfigKeys.LIST_PATH to "/browse-manga/")
     )

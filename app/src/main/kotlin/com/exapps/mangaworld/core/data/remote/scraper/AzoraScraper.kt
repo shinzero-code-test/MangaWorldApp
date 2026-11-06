@@ -413,9 +413,13 @@ class AzoraScraper @Inject constructor(
     }
 
     /**
-     * Static HTML detail — the live detail page (verified 2026-11-06) is plain
-     * SSR: h1[itemProp=name], og meta, and a[href*="/series/{slug}/chapter-N"]
-     * chapter links. Length-bounded, no island wire format.
+     * Static HTML detail (v9.5.8, review 2026-11-07): the live page (verified
+     * 2026-11-06, slug return-of-the-mount-hua-sect-76) SSR-renders only the
+     * 26 newest chapters as anchors; the full list + count live in the RSC
+     * payload (initialChapters / totalChapterCount). Cover is the portrait
+     * img[itemProp=image] (og:image is a 1200x630 banner that distorts the
+     * portrait slot). Status/type/views live in the <dl> label cells;
+     * description in div[itemProp=description].
      */
     private fun detailFromStaticHtml(
         doc: org.jsoup.nodes.Document,
@@ -427,34 +431,66 @@ class AzoraScraper @Inject constructor(
             ?: doc.selectFirst("meta[property=og:title]")?.attr("content")?.cleanText()
             ?.ifBlank { null }
             ?: slug
-        val coverUrl = doc.selectFirst("meta[property=og:image]")?.attr("content")?.cleanText()
-            ?.takeIf { it.isNotBlank() }
+        // Portrait first; the og:image banner is 1200x630 and crops badly.
+        val coverUrl = doc.selectFirst("img[itemprop=image], img[alt^='Cover of ']")?.let {
+            it.preferredImageUrl()?.absoluteUrl()
+        }?.takeIf { it.isNotBlank() }
             ?: doc.selectFirst("img[src*='storage.azorafly.com']")?.let {
                 it.attr("abs:src").ifEmpty { it.attr("src") }.absoluteUrl()
             }.orEmpty()
-        val description = doc.selectFirst("meta[property=og:description]")?.attr("content")?.cleanText()
+        // Full description; og:description truncates with "…".
+        val description = doc.selectFirst("div[itemprop=description]")?.text()?.cleanText()
+            ?.takeIf { it.isNotBlank() }
+            ?: doc.selectFirst("meta[property=og:description]")?.attr("content")?.cleanText()
             ?: doc.selectFirst("meta[name=description]")?.attr("content")?.cleanText()
             ?: ""
-        // Genres: filter pills/links near the header (best-effort; empty is fine).
-        val genres = doc.select("a[href*='/series?genres='], .badge, [class*=genre]")
+        // Status: dl cells الحالة (ONGOING), النوع (manhwa), plus ratingValue.
+        fun dlVal(vararg labels: String): String? {
+            for (label in labels) {
+                val el = doc.select("dt").firstOrNull { it.text().contains(label, ignoreCase = true) }
+                    ?: doc.select("dd").firstOrNull { it.text().contains(label, ignoreCase = true) }
+                    ?: continue
+                val sib = el.nextElementSibling()
+                val txt = sib?.text()?.cleanText()?.takeIf { it.isNotBlank() }
+                    ?: el.parent()?.selectFirst("dd")?.text()?.cleanText()
+                if (!txt.isNullOrBlank()) return txt
+            }
+            return null
+        }
+        val statusText = dlVal("ONGOING", "الحالة", "مستمر", "COMPLETED", "مكتمل")
+        val typeText = dlVal("مانهوا", "مانجا", "مانهوا كورية", "manhwa", "manhua")
+        val rating = doc.selectFirst("meta[itemprop=ratingvalue], [itemprop=ratingValue]")?.attr("content")?.toFloatOrNull()
+            ?: doc.selectFirst("meta[property=og:ratingValue]")?.attr("content")?.toFloatOrNull()
+        // Genres from itemProp=genre links (not the /series?genres= filter pills).
+        val genres = doc.select("a[itemprop=genre]")
             .map { it.text().cleanText() }
-            .filter { it.isNotBlank() && it.length in 2..24 }
+            .filter { it.isNotBlank() && it.length in 2..30 }
             .distinct().take(12)
-        // Chapters: the server lists every chapter as /series/{slug}/chapter-N.
+        // Chapters: DOM lists only the newest window; fall back to RSC flight
+        // (initialChapters JSON baked into the page) and the official total.
         val prefix = "/series/$slug/chapter-"
-        val chapters = doc.select("a[href*='$prefix']")
+        val domChapters = doc.select("a[href*='$prefix']")
             .mapNotNull { a ->
-                val href = a.attr("abs:href").ifEmpty { a.attr("href").absoluteUrl() }
+                val href = a.attr("abs:href").ifEmpty { a.attr("href").absoluteUrl() }.trimEnd('/')
                 val tail = href.substringAfter(prefix).substringBefore("?").substringBefore("/")
                 val num = tail.toFloatOrNull() ?: ScraperText.firstChapterNumber(a.text()) ?: return@mapNotNull null
+                // Skip the chapter-0 shortcut (it is not a real chapter).
+                if (num <= 0f) return@mapNotNull null
+                val titleEl = a.selectFirst("div[title]")
+                val tText = (titleEl?.attr("title")?.cleanText()?.takeIf { it.isNotBlank() }
+                    ?: a.text().cleanText().takeIf { it.isNotBlank() })
                 Chapter(
                     id = "${slug}_$num",
                     mangaId = "azora_$slug",
                     number = num,
-                    title = a.text().cleanText().takeIf { it.isNotBlank() },
+                    title = tText,
                     url = href
                 )
             }.distinctBy { it.url }.sortedByDescending { it.number }
+        val rscChapters = rscInitialChapters(doc.outerHtml(), slug)
+        val chapters = (if (rscChapters.size > domChapters.size) rscChapters else domChapters)
+            .distinctBy { it.url }.sortedByDescending { it.number }
+        val totalFromRsc = rscTotalChapterCount(doc.outerHtml())
         return MangaDetail(
             id = "azora_$slug",
             slug = slug,
@@ -464,11 +500,41 @@ class AzoraScraper @Inject constructor(
             description = description,
             genres = genres,
             tags = genres,
-            totalChapters = chapters.size,
+            status = MangaStatus.from(statusText),
+            type = MangaType.from(typeText),
+            rating = rating,
+            totalChapters = totalFromRsc ?: chapters.size,
             chapters = chapters,
             url = url
         )
     }
+
+    /** Full chapter list from the RSC flight payload (live verified 2026-11-07). */
+    private fun rscInitialChapters(html: String, slug: String): List<Chapter> {
+        // RSC flight embeds initialChapters as [{"number":N,"slug":"chapter-N",...}].
+        // Scalar match only — never re-implements selectors inline in tests.
+        val m = Regex("initialChapters[^]]*\[(.*?)\]", RegexOption.DOT_MATCHES_ALL).find(html)
+            ?: return emptyList()
+        val inner = m.groupValues[1]
+        val rows = mutableListOf<Chapter>()
+        // Parse number/slug pairs in order (bounded).
+        val numRx = Regex("number[^0-9]*(\d+(?:\.\d+)?)")
+        val slugRx = Regex("slug[^a-zA-Z0-9_-]*([a-zA-Z0-9][a-zA-Z0-9_-]*)")
+        val nums = numRx.findAll(inner).map { it.groupValues[1].toFloatOrNull() }.toList()
+        val slugs = slugRx.findAll(inner).map { it.groupValues[1].trimEnd('\', '"', ''', ',') }.toList()
+        val n = minOf(nums.size, slugs.size)
+        for (i in 0 until n) {
+            val num = nums[i] ?: continue
+            if (num <= 0f) continue
+            val cslug = slugs[i]
+            val chUrl = "${resolvedBaseUrl}/series/$slug/$cslug".trimEnd('/')
+            rows.add(Chapter(id = "${slug}_$num", mangaId = "azora_$slug", number = num, url = chUrl))
+        }
+        return rows.distinctBy { it.url }.sortedByDescending { it.number }
+    }
+
+    private fun rscTotalChapterCount(html: String): Int? =
+        Regex("totalChapterCount[^0-9]*(\d+)").find(html)?.groupValues?.getOr(1)?.toIntOrNull()
 
     // ─── Chapter pages ────────────────────────────────────────────────────────
     //

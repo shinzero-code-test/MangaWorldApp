@@ -239,6 +239,8 @@ private fun CloudflareWebView(
                             val title = view?.title ?: ""
                             val isCfPage = title.contains("Just a moment", ignoreCase = true) ||
                                            title.contains("Attention Required", ignoreCase = true)
+                            // v9.5.8: don't treat bare "orchestrate" as CF — it
+                            // re-fires on normal pages and loops (review 2026-11-07).
                             val status = title
                             solverStatus = status
                             // Exact host match: "evil.com/?x=<domain>".contains(domain)
@@ -248,8 +250,13 @@ private fun CloudflareWebView(
                                 // Harvest from the origin (cf_clearance is domain-scoped);
                                 // pageUrl may be a challenge or interstitial that never
                                 // carries the cookie itself.
-                                val cookies = (cm.getCookie("https://$domain") ?: "") +
-                                    cm.getCookie(pageUrl).orEmpty()
+                                val originCookies = cm.getCookie("https://$domain").orEmpty()
+                                val pageCookies = cm.getCookie(pageUrl).orEmpty()
+                                // Sub-agent finding: bare concatenation without ';'
+                                // produces a mangled Cookie header after solve.
+                                val cookies = listOf(originCookies, pageCookies)
+                                    .filter { it.isNotBlank() }
+                                    .joinToString("; ")
                                 // Some Turnstile variants use cf_chl_* or cf_clearance under
                                 // a different name — any cf_ cookie means progress, so keep
                                 // waiting; only cf_clearance (or a non-CF page with cookies)
