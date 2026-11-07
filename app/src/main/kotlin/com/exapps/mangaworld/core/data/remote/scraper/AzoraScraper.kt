@@ -515,7 +515,7 @@ class AzoraScraper @Inject constructor(
         // {id:143141,slug:"chapter-186",number:186,title:" ..."}.
         // The array delimiter "$R[n]*=[` is never a reliable start; the objects
         // themselves are the format. Match globally (not windowed).
-        val pairRx = Regex("\{id:\\d+,slug:\\"(chapter-[^\\"]+)\\",number:(\\d+(?:\\.\\d+)?)")
+        val pairRx = Regex("\\{id:\\d+,slug:\\"(chapter-[^\\"]+)\\",number:(\\d+(?:\\.\\d+)?)")
         return pairRx.findAll(html).mapNotNull { m ->
             val num = m.groupValues[2].toFloatOrNull() ?: return@mapNotNull null
             if (num <= 0f) return@mapNotNull null
