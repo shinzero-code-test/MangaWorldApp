@@ -511,26 +511,17 @@ class AzoraScraper @Inject constructor(
 
     /** Full chapter list from the RSC flight payload (live verified 2026-11-07). */
     private fun rscInitialChapters(html: String, slug: String): List<Chapter> {
-        // RSC flight embeds initialChapters as [{"number":N,"slug":"chapter-N",...}].
-        // Scalar match only — never re-implements selectors inline in tests.
-        val m = Regex("initialChapters[^]]*\\[(.*?)\\]", RegexOption.DOT_MATCHES_ALL).find(html)
-            ?: return emptyList()
-        val inner = m.groupValues[1]
-        val rows = mutableListOf<Chapter>()
-        // Parse number/slug pairs in order (bounded).
-        val numRx = Regex("number[^0-9]*(\\d+(?:\\.\\d+)?)")
-        val slugRx = Regex("slug[^a-zA-Z0-9_-]*([a-zA-Z0-9][a-zA-Z0-9_-]*)")
-        val nums = numRx.findAll(inner).map { it.groupValues[1].toFloatOrNull() }.toList()
-        val slugs = slugRx.findAll(inner).map { it.groupValues[1].trimEnd(',', '"', '\'' ) }.toList()
-        val n = minOf(nums.size, slugs.size)
-        for (i in 0 until n) {
-            val num = nums[i] ?: continue
-            if (num <= 0f) continue
-            val cslug = slugs[i]
-            val chUrl = "${resolvedBaseUrl}/series/$slug/$cslug".trimEnd('/')
-            rows.add(Chapter(id = "${slug}_$num", mangaId = "azora_$slug", number = num, url = chUrl))
-        }
-        return rows.distinctBy { it.url }.sortedByDescending { it.number }
+        // RSC flight chunks the list across many $R[n]={...} objects:
+        // {id:143141,slug:"chapter-186",number:186,title:" ..."}.
+        // The array delimiter "$R[n]*=[` is never a reliable start; the objects
+        // themselves are the format. Match globally (not windowed).
+        val pairRx = Regex("\{id:\\d+,slug:\\"(chapter-[^\\"]+)\\",number:(\\d+(?:\\.\\d+)?)")
+        return pairRx.findAll(html).mapNotNull { m ->
+            val num = m.groupValues[2].toFloatOrNull() ?: return@mapNotNull null
+            if (num <= 0f) return@mapNotNull null
+            val chUrl = "${resolvedBaseUrl}/series/$slug/${m.groupValues[1]}".trimEnd('/')
+            Chapter(id = "${slug}_$num", mangaId = "azora_$slug", number = num, url = chUrl)
+        }.distinctBy { it.url }.sortedByDescending { it.number }.toList()
     }
 
     private fun rscTotalChapterCount(html: String): Int? =

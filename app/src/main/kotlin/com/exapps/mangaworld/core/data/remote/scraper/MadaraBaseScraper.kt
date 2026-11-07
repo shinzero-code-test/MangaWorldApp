@@ -426,6 +426,8 @@ open class MadaraBaseScraper(
         // (which is the standard Madara endpoint used by kotatsu parsers)
         try {
             val ajaxUrl = "${pageUrl.trimEnd('/')}/ajax/chapters/"
+            // Cookie: clearance must reach AJAX (review 2026-11-07).
+            val ajaxCookies = getCookiesForDomain(ajaxUrl)
             val ajaxRequest = Request.Builder()
                 .url(ajaxUrl)
                 .header("User-Agent", USER_AGENT)
@@ -433,6 +435,7 @@ open class MadaraBaseScraper(
                 .header("Accept-Language", "ar,en;q=0.9")
                 .header("Referer", pageUrl.encodeForHeader())
                 .header("X-Requested-With", "XMLHttpRequest")
+                .apply { if (!ajaxCookies.isNullOrBlank()) header("Cookie", ajaxCookies) }
                 .post(FormBody.Builder().build())
                 .build()
 
@@ -470,12 +473,14 @@ open class MadaraBaseScraper(
                             .add("action", action)
                             .add("manga", postId)
                             .build()
+                        val adminCookies = getCookiesForDomain("${resolvedBaseUrl}/wp-admin/admin-ajax.php")
                         val ajaxRequest = Request.Builder()
                             .url("${resolvedBaseUrl}/wp-admin/admin-ajax.php")
                             .header("User-Agent", USER_AGENT)
                             .header("Accept", "*/*")
                             .header("Referer", pageUrl.encodeForHeader())
                             .header("X-Requested-With", "XMLHttpRequest")
+                            .apply { if (!adminCookies.isNullOrBlank()) header("Cookie", adminCookies) }
                             .post(formBody)
                             .build()
                         val body = withContext(Dispatchers.IO) {

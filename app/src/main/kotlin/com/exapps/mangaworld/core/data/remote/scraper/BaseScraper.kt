@@ -116,18 +116,19 @@ abstract class BaseScraperImpl(
             }
             val doc = Jsoup.parse(body, url)
             val title = doc.title().lowercase()
-            val isCf = code == 403 || code == 503 ||
+            // Narrowed (v9.5.9, review 2026-11-07): the previous matcher fired on
+            // passive embeds that ship on normal pages (RUM jsd/main.js via
+            // /cdn-cgi/, Turnstile comment widgets via challenges.cloudflare.com
+            // / cf-turnstile, bot cookie __cf_bm, ordinary JS word "orchestrate").
+            // A challenge gates content: the cf-mitigated header (strongest), an
+            // interstitial title, or the live challenge marker __cf_chl_ that
+            // only appears in the interstitial body.
+            val cfMitigated = response.headers["cf-mitigated"]?.lowercase() == "challenge"
+            val isCf = cfMitigated || code == 403 || code == 503 ||
                 title.contains("just a moment") ||
                 title.contains("attention required") ||
                 title.contains("access denied") ||
-                body.contains("cf-chl", ignoreCase = true) ||
-                body.contains("__cf_chl_", ignoreCase = true) ||
-                body.contains("challenges.cloudflare.com", ignoreCase = true) ||
-                body.contains("cdn-cgi/challenge-platform", ignoreCase = true) ||
-                body.contains("/cdn-cgi/", ignoreCase = true) ||
-                body.contains("cf-turnstile", ignoreCase = true) ||
-                body.contains("__cf_bm", ignoreCase = true) ||
-                body.contains("orchestrate", ignoreCase = true)
+                body.contains("__cf_chl_", ignoreCase = true)
             if (isCf) {
                 throw CloudflareChallengeException(resolvedBaseUrl.removePrefix("https://").removePrefix("http://"), url)
             }

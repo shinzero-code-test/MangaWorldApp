@@ -225,12 +225,18 @@ class OlympusScraper @Inject constructor(
             }
 
         // Dynamic page count from pagination nav — BOUNDED: a large/inflated
-        // page count (or markup change yielding a bogus number) must not turn
-        // one detail open into dozens of sequential 30s-timeout fetches.
-        // 10 pages ≫ any real series here; beyond that the list is truncated.
-        val maxPage = doc.select("ul.pagination a.page-link")
-            .mapNotNull { it.text().toIntOrNull() }
-            .maxOrNull()?.coerceAtMost(10) ?: 1
+        val totalFromH5 = doc.selectFirst(".enhanced-chapters-section h5")
+            ?.text()
+            ?.replace("[^0-9]".toRegex(), "")
+            ?.toIntOrNull()
+        // Derive the page budget from the site total (review 2026-11-07):
+        // the old cap of 10 pages silently truncated longer series. 40 cards/page.
+        val pagesFromTotal = totalFromH5?.let { (it + 39) / 40 } ?: 1
+        val maxPage = maxOf(
+            doc.select("ul.pagination a.page-link, ul.pagination span.page-link")
+                .mapNotNull { it.text().toIntOrNull() }.maxOrNull() ?: 1,
+            pagesFromTotal
+        ).coerceAtMost(100)
 
         val chaptersMap = linkedMapOf<String, Chapter>()
         parseChapterCards(doc).forEach { chaptersMap[it.url] = it }
@@ -252,10 +258,7 @@ class OlympusScraper @Inject constructor(
         // Views: "X views" text in info area, or sum chapter views
         val viewsText = ScraperText.extractViews(doc.body().text())?.toString()
 
-        val totalChapters = doc.selectFirst(".enhanced-chapters-section h5")
-            ?.text()
-            ?.replace("[^0-9]".toRegex(), "")
-            ?.toIntOrNull() ?: chapters.size
+        val totalChapters = totalFromH5 ?: chapters.size
 
         MangaDetail(
             id = "olympus_$slug",
