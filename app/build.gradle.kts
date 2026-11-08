@@ -113,7 +113,7 @@ android {
         // Room schema JSONs (KSP export dir) must be visible to androidTest
         // MigrationTestHelper — it reads them from androidTest assets at
         // `schemas/<db-class>/<version>.json` (U-08 safety net, Stage 0).
-        getByName("androidTest") { assets.srcDirs += "$projectDir/schemas" }
+        getByName("androidTest") { assets.srcDirs("$projectDir/schemas") }
     }
 
     splits {
