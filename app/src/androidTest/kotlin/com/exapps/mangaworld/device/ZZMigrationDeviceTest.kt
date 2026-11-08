@@ -24,9 +24,18 @@ import org.junit.runner.RunWith
  * Schema files live in `app/schemas/.../` and are wired into androidTest
  * assets via sourceSets (see `app/build.gradle.kts`). This suite only runs on
  * device (Firebase Test Lab) — it opens real SQLite.
+ *
+ * Naming note (ZZ prefix): instrumentation test classes run in alphabetical
+ * order; the migration class must run AFTER PluginLifecycleDeviceTest. At DB
+ * boot the PluginSyncWorker fires ~1s in and upgrades the pilots to the
+ * published v2 — the plugin lifecycle assertions are sensitive to that
+ * window (it made them fail on the slow API-26 emulator when this class ran
+ * first). A pre-existing timing race, exposed in Stage 0 — the durable fix
+ * (quiescence-waiting asserts + worker guards) is tracked as P1 test
+ * hardening, not smuggled in here.
  */
 @RunWith(AndroidJUnit4::class)
-class MigrationDeviceTest {
+class ZZMigrationDeviceTest {
 
     private val context get() = ApplicationProvider.getApplicationContext<Context>()
 
