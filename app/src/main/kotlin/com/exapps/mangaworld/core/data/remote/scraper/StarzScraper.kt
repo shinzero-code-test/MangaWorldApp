@@ -138,7 +138,7 @@ class StarzScraper @Inject constructor(
         var url = "${resolvedBaseUrl}/manga/$slug/"
         var resolvedDoc: org.jsoup.nodes.Document? = null
         for (candidate in listOf(url, "${resolvedBaseUrl}/comics/$slug/", "${resolvedBaseUrl}/manhwa/$slug/", "${resolvedBaseUrl}/$slug/")) {
-            val tryDoc = runCatching { fetchDocument(candidate) }.getOrNull() ?: continue
+            val tryDoc = suspendRunCatching { fetchDocument(candidate) }.getOrNull() ?: continue
             val looksLikeDetail = tryDoc.selectFirst(".summary_image, .listing-chapters_wrap, h1.entry-title, .post-title h1") != null
             val is404 = tryDoc.selectFirst("body.error-404, .page-404, .error-page") != null
             if (!is404 && looksLikeDetail) {
@@ -479,7 +479,7 @@ class StarzScraper @Inject constructor(
         status: MangaStatus?,
         type: MangaType?,
         sortBy: SortBy
-    ): Result<List<MangaItem>> = runCatching {
+    ): Result<List<MangaItem>> = suspendRunCatching {
         val order = when (sortBy) {
             SortBy.POPULARITY -> "views"
             SortBy.RATING -> "rating"

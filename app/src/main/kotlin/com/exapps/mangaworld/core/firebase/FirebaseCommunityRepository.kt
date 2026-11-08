@@ -294,7 +294,7 @@ class FirebaseCommunityRepository @Inject constructor(
                             reportListenError("public-library", error)
                             trySend(com.exapps.mangaworld.domain.repository.PublicLibraryState.Failed)
                             launch {
-                                runCatching { fetchPublicLibrary(userId) }
+                                suspendRunCatching { fetchPublicLibrary(userId) }
                                     .onSuccess { trySend(com.exapps.mangaworld.domain.repository.PublicLibraryState.Ready(it)) }
                                 // Failure here is already reported; Failed stands.
                             }
@@ -322,7 +322,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }.rescue("public-library", "favorites") {
         // Never rethrow: the listener already reported; map every outcome so
         // the watchdog's onFallbackError stays silent for this surface.
-        runCatching { fetchPublicLibrary(userId) }.fold(
+        suspendRunCatching { fetchPublicLibrary(userId) }.fold(
             onSuccess = { com.exapps.mangaworld.domain.repository.PublicLibraryState.Ready(it) },
             onFailure = { e ->
                 if ((e as? com.google.firebase.firestore.FirebaseFirestoreException)?.code ==
@@ -502,7 +502,7 @@ class FirebaseCommunityRepository @Inject constructor(
         val id = listId ?: UUID.randomUUID().toString()
         val doc = firestore.collection("users").document(uid).collection("lists").document(id)
         // Server-side count — the old full-collection download existed only for a number.
-        val existingCount = runCatching {
+        val existingCount = suspendRunCatching {
             doc.collection("items").count().get(AggregateSource.SERVER).await().count
         }.getOrDefault(0L).toInt()
         val payload = CustomUserList(

@@ -10,6 +10,7 @@ import androidx.work.*
 import androidx.work.await
 import com.exapps.mangaworld.MangaWorldApp
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.data.local.MangaDatabase
 import com.exapps.mangaworld.core.data.local.dao.DownloadTaskDao
 import com.exapps.mangaworld.core.data.local.dao.DownloadBatchDao
@@ -770,7 +771,7 @@ class DownloadQueueManager @Inject constructor(
         val coverFile = File(dir, "cover.jpg")
         if (metadata.coverUrl.isNotBlank() && (!coverFile.exists() || !coverFile.hasImageMagic())) {
             if (coverFile.exists()) coverFile.delete()
-            runCatching {
+            suspendRunCatching {
                 val req = Request.Builder().url(metadata.coverUrl)
                     .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36")
                     .header("Accept", "image/webp,image/apng,image/*,*/*;q=0.8")

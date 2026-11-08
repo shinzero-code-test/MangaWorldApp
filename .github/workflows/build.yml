@@ -63,7 +63,7 @@ jobs:
       - name: Verify committed Room schemas 8..16
         run: |
           set -euo pipefail
-          # U-08: the full migration chain test (ZZMigrationDeviceTest, on
+          # U-08: the full migration chain test (MigrationDeviceTest, on
           # device) now runs against committed 8..16 JSONs. Fail fast here
           # if any version is missing instead of discovering it on devices.
           dir="app/schemas/com.exapps.mangaworld.core.data.local.MangaDatabase"

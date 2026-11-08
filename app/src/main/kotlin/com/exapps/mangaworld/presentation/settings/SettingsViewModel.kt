@@ -2,6 +2,7 @@ package com.exapps.mangaworld.presentation.settings
 
 import android.content.Context
 import com.exapps.mangaworld.R
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import androidx.compose.ui.res.stringResource
 
 import androidx.lifecycle.ViewModel
@@ -82,8 +83,8 @@ class SettingsViewModel @Inject constructor(
         // back by itself when approval fails.
         // U-10: push so the toggle reaches the cloud doc (saveAndSync parity).
         reconciler.setEnabled(id, enabled)
-        runCatching { firebaseSyncManager.pushLocalSnapshot() }
-        runCatching { widgetDataRepository.refreshRemoteSnapshot() }
+        suspendRunCatching { firebaseSyncManager.pushLocalSnapshot() }
+        suspendRunCatching { widgetDataRepository.refreshRemoteSnapshot() }
         widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
     }
     fun setReaderMode(m: ReaderMode) = saveAndSync { repo.updateReaderMode(m) }
@@ -111,7 +112,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun exportBackup(uri: android.net.Uri) = viewModelScope.launch {
-        runCatching { localBackupManager.exportTo(uri) }
+        suspendRunCatching { localBackupManager.exportTo(uri) }
             .onSuccess { written ->
                 _backupMessage.value = context.getString(if (written) R.string.str_240 else R.string.str_336)
             }
@@ -119,7 +120,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun importBackup(uri: android.net.Uri) = viewModelScope.launch {
-        runCatching {
+        suspendRunCatching {
             when (val result = localBackupManager.importFrom(uri)) {
                 is com.exapps.mangaworld.core.data.LocalBackupManager.ImportResult.Success -> {
                     firebaseSyncManager.pushLocalSnapshot(force = true)
@@ -137,6 +138,6 @@ class SettingsViewModel @Inject constructor(
 
     private fun saveAndSync(block: suspend () -> Unit) = viewModelScope.launch {
         block()
-        runCatching { firebaseSyncManager.pushLocalSnapshot() }
+        suspendRunCatching { firebaseSyncManager.pushLocalSnapshot() }
     }
 }

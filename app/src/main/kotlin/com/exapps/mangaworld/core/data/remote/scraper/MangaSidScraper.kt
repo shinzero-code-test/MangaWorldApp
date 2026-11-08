@@ -221,7 +221,7 @@ class MangaSidScraper @Inject constructor(
         status: MangaStatus?,
         type: MangaType?,
         sortBy: SortBy
-    ): Result<List<MangaItem>> = runCatching {
+    ): Result<List<MangaItem>> = suspendRunCatching {
         val sort = when (sortBy) {
             SortBy.POPULARITY -> "views"
             // Site API has no rating sort — order by views explicitly rather

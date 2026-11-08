@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.presentation.community
 import com.exapps.mangaworld.R
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 
@@ -120,7 +121,7 @@ class CommunityChatViewModel @Inject constructor(
 
     /** Resolves an @mention to a uid for profile navigation. Null when unknown/offline. */
     suspend fun resolveMention(username: String): String? =
-        runCatching { communityRepository.getUidForUsername(username) }.getOrNull()
+        suspendRunCatching { communityRepository.getUidForUsername(username) }.getOrNull()
 
     fun onSuggestionSelected(reply: String) {
         analyticsManager.logSmartReplySelected("community_chat", reply.length)

@@ -2,6 +2,7 @@ package com.exapps.mangaworld.core.data
 
 import android.content.Context
 import coil.imageLoader
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -20,7 +21,7 @@ class CacheManager @Inject constructor(
     }
 
     suspend fun clearImageCache() = withContext(Dispatchers.IO) {
-        runCatching { context.imageLoader.diskCache?.clear() }
+        suspendRunCatching { context.imageLoader.diskCache?.clear() }
         if (coilDir.exists()) coilDir.deleteRecursively()
     }
 

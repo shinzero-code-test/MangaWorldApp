@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.firebase
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import android.content.Context
 import android.os.Build
 import com.exapps.mangaworld.BuildConfig
@@ -166,21 +167,21 @@ class FirebaseSecurityRepository @Inject constructor(
             sessions.document(id).get().await().getString("deviceId")
         }.getOrNull()
         if (!deviceId.isNullOrBlank()) {
-            runCatching {
+            suspendRunCatching {
                 firestore.collection("users").document(uid)
                     .collection("devices").document(deviceId).delete().await()
             }
         }
         sessions.document(id).set(mapOf("revoked" to true), SetOptions.merge()).await()
         if (id == currentId) {
-            runCatching { sessionManager.signOut() }
+            suspendRunCatching { sessionManager.signOut() }
         }
     }
 
     override suspend fun signOutAllDevices() {
         val uid = uid() ?: run {
             // No uid (guest): local sign-out is the whole operation.
-            runCatching { sessionManager.signOut() }
+            suspendRunCatching { sessionManager.signOut() }
             return
         }
         val token = auth.currentUser?.getIdToken(false)?.await()?.token
@@ -198,7 +199,7 @@ class FirebaseSecurityRepository @Inject constructor(
         if (code !in 200..299) error("Revoke failed: $code")
         // Server wiped devices/sessions + revoked refresh tokens — drop local state.
         securityPrefs.edit().remove("session_id").apply()
-        runCatching { sessionManager.signOut() }
+        suspendRunCatching { sessionManager.signOut() }
     }
 
     // ─── Recording ──────────────────────────────────────────────────────────
@@ -221,7 +222,7 @@ class FirebaseSecurityRepository @Inject constructor(
         val overflow = firestore.collection("users").document(uid).collection("loginLogs")
             .orderBy("createdAt", Query.Direction.DESCENDING).limit((MAX_LOGIN_LOGS + 1).toLong())
             .get().await().documents.drop(MAX_LOGIN_LOGS)
-        overflow.forEach { runCatching { it.reference.delete().await() } }
+        overflow.forEach { suspendRunCatching { it.reference.delete().await() } }
         ensureCurrentSession()
     }
 
@@ -229,7 +230,7 @@ class FirebaseSecurityRepository @Inject constructor(
         val uid = uid() ?: return false
         val sessionId = securityPrefs.getString("session_id", null)
         if (sessionId.isNullOrBlank()) return false
-        return runCatching {
+        return suspendRunCatching {
             firestore.collection("users").document(uid)
                 .collection("sessions").document(sessionId)
                 .get().await().getBoolean("revoked") == true
@@ -245,7 +246,7 @@ class FirebaseSecurityRepository @Inject constructor(
         }
         val now = System.currentTimeMillis()
         val ref = firestore.collection("users").document(uid).collection("sessions").document(sessionId)
-        val existingResult = runCatching { ref.get().await() }
+        val existingResult = suspendRunCatching { ref.get().await() }
         val existing = existingResult.getOrNull()
         // A-6: a revoked flag is authoritative — refreshing last-seen must
         // never flip it back to false (that silently undid every revocation

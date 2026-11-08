@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.firebase
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import android.content.Context
 import com.exapps.mangaworld.R
 import com.facebook.login.LoginManager
@@ -47,7 +48,7 @@ class FirebaseSessionManager @Inject constructor(
      */
     suspend fun ensureFirebaseSession(): String? {
         auth.currentUser?.uid?.let { return it }
-        return runCatching { auth.signInAnonymously().await().user?.uid }.getOrNull()
+        return suspendRunCatching { auth.signInAnonymously().await().user?.uid }.getOrNull()
     }
 
     fun currentUserId(): String? = auth.currentUser?.uid
@@ -246,7 +247,7 @@ class FirebaseSessionManager @Inject constructor(
         // row itself is deliberately KEPT: deleting it first would sign out
         // the device, turning a sign-in failure into a signed-out trap. Local
         // Room data stays on device and migrates via the next push.
-        runCatching { wipeAnonymousData(anonUser.uid) }
+        suspendRunCatching { wipeAnonymousData(anonUser.uid) }
         return try {
             auth.signInWithCredential(credential).await().user?.uid
         } catch (retryCollision: FirebaseAuthUserCollisionException) {
@@ -265,19 +266,19 @@ class FirebaseSessionManager @Inject constructor(
         val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
         val userRef = db.collection("users").document(anonUid)
         for (subcol in ANON_WIPE_SUBCOLLECTIONS) {
-            runCatching {
+            suspendRunCatching {
                 repeat(ANON_WIPE_MAX_PAGES) {
                     val snap = userRef.collection(subcol).limit(ANON_WIPE_PAGE_SIZE).get().await()
-                    if (snap.isEmpty) return@runCatching
+                    if (snap.isEmpty) return@suspendRunCatching
                     snap.documents.forEach { runCatching { it.reference.delete().await() } }
-                    if (snap.size() < ANON_WIPE_PAGE_SIZE) return@runCatching
+                    if (snap.size() < ANON_WIPE_PAGE_SIZE) return@suspendRunCatching
                 }
             }
         }
-        runCatching { userRef.delete().await() }
+        suspendRunCatching { userRef.delete().await() }
         // Anonymous sessions can't author community content (rules reject),
         // but an older flow may have left a profile doc behind.
-        runCatching { db.collection("publicProfiles").document(anonUid).delete().await() }
+        suspendRunCatching { db.collection("publicProfiles").document(anonUid).delete().await() }
     }
 }
 

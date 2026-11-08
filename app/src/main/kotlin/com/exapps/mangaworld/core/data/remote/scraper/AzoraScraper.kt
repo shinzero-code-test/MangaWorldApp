@@ -96,7 +96,7 @@ class AzoraScraper @Inject constructor(
     // ─── Raw HTTP (Astro props must come from raw HTML, not Jsoup) ────────────
 
     private suspend fun fetchRawHtml(url: String): String = withContext(Dispatchers.IO) {
-        runCatching {
+        suspendRunCatching {
             val cookies = getCookiesForDomain(url)
             val req = Request.Builder()
                 .url(url)
@@ -181,7 +181,7 @@ class AzoraScraper @Inject constructor(
     // ─── Search API (JSON REST — works correctly as-is) ───────────────────────
 
     private suspend fun apiGet(url: String): JSONObject? = withContext(Dispatchers.IO) {
-        runCatching {
+        suspendRunCatching {
             val cookies = getCookiesForDomain(url)
             val req = Request.Builder()
                 .url(url)
@@ -648,7 +648,7 @@ class AzoraScraper @Inject constructor(
         status: MangaStatus?,
         type: MangaType?,
         sortBy: SortBy
-    ): Result<List<MangaItem>> = runCatching {
+    ): Result<List<MangaItem>> = suspendRunCatching {
         val baseUrl = buildString {
             append("${resolvedBaseUrl}/series/?page=$page")
             genre?.takeIf { it.isNotBlank() }?.let {

@@ -25,17 +25,14 @@ import org.junit.runner.RunWith
  * assets via sourceSets (see `app/build.gradle.kts`). This suite only runs on
  * device (Firebase Test Lab) — it opens real SQLite.
  *
- * Naming note (ZZ prefix): instrumentation test classes run in alphabetical
- * order; the migration class must run AFTER PluginLifecycleDeviceTest. At DB
- * boot the PluginSyncWorker fires ~1s in and upgrades the pilots to the
- * published v2 — the plugin lifecycle assertions are sensitive to that
- * window (it made them fail on the slow API-26 emulator when this class ran
- * first). A pre-existing timing race, exposed in Stage 0 — the durable fix
- * (quiescence-waiting asserts + worker guards) is tracked as P1 test
- * hardening, not smuggled in here.
+ * Naming note: this class previously needed the `ZZ` prefix because the
+ * `PluginLifecycleDeviceTest` was racing the boot `PluginSyncWorker`
+ * (upgrading pilots to the published v2 mid-run). That suite now seeds
+ * `last_sync_ms` to now, making itself hermetic — no ordering requirement
+ * remains here.
  */
 @RunWith(AndroidJUnit4::class)
-class ZZMigrationDeviceTest {
+class MigrationDeviceTest {
 
     private val context get() = ApplicationProvider.getApplicationContext<Context>()
 

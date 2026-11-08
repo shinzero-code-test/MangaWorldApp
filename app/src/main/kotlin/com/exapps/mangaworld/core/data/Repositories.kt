@@ -17,6 +17,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.tasks.await
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
@@ -137,8 +138,8 @@ class MangaRepositoryImpl @Inject constructor(
     )
 
     override suspend fun getHomeData(source: com.exapps.mangaworld.core.source.plugins.SourceId) =
-        runCatching {
-            if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return@runCatching com.exapps.mangaworld.domain.model.HomeData()
+        suspendRunCatching {
+            if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return@suspendRunCatching com.exapps.mangaworld.domain.model.HomeData()
             val result = firebaseTelemetry.traceSuspend("home_${source.value}") { scraper(source).getHomeData() }
             runCatching { health.observeHome(source.value, result) }
             result.getOrThrow()
@@ -180,7 +181,7 @@ class MangaRepositoryImpl @Inject constructor(
         val mangaId = "${source.value}_$slug"
 
         // Load cached version (with chapters) to return as immediate fallback
-        val cached = runCatching { cacheDao.get(mangaId)?.toDetail(source) }.getOrNull()
+        val cached = suspendRunCatching { cacheDao.get(mangaId)?.toDetail(source) }.getOrNull()
 
         // v9.2.5 (audit O-3): the cache-fallback tail below ends in
         // `cached ?: throw e`, which re-threw the unavailable-source failure out

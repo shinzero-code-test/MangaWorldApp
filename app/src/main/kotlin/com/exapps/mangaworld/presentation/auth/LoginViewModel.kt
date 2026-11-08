@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.presentation.auth
 import com.exapps.mangaworld.R
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import android.content.Context
 import androidx.compose.ui.res.stringResource
 
@@ -78,7 +79,7 @@ class LoginViewModel @Inject constructor(
             try {
                 val uid = sessionManager.signInWithEmail(normalizedEmail, password)
                 if (uid != null) {
-                    runCatching { securityRepository.recordSignIn("password") }
+                    suspendRunCatching { securityRepository.recordSignIn("password") }
                     // A-5: never retain the raw password in state after submit.
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true, password = "") }
                 } else {
@@ -123,7 +124,7 @@ class LoginViewModel @Inject constructor(
                     // told to pick another name). Any other save failure keeps
                     // the v8.4.2 behavior: silent success, profile screens
                     // self-heal on next visit.
-                    val profileResult = runCatching {
+                    val profileResult = suspendRunCatching {
                         communityRepository.upsertProfile(
                             username = normalizedUsername,
                             bio = "",
@@ -133,7 +134,7 @@ class LoginViewModel @Inject constructor(
                     }
                     profileResult.exceptionOrNull()?.let { failure ->
                         if (isUsernameClaimFailure(failure)) {
-                            runCatching { securityRepository.recordSignIn("password") }
+                            suspendRunCatching { securityRepository.recordSignIn("password") }
                             _uiState.update {
                                 it.copy(
                                     isLoading = false,
@@ -145,7 +146,7 @@ class LoginViewModel @Inject constructor(
                             return@launch
                         }
                     }
-                    runCatching { securityRepository.recordSignIn("password") }
+                    suspendRunCatching { securityRepository.recordSignIn("password") }
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true, password = "") }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.auth_error_signup_failed), password = "") }
@@ -166,7 +167,7 @@ class LoginViewModel @Inject constructor(
                 if (uid != null) {
                     // Ensure profile exists with the provider's display name
                     ensureProfileExists(uid)
-                    runCatching { securityRepository.recordSignIn("google.com") }
+                    suspendRunCatching { securityRepository.recordSignIn("google.com") }
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.str_335)) }
@@ -187,7 +188,7 @@ class LoginViewModel @Inject constructor(
                 if (uid != null) {
                     // Ensure profile exists with the provider's display name
                     ensureProfileExists(uid)
-                    runCatching { securityRepository.recordSignIn("facebook.com") }
+                    suspendRunCatching { securityRepository.recordSignIn("facebook.com") }
                     _uiState.update { it.copy(isLoading = false, isSignedIn = true) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.str_334)) }
@@ -206,7 +207,7 @@ class LoginViewModel @Inject constructor(
      * one. Shared helper — CloudSyncViewModel uses the same call.
      */
     private suspend fun ensureProfileExists(uid: String) {
-        runCatching {
+        suspendRunCatching {
             communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid)
         }
     }

@@ -110,7 +110,7 @@ class MeshmangaScraper @Inject constructor(
         status: MangaStatus?,
         type: MangaType?,
         sortBy: SortBy
-    ): Result<List<MangaItem>> = runCatching {
+    ): Result<List<MangaItem>> = suspendRunCatching {
         val params = mutableListOf("page=$page", "page_size=30")
         genre?.takeIf { it.isNotBlank() }?.let { resolveGenreId(it)?.let { id -> params += "genre=$id" } }
         when (sortBy) {
@@ -283,7 +283,7 @@ runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() ?: Scrape
 
     private suspend fun apiGetObject(url: String): JSONObject? = withContext(Dispatchers.IO) {
         require(!url.contains(' ')) { "malformed API URL (whitespace): ${url.take(120)}" }
-        runCatching {
+        suspendRunCatching {
             val cookies = getCookiesForDomain(url)
             val request = Request.Builder()
                 .url(url)
@@ -299,7 +299,7 @@ runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() ?: Scrape
     }
 
     private suspend fun apiGetArray(url: String): List<JSONObject>? = withContext(Dispatchers.IO) {
-        runCatching {
+        suspendRunCatching {
             val cookies = getCookiesForDomain(url)
             val request = Request.Builder()
                 .url(url)
@@ -310,7 +310,7 @@ runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() ?: Scrape
                 .build()
             val response = client.newCall(request).execute()
             val body = response.use { it.body?.string() ?: "" }
-            if (body.isBlank()) return@runCatching null
+            if (body.isBlank()) return@suspendRunCatching null
             val array = JSONArray(body)
             (0 until array.length()).mapNotNull { i -> array.optJSONObject(i) }
         }.getOrNull()

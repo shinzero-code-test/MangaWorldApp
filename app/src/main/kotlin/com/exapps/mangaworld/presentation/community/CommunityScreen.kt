@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.presentation.community
 
 import android.content.Context
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -252,7 +253,7 @@ class CommunityViewModel @Inject constructor(
     // screen on its initial state forever — bare community_title, dead tabs,
     // empty lists. Now each source falls back and the error banner explains.
     private val mangaTitle = flow {
-        emit(runCatching { mangaCacheDao.get(mangaId)?.title ?: slug }.getOrDefault(slug))
+        emit(suspendRunCatching { mangaCacheDao.get(mangaId)?.title ?: slug }.getOrDefault(slug))
     }.stateIn(viewModelScope, SharingStarted.Eagerly, slug)
     private val commentsFlow: Flow<List<CommunityComment>> = (if (chapterUrl == null) {
         communityRepository.observeMangaComments(mangaId)
@@ -269,7 +270,7 @@ class CommunityViewModel @Inject constructor(
                 emit(emptyList())
             }
     private val profileFlow: Flow<CommunityProfile?> = flow {
-        emit(runCatching { communityRepository.getCurrentProfile() }.getOrNull())
+        emit(suspendRunCatching { communityRepository.getCurrentProfile() }.getOrNull())
     }
 
     val state: StateFlow<CommunityUiState> = combine(
@@ -358,7 +359,7 @@ class CommunityViewModel @Inject constructor(
 
     /** Resolves an @mention to a uid for profile navigation. Null when unknown/offline. */
     suspend fun resolveMention(username: String): String? =
-        runCatching { communityRepository.getUidForUsername(username) }.getOrNull()
+        suspendRunCatching { communityRepository.getUidForUsername(username) }.getOrNull()
 
     fun postComment(text: String, spoiler: Boolean) {
         val profile = state.value.profile
@@ -665,7 +666,7 @@ class CommunityViewModel @Inject constructor(
                 return
             }
         }
-        val fresh = runCatching { fetch() }.getOrNull() ?: return
+        val fresh = suspendRunCatching { fetch() }.getOrNull() ?: return
         pending.update { cur ->
             val current = cur.voteEchoes[targetId]
             if (current?.at != echo.at) return@update cur

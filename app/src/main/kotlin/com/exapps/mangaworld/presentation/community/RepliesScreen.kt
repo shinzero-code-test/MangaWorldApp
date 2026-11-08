@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.presentation.community
 
 import android.content.Context
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -161,7 +162,7 @@ class RepliesViewModel @Inject constructor(
                 emit(emptyList())
             }
     private val profileFlow: Flow<CommunityProfile?> = flow {
-        emit(runCatching { communityRepository.getCurrentProfile() }.getOrNull())
+        emit(suspendRunCatching { communityRepository.getCurrentProfile() }.getOrNull())
     }
 
     val state: StateFlow<RepliesUiState> = combine(
@@ -245,7 +246,7 @@ class RepliesViewModel @Inject constructor(
 
     /** Resolves an @mention to a uid for profile navigation. Null when unknown/offline. */
     suspend fun resolveMention(username: String): String? =
-        runCatching { communityRepository.getUidForUsername(username) }.getOrNull()
+        suspendRunCatching { communityRepository.getUidForUsername(username) }.getOrNull()
 
     fun postReply(text: String, spoiler: Boolean) {
         val rootRecipient = state.value.root?.toRecipient()
@@ -514,7 +515,7 @@ class RepliesViewModel @Inject constructor(
                 return
             }
         }
-        val fresh = runCatching { fetch() }.getOrNull() ?: return
+        val fresh = suspendRunCatching { fetch() }.getOrNull() ?: return
         pending.update { cur ->
             val current = cur.voteEchoes[targetId]
             if (current?.at != echo.at) return@update cur

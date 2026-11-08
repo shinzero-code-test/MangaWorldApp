@@ -2,6 +2,7 @@ package com.exapps.mangaworld.presentation.home
 
 import android.content.Context
 import com.exapps.mangaworld.R
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.runtime.Immutable
@@ -173,7 +174,7 @@ class HomeViewModel @Inject constructor(
                 _state.update { it.copy(avatarUrl = fallbackUrl, avatarInitial = fallbackInitial) }
                 val uid = user?.uid
                 if (uid != null) {
-                    runCatching {
+                    suspendRunCatching {
                         communityRepo.observePublicProfile(uid).collect { profile ->
                             val avt = profile?.avatarUrl?.takeIf { it.isNotBlank() } ?: fallbackUrl
                             _state.update {
@@ -253,10 +254,10 @@ class HomeViewModel @Inject constructor(
             }
         }
         homeLoadJob = viewModelScope.launch {
-            runCatching { settingsRepo.setLastSourceId(source.value) }
+            suspendRunCatching { settingsRepo.setLastSourceId(source.value) }
             // Show the cached snapshot instantly (if any) so offline launches
             // still render content; the network refresh replaces it below.
-            val cached = runCatching { homeCacheDao.get(source.value) }.getOrNull()
+            val cached = suspendRunCatching { homeCacheDao.get(source.value) }.getOrNull()
             val cachedData = cached?.payloadJson?.let { HomeCacheCodec.decode(it) }
             if (cachedData != null && _state.value.featured.isEmpty()) {
                 if (seq == homeLoadSeq) applyHomeData(source, cachedData, blockedKeywords, offline = true, seq = seq)
@@ -272,7 +273,7 @@ class HomeViewModel @Inject constructor(
                 .onSuccess { data ->
                     if (seq != homeLoadSeq) return@onSuccess
                     firebaseTelemetry.setActiveSource(source.value)
-                    runCatching {
+                    suspendRunCatching {
                         homeCacheDao.upsert(
                             HomeCacheEntity(
                                 sourceId = source.value,

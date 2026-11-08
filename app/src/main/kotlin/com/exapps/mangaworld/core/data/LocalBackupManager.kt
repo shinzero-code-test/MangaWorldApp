@@ -22,6 +22,7 @@ import com.exapps.mangaworld.domain.model.ReaderImageFilter
 import com.exapps.mangaworld.domain.model.ReaderMode
 import com.exapps.mangaworld.domain.model.ReaderSettings
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
@@ -96,12 +97,12 @@ class LocalBackupManager @Inject constructor(
                     .toJson()
             )
             put("readerSettings", settingsRepository.getReaderSettings().first().toJson())
-            runCatching { put("readingStats", readingStatsStore.snapshot()) }
+            suspendRunCatching { put("readingStats", readingStatsStore.snapshot()) }
                 .onFailure { Log.w(TAG, "Stats export skipped: ${it.message}") }
             // BK-4 (plan §11A): backups store plugin REFERENCES ({id, version,
             // origin}), never payloads. Restore re-syncs verified payloads from
             // distribution instead of resurrecting stale or revoked bytes.
-            runCatching {
+            suspendRunCatching {
                 put(
                     "pluginRefs",
                     JSONArray(

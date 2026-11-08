@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.firebase
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.data.AchievementManager
 import com.exapps.mangaworld.core.data.ReadingPositionSyncManager
 import com.exapps.mangaworld.core.data.ReadingStatsStore
@@ -353,7 +354,7 @@ class FirebaseSyncManager @Inject constructor(
 
             val staleCloud = mutableListOf<Pair<String, String>>()
             suspend fun sweep(collection: String, localIds: Set<String>) {
-                runCatching {
+                suspendRunCatching {
                     fetchAllCollection(userRef.collection(collection)).docs.forEach { doc ->
                         val key = when (collection) {
                             "favorites" -> FirebaseSyncMerge.favorite(doc)?.mangaId
@@ -381,7 +382,7 @@ class FirebaseSyncManager @Inject constructor(
                 commitChunkedDeletes(staleCloud.map { (collection, id) -> userRef.collection(collection).document(id) })
             }
             // Positions are fully rewritten from local (+ stale chunks removed).
-            runCatching { positionSyncManager.pushLocalPositions() }
+            suspendRunCatching { positionSyncManager.pushLocalPositions() }
             true
         }
         if (sweepDone) {
@@ -415,13 +416,13 @@ class FirebaseSyncManager @Inject constructor(
                 .filterNot { it.mangaId in remoteFavIds }
                 .forEach {
                     favoriteDao.deleteIfOlder(it.mangaId, Long.MAX_VALUE)
-                    runCatching { prefs.markSyncTombstone("favorites", it.mangaId, now) }
+                    suspendRunCatching { prefs.markSyncTombstone("favorites", it.mangaId, now) }
                 }
             historyDao.getAll()
                 .filterNot { it.mangaId in remoteHistIds }
                 .forEach {
                     historyDao.delete(it.mangaId)
-                    runCatching { prefs.markSyncTombstone("readingHistory", it.mangaId, now) }
+                    suspendRunCatching { prefs.markSyncTombstone("readingHistory", it.mangaId, now) }
                 }
             readerAnnotationDao.getAll()
                 .filterNot {
@@ -430,13 +431,13 @@ class FirebaseSyncManager @Inject constructor(
                 }
                 .forEach {
                     readerAnnotationDao.delete(it.mangaId, it.chapterUrl, it.pageIndex)
-                    runCatching { prefs.markSyncTombstone("readerAnnotations", annotationDocId(it), now) }
+                    suspendRunCatching { prefs.markSyncTombstone("readerAnnotations", annotationDocId(it), now) }
                 }
             readChapterDao.getAll()
                 .filterNot { FirebaseSyncMerge.readMarkDocId(it.mangaId, it.chapterNumber) in remoteMarkIds }
                 .forEach {
                     readChapterDao.markUnread(it.mangaId, it.chapterNumber)
-                    runCatching {
+                    suspendRunCatching {
                         prefs.markSyncTombstone(
                             "readMarks",
                             FirebaseSyncMerge.readMarkDocId(it.mangaId, it.chapterNumber),

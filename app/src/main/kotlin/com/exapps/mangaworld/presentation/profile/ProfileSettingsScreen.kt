@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.presentation.profile
 import com.exapps.mangaworld.R
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import androidx.compose.ui.res.stringResource
 
 import android.net.Uri
@@ -191,14 +192,14 @@ class ProfileSettingsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            runCatching { profile.first { it != null } }
+            suspendRunCatching { profile.first { it != null } }
             _isLoading.value = false
             _favoriteCount.value = favoriteDao.getFavoritesList().size
             _historyCount.value = historyDao.getAll().size
             _readCount.value = readChapterDao.getTotalReadCount()
             // A-15: currently-reading count comes from readingStatus, not the
             // favorites total (any failure degrades to 0, never crashes init).
-            _readingCount.value = runCatching { favoriteDao.getByStatus("reading").size }.getOrDefault(0)
+            _readingCount.value = suspendRunCatching { favoriteDao.getByStatus("reading").size }.getOrDefault(0)
             // Social counts + lists (real data for the section + dialogs).
             val uid = sessionManager.currentUserId()
             if (uid != null) {
@@ -214,7 +215,7 @@ class ProfileSettingsViewModel @Inject constructor(
             }
         }
         // Keep this device's session row fresh (last-seen for the sessions list).
-        viewModelScope.launch { runCatching { securityRepository.ensureCurrentSession() } }
+        viewModelScope.launch { suspendRunCatching { securityRepository.ensureCurrentSession() } }
         // Follow lists for the dialogs.
         viewModelScope.launch {
             val uid = sessionManager.currentUserId() ?: return@launch
@@ -226,7 +227,7 @@ class ProfileSettingsViewModel @Inject constructor(
             communityRepository.getBlockedUsers().collect { ids ->
                 _blockedUsers.value = ids
                 _blockedUserNames.value =
-                    runCatching { communityRepository.getPublicUsernames(ids) }.getOrDefault(emptyMap())
+                    suspendRunCatching { communityRepository.getPublicUsernames(ids) }.getOrDefault(emptyMap())
             }
         }
         viewModelScope.launch {
@@ -252,14 +253,14 @@ class ProfileSettingsViewModel @Inject constructor(
                 _saveError.value = context.getString(R.string.settings_provider_guest_error)
                 return@launch
             }
-            val current = runCatching { communityRepository.getCurrentProfile() }.getOrNull()
+            val current = suspendRunCatching { communityRepository.getCurrentProfile() }.getOrNull()
             val result = cloudinaryUploader.uploadImage(uri, assetType = "avatar")
             // A-17: a failed upload previously did nothing at all — surface it.
             if (result == null) {
                 _saveError.value = context.getString(R.string.profile_save_failed)
                 return@launch
             }
-            runCatching {
+            suspendRunCatching {
                 communityRepository.upsertProfile(
                     username = current?.username ?: "",
                     bio = current?.bio ?: "",
@@ -301,7 +302,7 @@ class ProfileSettingsViewModel @Inject constructor(
                 _saveError.value = context.getString(R.string.settings_provider_guest_error)
                 return@launch
             }
-            val result = runCatching {
+            val result = suspendRunCatching {
                 val c = communityRepository.getCurrentProfile()
                 communityRepository.upsertProfile(
                     username = username.ifBlank { c?.username ?: "" },
@@ -328,7 +329,7 @@ class ProfileSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val user = sessionManager.currentUser() ?: return@launch
             if (user.isAnonymous) return@launch
-            val current = runCatching { communityRepository.getCurrentProfile() }.getOrNull()
+            val current = suspendRunCatching { communityRepository.getCurrentProfile() }.getOrNull()
             if (current != null && current.username.isBlank()) {
                 runCatching { communityRepository.ensureSocialProfile(user, user.uid) }
                 refreshProfile()

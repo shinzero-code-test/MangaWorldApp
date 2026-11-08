@@ -11,6 +11,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.ImagePrefetcher
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.data.ReadingPositionSyncManager
 import com.exapps.mangaworld.core.data.ReadingStatsStore
 import com.exapps.mangaworld.core.data.AchievementManager
@@ -267,7 +268,7 @@ class ReaderViewModel @Inject constructor(
                     // Metadata comes from the downloads table (no manga-cache row
                     // exists for disk-only manga); sourceId stays "imported".
                     if (!_state.value.incognitoMode) {
-                        runCatching {
+                        suspendRunCatching {
                             val local = withContext(ioDispatcher) {
                                 downloadQueueManager.getDownloadedManga(mangaId)
                             }
@@ -283,7 +284,7 @@ class ReaderViewModel @Inject constructor(
                                     chapterUrl = chapterUrl,
                                     totalChapters = local.totalChapters
                                 )
-                                viewModelScope.launch { runCatching { firebaseSyncManager.pushLocalSnapshot() } }
+                                viewModelScope.launch { suspendRunCatching { firebaseSyncManager.pushLocalSnapshot() } }
                             }
                         }
                     }
@@ -297,7 +298,7 @@ class ReaderViewModel @Inject constructor(
 
         // Pull remote positions to get latest from other devices
         viewModelScope.launch {
-            runCatching { positionSyncManager.pullRemotePositions() }
+            suspendRunCatching { positionSyncManager.pullRemotePositions() }
         }
         viewModelScope.launch {
             val chapterMeta = resolveChapterMeta(mangaId, chapterUrl, source)
@@ -367,7 +368,7 @@ class ReaderViewModel @Inject constructor(
                     }
                     // Update reading history so Library shows last-visited manga
                     if (!_state.value.incognitoMode) {
-                        runCatching {
+                        suspendRunCatching {
                             val cached = cacheDao.get(mangaId)
                             if (cached != null) {
                                 libraryRepo.updateReadingHistory(
@@ -386,7 +387,7 @@ class ReaderViewModel @Inject constructor(
                     refreshAllChaptersOnline(mangaId, chapterUrl, source)
                     beginSession(mangaId, chapterUrl)
                     if (!_state.value.incognitoMode) {
-                        viewModelScope.launch { runCatching { firebaseSyncManager.pushLocalSnapshot() } }
+                        viewModelScope.launch { suspendRunCatching { firebaseSyncManager.pushLocalSnapshot() } }
                     }
                     viewModelScope.launch { widgetShortcutCoordinator.refreshWidgetsAndShortcuts() }
                 }
@@ -457,7 +458,7 @@ class ReaderViewModel @Inject constructor(
             if (!st.incognitoMode) {
                 libraryRepo.saveReadingProgress(st.mangaId, chNum, inChapter, chapterTotal)
                 if (pos % 5 == 0) {
-                    runCatching { positionSyncManager.pushLocalPositions() }
+                    suspendRunCatching { positionSyncManager.pushLocalPositions() }
                 }
             }
             observeReactions(st.mangaId, activeChapterUrl, inChapter)
@@ -482,7 +483,7 @@ class ReaderViewModel @Inject constructor(
                     achievementManager.recordChapterRead()
                     readingStatsStore.incrementMangaRead()
                     scheduleAutoCleanupIfNeeded(st.mangaId, activeChapterUrl)
-                    runCatching { firebaseSyncManager.pushLocalSnapshot() }
+                    suspendRunCatching { firebaseSyncManager.pushLocalSnapshot() }
                     val analyticsKey = "${st.mangaId}|$activeChapterUrl|$chNum"
                     if (lastReadAnalyticsKey != analyticsKey) {
                         lastReadAnalyticsKey = analyticsKey
@@ -847,7 +848,7 @@ class ReaderViewModel @Inject constructor(
         viewModelScope.launch {
             // Surface failures — a silent runCatching left guests (or flaky networks)
             // staring at a cleared composer with zero feedback.
-            runCatching {
+            suspendRunCatching {
                 communityRepository.postChapterComment(
                     mangaId = st.mangaId,
                     slug = slug,

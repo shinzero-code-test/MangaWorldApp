@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import coil.ImageLoader
 import coil.request.ImageRequest
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
@@ -191,7 +192,7 @@ class WidgetDataRepository @Inject constructor(
         // Singleton lean image client (no scraper perf interceptor), sampled to
         // widget size. Aspect-preserving: never force-square portrait covers.
         return withContext(ioDispatcher) {
-            runCatching {
+            suspendRunCatching {
                 val request = ImageRequest.Builder(context)
                     .data(url)
                     .size(width.coerceAtMost(320), height.coerceAtMost(440))

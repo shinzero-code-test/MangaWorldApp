@@ -2,6 +2,7 @@ package com.exapps.mangaworld.presentation.detail
 
 import android.content.Context
 import com.exapps.mangaworld.R
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -371,7 +372,7 @@ class MangaDetailViewModel @Inject constructor(
         viewModelScope.launch {
             if (_state.value.isFavorite) {
                 libraryRepo.removeFavorite(currentMangaId)
-                runCatching { firebaseTopicManager.unsubscribeFromManga(currentMangaId) }
+                suspendRunCatching { firebaseTopicManager.unsubscribeFromManga(currentMangaId) }
             } else {
                 libraryRepo.addFavorite(
                     FavoriteManga(
@@ -380,9 +381,9 @@ class MangaDetailViewModel @Inject constructor(
                         source = manga.source, totalChapters = manga.totalChapters
                     )
                 )
-                runCatching { firebaseTopicManager.subscribeToManga(currentMangaId) }
+                suspendRunCatching { firebaseTopicManager.subscribeToManga(currentMangaId) }
             }
-            runCatching { firebaseSyncManager.pushLocalSnapshot() }
+            suspendRunCatching { firebaseSyncManager.pushLocalSnapshot() }
             widgetShortcutCoordinator.refreshWidgets()
         }
     }
@@ -406,7 +407,7 @@ class MangaDetailViewModel @Inject constructor(
             // Update status
             libraryRepo.updateReadingStatus(currentMangaId, status)
             _state.update { it.copy(readingStatus = status) }
-            runCatching { firebaseSyncManager.pushLocalSnapshot() }
+            suspendRunCatching { firebaseSyncManager.pushLocalSnapshot() }
             widgetShortcutCoordinator.refreshWidgets()
         }
     }
@@ -420,7 +421,7 @@ class MangaDetailViewModel @Inject constructor(
         // Resolve membership up-front so every row can show an accurate
         // "already added" label (v8 #9).
         viewModelScope.launch {
-            runCatching {
+            suspendRunCatching {
                 val containing = mutableSetOf<String>()
                 _state.value.userLists.forEach { list ->
                     val items = communityRepository.observeListItems(list.id).first()
@@ -438,7 +439,7 @@ class MangaDetailViewModel @Inject constructor(
         if (BuiltinSourceIds.isLocal(currentRawSourceId) || currentMangaId.startsWith("imported_")) return
         val manga = _state.value.manga ?: return
         viewModelScope.launch {
-            val result = runCatching {
+            val result = suspendRunCatching {
                 communityRepository.addMangaToList(
                     listId,
                     CustomUserListItem(

@@ -54,6 +54,28 @@ class PluginLifecycleDeviceTest {
     private val registry: SourceRegistry get() = entry.sourceRegistry()
     private val loader: BundledPluginLoader get() = entry.bundledPluginLoader()
 
+    /**
+     * One SharedPreferences file (`plugin_sync`), written BY the same
+     * scheduler instance the app uses at boot. The boot lane fires a one-shot
+     * `PluginSyncWorker` when `last_sync_ms` is older than 12h — with a fresh
+     * `last_sync_ms=0` (true pre-Stage-0 behaviour, and the default under
+     * instrumented runners), the worker upgrades bundled pilots to the
+     * published v2 within ~1s of boot, and the bootstrap assertions below
+     * then depend on whichever side of that race they landed. Seeding the
+     * timestamp to "now" makes this suite hermetically the bundled-pilot
+     * scenario it claims to test.
+     *
+     * Product impact is NONE — the boot-sync is the feature (12h-stale
+     * upgrade path) and it works as designed; only the *test* was standing
+     * in the race. Setting it unblocks Stage-0's `ZZMigrationDeviceTest`
+     * from needing its ZZ ordering for this reason.
+     */
+    @Before
+    fun markSyncFresh() {
+        context.getSharedPreferences("plugin_sync", Context.MODE_PRIVATE)
+            .edit().putLong("last_sync_ms", System.currentTimeMillis()).apply()
+    }
+
     @Before
     fun waitForBoot() = runBlocking {
         // The app boots the pilots in its own coroutine (v9.3.5 moved it ahead
