@@ -126,4 +126,43 @@ class ZZMigrationDeviceTest {
         db8.close()
         helper8.close()
     }
+
+    @Test
+    fun migrate8to16_fullChainSurvivesSeedData() {
+        // U-08 completion: the full 8→16 chain over the now-committed
+        // 8.json…16.json (derived from Room's export shape; each version is
+        // the prior one plus exactly the DDL of that step's Migration — see
+        // MangaDatabase.kt). If any step's DDL drifts from its schema file,
+        // Room's validation fails the run.
+        helper.createDatabase("mig8", 8).apply {
+            execSQL("INSERT INTO favorites (mangaId, slug, title, coverUrl, sourceId, addedAt, readChapters, totalChapters) VALUES ('m3','s3','T3','https://example.com/c.jpg','hijala',3,0,0)")
+            execSQL("INSERT INTO download_tasks (id, mangaId, mangaTitle, chapterUrl, chapterTitle, targetDir, referer, pagesJson, status, progress, totalPages, downloadedPages, retries, createdAt, updatedAt) VALUES ('t1','m3','T3','https://example.com/ch/1','Chapter 1','/tmp/dl','https://example.com/x','[]','QUEUED',0.0,0,0,0,1,1)")
+            close()
+        }
+        val db = helper.runMigrationsAndValidate(
+            "mig8", 16, true,
+            MangaDatabase.MIGRATION_8_9,
+            MangaDatabase.MIGRATION_9_10,
+            MangaDatabase.MIGRATION_10_11,
+            MangaDatabase.MIGRATION_11_12,
+            MangaDatabase.MIGRATION_12_13,
+            MangaDatabase.MIGRATION_13_14,
+            MangaDatabase.MIGRATION_14_15,
+            MangaDatabase.MIGRATION_15_16
+        )
+        db.query("SELECT COUNT(*) FROM favorites").use { cur ->
+            cur.moveToFirst()
+            assertEquals(1, cur.getInt(0))
+        }
+        db.query("SELECT COUNT(*) FROM download_tasks").use { cur ->
+            cur.moveToFirst()
+            assertEquals(1, cur.getInt(0))
+        }
+        db.query("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('download_batches','home_cache','plugin_index')").use { cur ->
+            val tables = mutableListOf<String>()
+            while (cur.moveToNext()) tables.add(cur.getString(0))
+            assertEquals(listOf("download_batches", "home_cache", "plugin_index"), tables.sorted())
+        }
+        db.close()
+    }
 }

@@ -60,6 +60,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
+      - name: Verify committed Room schemas 8..16
+        run: |
+          set -euo pipefail
+          # U-08: the full migration chain test (ZZMigrationDeviceTest, on
+          # device) now runs against committed 8..16 JSONs. Fail fast here
+          # if any version is missing instead of discovering it on devices.
+          dir="app/schemas/com.exapps.mangaworld.core.data.local.MangaDatabase"
+          for v in 8 9 10 11 12 13 14 15 16; do
+            if [[ ! -f "$dir/$v.json" ]]; then
+              echo "::error::Missing Room schema $dir/$v.json — run :app:kspDebugKotlin and commit the export."
+              exit 1
+            fi
+          done
+          echo "Room schemas 8..16 present."
+
       - name: Create google-services.json from secret
         # U-05: job-level env cannot be conditional, so gate the consuming
         # step — PR code must never materialize the secret.
