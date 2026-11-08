@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.firebase
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import android.content.Context
 import com.exapps.mangaworld.R
 import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
@@ -412,7 +413,7 @@ class FirebaseCommunityRepository @Inject constructor(
         return existing ?: defaultProfile(uid)
     }
 
-    override suspend fun getUidForUsername(username: String): String? = runCatching {
+    override suspend fun getUidForUsername(username: String): String? = suspendRunCatching {
         val normalized = username.trim().trimStart('@').lowercase()
         if (normalized.isBlank()) return null
         firestore.collection("usernames").document(normalized).get().await().getString("uid")
@@ -830,7 +831,7 @@ class FirebaseCommunityRepository @Inject constructor(
         return voteOnContent(targetType = "review", mangaId = mangaId, targetId = reviewId, vote = -1)
     }
 
-    override suspend fun fetchCommentVote(targetId: String): com.exapps.mangaworld.domain.model.VoteOutcome? = runCatching {
+    override suspend fun fetchCommentVote(targetId: String): com.exapps.mangaworld.domain.model.VoteOutcome? = suspendRunCatching {
         if (targetId.isBlank()) return null
         val snap = firestore.collectionGroup("comments")
             .whereEqualTo("id", targetId)
@@ -842,7 +843,7 @@ class FirebaseCommunityRepository @Inject constructor(
         )
     }.getOrNull()
 
-    override suspend fun fetchReviewVote(mangaId: String, reviewId: String): com.exapps.mangaworld.domain.model.VoteOutcome? = runCatching {
+    override suspend fun fetchReviewVote(mangaId: String, reviewId: String): com.exapps.mangaworld.domain.model.VoteOutcome? = suspendRunCatching {
         if (mangaId.isBlank() || reviewId.isBlank()) return null
         val doc = firestore.collection("community_manga").document(mangaId)
             .collection("reviews").document(reviewId).get().await()
@@ -1781,12 +1782,12 @@ class FirebaseCommunityRepository @Inject constructor(
         awaitClose { reg.remove() }
     }
 
-    override suspend fun getFollowingCount(userId: String): Int = runCatching {
+    override suspend fun getFollowingCount(userId: String): Int = suspendRunCatching {
         firestore.collection("relationships").document(userId).collection("following")
             .count().get(AggregateSource.SERVER).await().count
     }.getOrDefault(0L).toInt()
 
-    override suspend fun getFollowersCount(userId: String): Int = runCatching {
+    override suspend fun getFollowersCount(userId: String): Int = suspendRunCatching {
         firestore.collection("relationships").document(userId).collection("followers")
             .count().get(AggregateSource.SERVER).await().count
     }.getOrDefault(0L).toInt()

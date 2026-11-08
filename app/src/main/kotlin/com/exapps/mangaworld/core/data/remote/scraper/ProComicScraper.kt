@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -73,7 +74,7 @@ class ProComicScraper @Inject constructor(
         json
     }
 
-    override suspend fun getHomeData(): Result<HomeData> = runCatching {
+    override suspend fun getHomeData(): Result<HomeData> = suspendRunCatching {
         // Try API first, fall back to HTML scraping
         val items = try {
             val json = apiGet("${resolvedBaseUrl}/api/public/series/search?status=approved&limit=20&page=1&sort=latest")
@@ -94,7 +95,7 @@ class ProComicScraper @Inject constructor(
         )
     }
 
-    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
+    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = suspendRunCatching {
         // Try API first, fall back to HTML scraping
         val matchedItem = try {
             val encoded = java.net.URLEncoder.encode(slug.replace("-", " "), "UTF-8")
@@ -166,7 +167,7 @@ class ProComicScraper @Inject constructor(
         }
     }
 
-    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
+    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = suspendRunCatching {
         // Try to extract series info from URL: /series/{type}/{id}/{slug}/{chapterNumber}
         val pathAfterSeries = chapterUrl.substringAfter("/series/").substringBefore("?")
         val parts = pathAfterSeries.trimEnd('/').split("/")
@@ -245,13 +246,13 @@ class ProComicScraper @Inject constructor(
         }
     }
 
-    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         // Try API first, fall back to HTML scraping
         try {
             val encoded = java.net.URLEncoder.encode(query, "UTF-8")
             val json = apiGet("${resolvedBaseUrl}/api/public/series/search?status=approved&limit=18&page=$page&search=$encoded&sort=latest")
             val items = parseApiResults(json)
-            if (items.isNotEmpty()) return@runCatching items.distinctBy { it.id }
+            if (items.isNotEmpty()) return@suspendRunCatching items.distinctBy { it.id }
         } catch (e: CloudflareChallengeException) { throw e }
           catch (e: Exception) { ScraperTelemetry.logFailure(sourceId, "search_api", e) }
         // Fallback: HTML scraping
@@ -261,17 +262,17 @@ class ProComicScraper @Inject constructor(
         parseMangaGridFromHtml(doc)
     }
 
-    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         val encoded = java.net.URLEncoder.encode(genre, "UTF-8")
         val json = apiGet("${resolvedBaseUrl}/api/public/series/search?status=approved&limit=18&page=$page&genre=$encoded&sort=latest")
         parseApiResults(json)
     }
 
-    override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
+    override suspend fun getPopularManga(): Result<List<MangaItem>> = suspendRunCatching {
         try {
             val json = apiGet("${resolvedBaseUrl}/api/public/series/search?status=approved&limit=30&page=1&sort=popular")
             val items = parseApiResults(json)
-            if (items.isNotEmpty()) return@runCatching items.distinctBy { it.id }
+            if (items.isNotEmpty()) return@suspendRunCatching items.distinctBy { it.id }
         } catch (e: CloudflareChallengeException) { throw e }
           catch (e: Exception) { ScraperTelemetry.logFailure(sourceId, "popular_api", e) }
         val doc = fetchDocument("${resolvedBaseUrl}/series?sort=popular").also { throwIfTurnstile(it.outerHtml(), "${resolvedBaseUrl}/series") }
@@ -293,7 +294,7 @@ class ProComicScraper @Inject constructor(
             genre?.takeIf { it.isNotBlank() }?.let { params += "search=${java.net.URLEncoder.encode(it, "UTF-8")}" }
             val json = apiGet("${resolvedBaseUrl}/api/public/series/search?${params.joinToString("&")}")
             val items = parseApiResults(json)
-            if (items.isNotEmpty()) return@runCatching items.distinctBy { it.id }
+            if (items.isNotEmpty()) return@suspendRunCatching items.distinctBy { it.id }
         } catch (e: CloudflareChallengeException) { throw e }
           catch (e: Exception) { ScraperTelemetry.logFailure(sourceId, "browse_api", e) }
         // Fallback: HTML scraping (paged)
@@ -301,7 +302,7 @@ class ProComicScraper @Inject constructor(
         parseMangaGridFromHtml(doc)
     }
 
-    override suspend fun getGenres(): Result<List<String>> = runCatching {
+    override suspend fun getGenres(): Result<List<String>> = suspendRunCatching {
         val json = apiGet("${resolvedBaseUrl}/api/public/series/search?status=approved&limit=1&page=1&sort=latest")
         val data = json?.optJSONObject("metadata")?.optJSONArray("genres")
             ?: json?.optJSONArray("data")?.optJSONObject(0)?.optJSONObject("metadata")?.optJSONArray("genres")

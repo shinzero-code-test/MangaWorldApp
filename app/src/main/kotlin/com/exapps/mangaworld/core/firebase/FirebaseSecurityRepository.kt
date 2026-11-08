@@ -18,10 +18,12 @@ import java.security.MessageDigest
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -188,7 +190,11 @@ class FirebaseSecurityRepository @Inject constructor(
             .post("{}".toRequestBody("application/json".toMediaType()))
             .header("Authorization", "Bearer $token")
             .build()
-        val code = okHttpClient.newCall(request).execute().use { it.code }
+        // U-14: synchronous OkHttp on caller's (Main) dispatcher threw
+        // NetworkOnMainThreadException — the feature always failed from UI.
+        val code = withContext(Dispatchers.IO) {
+            okHttpClient.newCall(request).execute().use { it.code }
+        }
         if (code !in 200..299) error("Revoke failed: $code")
         // Server wiped devices/sessions + revoked refresh tokens — drop local state.
         securityPrefs.edit().remove("session_id").apply()

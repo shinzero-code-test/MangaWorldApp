@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -31,7 +32,7 @@ class AreaScansScraper @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : BaseScraperImpl(client, "areascans", "https://ar.kenmanga.com", settingsRepo) {
 
-    override suspend fun getHomeData(): Result<HomeData> = runCatching {
+    override suspend fun getHomeData(): Result<HomeData> = suspendRunCatching {
         val doc = fetchDocument("${resolvedBaseUrl}/browse/")
         val mangaCards = parseMangaCards(doc)
 
@@ -45,7 +46,7 @@ class AreaScansScraper @Inject constructor(
         )
     }
 
-    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
+    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = suspendRunCatching {
         val url = "${resolvedBaseUrl}/manga/$slug/"
         val doc = fetchDocument(url)
 
@@ -138,7 +139,7 @@ class AreaScansScraper @Inject constructor(
         )
     }
 
-    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
+    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = suspendRunCatching {
         val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to resolvedBaseUrl + "/"))
 
         // Strategy 1: Try AJAX endpoint (get_secure_chapter_images) - most reliable
@@ -181,7 +182,7 @@ class AreaScansScraper @Inject constructor(
                         if (src.isNotBlank() && !src.startsWith("data:")) src else null
                     }.distinct()
                     if (ajaxImages.isNotEmpty()) {
-                        return@runCatching ajaxImages.mapIndexed { index, src ->
+                        return@suspendRunCatching ajaxImages.mapIndexed { index, src ->
                             ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
                         }
                     }
@@ -214,7 +215,7 @@ class AreaScansScraper @Inject constructor(
                 ChapterPage(index = index, url = src, headers = buildImageHeaders(src, chapterUrl))
             }
 
-        if (images.isNotEmpty()) return@runCatching images
+        if (images.isNotEmpty()) return@suspendRunCatching images
 
         // Strategy 3: Fallback - extract from ts_reader.run() JSON config if present
         val rawHtml = doc.outerHtml()
@@ -237,7 +238,7 @@ class AreaScansScraper @Inject constructor(
         } else images
     }
 
-    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
 
         // Standard WP search page is more reliable than AJAX for this site
@@ -245,7 +246,7 @@ class AreaScansScraper @Inject constructor(
         val doc = fetchDocument(url)
         val results = parseMangaCards(doc)
 
-        if (results.isNotEmpty()) return@runCatching results
+        if (results.isNotEmpty()) return@suspendRunCatching results
 
         // Fallback: try AJAX search (GET with query params — POST body is ignored)
         try {
@@ -267,7 +268,7 @@ class AreaScansScraper @Inject constructor(
                     } else null
                 }
             }
-            if (!ajaxItems.isNullOrEmpty()) return@runCatching ajaxItems
+            if (!ajaxItems.isNullOrEmpty()) return@suspendRunCatching ajaxItems
         } catch (e: Exception) {
             ScraperTelemetry.logFailure(sourceId, "search_ajax_fallback", e)
         }
@@ -275,12 +276,12 @@ class AreaScansScraper @Inject constructor(
         results
     }
 
-    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {        val url = "${resolvedBaseUrl}/browse/?genre[]=${java.net.URLEncoder.encode(genre, "UTF-8")}&page=$page"
+    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {        val url = "${resolvedBaseUrl}/browse/?genre[]=${java.net.URLEncoder.encode(genre, "UTF-8")}&page=$page"
         val doc = fetchDocument(url)
         parseMangaCards(doc)
     }
 
-    override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
+    override suspend fun getPopularManga(): Result<List<MangaItem>> = suspendRunCatching {
         val doc = fetchDocument("${resolvedBaseUrl}/browse/?m_orderby=views")
         parseMangaCards(doc)
     }
@@ -300,7 +301,7 @@ class AreaScansScraper @Inject constructor(
         parseMangaCards(doc)
     }
 
-    override suspend fun getGenres(): Result<List<String>> = runCatching {
+    override suspend fun getGenres(): Result<List<String>> = suspendRunCatching {
         val doc = fetchDocument("${resolvedBaseUrl}/browse/")
         doc.select(".genre-tag, .quickfilter .genre-item label")
             .map { it.text().cleanText() }

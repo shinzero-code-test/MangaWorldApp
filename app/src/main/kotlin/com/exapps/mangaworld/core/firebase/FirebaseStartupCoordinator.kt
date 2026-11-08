@@ -66,16 +66,22 @@ class FirebaseStartupCoordinator @Inject constructor(
         // Merge (never overwrite) + tombstones make this safe in both directions.
         // Fresh UIDs merge BEFORE any push so the first push can't upload a
         // stranger's library over the new account's cloud (FS-3).
-        if (uid != null && !prefsStore.getBoolean(mergeKey, false)) {
+        // U-10: gate the first forced push on merge success (below) — a
+        // fresh/wiped device with a failed merge never uploads stale
+        // settings over the cloud truth.
+        val mergeJustDone = uid != null && !prefsStore.getBoolean(mergeKey, false)
+        if (mergeJustDone) {
             if (runCatching { syncManager.mergeRemoteSnapshot() }.isSuccess) {
                 prefsStore.edit().putBoolean(mergeKey, true).apply()
             }
         }
+        val merged = if (uid == null) false else
+            prefsStore.getBoolean(mergeKey, false)
 
         // Throttle full sync to once per hour to avoid redundant Firestore writes on every app launch
         val lastSync = prefsStore.getLong(pushKey, 0L)
         val now = System.currentTimeMillis()
-        if (uid != null && now - lastSync > 3_600_000L) { // 1 hour
+        if (uid != null && merged && now - lastSync > 3_600_000L) { // 1 hour
             // Stamp only on success (#26): stamping a failed push would
             // suppress the retry until the next hour window.
             if (runCatching { syncManager.pushLocalSnapshot(force = true) }.isSuccess) {

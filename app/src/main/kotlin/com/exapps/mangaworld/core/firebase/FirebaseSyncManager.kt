@@ -512,6 +512,11 @@ class FirebaseSyncManager @Inject constructor(
      * merge path applied only the theme).
      */
     private suspend fun applyUserDocSettings(profile: DocumentSnapshot) {
+        // U-10 timestamp guard: a stale device push must not revert newer
+        // local settings on every other device. Compare the cloud doc's
+        // updatedAt with the local watermark; skip strictly-older docs.
+        val remoteUpdatedAt = profile.getLong("updatedAt") ?: 0L
+        if (remoteUpdatedAt < prefs.getSettingsAppliedAt()) return
         profile.getString("theme")?.let { name ->
             AppTheme.entries.firstOrNull { it.name == name }?.let { theme ->
                 settingsRepository.updateTheme(theme)
@@ -542,6 +547,7 @@ class FirebaseSyncManager @Inject constructor(
         (profile.get("mutedUserIds") as? List<*>)?.mapNotNull { it?.toString() }?.take(100)?.toSet()?.let { muted ->
             settingsRepository.setMutedUserIds(muted)
         }
+        prefs.setSettingsAppliedAt(remoteUpdatedAt)
     }
 
     /**

@@ -80,7 +80,9 @@ class SettingsViewModel @Inject constructor(
         // approval instead of a bare flip (which would strand the row with
         // nothing registered). appSettings flow re-emits, so the switch snaps
         // back by itself when approval fails.
+        // U-10: push so the toggle reaches the cloud doc (saveAndSync parity).
         reconciler.setEnabled(id, enabled)
+        runCatching { firebaseSyncManager.pushLocalSnapshot() }
         runCatching { widgetDataRepository.refreshRemoteSnapshot() }
         widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
     }

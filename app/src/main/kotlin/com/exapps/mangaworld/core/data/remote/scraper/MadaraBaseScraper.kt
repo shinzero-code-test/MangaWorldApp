@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -41,7 +42,7 @@ open class MadaraBaseScraper(
 
     // ─── Home ─────────────────────────────────────────────────────────────────
 
-    override suspend fun getHomeData(): Result<HomeData> = runCatching {
+    override suspend fun getHomeData(): Result<HomeData> = suspendRunCatching {
         val doc = fetchDocument(resolvedBaseUrl)
         val latestChapters = parseMadaraLatestChapters(doc)
         val popular = parseMadaraPopularManga(doc)
@@ -55,7 +56,7 @@ open class MadaraBaseScraper(
 
     // ─── Manga Detail ─────────────────────────────────────────────────────────
 
-    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
+    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = suspendRunCatching {
         // Progressive URL resolution: try /manga/ → /comics/ → /manhwa/ → bare /
         // Some Madara sites use different path prefixes for manga detail pages.
         // Check for DETAIL-SPECIFIC elements (not just any Madara element) to avoid
@@ -198,7 +199,7 @@ open class MadaraBaseScraper(
 
     // ─── Chapter Pages ────────────────────────────────────────────────────────
 
-    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
+    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = suspendRunCatching {
         val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to resolvedBaseUrl + "/"))
 
         // Madara theme: .reading-content .page-break img
@@ -231,13 +232,13 @@ open class MadaraBaseScraper(
 
     // ─── Search ───────────────────────────────────────────────────────────────
 
-    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
         // Try standard GET search first
         val url = "${resolvedBaseUrl}/?s=$encoded&post_type=wp-manga&paged=$page"
         val doc = fetchDocument(url)
         val results = parseMangaGrid(doc)
-        if (results.isNotEmpty()) return@runCatching results
+        if (results.isNotEmpty()) return@suspendRunCatching results
 
         // Fallback: try /{listPath}/ path search — WP archives paginate via
         // /page/N/, not ?page= (which repeats page-1 results) (L-review).
@@ -249,20 +250,20 @@ open class MadaraBaseScraper(
         val doc2 = runCatching { fetchDocument(url2) }.getOrNull()
         if (doc2 != null) {
             val results2 = parseMangaGrid(doc2)
-            if (results2.isNotEmpty()) return@runCatching results2
+            if (results2.isNotEmpty()) return@suspendRunCatching results2
         }
         results
     }
 
     // ─── Browse ───────────────────────────────────────────────────────────────
 
-    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         val url = "${resolvedBaseUrl}${listPath}?genre=${java.net.URLEncoder.encode(genre, "UTF-8")}&page=$page"
         val doc = fetchDocument(url)
         parseMangaGrid(doc)
     }
 
-    override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
+    override suspend fun getPopularManga(): Result<List<MangaItem>> = suspendRunCatching {
         val url = "${resolvedBaseUrl}${listPath}?m_orderby=views"
         val doc = fetchDocument(url)
         parseMangaGrid(doc)
@@ -288,7 +289,7 @@ open class MadaraBaseScraper(
         parseMangaGrid(doc)
     }
 
-    override suspend fun getGenres(): Result<List<String>> = runCatching {
+    override suspend fun getGenres(): Result<List<String>> = suspendRunCatching {
         val doc = fetchDocument("${resolvedBaseUrl}${listPath}")
         doc.select("ul.genre-scroll-list li a, .genres-content a, .madara-dropdown .genre-item a")
             .map { it.text().cleanText() }

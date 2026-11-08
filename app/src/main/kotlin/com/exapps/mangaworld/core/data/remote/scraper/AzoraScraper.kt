@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -199,7 +200,7 @@ class AzoraScraper @Inject constructor(
 
     // ─── Home ─────────────────────────────────────────────────────────────────
 
-    override suspend fun getHomeData(): Result<HomeData> = runCatching {
+    override suspend fun getHomeData(): Result<HomeData> = suspendRunCatching {
         val rawHtml = fetchRawHtml(resolvedBaseUrl)
         if (rawHtml.isBlank()) error("Azora home HTML unavailable")
 
@@ -279,7 +280,7 @@ class AzoraScraper @Inject constructor(
 
     // ─── Manga Detail ─────────────────────────────────────────────────────────
 
-    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
+    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = suspendRunCatching {
         val url     = "${resolvedBaseUrl}/series/$slug/"
         // Static HTML since the site dropped astro-islands (verified 2026-11-06:
         // zero <astro-island> in a live detail page). Keep the island path as a
@@ -287,7 +288,7 @@ class AzoraScraper @Inject constructor(
         val rawHtml = fetchRawHtml(url)
         val islandProps = extractIslandProps(rawHtml, "SeriesChaptersPanelIsland")
         if (islandProps != null) {
-            return@runCatching detailFromIsland(islandProps, rawHtml, slug, url)
+            return@suspendRunCatching detailFromIsland(islandProps, rawHtml, slug, url)
         }
         val doc = fetchDocument(url)
         detailFromStaticHtml(doc, slug, url)
@@ -532,7 +533,7 @@ class AzoraScraper @Inject constructor(
     // Images are SSR-rendered directly into the HTML — no astro-island needed.
     // URL pattern: storage.azorafly.com/WP-manga/data/manga_{hash}/{ch_hash}/N.jpg
 
-    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
+    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = suspendRunCatching {
         val doc = fetchDocument(chapterUrl)
 
         // Primary: images inside .comic-images-wrapper (SSR-rendered)
@@ -567,12 +568,12 @@ class AzoraScraper @Inject constructor(
 
     // ─── Search (REST API — correct and working) ──────────────────────────────
 
-    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         val enc   = java.net.URLEncoder.encode(query, "UTF-8")
         // Page must reach the API or every page returns identical results (H-review).
         val json  = apiGet("https://api.azorafly.com/api/query?searchTerm=$enc&perPage=30&page=$page") // NOTE: hardcoded API host — NOT covered by source_<id>_base_url RC overrides
             ?: error("Azora API unavailable")
-        val posts = json.optJSONArray("posts") ?: return@runCatching emptyList()
+        val posts = json.optJSONArray("posts") ?: return@suspendRunCatching emptyList()
         val result = mutableListOf<MangaItem>()
         for (i in 0 until posts.length()) {
             val post = posts.getJSONObject(i)
@@ -606,12 +607,12 @@ class AzoraScraper @Inject constructor(
     //   <a href="/series/{slug}" class="… font-bold …">{title}</a>
     //   <p class="font-normal text-xs">مستمر</p>                  ← status
 
-    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         val enc = java.net.URLEncoder.encode(genre, "UTF-8")
         parseMangaListPage(fetchDocument("${resolvedBaseUrl}/series/?genres=%2B$enc&page=$page"))
     }
 
-    override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
+    override suspend fun getPopularManga(): Result<List<MangaItem>> = suspendRunCatching {
         // API gives rating-sorted results
         val json  = apiGet("https://api.azorafly.com/api/query?searchTerm=&perPage=30") // NOTE: hardcoded API host — NOT covered by RC overrides
         val posts = json?.optJSONArray("posts")
@@ -668,7 +669,7 @@ class AzoraScraper @Inject constructor(
         }
     }
 
-    override suspend fun getGenres(): Result<List<String>> = runCatching {
+    override suspend fun getGenres(): Result<List<String>> = suspendRunCatching {
         // Genres are rendered as filter links on the series page
         val doc = fetchDocument("${resolvedBaseUrl}/series")
         doc.select("a[href*='/series?genres='], a[href*='genres=']")

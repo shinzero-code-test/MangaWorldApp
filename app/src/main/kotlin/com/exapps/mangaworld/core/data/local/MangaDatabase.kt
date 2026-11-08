@@ -147,6 +147,14 @@ abstract class MangaDatabase : RoomDatabase() {
             return cols
         }
 
+        /**
+         * Defence-in-depth for pre-v14 installs: pre-13_14 databases lack
+         * `download_tasks.batchId` and the whole `download_batches` table
+         * (created only in MIGRATION_13_14 below), so an unconditional index
+         * create crashes every v8/v9-era device on upgrade (no destructive
+         * fallback by design). Create each index only when its table — and
+         * for single-column defs, its column — already exists.
+         */
         private fun addAllIndices(db: SupportSQLiteDatabase) {
             listOf(
                 "index_reading_history_lastReadAt" to "reading_history(lastReadAt)",
@@ -163,7 +171,12 @@ abstract class MangaDatabase : RoomDatabase() {
                 "index_download_batches_updatedAt" to "download_batches(updatedAt)",
                 "index_manga_cache_sourceId" to "manga_cache(sourceId)",
                 "index_manga_cache_cachedAt" to "manga_cache(cachedAt)"
-            ).forEach { (name, def) -> db.execSQL("CREATE INDEX IF NOT EXISTS $name ON $def") }
+            ).forEach { (name, def) ->
+                val (table, col) = def.substringBefore("(") to def.substringAfter("(").removeSuffix(")").trim()
+                if (getColumnNames(db, table).contains(col)) {
+                    db.execSQL("CREATE INDEX IF NOT EXISTS $name ON $def")
+                }
+            }
         }
     }
 }

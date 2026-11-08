@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.withContext
@@ -54,12 +55,12 @@ class StellarSaberScraper @Inject constructor(
     private val keyStore: com.exapps.mangaworld.core.data.remote.scraper.StellarKeyStore
 ) : MangaReaderBaseScraper(client, "stellarsaber", "https://stellarsaber.pro", settingsRepo, pageSize = 32, searchPageSize = 10) {
 
-    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
+    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = suspendRunCatching {
         val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to "$resolvedBaseUrl/"))
         val slots = doc.select("img.reader__page[data-cdn-url]")
         if (slots.isEmpty()) {
             // Not a Flavor encrypted reader (or markup changed) — base path as fallback.
-            return@runCatching super.getChapterPages(chapterUrl).getOrThrow()
+            return@suspendRunCatching super.getChapterPages(chapterUrl).getOrThrow()
         }
         val scripts = doc.select("script").map { it.html() }
         val chapterId = scripts.firstNotNullOfOrNull { html ->

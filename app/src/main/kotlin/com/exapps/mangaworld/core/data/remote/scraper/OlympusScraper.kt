@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.data.CookieCache
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
@@ -54,7 +55,7 @@ class OlympusScraper @Inject constructor(
 
     // ─── Home ─────────────────────────────────────────────────────────────────
 
-    override suspend fun getHomeData(): Result<HomeData> = runCatching {
+    override suspend fun getHomeData(): Result<HomeData> = suspendRunCatching {
         val doc = fetchDocument(resolvedBaseUrl)
 
         // Latest updates: skip empty hero slots and '#' placeholders.
@@ -134,7 +135,7 @@ class OlympusScraper @Inject constructor(
 
     // ─── Manga Detail ─────────────────────────────────────────────────────────
 
-    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
+    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = suspendRunCatching {
         val url = "${resolvedBaseUrl}/series/$slug"
         val doc = fetchDocument(url)
 
@@ -281,7 +282,7 @@ class OlympusScraper @Inject constructor(
 
     // ─── Chapter Pages ────────────────────────────────────────────────────────
 
-    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
+    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = suspendRunCatching {
         val doc = fetchDocument(
             chapterUrl,
             extraHeaders = mapOf("Referer" to resolvedBaseUrl + "/")
@@ -313,14 +314,14 @@ class OlympusScraper @Inject constructor(
 
     // ─── Search ───────────────────────────────────────────────────────────────
 
-    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         val encoded = java.net.URLEncoder.encode(query.trim(), "UTF-8")
         // Correct URL format per Kotatsu reference: /?search=<query>&page=<n>
         val doc = fetchDocument("${resolvedBaseUrl}/?search=$encoded&page=$page")
         parseMangaGrid(doc)
     }
 
-    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         val encodedGenre = java.net.URLEncoder.encode(genre, "UTF-8")
         val url = "${resolvedBaseUrl}/series?genre=$encodedGenre&page=$page"
         val doc = fetchDocument(url)
@@ -352,7 +353,7 @@ class OlympusScraper @Inject constructor(
             .let { applyBrowseSort(it, sortBy) }
     }
 
-    override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
+    override suspend fun getPopularManga(): Result<List<MangaItem>> = suspendRunCatching {
         val doc = fetchDocument(resolvedBaseUrl)
         doc.select(".popular-manga .entry-box, .entry-box.entry-box-1").mapNotNull { box ->
             val img = box.selectFirst("img.best-img") ?: return@mapNotNull null
@@ -368,7 +369,7 @@ class OlympusScraper @Inject constructor(
         }
     }
 
-    override suspend fun getGenres(): Result<List<String>> = runCatching {
+    override suspend fun getGenres(): Result<List<String>> = suspendRunCatching {
         val doc = fetchDocument("${resolvedBaseUrl}/series")
         doc.select("a.subtitle[href*=\"genre\"]")
             .map { it.text().cleanText() }

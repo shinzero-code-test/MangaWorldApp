@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -9,6 +10,8 @@ import okhttp3.Request
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Scraper for starzmanga.com (Manga Starz, formerly manga-starz.net) —
@@ -61,7 +64,7 @@ class StarzScraper @Inject constructor(
 
     // ─── Home ─────────────────────────────────────────────────────────────────
 
-    override suspend fun getHomeData(): Result<HomeData> = runCatching {
+    override suspend fun getHomeData(): Result<HomeData> = suspendRunCatching {
         val doc = fetchDocument(resolvedBaseUrl)
 
         // Latest: .page-item-detail.manga cards
@@ -130,7 +133,7 @@ class StarzScraper @Inject constructor(
 
     // ─── Manga Detail ─────────────────────────────────────────────────────────
 
-    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
+    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = suspendRunCatching {
         // Progressive path resolution (matches MadaraBaseScraper): /manga/ → /comics/ → /manhwa/ → bare.
         var url = "${resolvedBaseUrl}/manga/$slug/"
         var resolvedDoc: org.jsoup.nodes.Document? = null
@@ -276,7 +279,10 @@ class StarzScraper @Inject constructor(
                 .header("X-Requested-With", "XMLHttpRequest")
                 .post(FormBody.Builder().build())
                 .build()
-            val body = client.newCall(ajaxReq).execute().use { it.body?.string().orEmpty() }
+            // U-14: blocking OkHttp on caller's dispatcher threw on Main (detail path)
+            val body = withContext(Dispatchers.IO) {
+                client.newCall(ajaxReq).execute().use { it.body?.string().orEmpty() }
+            }
             if (body.contains("wp-manga-chapter")) {
                 val chapDoc = Jsoup.parse(body, resolvedBaseUrl)
                 chapDoc.select("li.wp-manga-chapter, li").mapNotNull { li ->
@@ -321,8 +327,11 @@ class StarzScraper @Inject constructor(
                         .post(formBody)
                         .build()
 
-                    val bodyStr = client.newCall(ajaxRequest).execute().use { response ->
-                        response.body?.string() ?: "{}"
+                    // U-14: see above — same Main-thread block
+                    val bodyStr = withContext(Dispatchers.IO) {
+                        client.newCall(ajaxRequest).execute().use { response ->
+                            response.body?.string() ?: "{}"
+                        }
                     }
 
                     if (bodyStr.trimStart().startsWith("{").not()) continue
@@ -409,7 +418,7 @@ class StarzScraper @Inject constructor(
 
     // ─── Chapter Pages ────────────────────────────────────────────────────────
 
-    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
+    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = suspendRunCatching {
         val doc = fetchDocument(
             chapterUrl,
             extraHeaders = mapOf("Referer" to resolvedBaseUrl + "/")
@@ -443,14 +452,14 @@ class StarzScraper @Inject constructor(
 
     // ─── Search ───────────────────────────────────────────────────────────────
 
-    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
         val url = "${resolvedBaseUrl}/?s=$encoded&post_type=wp-manga&paged=$page"
         val doc = fetchDocument(url)
         parseStarzGrid(doc)
     }
 
-    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         // Genres are Arabic — raw insertion throws inside java.net.URI (H-review).
         val encodedGenre = java.net.URLEncoder.encode(genre, "UTF-8")
         val url = "${resolvedBaseUrl}/manga/?genre=$encodedGenre&page=$page"
@@ -458,7 +467,7 @@ class StarzScraper @Inject constructor(
         parseStarzGrid(doc)
     }
 
-    override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
+    override suspend fun getPopularManga(): Result<List<MangaItem>> = suspendRunCatching {
         val url = "${resolvedBaseUrl}/manga/?m_orderby=views"
         val doc = fetchDocument(url)
         parseStarzGrid(doc)
@@ -484,7 +493,7 @@ class StarzScraper @Inject constructor(
         parseStarzGrid(doc)
     }
 
-    override suspend fun getGenres(): Result<List<String>> = runCatching {
+    override suspend fun getGenres(): Result<List<String>> = suspendRunCatching {
         val doc = fetchDocument("${resolvedBaseUrl}/manga/")
         doc.select("ul.genre-scroll-list li a, .genres-content a")
             .map { it.text().cleanText() }

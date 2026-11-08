@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -43,7 +44,7 @@ open class MangaReaderBaseScraper(
 
     // ─── Home ─────────────────────────────────────────────────────────────────
 
-    override suspend fun getHomeData(): Result<HomeData> = runCatching {
+    override suspend fun getHomeData(): Result<HomeData> = suspendRunCatching {
         val doc = fetchDocument(resolvedBaseUrl)
         val latestChapters = parseLatestChapters(doc)
         val popular = parsePopularManga(doc)
@@ -57,7 +58,7 @@ open class MangaReaderBaseScraper(
 
     // ─── Manga Detail ─────────────────────────────────────────────────────────
 
-    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
+    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = suspendRunCatching {
         // Progressive URL resolution: some sites use /manga/, others use direct slug
         // Check for DETAIL-SPECIFIC elements to avoid matching library/list pages
         val isMangaDetailPage: (org.jsoup.nodes.Document) -> Boolean = { d ->
@@ -198,7 +199,7 @@ open class MangaReaderBaseScraper(
 
     // ─── Chapter Pages ────────────────────────────────────────────────────────
 
-    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
+    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = suspendRunCatching {
         val doc = fetchDocument(chapterUrl, extraHeaders = mapOf("Referer" to resolvedBaseUrl + "/"))
 
         // MangaReader/MangaStream themes:
@@ -259,7 +260,7 @@ open class MangaReaderBaseScraper(
 
     // ─── Search ───────────────────────────────────────────────────────────────
 
-    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
         val url = if (page <= 1) "${resolvedBaseUrl}/?s=$encoded" else "${resolvedBaseUrl}/page/$page/?s=$encoded"
         val doc = fetchDocument(url)
@@ -268,13 +269,13 @@ open class MangaReaderBaseScraper(
 
     // ─── Browse ───────────────────────────────────────────────────────────────
 
-    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         val url = "${resolvedBaseUrl}${listPath}?genre[]=${java.net.URLEncoder.encode(genre, "UTF-8")}&page=$page"
         val doc = fetchDocument(url)
         parseMangaCards(doc)
     }
 
-    override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
+    override suspend fun getPopularManga(): Result<List<MangaItem>> = suspendRunCatching {
         val url = "${resolvedBaseUrl}${listPath}?order=popular"
         val doc = fetchDocument(url)
         parseMangaCards(doc)
@@ -299,7 +300,7 @@ open class MangaReaderBaseScraper(
         parseMangaCards(doc)
     }
 
-    override suspend fun getGenres(): Result<List<String>> = runCatching {
+    override suspend fun getGenres(): Result<List<String>> = suspendRunCatching {
         val doc = fetchDocument("${resolvedBaseUrl}${listPath}")
         doc.select(".quickfilter .genrez label, .advanced-search .genres label, ul.genrez li label")
             .map { it.text().cleanText() }

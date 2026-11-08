@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.firebase
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
@@ -15,7 +16,7 @@ class FirebaseSyncWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val syncManager: FirebaseSyncManager
 ) : CoroutineWorker(appContext, params) {
-    override suspend fun doWork(): Result = runCatching {
+    override suspend fun doWork(): Result = suspendRunCatching {
         syncManager.pushLocalSnapshot(force = true)
         Result.success()
     }.getOrElse { e ->

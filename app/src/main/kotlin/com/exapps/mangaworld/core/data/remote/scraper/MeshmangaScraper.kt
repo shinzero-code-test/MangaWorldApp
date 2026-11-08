@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.data.remote.scraper
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.source.plugins.SourceId
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -23,7 +24,7 @@ class MeshmangaScraper @Inject constructor(
     private val apiBase = "https://appswat.com/v2/api/v2"
     @Volatile private var genreIdCache: Map<String, Int>? = null
 
-    override suspend fun getHomeData(): Result<HomeData> = runCatching {
+    override suspend fun getHomeData(): Result<HomeData> = suspendRunCatching {
         val featured = fetchSeriesPage("$apiBase/series/?is_hot=true&page_size=20")
         val latestJson = apiGetObject("$apiBase/chapters/?page_size=20&order_by=-created_at")
         val latest = latestJson?.optJSONArray("results")?.let { array ->
@@ -39,7 +40,7 @@ class MeshmangaScraper @Inject constructor(
         )
     }
 
-    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = runCatching {
+    override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = suspendRunCatching {
         val seriesId = slug.substringBefore('-').substringBefore('_').ifBlank { slug }
         val series = apiGetObject("$apiBase/series/$seriesId/")
             ?: error("Series $seriesId not found")
@@ -68,7 +69,7 @@ class MeshmangaScraper @Inject constructor(
         )
     }
 
-    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = runCatching {
+    override suspend fun getChapterPages(chapterUrl: String): Result<List<ChapterPage>> = suspendRunCatching {
         val chapterId = Regex("cid-(\\d+)").find(chapterUrl)?.groupValues?.get(1)
             ?: error("Missing Meshmanga chapter id in $chapterUrl")
         val json = apiGetObject("$apiBase/chapters/$chapterId/")
@@ -89,17 +90,17 @@ class MeshmangaScraper @Inject constructor(
             .sortedBy { it.index }
     }
 
-    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = runCatching {
+    override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         val encoded = java.net.URLEncoder.encode(query.trim(), "UTF-8")
         fetchSeriesPage("$apiBase/series/?search=$encoded&page=$page&page_size=30")
     }
 
-    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = runCatching {
-        val genreId = resolveGenreId(genre) ?: return@runCatching emptyList()
+    override suspend fun getMangaByGenre(genre: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
+        val genreId = resolveGenreId(genre) ?: return@suspendRunCatching emptyList()
         fetchSeriesPage("$apiBase/series/?genre=$genreId&page=$page&page_size=30")
     }
 
-    override suspend fun getPopularManga(): Result<List<MangaItem>> = runCatching {
+    override suspend fun getPopularManga(): Result<List<MangaItem>> = suspendRunCatching {
         fetchSeriesPage("$apiBase/series/?is_hot=true&page_size=30")
     }
 
@@ -123,7 +124,7 @@ class MeshmangaScraper @Inject constructor(
             .filter { type == null || it.type == type || it.type == MangaType.UNKNOWN }
     }
 
-    override suspend fun getGenres(): Result<List<String>> = runCatching {
+    override suspend fun getGenres(): Result<List<String>> = suspendRunCatching {
         val genres = apiGetArray("$apiBase/genres/?page_size=200").orEmpty()
         val mapped = genres
             .mapNotNull { obj ->

@@ -64,8 +64,8 @@ android {
         applicationId = "com.exapps.mangaworld"
         minSdk        = 26
         targetSdk     = 36
-        versionCode   = 274
-        versionName   = "9.5.10"
+        versionCode   = 275
+        versionName   = "9.5.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -107,6 +107,13 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
+    }
+
+    sourceSets {
+        // Room schema JSONs (KSP export dir) must be visible to androidTest
+        // MigrationTestHelper — it reads them from androidTest assets at
+        // `schemas/<db-class>/<version>.json` (U-08 safety net, Stage 0).
+        getByName("androidTest") { assets.srcDirs += "$projectDir/schemas" }
     }
 
     splits {

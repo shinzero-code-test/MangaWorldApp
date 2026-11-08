@@ -54,6 +54,8 @@ class AppPreferences @Inject constructor(
         val KEY_LAST_POSITIONS_PUSH = longPreferencesKey("last_positions_push_ms")
         val KEY_SHOW_LIBRARY_PUBLIC = booleanPreferencesKey("show_library_public")
         val KEY_LAST_SOURCE_ID = stringPreferencesKey("last_source_id")
+        // U-10: timestamp guard for cloud settings apply (FirebaseSyncManager).
+        val KEY_SETTINGS_APPLIED_AT = longPreferencesKey("settings_applied_at_ms")
 
         val KEY_READER_MODE = stringPreferencesKey("reader_mode")
         val KEY_BRIGHTNESS = floatPreferencesKey("brightness")
@@ -247,6 +249,13 @@ class AppPreferences @Inject constructor(
 
     suspend fun setLastSourceId(sourceId: String) =
         dataStore.edit { it[KEY_LAST_SOURCE_ID] = sourceId.take(64) }
+
+    /** U-10: local watermark of the newest cloud settings doc applied so far. */
+    suspend fun getSettingsAppliedAt(): Long =
+        dataStore.data.first()[KEY_SETTINGS_APPLIED_AT] ?: 0L
+
+    suspend fun setSettingsAppliedAt(timestampMs: Long) =
+        dataStore.edit { it[KEY_SETTINGS_APPLIED_AT] = timestampMs }
 
     suspend fun getSyncTombstones(): List<SyncTombstone> =
         decodeSyncTombstones(dataStore.data.first()[KEY_SYNC_TOMBSTONES])

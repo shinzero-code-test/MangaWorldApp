@@ -49,27 +49,56 @@ jobs:
   lint-and-test:
     name: Lint & Unit Tests
     runs-on: ubuntu-latest
-    # Tag pushes only cut the release: the same commit already passed
-    # lint/tests/debug on its main-branch push, so re-running them here just
-    # burns runners and delays the release. The daily `schedule` trigger exists
-    # for the deployed-distribution drift check alone (which is a few public GETs),
-    # so the Android pipeline stands down for it — every push/PR/tag path is
-    # unchanged.
-    if: "github.event_name != 'schedule' && !startsWith(github.ref, 'refs/tags/')"
+    # U-01: tag pushes run the gates too — a tag must never bypass lint/tests.
+    # The daily `schedule` trigger exists for the deployed-distribution drift
+    # check alone (which is a few public GETs), so the Android pipeline stands
+    # down for it — every push/PR/tag path runs the checks.
+    if: "github.event_name != 'schedule'"
     env:
       GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Create google-services.json from secret
-        if: env.GOOGLE_SERVICES_JSON != ''
+        # U-05: job-level env cannot be conditional, so gate the consuming
+        # step — PR code must never materialize the secret.
+        if: github.event_name != 'pull_request' && env.GOOGLE_SERVICES_JSON != ''
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
 
+      - name: Create stub google-services.json for PRs
+        # U-05 companion: PRs (same-repo and forks alike) no longer get the
+        # real secret, but the google-services Gradle plugin fails config
+        # without the file — write a structurally valid stub (dummy ids,
+        # com.exapps.mangaworld package) so lint/tests compile on PRs.
+        if: github.event_name == 'pull_request'
+        run: |
+          cat > app/google-services.json << 'STUB'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "mangaworld-pr-stub",
+              "storage_bucket": "mangaworld-pr-stub.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+                  "android_client_info": {"package_name": "com.exapps.mangaworld"}
+                },
+                "oauth_client": [],
+                "api_key": [{"current_key": "stub"}],
+                "services": {"appinvite_service": {"other_platform_oauth_client": []}}
+              }
+            ],
+            "configuration_version": "1"
+          }
+          STUB
+
       - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
@@ -97,10 +126,11 @@ jobs:
           echo "sdk.dir=$SDK_DIR" > local.properties
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           gradle-version: wrapper
-          cache-read-only: false
+          # U-05: PR runs must not write to the shared Gradle cache.
+          cache-read-only: true
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -117,7 +147,7 @@ jobs:
 
       - name: Upload Lint Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lint-results
           path: app/build/reports/lint-results-debug.html
@@ -125,7 +155,7 @@ jobs:
 
       - name: Upload Unit Test Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: unit-test-results
           path: |
@@ -144,7 +174,7 @@ jobs:
 
       - name: Upload Room Schemas
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: room-schemas
           path: app/schemas/**/*.json
@@ -158,16 +188,16 @@ jobs:
   dashboard-checks:
     name: Dashboard Typecheck & Lint
     runs-on: ubuntu-latest
-    # Tag pushes only cut the release (same rationale as lint-and-test). The
+    # U-01: tag pushes run the gates too (same rationale as lint-and-test). The
     # daily schedule skips it too, but re-runs the signature gate it owns through
     # verify-deployed-plugins so the committed tree stays covered on quiet days.
-    if: "github.event_name != 'schedule' && !startsWith(github.ref, 'refs/tags/')"
+    if: "github.event_name != 'schedule'"
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
@@ -201,25 +231,25 @@ jobs:
   # Boots the Firestore emulator with the shipped rules + indexes and replays
   # the app's exact public-library query (visitor/owner/denied/legacy/anon).
   # A rules change that breaks provability or privacy fails here instead of in
-  # prod (PL-1). Tag pushes skip like every other check job, and so does the daily
-  # schedule (an emulator boot per day for a plugin-drift watch is not a trade).
+  # prod (PL-1). U-01: tag pushes run like every other check job; only the daily
+  # schedule skips it (an emulator boot per day for a plugin-drift watch is not a trade).
   firestore-rules:
     name: Firestore Rules Verification
     runs-on: ubuntu-latest
-    if: "github.event_name != 'schedule' && !startsWith(github.ref, 'refs/tags/')"
+    if: "github.event_name != 'schedule'"
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
 
       - name: Set up JDK 21 (Firestore emulator requirement)
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           java-version: '21'
           distribution: 'temurin'
@@ -260,10 +290,10 @@ jobs:
       PLUGIN_INDEX_URL: https://mangaworld-admin.vercel.app/plugins/index.json
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
 
@@ -300,7 +330,7 @@ jobs:
         # The exact bytes that were served, so a promotion that shipped something
         # else cannot hide behind a green re-run.
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: deployed-plugins-mirror
           path: ${{ env.PLUGIN_MIRROR }}
@@ -343,22 +373,49 @@ jobs:
       github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Create google-services.json from secret
         # The Google Services plugin refuses to run without it, so the debug
         # build fails before a single test is compiled.
-        if: env.GOOGLE_SERVICES_JSON != ''
+        # U-05: gate the consuming step — PR code must never materialize the secret.
+        if: github.event_name != 'pull_request' && env.GOOGLE_SERVICES_JSON != ''
         run: echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
 
+      - name: Create stub google-services.json for PRs
+        # U-05 companion: PRs get no real secret (see lint-and-test).
+        if: github.event_name == 'pull_request'
+        run: |
+          cat > app/google-services.json << 'STUB'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "mangaworld-pr-stub",
+              "storage_bucket": "mangaworld-pr-stub.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+                  "android_client_info": {"package_name": "com.exapps.mangaworld"}
+                },
+                "oauth_client": [],
+                "api_key": [{"current_key": "stub"}],
+                "services": {"appinvite_service": {"other_platform_oauth_client": []}}
+              }
+            ],
+            "configuration_version": "1"
+          }
+          STUB
+
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5 (normalized from v4)
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Gradle cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.gradle/caches
@@ -370,6 +427,8 @@ jobs:
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
 
       - name: Activate the service account
+        # U-05: the service account is privileged — never activate it on PRs.
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
@@ -377,6 +436,9 @@ jobs:
           gcloud config set project mangaworld-live-260519
 
       - name: Run on-device plugin invariants
+        # U-05: depends on the service-account auth above; skip it on PRs too
+        # (it would otherwise fail unauthenticated instead of skipping cleanly).
+        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
           # Discover by name, not by a guessed path: AGP's androidTest output name
@@ -432,7 +494,8 @@ jobs:
           echo "TEST_LAB_PASSED=1" >> "$GITHUB_ENV"
 
       - name: Collect the on-device test report
-        if: always()
+        # U-05: reads via the service-account auth; skip on PRs (see above).
+        if: always() && github.event_name != 'pull_request'
         run: |
           set -uo pipefail
           # The CLI provisions its own RANDOM staging/results bucket (a named
@@ -455,7 +518,7 @@ jobs:
 
       - name: Upload on-device test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: testlab-results
           path: testlab/
@@ -477,16 +540,44 @@ jobs:
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both'))
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Create google-services.json from secret
-        if: env.GOOGLE_SERVICES_JSON != ''
+        # U-05: PR code must never materialize the real secret; stub below.
+        if: github.event_name != 'pull_request' && env.GOOGLE_SERVICES_JSON != ''
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
 
+      - name: Create stub google-services.json for PRs
+        # U-05 companion (see lint-and-test): PRs get no real secret, but the
+        # google-services Gradle plugin fails config without the file.
+        if: github.event_name == 'pull_request'
+        run: |
+          cat > app/google-services.json << 'STUB'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "mangaworld-pr-stub",
+              "storage_bucket": "mangaworld-pr-stub.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+                  "android_client_info": {"package_name": "com.exapps.mangaworld"}
+                },
+                "oauth_client": [],
+                "api_key": [{"current_key": "stub"}],
+                "services": {"appinvite_service": {"other_platform_oauth_client": []}}
+              }
+            ],
+            "configuration_version": "1"
+          }
+          STUB
+
       - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
@@ -514,9 +605,11 @@ jobs:
           echo "sdk.dir=$SDK_DIR" > local.properties
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           gradle-version: wrapper
+          # U-05: PR runs must not write to the shared Gradle cache.
+          cache-read-only: true
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -530,6 +623,13 @@ jobs:
       - name: Build AndroidTest APK
         run: ./gradlew :app:assembleDebugAndroidTest --stacktrace
 
+      # U-04: PRs must build the release variant too (compile/dex/R8 check).
+      # Unsigned on purpose — no signing secrets on PRs; assembleRelease
+      # without a signing config still exercises the full release pipeline.
+      - name: Build Release APKs (unsigned PR check)
+        if: github.event_name == 'pull_request'
+        run: ./gradlew :app:assembleRelease --stacktrace
+
       - name: Resolve Firebase app id
         if: github.event_name == 'push'
         id: firebase-app
@@ -541,7 +641,7 @@ jobs:
 
       - name: Set up Node.js for Firebase CLI
         if: github.event_name == 'push' && env.FIREBASE_SERVICE_ACCOUNT != ''
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
 
@@ -577,7 +677,7 @@ jobs:
         run: find app/build/outputs/apk -name "*.apk" -type f
 
       - name: Upload arm64-v8a Debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MangaWorld-debug-arm64-v8a
           path: app/build/outputs/apk/debug/*arm64-v8a*.apk
@@ -585,7 +685,7 @@ jobs:
           retention-days: 14
 
       - name: Upload armeabi-v7a Debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MangaWorld-debug-armeabi-v7a
           path: app/build/outputs/apk/debug/*armeabi-v7a*.apk
@@ -593,7 +693,7 @@ jobs:
           retention-days: 14
 
       - name: Upload x86_64 Debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MangaWorld-debug-x86_64
           path: app/build/outputs/apk/debug/*x86_64*.apk
@@ -601,7 +701,7 @@ jobs:
           retention-days: 14
 
       - name: Upload x86 Debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MangaWorld-debug-x86
           path: |
@@ -611,7 +711,7 @@ jobs:
           retention-days: 14
 
       - name: Upload Universal Debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MangaWorld-debug-universal
           path: app/build/outputs/apk/debug/*universal*.apk
@@ -619,7 +719,7 @@ jobs:
           retention-days: 14
 
       - name: Upload AndroidTest APK (FTL instrumentation)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MangaWorld-debug-androidTest
           path: app/build/outputs/apk/androidTest/debug/*.apk
@@ -634,18 +734,19 @@ jobs:
     # --check-published): without it here, a mis-signed or tampered promoted
     # manifest shipped in a release APK with every check green (audit C1).
     needs: [lint-and-test, dashboard-checks, firestore-rules]
-    # A skipped check (tag pushes) must NOT gate the release: needs.*.result
-    # would otherwise skip this job too. Branch pushes still require green
-    # lint/tests/dashboard(signature gate)/rules; tag pushes (already validated on
-    # main) proceed regardless. A `failure` result blocks branch pushes and PRs.
+    # U-01: the check jobs now run on tag pushes too, so a tag no longer
+    # bypasses them — green lint/tests/dashboard(signature gate)/rules is
+    # required on every path that builds a release. A `failure`/`skipped`
+    # check result blocks the release build.
     if: |
-      always() && ((needs.lint-and-test.result == 'success' && needs.dashboard-checks.result == 'success' && needs.firestore-rules.result == 'success') || startsWith(github.ref, 'refs/tags/')) && (
+      always() && needs.lint-and-test.result == 'success' && needs.dashboard-checks.result == 'success' && needs.firestore-rules.result == 'success' && (
         github.event_name == 'push' ||
         startsWith(github.ref, 'refs/tags/v') ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both'))
       )
     outputs:
       signed: ${{ steps.signing.outputs.signed }}
+      verified: ${{ steps.cert-verify.outputs.verified }}
     env:
       KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
       RELEASE_CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
@@ -654,7 +755,7 @@ jobs:
       GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Create google-services.json from secret
         if: env.GOOGLE_SERVICES_JSON != ''
@@ -663,7 +764,7 @@ jobs:
         run: echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
@@ -691,7 +792,7 @@ jobs:
           echo "sdk.dir=$SDK_DIR" > local.properties
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           gradle-version: wrapper
 
@@ -736,7 +837,7 @@ jobs:
 
       - name: Set up Node.js for Firebase CLI
         if: github.event_name == 'push' && steps.signing.outputs.signed == 'true' && env.FIREBASE_SERVICE_ACCOUNT != ''
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
 
@@ -745,12 +846,14 @@ jobs:
         run: npm install -g firebase-tools
 
       - name: Distribute internal release build
+        id: cert-verify
         if: github.event_name == 'push' && steps.signing.outputs.signed == 'true' && env.FIREBASE_SERVICE_ACCOUNT != '' && env.RELEASE_CERT_SHA256 != ''
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
           RELEASE_CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
         shell: bash
-        continue-on-error: true
+        # U-02: no continue-on-error — a fingerprint mismatch must fail the job
+        # (and leave `verified` unset, so create-release cannot publish).
         run: |
           set -euo pipefail
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
@@ -767,6 +870,8 @@ jobs:
             echo "Release certificate fingerprint verification failed." >&2
             exit 1
           fi
+          echo "Release certificate fingerprint verified."
+          echo "verified=true" >> "$GITHUB_OUTPUT"
           groups="${FIREBASE_APP_DISTRIBUTION_GROUPS:-internal-testers}"
           safe_ref="${GITHUB_REF_NAME//[^A-Za-z0-9._-]/_}"
           firebase appdistribution:distribute "${apks[0]}" \
@@ -781,7 +886,7 @@ jobs:
 
       # ── Upload APKs per ABI ─────────────────────────────────────────────────
       - name: Upload arm64-v8a Release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MangaWorld-release-arm64-v8a
           path: app/build/outputs/apk/release/*arm64-v8a*.apk
@@ -789,7 +894,7 @@ jobs:
           retention-days: 90
 
       - name: Upload armeabi-v7a Release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MangaWorld-release-armeabi-v7a
           path: app/build/outputs/apk/release/*armeabi-v7a*.apk
@@ -797,7 +902,7 @@ jobs:
           retention-days: 90
 
       - name: Upload x86 Release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MangaWorld-release-x86
           path: |
@@ -807,7 +912,7 @@ jobs:
           retention-days: 90
 
       - name: Upload x86_64 Release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MangaWorld-release-x86_64
           path: app/build/outputs/apk/release/*x86_64*.apk
@@ -815,7 +920,7 @@ jobs:
           retention-days: 90
 
       - name: Upload Universal Release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MangaWorld-release-universal
           path: app/build/outputs/apk/release/*universal*.apk
@@ -825,7 +930,7 @@ jobs:
       # v9.1.5: R8 mapping for deobfuscating fleet logcat stacks (the minified
       # `sync manonga -> p` dead end). Never shipped in-app; CI artifact only.
       - name: Upload R8 mapping
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MangaWorld-release-mapping
           path: app/build/outputs/mapping/release/mapping.txt
@@ -840,20 +945,17 @@ jobs:
     # the plugin signature gate on the publishing job itself, so a future edit to
     # build-release's condition cannot silently unhook it from the release DAG.
     needs: [build-release, dashboard-checks]
-    # always(): without it, the skipped lint job on tag pushes transitively
-    # skips this job before its condition is even evaluated (same trap as
-    # build-release had). The signed-gate lives in a step below so an
-    # unsigned build warns loudly instead of vanishing silently.
-    # Deliberately NOT `needs.dashboard-checks.result == 'success'` here: on tag
-    # pushes that job is skipped by design (the tagged commit already passed it on
-    # main), and requiring success would block every release. Its failure blocks
-    # earlier, in build-release, which is where branch pushes and PRs are held.
-    if: always() && startsWith(github.ref, 'refs/tags/') && needs.build-release.result == 'success'
+    # always(): without it, a skipped need would transitively skip this job
+    # before its condition is even evaluated (same trap as build-release had).
+    # U-01: dashboard-checks now runs on tag pushes and build-release requires
+    # its success, so gating on build-release (success + U-02 `verified`
+    # fingerprint output) transitively gates on the signature check too.
+    if: always() && startsWith(github.ref, 'refs/tags/') && needs.build-release.result == 'success' && needs.build-release.outputs.verified == 'true'
     permissions:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Require signed build for publication
         run: |
@@ -864,7 +966,7 @@ jobs:
 
       - name: Download all APK artifacts
         if: env.SKIP_PUBLISH != 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: MangaWorld-release-*
           merge-multiple: false
@@ -876,7 +978,7 @@ jobs:
 
       - name: Create Release
         if: env.SKIP_PUBLISH != 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ github.ref_name }}
           name: "MangaWorld ${{ github.ref_name }}"
@@ -911,7 +1013,6 @@ jobs:
             - ✅ لاڤا سكانز (lavascans.com)
             - ✅ StellarSaber (stellarsaber.pro)
             - ✅ ProChan (procomic.pro)
-            - ✅ روكس مانجا (rocksmanga.com)
 
             ### المتطلبات
             - Android 8.0+ (API 26)
@@ -929,7 +1030,7 @@ jobs:
     if: always() && needs.build-debug.result == 'success'
     steps:
       - name: Download debug artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: MangaWorld-debug-*
           merge-multiple: true
@@ -953,7 +1054,7 @@ jobs:
     if: always() && needs.build-release.result == 'success'
     steps:
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: MangaWorld-release-*
           merge-multiple: true
