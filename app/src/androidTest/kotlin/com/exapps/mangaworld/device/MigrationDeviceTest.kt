@@ -6,7 +6,7 @@ import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.room.migration.MigrationTestHelper
+import androidx.room.testing.MigrationTestHelper
 import com.exapps.mangaworld.core.data.local.MangaDatabase
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
