@@ -69,14 +69,12 @@ class FirebaseStartupCoordinator @Inject constructor(
         // U-10: gate the first forced push on merge success (below) — a
         // fresh/wiped device with a failed merge never uploads stale
         // settings over the cloud truth.
-        val mergeJustDone = uid != null && !prefsStore.getBoolean(mergeKey, false)
-        if (mergeJustDone) {
-            if (runCatching { syncManager.mergeRemoteSnapshot() }.isSuccess) {
-                prefsStore.edit().putBoolean(mergeKey, true).apply()
-            }
+        val mergeJustSucceeded = uid != null && !prefsStore.getBoolean(mergeKey, false) &&
+            runCatching { syncManager.mergeRemoteSnapshot() }.isSuccess
+        if (mergeJustSucceeded) {
+            prefsStore.edit().putBoolean(mergeKey, true).apply()
         }
-        val merged = if (uid == null) false else
-            prefsStore.getBoolean(mergeKey, false)
+        val merged = prefsStore.getBoolean(mergeKey, false) || mergeJustSucceeded
 
         // Throttle full sync to once per hour to avoid redundant Firestore writes on every app launch
         val lastSync = prefsStore.getLong(pushKey, 0L)
