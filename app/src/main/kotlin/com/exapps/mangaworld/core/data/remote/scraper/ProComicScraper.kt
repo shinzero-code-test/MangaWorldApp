@@ -281,7 +281,7 @@ class ProComicScraper @Inject constructor(
 
     override suspend fun browseManga(
         page: Int, genre: String?, status: MangaStatus?, type: MangaType?, sortBy: SortBy
-    ): Result<List<MangaItem>> = runCatching {
+    ): Result<List<MangaItem>> = suspendRunCatching {
         // Try API first, fall back to HTML scraping
         try {
             val sort = when (sortBy) {

@@ -288,7 +288,7 @@ class AreaScansScraper @Inject constructor(
 
     override suspend fun browseManga(
         page: Int, genre: String?, status: MangaStatus?, type: MangaType?, sortBy: SortBy
-    ): Result<List<MangaItem>> = runCatching {
+    ): Result<List<MangaItem>> = suspendRunCatching {
         val order = when (sortBy) {
             SortBy.POPULARITY -> "views"
             SortBy.RATING -> "rating"

@@ -13,7 +13,7 @@ import kotlinx.coroutines.CancellationException
  * Shape mirrors [runCatching] exactly so call-site migration is mechanical:
  * `= runCatching { … }` → `= suspendRunCatching { … }`.
  */
-inline fun <T> suspendRunCatching(block: suspend () -> T): Result<T> {
+inline suspend fun <T> suspendRunCatching(block: suspend () -> T): Result<T> {
     return try {
         Result.success(block())
     } catch (e: CancellationException) {
