@@ -874,6 +874,10 @@ internal fun computeLocalPushFingerprint(
         h = h * 31 + java.lang.Double.doubleToLongBits(this)
         return h
     }
+    fun Float.mix(): Long {
+        h = h * 31 + java.lang.Float.floatToIntBits(this).toLong()
+        return h
+    }
     fun Boolean.mix(): Long {
         h = h * 31 + (if (this) 1 else 0)
         return h
