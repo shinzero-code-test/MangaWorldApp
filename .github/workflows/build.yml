@@ -985,8 +985,12 @@ jobs:
             echo "apksigner not found under $ANDROID_HOME/build-tools (needed for fingerprint)." >&2
             exit 1
           fi
-          actual_fingerprint=$("$APKSIGNER" verify --print-certs --verbose "${apks[0]}" 2>/dev/null \
-            | grep -iE "SHA-256 digest of the certificate|Signer #[0-9]+ certificate SHA-256 digest" | head -1 | awk -F': ' '{print $2}' | tr -d ':')
+          # NB: --verbose would be useful but its info goes to stderr; stdout
+          # carries the per-signer digest lines we grep. (First failure was
+          # `2>/dev/null` silently eating an empty verbose stream under
+          # pipefail, and the bare `apksigner` lookup failing on the PATH.)
+          actual_fingerprint=$("$APKSIGNER" verify --print-certs "${apks[0]}" 2>/dev/null \
+            | grep -iE "SHA-256 digest" | head -1 | awk -F': ' '{print $2}' | tr -d ':')
           echo "release cert SHA-256: ${actual_fingerprint:-<empty>}"
           if [[ -z "$actual_fingerprint" ]]; then
             echo "Could not extract the certificate fingerprint (apksigner found nothing)." >&2
