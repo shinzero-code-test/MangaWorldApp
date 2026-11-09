@@ -8,7 +8,6 @@ import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.invokeOnCancellation
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -109,8 +108,12 @@ abstract class BaseScraperImpl(
             val request = requestBuilder.build()
 
             val call = client.newCall(request)
-            // U-18: coroutine cancellation must abort the blocking call.
-            currentCoroutineContext().invokeOnCancellation { runCatching { call.cancel() } }
+            // U-18: coroutine cancellation must abort the blocking call — use
+            // the Job's invokeOnCancellation via a launched handler instead of
+            // the internal CancellableContinuation overload (kotlinx 1.8+ marks
+            // the latter internal: currentCoroutineContext().invokeOnCancellation
+            // does not compile from app code).
+            currentCoroutineContext()[kotlinx.coroutines.Job]?.invokeOnCancellation { runCatching { call.cancel() } }
             val response = call.execute()
             val body: String
             val code: Int

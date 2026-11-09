@@ -52,7 +52,7 @@ private const val MAX_COMMUNITY_MENTIONS = 10
  * Firestore write cannot outlive onCleared() unbounded.
  */
 private suspend fun <T> nonCancellableTimed(block: suspend () -> T): T =
-    withContext(NonCancellable) { withTimeout(30_000L, block) }
+    withContext(NonCancellable) { withTimeout(30_000L) { block() } }
 
 @Singleton
 class FirebaseCommunityRepository @Inject constructor(
@@ -429,7 +429,7 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String?, bannerUrl: String?, displayName: String, location: String, birthday: Long?) {
         nonCancellableTimed {
-        val uid = sessionManager.ensureFirebaseSession() ?: return@nonCancellableTimed
+        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
         val normalized = username.trim().lowercase()
         require(normalized.isNotBlank()) { context.getString(R.string.auth_error_username_required) }
         require(normalized.length in 3..20) { context.getString(R.string.auth_error_username_invalid) }
@@ -490,7 +490,7 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override suspend fun updateProfilePrivacyFlag(flag: com.exapps.mangaworld.domain.repository.ProfilePrivacyFlag, value: Boolean) {
         nonCancellableTimed {
-        val uid = sessionManager.ensureFirebaseSession() ?: return@nonCancellableTimed
+        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
         // Single-key merge: no read, so a concurrent toggle from another
         // device can never be clobbered (RA-5). Rules allow any subset of the
         // profile allowlist, so one key + updatedAt passes as-is.
@@ -531,7 +531,7 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override suspend fun deleteList(listId: String) {
         nonCancellableTimed {
-        val uid = sessionManager.ensureFirebaseSession() ?: return@nonCancellableTimed
+        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
         val doc = firestore.collection("users").document(uid).collection("lists").document(listId)
         val items = doc.collection("items").get().await().documents
         // Firestore batches cap at 500 operations — chunk so large lists can
@@ -546,7 +546,7 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override suspend fun addMangaToList(listId: String, item: CustomUserListItem) {
         nonCancellableTimed {
-        val uid = sessionManager.ensureFirebaseSession() ?: return@nonCancellableTimed
+        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
         val listDoc = firestore.collection("users").document(uid).collection("lists").document(listId)
         val itemDoc = listDoc.collection("items").document(item.mangaId)
         val existed = itemDoc.get().await().exists()
@@ -562,13 +562,13 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override suspend fun removeMangaFromList(listId: String, mangaId: String) {
         nonCancellableTimed {
-        val uid = sessionManager.ensureFirebaseSession() ?: return@nonCancellableTimed
+        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
         val listDoc = firestore.collection("users").document(uid).collection("lists").document(listId)
         val itemDoc = listDoc.collection("items").document(mangaId)
         // Mirror addMangaToList: only decrement when the item actually existed,
         // otherwise repeated removes drive itemCount negative (L-review).
         val existed = itemDoc.get().await().exists()
-        if (!existed) return@nonCancellableTimed
+        if (!existed) return@withContext
         itemDoc.delete().await()
         listDoc.update(
             mapOf(
@@ -893,7 +893,7 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override suspend fun markNotificationRead(notificationId: String) {
         nonCancellableTimed {
-        val uid = sessionManager.currentUserId() ?: return@nonCancellableTimed
+        val uid = sessionManager.currentUserId() ?: return@withContext
         firestore.collection("users").document(uid)
             .collection("notifications").document(notificationId)
             .update("read", true)
@@ -903,7 +903,7 @@ class FirebaseCommunityRepository @Inject constructor(
 
     override suspend fun markNotificationsRead(ids: List<String>) {
         nonCancellableTimed {
-        val uid = sessionManager.currentUserId() ?: return@nonCancellableTimed
+        val uid = sessionManager.currentUserId() ?: return@withContext
         // WriteBatch chunks — one round-trip per 400 instead of one per item.
         ids.chunked(400).forEach { chunk ->
             val batch = firestore.batch()
@@ -1046,7 +1046,7 @@ class FirebaseCommunityRepository @Inject constructor(
                 spoiler = spoiler,
                 replyTarget = replyTarget!!
             )
-            return@nonCancellableTimed
+            return@withContext
         }
         val comment = CommunityComment(
             id = UUID.randomUUID().toString(),
@@ -1143,7 +1143,7 @@ class FirebaseCommunityRepository @Inject constructor(
     private suspend fun sendPushNotification(mangaId: String, chapterUrl: String?, commentId: String) =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val token = sessionManager.currentIdToken() ?: return@nonCancellableTimed
+                val token = sessionManager.currentIdToken() ?: return@withContext
                 val body = org.json.JSONObject().apply {
                     put("mangaId", mangaId)
                     put("commentId", commentId)
@@ -1182,7 +1182,7 @@ class FirebaseCommunityRepository @Inject constructor(
         reviewId: String? = null
     ) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         try {
-            val token = sessionManager.currentIdToken() ?: return@nonCancellableTimed
+            val token = sessionManager.currentIdToken() ?: return@withContext
             val body = org.json.JSONObject().apply {
                 put("mangaId", mangaId)
                 if (chapterUrl != null) put("chapterUrl", chapterUrl)
@@ -1217,7 +1217,7 @@ class FirebaseCommunityRepository @Inject constructor(
     private suspend fun notifyFollow(targetUid: String) =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val token = sessionManager.currentIdToken() ?: return@nonCancellableTimed
+                val token = sessionManager.currentIdToken() ?: return@withContext
                 val body = org.json.JSONObject().apply { put("targetUid", targetUid) }
                 val conn = java.net.URL("${CloudinaryUploader.DASHBOARD_BASE_URL}/api/notifications/follow").openConnection() as java.net.HttpURLConnection
                 try {
@@ -1471,7 +1471,7 @@ class FirebaseCommunityRepository @Inject constructor(
         }
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val token = sessionManager.currentIdToken() ?: return@nonCancellableTimed
+                val token = sessionManager.currentIdToken() ?: return@withContext
                 val body = org.json.JSONObject().apply { put("text", text) }
                 val conn = java.net.URL("${CloudinaryUploader.DASHBOARD_BASE_URL}/api/community/moderate").openConnection() as java.net.HttpURLConnection
                 try {
