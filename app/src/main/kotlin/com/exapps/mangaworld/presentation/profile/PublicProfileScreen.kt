@@ -88,11 +88,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withTimeout
 
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
 /** U-18: NonCancellable writes bounded by a 30s deadline. */
 private fun CoroutineScope.launchNonCancellableTimed(block: suspend () -> Unit): Job =
     launch(NonCancellable) { withTimeout(30_000L) { block() } }
-import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 // =====================================================================================
 // ViewModel & State — business logic is unchanged from the original implementation.
