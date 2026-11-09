@@ -32,12 +32,12 @@ export function uidParams(uid: string) {
 export const APP_USER = {
   uid: "uid-1",
   firebase: { sign_in_provider: "password" },
-} as never;
+} as Record<string, unknown>;
 
 export const APP_ANON = {
   uid: "anon-1",
   firebase: { sign_in_provider: "anonymous" },
-} as never;
+} as Record<string, unknown>;
 
 export function mockAppAuthed() {
   vi.mocked(verifyAppIdToken).mockResolvedValue(APP_USER);
@@ -55,12 +55,12 @@ export function mockAppUnauthorized() {
   vi.mocked(verifyAppIdToken).mockRejectedValue(new Error("Unauthorized"));
 }
 
-export const SESSION_USER = {
+export const SESSION_USER: Record<string, unknown> = {
   uid: "admin-1",
   email: "admin@example.com",
   role: "super-admin",
   mfaVerified: true,
-} as never;
+};
 
 export function mockSessionUser(
   overrides: Record<string, unknown> = {},

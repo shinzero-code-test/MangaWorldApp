@@ -335,7 +335,7 @@ class MangaPagingSource(
                                 // the previous page load (1 network call for
                                 // the 2 shared subpages, 1 new for the edge).
                                 val memoed = memoizedBrowse(source.value, subPage)
-                                val (items, failureCause): Pair<List<MangaItem>?, Throwable?> =
+                                val (items, failureCause) =
                                     if (memoed != null) {
                                         memoed to null
                                     } else {
