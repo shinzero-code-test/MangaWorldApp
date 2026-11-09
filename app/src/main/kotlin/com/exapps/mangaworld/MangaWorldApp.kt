@@ -59,19 +59,25 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
             .setWorkerFactory(workerFactory)
             .build()
 
-    override fun newImageLoader(): ImageLoader {
-        // Image traffic must NEVER share the scraper OkHttpClient: U-23's
-        // host gate (built from bare base hosts) rejects image CDN fetches
-        // (`storage.azorafly.com`, `i0.wp.com`, …) with IOException, which
-        // blanked every cover/page in v9.6.0. The gate is scraper-only;
-        // Coil gets a plain client. (Triage: image-regression-triage.md)
-        //
+    /**
+     * U-26 single ImageLoader. `newImageLoader()` below is the ONLY
+     * Coil builder; injected consumers (Hilt `provideImageLoader` in
+     * Modules.kt) resolve to this same instance via [sharedImageLoader],
+     * so prefetch/widget/save paths share the browser — and the cache —
+     * of Compose screens. Memoization is ours on purpose: Coil 2.7 ships
+     * no `coil.SingletonImageLoader` class, so delegation must not rely
+     * on it.
+     */
+    val sharedImageLoader: ImageLoader by lazy { buildSharedImageLoader() }
+
+    override fun newImageLoader(): ImageLoader = sharedImageLoader
+
+    private fun buildSharedImageLoader(): ImageLoader {
         // U-26 (single ImageLoader): this factory is the ONLY ImageLoader
         // builder. The deleted Hilt duplicate carried the Stellar CDN
         // decryption interceptor, so its absence here would silently break
-        // StellarSaber `.bin` images for prefetch/widget/save paths (whose
-        // injected loader now resolves to this factory via
-        // SingletonImageLoader). The interceptor is host-scoped to
+        // StellarSaber `.bin` images for prefetch/widget/save paths.
+        // The interceptor is host-scoped to
         // `cdn-stellarsaber.com` (pass-through for everything else) and is
         // NOT the U-23 host gate — it never rejects traffic, so display
         // images that already load through this client keep loading.

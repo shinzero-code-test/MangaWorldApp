@@ -856,17 +856,22 @@ internal fun computeLocalPushFingerprint(
     totalMangaRead: Int,
     achievements: Map<String, Any>,
 ): Long {
-    var h = 17
+    var h = 17L
     fun Long.mix(): Long {
-        h = h * 31 + hashCode().toLong()
-        return h
-    }
-    fun Int.mix(): Long {
         h = h * 31 + this
         return h
     }
+    fun Int.mix(): Long {
+        h = h * 31 + this.toLong()
+        return h
+    }
     fun String.mix(): Long {
-        h = h * 31 + hashCode()
+        h = h * 31 + hashCode().toLong()
+        return h
+    }
+    fun Double.mix(): Long {
+        // java.lang.Double hashCode (bits of the double, not Float's)
+        h = h * 31 + java.lang.Double.doubleToLongBits(this)
         return h
     }
     fun Boolean.mix(): Long {
@@ -882,7 +887,7 @@ internal fun computeLocalPushFingerprint(
     }
     history.size.mix()
     history.sortedBy { it.mangaId }.forEach {
-        it.mangaId.mix(); it.lastReadAt.mix(); it.lastChapterNumber.hashCode().mix()
+        it.mangaId.mix(); it.lastReadAt.mix(); it.lastChapterNumber.mix()
         it.readChapters.mix(); it.totalChapters.mix(); it.durationMs.mix()
     }
     annotations.size.mix()
@@ -893,7 +898,7 @@ internal fun computeLocalPushFingerprint(
     readMarks.size.mix()
     readMarks.sortedWith(
         compareBy<ReadChapterEntity>({ it.mangaId }, { it.chapterNumber })
-    ).forEach { it.mangaId.mix(); it.chapterNumber.hashCode().mix(); it.readAt.mix() }
+    ).forEach { it.mangaId.mix(); it.chapterNumber.mix(); it.readAt.mix() }
     tombstones.size.mix()
     tombstones.sortedBy { it.collection + "|" + it.documentId }.forEach {
         it.collection.mix(); it.documentId.mix(); it.deletedAt.mix()
@@ -910,7 +915,7 @@ internal fun computeLocalPushFingerprint(
     settings.spoilerCollapseDefault.mix()
     settings.mutedUserIds.take(100).forEach { it.mix() }
     totalReadingTimeMs.mix(); totalMangaRead.mix()
-    reader.mode.name.mix(); reader.brightness.hashCode().mix(); reader.pageSpacing.mix()
+    reader.mode.name.mix(); reader.brightness.mix(); reader.pageSpacing.mix()
     reader.keepScreenOn.mix(); reader.showPageNumber.mix(); reader.autoWebtoonDetection.mix()
     reader.incognitoMode.mix(); reader.smartPrefetchEnabled.mix(); reader.hapticsEnabled.mix()
     reader.imageFilter.name.mix(); reader.autoOpenNextChapter.mix(); reader.showLiveReadersOverlay.mix()
@@ -919,4 +924,4 @@ internal fun computeLocalPushFingerprint(
     achievements.size.mix()
     achievements.entries.sortedBy { it.key }.forEach { it.key.mix(); it.value.toString().mix() }
     return h
-}
+    }

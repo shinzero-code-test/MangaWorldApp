@@ -168,18 +168,22 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideImageLoader(@ApplicationContext ctx: Context): ImageLoader =
-        // U-26: single ImageLoader. The factory ([MangaWorldApp.newImageLoader])
-        // is the ONLY builder (one memory cache, 30%, one disk journal). The
-        // old Hilt duplicate builder ran a second memory cache (+25%) over the
-        // same "coil_image_cache" directory, and prefetch/widget/save paths
-        // read a cache display never wrote (and vice versa). Injected
-        // consumers (ImagePrefetcher, ReaderViewModel, WidgetDataRepository)
+        // U-26: single ImageLoader. `MangaWorldApp.sharedImageLoader`
+        // (created by `MangaWorldApp.newImageLoader`, which delegates
+        // to it) is the ONLY builder. The old Hilt duplicate builder ran
+        // a second memory cache (+25%) over the same "coil_image_cache"
+        // directory, and prefetch/widget/save paths read a cache display
+        // never wrote (and vice versa). Injected consumers
+        // (ImagePrefetcher, ReaderViewModel, WidgetDataRepository)
         // therefore resolve the very instance Compose screens use via
-        // `ctx.imageLoader`. The factory's plain OkHttp client (no host
-        // gate — U-23 triage, `image-regression-triage.md`) still carries
-        // the Stellar CDN decryption interceptor, which was the only
-        // behavior unique to the deleted builder.
-        coil.SingletonImageLoader.get(ctx)
+        // `ctx.imageLoader`. Coil 2.7 has no
+        // `coil.SingletonImageLoader` symbol, so delegation goes through
+        // the Application's own memoized instance. The factory's plain
+        // OkHttp client (no host gate — U-23 triage,
+        // `image-regression-triage.md`) still carries the Stellar CDN
+        // decryption interceptor, which was the only behavior unique to
+        // the deleted builder.
+        (ctx.applicationContext as com.exapps.mangaworld.MangaWorldApp).sharedImageLoader
 }
 
 

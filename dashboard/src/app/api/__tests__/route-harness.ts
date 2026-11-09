@@ -40,12 +40,12 @@ export const APP_ANON = {
 } as Record<string, unknown>;
 
 export function mockAppAuthed() {
-  vi.mocked(verifyAppIdToken).mockResolvedValue(APP_USER);
+  vi.mocked(verifyAppIdToken).mockResolvedValue(APP_USER as unknown as import("firebase-admin/auth").DecodedIdToken);
   vi.mocked(rejectAnonymousUser).mockImplementation(() => {});
 }
 
 export function mockAppAnon() {
-  vi.mocked(verifyAppIdToken).mockResolvedValue(APP_ANON);
+  vi.mocked(verifyAppIdToken).mockResolvedValue(APP_ANON as unknown as import("firebase-admin/auth").DecodedIdToken);
   vi.mocked(rejectAnonymousUser).mockImplementation(() => {
     throw new Error("Forbidden");
   });
