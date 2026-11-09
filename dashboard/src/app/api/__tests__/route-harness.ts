@@ -62,15 +62,25 @@ export const SESSION_USER: Record<string, unknown> = {
   mfaVerified: true,
 };
 
+/**
+ * Mock implementations REPLACE (never queue), so each call sets what the
+ * next invocation returns. (Previously `mockResolvedValue` calls from
+ * `mockSessionUser` in beforeEach stacked with those from the test body,
+ * and the FIRST-in-queue value — a fresh session — won, making
+ * `mockSessionStale` a no-op (returns fresh authTime → route 200s.)
+ */
 export function mockSessionUser(
   overrides: Record<string, unknown> = {},
   authTime: number = Date.now()
 ) {
-  vi.mocked(getCurrentUser).mockResolvedValue({
-    ...SESSION_USER,
-    authTime,
-    ...overrides,
-  } as never);
+  vi.mocked(getCurrentUser).mockImplementation(
+    async () =>
+      ({
+        ...SESSION_USER,
+        authTime,
+        ...overrides,
+      }) as never
+  );
 }
 
 export function mockSessionStale() {

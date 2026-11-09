@@ -72,6 +72,11 @@ function fakeDb(opts: {
             set: async (data: Record<string, unknown>) => {
               notificationWrites.push({ ref: ref(subPath), data });
             },
+            // Reviews live two levels deep (community_manga/{manga}/reviews/{id});
+            // the route chains .collection("votes") off the content doc.
+            collection: (nested: string) => ({
+              doc: (nestedId: string) => ref(`${subPath}/${nested}/${nestedId}`),
+            }),
           };
         },
       }),
