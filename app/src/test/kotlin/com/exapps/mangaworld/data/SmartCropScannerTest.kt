@@ -50,8 +50,6 @@ class SmartCropScannerTest {
 
     @Test
     fun trimsKnownMargins_withFewRowReads() {
-    @Test
-    fun trimsKnownMargins_withFewRowReads() {
         // The §53 call previously omitted the required `content` lambda
         // (fake-profiler fix landed in CI, not in the initial commit).
         val px = pixels { x, y -> x >= marginX && x < width - marginX && y >= marginY && y < height - marginY }

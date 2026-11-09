@@ -53,6 +53,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockAuth();
   vi.mocked(consumeRateLimit).mockResolvedValue({ allowed: true });
+  // The cross-origin test flips this to false — restore for every other test.
+  vi.mocked(isSameOriginRequest).mockReturnValue(true);
 });
 
 describe("POST /api/auth/login", () => {
