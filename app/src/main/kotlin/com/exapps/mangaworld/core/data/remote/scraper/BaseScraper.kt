@@ -7,6 +7,7 @@ import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
