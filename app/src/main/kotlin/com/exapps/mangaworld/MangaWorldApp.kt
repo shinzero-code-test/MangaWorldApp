@@ -59,8 +59,18 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
             .build()
 
     override fun newImageLoader(): ImageLoader {
+        // Image traffic must NEVER share the scraper OkHttpClient: U-23's
+        // host gate (built from bare base hosts) rejects image CDN fetches
+        // (`storage.azorafly.com`, `i0.wp.com`, …) with IOException, which
+        // blanked every cover/page in v9.6.0. The gate is scraper-only;
+        // Coil gets a plain client. (Triage: image-regression-triage.md)
         return ImageLoader.Builder(this)
-            .okHttpClient(okHttpClient)
+            .okHttpClient(
+                okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+            )
             .diskCache {
                 DiskCache.Builder()
                     .directory(File(cacheDir, "coil_image_cache"))

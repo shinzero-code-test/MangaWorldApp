@@ -125,11 +125,15 @@ object NetworkModule {
                     registryProvider.get().allDescriptors().flatMap { d ->
                         val id = d.id.value
                         listOf(
+                            // base + subdomain-aware effective hosts: the bare
+                            // base host missed API subdomains (api.azorafly.com,
+                            // appswat.com…) and was the same root cause as the
+                            // image blanking (triage-listed second half).
                             com.exapps.mangaworld.core.source.plugins.HostPolicy.hostOf(
                                 com.exapps.mangaworld.domain.model.SourceDomainOverrides.baseUrlFor(id, d.baseUrl)
                             ),
                             com.exapps.mangaworld.core.source.plugins.HostPolicy.hostOf(d.baseUrl)
-                        )
+                        ) + d.effectiveHosts
                     }.toSet()
                 }.getOrDefault(emptySet())
                 // Fail-open only when the registry is empty (tests / early
