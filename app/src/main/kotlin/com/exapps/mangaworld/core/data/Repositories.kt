@@ -12,6 +12,8 @@ import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeExcepti
 import com.exapps.mangaworld.core.data.remote.scraper.MangaScraper
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.*
+import com.google.firebase.firestore.FieldPath
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -246,6 +248,17 @@ class MangaRepositoryImpl @Inject constructor(
 
 // ─── PagingSource ─────────────────────────────────────────────────────────────
 
+/**
+ * U-20: sealed per-source fetch outcome for multi-source search.
+ * [Ok] carries rows; [Fail] names the source + error. Callers render partial
+ * results + log failures (ScraperTelemetry) instead of an outage posing as
+ * "no results".
+ */
+sealed interface SourceFetchOutcome {
+    data class Ok(val items: List<MangaItem>) : SourceFetchOutcome
+    data class Fail(val sourceId: String, val error: Throwable) : SourceFetchOutcome
+}
+
 class MangaPagingSource(
     private val scrapers: Map<String, MangaScraper>,
     private val filters: SearchFilters
@@ -280,39 +293,58 @@ class MangaPagingSource(
                 scrapers.keys.filter { it in allowedSourceIds }.map { com.exapps.mangaworld.core.source.plugins.SourceId(it) }
             }
 
-            // Run all source queries in parallel, tolerate CF errors per-source
-            val rawResults: List<MangaItem> = coroutineScope {
-                val deferred: List<kotlinx.coroutines.Deferred<List<MangaItem>>> = sources.map { source ->
+            // Run all source queries in parallel, tolerate CF errors per-source.
+            // U-20: sealed outcomes — failures are logged per-source (ScraperTelemetry)
+            // while successes still render (partial-failure, not "no results").
+            val outcomes: List<SourceFetchOutcome> = coroutineScope {
+                val deferred: List<kotlinx.coroutines.Deferred<SourceFetchOutcome>> = sources.map { source ->
                     async {
-                        val scraper = scrapers[source.value] ?: return@async emptyList<MangaItem>()
-                        val fetched = if (needsLocalFiltering) {
+                        val scraper = scrapers[source.value]
+                            ?: return@async SourceFetchOutcome.Fail(source.value, IllegalStateException("no scraper for ${source.value}"))
+                        if (needsLocalFiltering) {
                             val aggregate = mutableListOf<MangaItem>()
+                            var failure: SourceFetchOutcome.Fail? = null
                             for (subPage in page until page + 3) {
                                 val result = scraper.browseManga(subPage, filters.genre, filters.status, filters.type, filters.sortBy)
-                                val items = result.getOrElse { e ->
+                                val items = result.getOrNull()
+                                if (items == null) {
+                                    val e = result.exceptionOrNull() ?: IllegalStateException("browse failed")
                                     if (filters.source != null) throw e
-                                    emptyList()
+                                    failure = SourceFetchOutcome.Fail(source.value, e)
+                                    break
                                 }
                                 if (items.isEmpty()) break
                                 aggregate += items
                             }
-                            aggregate
+                            if (failure != null && aggregate.isEmpty()) {
+                                com.exapps.mangaworld.core.data.remote.scraper.ScraperTelemetry.logFailure(source.value, "paging_search", failure.error)
+                                failure
+                            } else {
+                                if (failure != null) com.exapps.mangaworld.core.data.remote.scraper.ScraperTelemetry.logFailure(source.value, "paging_search_partial", failure.error)
+                                SourceFetchOutcome.Ok(aggregate)
+                            }
                         } else {
                             val result = when {
                                 filters.query.isNotEmpty() -> scraper.searchManga(filters.query, page)
                                 else -> scraper.browseManga(page, filters.genre, filters.status, filters.type, filters.sortBy)
                             }
-
-                            result.getOrElse { e ->
-                                if (filters.source != null) throw e
-                                emptyList()
-                            }
+                            result.fold(
+                                onSuccess = { SourceFetchOutcome.Ok(it) },
+                                onFailure = { e ->
+                                    if (filters.source != null) throw e
+                                    com.exapps.mangaworld.core.data.remote.scraper.ScraperTelemetry.logFailure(source.value, "paging_search", e)
+                                    SourceFetchOutcome.Fail(source.value, e)
+                                }
+                            )
                         }
-                        fetched
                     }
                 }
-                deferred.awaitAll().flatMap { it }
-            }.distinctBy { it.id }
+                deferred.awaitAll()
+            }
+            val rawResults: List<MangaItem> = outcomes
+                .filterIsInstance<SourceFetchOutcome.Ok>()
+                .flatMap { it.items }
+                .distinctBy { it.id }
 
             var filtered = rawResults
             if (filters.blockedKeywords.isNotEmpty()) {
@@ -366,11 +398,14 @@ class LibraryRepositoryImpl @Inject constructor(
         }
 
     override suspend fun addFavorite(manga: FavoriteManga) {
+        // U-20: present-but-unfavorited rows use the targeted UPDATE so
+        // concurrent progress writes (syncFavoriteProgress) are not clobbered
+        // by a stale whole-entity REPLACE. Only a truly missing row inserts.
         val existing = favoriteDao.getById(manga.mangaId)
         if (existing == null) {
             favoriteDao.insert(manga.toEntity().copy(isFavorite = true))
         } else {
-            favoriteDao.insert(existing.copy(isFavorite = true, addedAt = System.currentTimeMillis()))
+            favoriteDao.setFavoriteIfExisting(manga.mangaId, System.currentTimeMillis())
         }
         prefs.clearSyncTombstone("favorites", manga.mangaId)
     }
@@ -434,7 +469,17 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun clearHistory() {
-        historyDao.getAllMangaIds().forEach { mangaId -> prefs.markSyncTombstone("readingHistory", mangaId) }
+        // U-11: a tombstone-write failure must be loud, not abort the wipe.
+        // Keep going row-by-row so most tombstones land; the paged cloud wipe
+        // below covers the residue (the 2k cap drops the oldest anyway).
+        var tombstoneFailures = 0
+        historyDao.getAllMangaIds().forEach { mangaId ->
+            suspendRunCatching { prefs.markSyncTombstone("readingHistory", mangaId) }
+                .onFailure { e -> tombstoneFailures++; android.util.Log.e("LibraryRepo", "clearHistory tombstone failed for $mangaId: ${e.message}") }
+        }
+        if (tombstoneFailures > 0) {
+            android.util.Log.e("LibraryRepo", "clearHistory: $tombstoneFailures tombstone write(s) failed")
+        }
         historyDao.clearAll()
         // FS-4: cloud copies must die now — the local tombstone cap cannot
         // cover mass deletions, and without this the rows resurrect on pull.
@@ -477,18 +522,43 @@ class LibraryRepositoryImpl @Inject constructor(
      * Best-effort cloud wipe of one users/{uid} subcollection (FS-4). Never
      * throws: sync correctness must not depend on it (tombstones + push-time
      * application are the reliable path).
+     *
+     * U-11: the old 25×200 cap (5,000 docs) left a resurrectable tail past
+     * 5k rows. Page with a document-id cursor until the collection is
+     * exhausted instead; failures are logged loudly (previously swallowed).
      */
     private suspend fun deleteCloudCollection(collection: String) {
         val uid = sessionManager.currentUserId() ?: return
-        runCatching {
-            val col = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                .collection("users").document(uid).collection(collection)
-            repeat(25) {
-                val snap = col.limit(200).get().await()
-                if (snap.isEmpty) return@runCatching
-                snap.documents.forEach { runCatching { it.reference.delete().await() } }
-                if (snap.size() < 200) return@runCatching
+        val col = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            .collection("users").document(uid).collection(collection)
+        var lastDocId: String? = null
+        var deleted = 0
+        try {
+            while (true) {
+                val query = if (lastDocId == null) {
+                    col.orderBy(FieldPath.documentId()).limit(200)
+                } else {
+                    col.orderBy(FieldPath.documentId()).startAfter(lastDocId).limit(200)
+                }
+                val snap = query.get().await()
+                if (snap.isEmpty) break
+                snap.documents.forEach { doc ->
+                    // Per-doc delete kept (no WriteBatch) — same failure
+                    // isolation as the old loop.
+                    runCatching { doc.reference.delete().await() }
+                        .onFailure { e ->
+                            if (e is CancellationException) throw e
+                            android.util.Log.e("LibraryRepo", "Cloud wipe $collection: delete ${doc.id} failed: ${e.message}")
+                        }
+                        .onSuccess { deleted++ }
+                }
+                if (snap.size() < 200) break
+                lastDocId = snap.documents.last().id
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.e("LibraryRepo", "Cloud wipe of $collection failed after $deleted deletes: ${e.message}", e)
         }
     }
 

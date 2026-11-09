@@ -33,6 +33,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -45,6 +46,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val MAX_COMMUNITY_MENTIONS = 10
+
+/**
+ * U-18: every NonCancellable write is bounded by a 30s deadline so a hung
+ * Firestore write cannot outlive onCleared() unbounded.
+ */
+private suspend fun <T> nonCancellableTimed(block: suspend () -> T): T =
+    withContext(NonCancellable) { withTimeout(30_000L, block) }
 
 @Singleton
 class FirebaseCommunityRepository @Inject constructor(
@@ -420,8 +428,8 @@ class FirebaseCommunityRepository @Inject constructor(
     }.getOrNull()
 
     override suspend fun upsertProfile(username: String, bio: String, isPublic: Boolean, avatarUrl: String?, bannerUrl: String?, displayName: String, location: String, birthday: Long?) {
-        withContext(NonCancellable) {
-        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
+        nonCancellableTimed {
+        val uid = sessionManager.ensureFirebaseSession() ?: return@nonCancellableTimed
         val normalized = username.trim().lowercase()
         require(normalized.isNotBlank()) { context.getString(R.string.auth_error_username_required) }
         require(normalized.length in 3..20) { context.getString(R.string.auth_error_username_invalid) }
@@ -481,8 +489,8 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun updateProfilePrivacyFlag(flag: com.exapps.mangaworld.domain.repository.ProfilePrivacyFlag, value: Boolean) {
-        withContext(NonCancellable) {
-        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
+        nonCancellableTimed {
+        val uid = sessionManager.ensureFirebaseSession() ?: return@nonCancellableTimed
         // Single-key merge: no read, so a concurrent toggle from another
         // device can never be clobbered (RA-5). Rules allow any subset of the
         // profile allowlist, so one key + updatedAt passes as-is.
@@ -497,7 +505,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun createOrUpdateList(listId: String?, name: String, description: String, coverUrl: String, rating: Float, genres: List<String>, isPublic: Boolean): String {
-        return withContext(NonCancellable) {
+        return nonCancellableTimed {
         val uid = sessionManager.ensureFirebaseSession() ?: error(context.getString(R.string.community_error_sign_in))
         val id = listId ?: UUID.randomUUID().toString()
         val doc = firestore.collection("users").document(uid).collection("lists").document(id)
@@ -522,8 +530,8 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun deleteList(listId: String) {
-        withContext(NonCancellable) {
-        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
+        nonCancellableTimed {
+        val uid = sessionManager.ensureFirebaseSession() ?: return@nonCancellableTimed
         val doc = firestore.collection("users").document(uid).collection("lists").document(listId)
         val items = doc.collection("items").get().await().documents
         // Firestore batches cap at 500 operations — chunk so large lists can
@@ -537,8 +545,8 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun addMangaToList(listId: String, item: CustomUserListItem) {
-        withContext(NonCancellable) {
-        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
+        nonCancellableTimed {
+        val uid = sessionManager.ensureFirebaseSession() ?: return@nonCancellableTimed
         val listDoc = firestore.collection("users").document(uid).collection("lists").document(listId)
         val itemDoc = listDoc.collection("items").document(item.mangaId)
         val existed = itemDoc.get().await().exists()
@@ -553,14 +561,14 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun removeMangaFromList(listId: String, mangaId: String) {
-        withContext(NonCancellable) {
-        val uid = sessionManager.ensureFirebaseSession() ?: return@withContext
+        nonCancellableTimed {
+        val uid = sessionManager.ensureFirebaseSession() ?: return@nonCancellableTimed
         val listDoc = firestore.collection("users").document(uid).collection("lists").document(listId)
         val itemDoc = listDoc.collection("items").document(mangaId)
         // Mirror addMangaToList: only decrement when the item actually existed,
         // otherwise repeated removes drive itemCount negative (L-review).
         val existed = itemDoc.get().await().exists()
-        if (!existed) return@withContext
+        if (!existed) return@nonCancellableTimed
         itemDoc.delete().await()
         listDoc.update(
             mapOf(
@@ -580,11 +588,16 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun upsertReview(mangaId: String, slug: String, sourceId: String, rating: Int, title: String, body: String) {
+        // TODO(U-18e): migrate comment/review writes to WorkManager (durable
+        // outbox + retries across process death). Too invasive for this
+        // bundle: needs a Room outbox, worker, and pending-state UI. Until
+        // then writes stay NonCancellable+30s-bounded (survive navigation,
+        // die with the process).
         // Review edits must survive navigation: the ViewModel's viewModelScope is
         // cancelled the moment the screen is left, which previously aborted the
         // read-then-write below mid-flight while the UI already showed success.
         // NonCancellable lets this block finish even after the parent scope dies.
-        withContext(NonCancellable) {
+        nonCancellableTimed {
         val profile = requireNamedProfile()
         val trimmedTitle = title.trim()
         val trimmedBody = body.trim()
@@ -642,7 +655,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun updateComment(comment: CommunityComment, text: String, spoiler: Boolean) {
-        withContext(NonCancellable) {
+        nonCancellableTimed {
         val profile = requireNamedProfile()
         require(profile.uid == comment.authorUid) { context.getString(R.string.community_error_author_edit) }
         val trimmed = text.trim()
@@ -665,11 +678,15 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun deleteComment(comment: CommunityComment) {
-        withContext(NonCancellable) {
+        nonCancellableTimed {
         val profile = requireNamedProfile()
         require(profile.uid == comment.authorUid) { context.getString(R.string.community_error_author_delete) }
         val docRef = commentsCollection(comment.mangaId, comment.chapterUrl).document(comment.id)
-        if (comment.replyCount > 0) {
+        // replyCount is transactionally maintained by POST /api/community/replies
+        // (U-19), so a zero here genuinely means unreferenced; firestore.rules
+        // still re-checks server-side and denies a delete below count > 0,
+        // with the soft-delete fallback preserving intent on stale snapshots.
+        if (shouldSoftDeleteRoot(comment.replyCount)) {
             // Referenced by replies — retain the anchor document so the thread
             // stays navigable; content is blanked and flagged.
             docRef.update(
@@ -707,12 +724,13 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun deleteReview(review: MangaReview) {
-        withContext(NonCancellable) {
+        nonCancellableTimed {
         val profile = requireNamedProfile()
         require(profile.uid == review.authorUid) { context.getString(R.string.community_error_author_delete) }
         val reviewRef = firestore.collection("community_manga").document(review.mangaId)
             .collection("reviews").document(review.id)
-        if (review.replyCount > 0) {
+        // Same transactional-count contract as deleteComment (U-19).
+        if (shouldSoftDeleteRoot(review.replyCount)) {
             // Retain the review document to preserve its replies thread.
             reviewRef.update(
                 mapOf(
@@ -744,7 +762,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun sendPageReaction(mangaId: String, chapterUrl: String, pageIndex: Int, emoji: String, normalizedX: Float, normalizedY: Float) {
-        withContext(NonCancellable) {
+        nonCancellableTimed {
         val profile = requireNamedProfile()
         require(emoji.trim().length <= 16) { context.getString(R.string.community_error_empty_content) }
         val reaction = ReaderReaction(
@@ -766,7 +784,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun sendChatMessage(roomId: String, text: String) {
-        withContext(NonCancellable) {
+        nonCancellableTimed {
         // Chat is named-users-only. Checking BEFORE currentProfileOrThrow() matters:
         // that helper silently provisions an anonymous session, which the RTDB rules
         // now reject — guests must get a sign-in error, not a provisioned identity.
@@ -855,7 +873,7 @@ class FirebaseCommunityRepository @Inject constructor(
     }.getOrNull()
 
     override suspend fun setReaderPresence(mangaId: String, chapterUrl: String, active: Boolean) {
-        withContext(NonCancellable) {
+        nonCancellableTimed {
         val profile = requireNamedProfile()
         val memberDoc = firestore.collection("community_presence").document(threadId(mangaId, chapterUrl))
             .collection("members").document(profile.uid)
@@ -874,8 +892,8 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun markNotificationRead(notificationId: String) {
-        withContext(NonCancellable) {
-        val uid = sessionManager.currentUserId() ?: return@withContext
+        nonCancellableTimed {
+        val uid = sessionManager.currentUserId() ?: return@nonCancellableTimed
         firestore.collection("users").document(uid)
             .collection("notifications").document(notificationId)
             .update("read", true)
@@ -884,8 +902,8 @@ class FirebaseCommunityRepository @Inject constructor(
     }
 
     override suspend fun markNotificationsRead(ids: List<String>) {
-        withContext(NonCancellable) {
-        val uid = sessionManager.currentUserId() ?: return@withContext
+        nonCancellableTimed {
+        val uid = sessionManager.currentUserId() ?: return@nonCancellableTimed
         // WriteBatch chunks — one round-trip per 400 instead of one per item.
         ids.chunked(400).forEach { chunk ->
             val batch = firestore.batch()
@@ -1006,11 +1024,30 @@ class FirebaseCommunityRepository @Inject constructor(
         spoiler: Boolean,
         replyTarget: com.exapps.mangaworld.domain.model.CommunityReplyTarget?
     ) {
-        withContext(NonCancellable) {
+        nonCancellableTimed {
         val profile = requireNamedProfile()
         val trimmed = text.trim()
         require(trimmed.isNotBlank()) { context.getString(R.string.community_error_empty_content) }
         validateModeration(trimmed)
+        // U-19: replies go through POST /api/community/replies, which writes
+        // the reply doc and increments the root replyCount in ONE server
+        // transaction. There is deliberately NO fallback to the direct
+        // Firestore write + push-reply bump below: that side-channel bump is
+        // the bug (a failed push left replyCount at 0, so a root with
+        // replies could be hard-deleted). Top-level comments keep the direct
+        // write until the server-only migration (see firestore.rules).
+        if (isReplyCreate(replyTarget)) {
+            createReplyViaEndpoint(
+                mangaId = mangaId,
+                chapterUrl = chapterUrl,
+                slug = slug,
+                sourceId = sourceId,
+                text = trimmed,
+                spoiler = spoiler,
+                replyTarget = replyTarget!!
+            )
+            return@nonCancellableTimed
+        }
         val comment = CommunityComment(
             id = UUID.randomUUID().toString(),
             mangaId = mangaId,
@@ -1034,16 +1071,79 @@ class FirebaseCommunityRepository @Inject constructor(
         )
         val collection = commentsCollection(mangaId, chapterUrl)
         collection.document(comment.id).set(comment.toMap()).await()
-        if (replyTarget != null || comment.mentions.isNotEmpty()) {
+        // Top-level mentions still notify via push-reply (which carries the
+        // old tally hook for old apps). Replies never reach here — the
+        // replies endpoint owns their count and their REPLY/MENTION fan-out,
+        // so a push failure can't undercount a new-path reply.
+        if (shouldNotifyViaPushReply(replyTarget, comment.mentions)) {
             sendPushNotification(mangaId, chapterUrl, comment.id)
         }
+        }
+    }
+
+    /**
+     * U-19 reply-create: POST /api/community/replies (vote-pattern HTTP).
+     * Throws on any non-2xx — the caller must surface the failure, never
+     * retry via the old direct-write + push-reply bump (that bump is the
+     * defect this endpoint replaces).
+     */
+    private suspend fun createReplyViaEndpoint(
+        mangaId: String,
+        chapterUrl: String?,
+        slug: String,
+        sourceId: String,
+        text: String,
+        spoiler: Boolean,
+        replyTarget: com.exapps.mangaworld.domain.model.CommunityReplyTarget
+    ) {
+        // Replies must survive navigation like every other community write.
+        nonCancellableTimed {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val token = sessionManager.currentIdToken() ?: error(context.getString(R.string.community_error_sign_in))
+                val payload = buildReplyRequestPayload(
+                    mangaId = mangaId,
+                    chapterUrl = chapterUrl,
+                    slug = slug,
+                    sourceId = sourceId,
+                    text = text,
+                    spoiler = spoiler,
+                    replyTarget = replyTarget
+                )
+                val body = org.json.JSONObject().apply {
+                    for ((key, value) in payload) {
+                        when (value) {
+                            is String -> put(key, value)
+                            is Boolean -> put(key, value)
+                            is Number -> put(key, value)
+                            else -> put(key, value.toString())
+                        }
+                    }
+                }
+                val conn = java.net.URL("${CloudinaryUploader.DASHBOARD_BASE_URL}$REPLIES_ENDPOINT_PATH").openConnection() as java.net.HttpURLConnection
+                try {
+                    conn.requestMethod = "POST"
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.setRequestProperty("Authorization", "Bearer $token")
+                    conn.doOutput = true
+                    conn.connectTimeout = 5000
+                    conn.readTimeout = 5000
+                    conn.outputStream.use { output -> output.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                    check(conn.responseCode in 200..299) { context.getString(R.string.community_error_post) }
+                    // Strict read — a body without the server-issued reply id
+                    // is a failed create like any other non-2xx.
+                    val json = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+                    check(json.optString("id", "").isNotBlank()) { context.getString(R.string.community_error_post) }
+                } finally {
+                    conn.disconnect()
+                }
+            }
         }
     }
 
     private suspend fun sendPushNotification(mangaId: String, chapterUrl: String?, commentId: String) =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val token = sessionManager.currentIdToken() ?: return@withContext
+                val token = sessionManager.currentIdToken() ?: return@nonCancellableTimed
                 val body = org.json.JSONObject().apply {
                     put("mangaId", mangaId)
                     put("commentId", commentId)
@@ -1082,7 +1182,7 @@ class FirebaseCommunityRepository @Inject constructor(
         reviewId: String? = null
     ) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         try {
-            val token = sessionManager.currentIdToken() ?: return@withContext
+            val token = sessionManager.currentIdToken() ?: return@nonCancellableTimed
             val body = org.json.JSONObject().apply {
                 put("mangaId", mangaId)
                 if (chapterUrl != null) put("chapterUrl", chapterUrl)
@@ -1117,7 +1217,7 @@ class FirebaseCommunityRepository @Inject constructor(
     private suspend fun notifyFollow(targetUid: String) =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val token = sessionManager.currentIdToken() ?: return@withContext
+                val token = sessionManager.currentIdToken() ?: return@nonCancellableTimed
                 val body = org.json.JSONObject().apply { put("targetUid", targetUid) }
                 val conn = java.net.URL("${CloudinaryUploader.DASHBOARD_BASE_URL}/api/notifications/follow").openConnection() as java.net.HttpURLConnection
                 try {
@@ -1142,7 +1242,7 @@ class FirebaseCommunityRepository @Inject constructor(
     private suspend fun voteOnContent(targetType: String, mangaId: String?, targetId: String, vote: Int): com.exapps.mangaworld.domain.model.VoteOutcome {
         require(targetId.isNotBlank()) { context.getString(R.string.community_error_invalid_content) }
         // Votes must survive navigation like every other community write.
-        return withContext(NonCancellable) {
+        return nonCancellableTimed {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val token = sessionManager.currentIdToken() ?: error(context.getString(R.string.community_error_sign_in))
             val body = org.json.JSONObject().apply {
@@ -1187,7 +1287,7 @@ class FirebaseCommunityRepository @Inject constructor(
         reportedUid: String,
         reason: String
     ) {
-        withContext(NonCancellable) {
+        nonCancellableTimed {
         val reporter = requireNamedProfile()
         val trimmedReason = reason.trim().take(500)
         require(trimmedReason.isNotBlank()) { context.getString(R.string.community_error_report_reason_required) }
@@ -1371,7 +1471,7 @@ class FirebaseCommunityRepository @Inject constructor(
         }
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val token = sessionManager.currentIdToken() ?: return@withContext
+                val token = sessionManager.currentIdToken() ?: return@nonCancellableTimed
                 val body = org.json.JSONObject().apply { put("text", text) }
                 val conn = java.net.URL("${CloudinaryUploader.DASHBOARD_BASE_URL}/api/community/moderate").openConnection() as java.net.HttpURLConnection
                 try {
@@ -1829,6 +1929,64 @@ internal const val REPORT_WINDOW_MS = 3_600_000L
 
 /** Probe cap: quota math only needs to know "more than 10 in the window". */
 private const val REPORT_QUOTA_PROBE = 25L
+
+/** U-19 endpoint path (dashboard-first deploy: live before app release). */
+internal const val REPLIES_ENDPOINT_PATH = "/api/community/replies"
+
+/**
+ * U-19 routing: a post is a reply iff it targets a root comment or a review.
+ * A non-null target carrying neither id is treated as top-level (legacy
+ * shape) so a malformed target can't force the endpoint into a 400.
+ */
+internal fun isReplyCreate(replyTarget: com.exapps.mangaworld.domain.model.CommunityReplyTarget?): Boolean =
+    replyTarget?.let { it.parentId != null || it.reviewId != null } == true
+
+/**
+ * Pure payload builder for POST /api/community/replies (no Android, no
+ * network — unit-testable). Author snapshot, mentions and the addressee are
+ * derived server-side; the client sends only semantic fields. Exactly one
+ * of parentId/reviewId is sent — never both, never neither for a reply.
+ */
+internal fun buildReplyRequestPayload(
+    mangaId: String,
+    chapterUrl: String?,
+    slug: String,
+    sourceId: String,
+    text: String,
+    spoiler: Boolean,
+    replyTarget: com.exapps.mangaworld.domain.model.CommunityReplyTarget
+): Map<String, Any?> {
+    val payload = mutableMapOf<String, Any?>(
+        "mangaId" to mangaId,
+        "slug" to slug,
+        "sourceId" to sourceId,
+        "text" to text,
+        "spoiler" to spoiler
+    )
+    if (chapterUrl != null) payload["chapterUrl"] = chapterUrl
+    val parentId = replyTarget.parentId
+    val reviewId = replyTarget.reviewId
+    if (parentId != null) {
+        payload["parentId"] = parentId
+    } else if (reviewId != null) {
+        payload["reviewId"] = reviewId
+    }
+    return payload
+}
+
+/**
+ * Totally-ordered notification routing: replies are answered by the replies
+ * endpoint alone (count + REPLY/MENTION fan-out server-side), so they must
+ * never also call push-reply (which would double-count the tally).
+ * Only top-level comments with mentions use the push-reply path.
+ */
+internal fun shouldNotifyViaPushReply(
+    replyTarget: com.exapps.mangaworld.domain.model.CommunityReplyTarget?,
+    mentions: List<String>
+): Boolean = !isReplyCreate(replyTarget) && mentions.isNotEmpty()
+
+/** Delete gating: a referenced root (replyCount > 0) must stay as an anchor. */
+internal fun shouldSoftDeleteRoot(replyCount: Int): Boolean = replyCount > 0
 
 /** Deterministic open-report doc ID: reporter x type x target (#2 dedupe). */
 internal fun reportDedupeId(reporterUid: String, targetType: String, targetId: String): String {

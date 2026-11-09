@@ -194,6 +194,15 @@ service cloud.firestore {
         && hasInitialContentCounters();
     }
 
+    // U-19 TRANSITION — replies are created via POST /api/community/replies
+    // (reply doc + root replyCount increment atomically, server-side).
+    // Reply-shaped creates (parentId/reviewId != null) must stay client-
+    // writable HERE until that app release is actually deployed: tightening
+    // today would break the reply flow for installed old apps. After
+    // adoption, restrict reply-shaped creates to the server (keep only
+    // top-level creates client-writable) so tally integrity can't be
+    // bypassed. Deploy order: dashboard -> app -> rules. See
+    // tmp/review/stage1/19-replies.md.
     function validMangaCommentStructure(mangaId) {
       return (
           request.resource.data.parentId == null

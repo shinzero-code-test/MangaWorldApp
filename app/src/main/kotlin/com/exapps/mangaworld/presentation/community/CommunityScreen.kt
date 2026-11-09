@@ -102,6 +102,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withTimeout
+
+/** U-18: NonCancellable writes bounded by a 30s deadline. */
+private fun CoroutineScope.launchNonCancellableTimed(block: suspend () -> Unit): Job =
+    launch(NonCancellable) { withTimeout(30_000L) { block() } }
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -694,7 +701,7 @@ class CommunityViewModel @Inject constructor(
         // not abort an in-flight community write the UI already confirmed.
         // The repository layer is NonCancellable too — this covers the VM
         // overlay bookkeeping around it.
-        viewModelScope.launch(NonCancellable) {
+        viewModelScope.launchNonCancellableTimed {
             if (trackSending) pending.update { it.copy(sendingComments = it.sendingComments + 1) }
             try {
                 block()

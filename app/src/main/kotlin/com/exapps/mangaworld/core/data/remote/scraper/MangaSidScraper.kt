@@ -180,10 +180,11 @@ class MangaSidScraper @Inject constructor(
                     ?: return@mapNotNull null
                 if (raw.isBlank()) return@mapNotNull null
                 
+                val apiHost = com.exapps.mangaworld.domain.model.SourceDomainOverrides.apiHostFor("mangasid", "api.mangasid.com")
                 val src = when {
                     raw.startsWith("http") -> raw
                     raw.startsWith("//") -> "https:$raw"
-                    else -> "https://api.mangasid.com${if (raw.startsWith("/")) "" else "/"}$raw" // NOTE: hardcoded API host — NOT covered by source_<id>_base_url RC overrides
+                    else -> "https://$apiHost${if (raw.startsWith("/")) "" else "/"}$raw"
                 }.encodeForUrl()
                 
                 src.takeIf { it.isNotBlank() }

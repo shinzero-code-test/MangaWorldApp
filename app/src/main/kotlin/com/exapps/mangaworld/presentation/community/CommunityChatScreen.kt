@@ -61,9 +61,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
+
+/** U-18: NonCancellable writes bounded by a 30s deadline. */
+private fun CoroutineScope.launchNonCancellableTimed(block: suspend () -> Unit): Job =
+    launch(NonCancellable) { withTimeout(30_000L) { block() } }
 
 @HiltViewModel
 class CommunityChatViewModel @Inject constructor(
@@ -101,7 +108,7 @@ class CommunityChatViewModel @Inject constructor(
         // NonCancellable + surfaced errors: the old runCatching swallowed
         // every failure (offline, denied, signed-out) with zero feedback
         // while the input had already been cleared — a silent message loss.
-        viewModelScope.launch(NonCancellable) {
+        viewModelScope.launchNonCancellableTimed {
             try {
                 communityRepository.sendChatMessage(roomId, text.trim())
                 _error.value = null

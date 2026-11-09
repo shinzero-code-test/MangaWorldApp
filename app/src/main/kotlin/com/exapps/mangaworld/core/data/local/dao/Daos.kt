@@ -36,6 +36,14 @@ interface FavoriteDao {
     @Query("UPDATE favorites SET isFavorite = 1 WHERE mangaId = :mangaId")
     suspend fun restoreFavorite(mangaId: String)
 
+    /**
+     * U-20: targeted favorite-mark — touches only `isFavorite`/`addedAt`, so a
+     * concurrent `syncFavoriteProgress` (readChapters/totalChapters) can never
+     * be clobbered by a whole-entity REPLACE (the old addFavorite path).
+     */
+    @Query("UPDATE favorites SET isFavorite = 1, addedAt = :updatedAt WHERE mangaId = :mangaId")
+    suspend fun setFavoriteIfExisting(mangaId: String, updatedAt: Long): Int
+
     @Query("DELETE FROM favorites WHERE mangaId = :mangaId AND addedAt <= :olderThan")
     suspend fun deleteIfOlder(mangaId: String, olderThan: Long)
 

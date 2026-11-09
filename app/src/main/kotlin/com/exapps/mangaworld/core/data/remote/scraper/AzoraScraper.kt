@@ -568,10 +568,13 @@ class AzoraScraper @Inject constructor(
 
     // ─── Search (REST API — correct and working) ──────────────────────────────
 
+    private fun azoraApiHost(): String =
+        com.exapps.mangaworld.domain.model.SourceDomainOverrides.apiHostFor("azora", "api.azorafly.com")
+
     override suspend fun searchManga(query: String, page: Int): Result<List<MangaItem>> = suspendRunCatching {
         val enc   = java.net.URLEncoder.encode(query, "UTF-8")
         // Page must reach the API or every page returns identical results (H-review).
-        val json  = apiGet("https://api.azorafly.com/api/query?searchTerm=$enc&perPage=30&page=$page") // NOTE: hardcoded API host — NOT covered by source_<id>_base_url RC overrides
+        val json  = apiGet("https://${azoraApiHost()}/api/query?searchTerm=$enc&perPage=30&page=$page")
             ?: error("Azora API unavailable")
         val posts = json.optJSONArray("posts") ?: return@suspendRunCatching emptyList()
         val result = mutableListOf<MangaItem>()
@@ -614,7 +617,7 @@ class AzoraScraper @Inject constructor(
 
     override suspend fun getPopularManga(): Result<List<MangaItem>> = suspendRunCatching {
         // API gives rating-sorted results
-        val json  = apiGet("https://api.azorafly.com/api/query?searchTerm=&perPage=30") // NOTE: hardcoded API host — NOT covered by RC overrides
+        val json  = apiGet("https://${azoraApiHost()}/api/query?searchTerm=&perPage=30")
         val posts = json?.optJSONArray("posts")
         if (posts != null && posts.length() > 0) {
             val result = mutableListOf<MangaItem>()

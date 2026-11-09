@@ -39,6 +39,20 @@ object ScraperText {
         url.substringBefore("?").trimEnd('/').substringAfterLast('/').toFloatOrNull()
 
     /**
+     * U-25: canonical chapter-number rule shared by detail parser + reader
+     * fallback. Parser emits (data-num/dedicated chip already handled by
+     * caller when present — pass the *label text* here), reader consumes
+     * verbatim. Order: first number in the label → last URL segment as
+     * number. Both sides call THIS so the same physical chapter keeps one
+     * number (fixes split marks/progress).
+     */
+    fun canonicalChapterNumber(chapterText: String?, chapterUrl: String?): Float? {
+        firstChapterNumber(chapterText)?.let { return it }
+        chapterUrl?.let { lastSegmentNumber(it)?.let { n -> return n } }
+        return null
+    }
+
+    /**
      * Slug from a manga/chapter href across WordPress themes:
      * /manga/slug/, /comics/slug/, /manhwa/slug/ or bare /slug/.
      * Query-stripped; pagination artifacts ("page", bare numbers) rejected.

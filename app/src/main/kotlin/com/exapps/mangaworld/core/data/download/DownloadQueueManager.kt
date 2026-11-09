@@ -105,16 +105,16 @@ class DownloadQueueManager @Inject constructor(
             ?: emptyList()
     }
 
-    /** Count locally-downloaded chapters for a manga by scanning the directory. */
-    fun countDownloadedChapters(mangaId: String, title: String? = null): Int {
+    /** Count locally-downloaded chapters for a manga by scanning the directory. IO thread only (U-15). */
+    suspend fun countDownloadedChapters(mangaId: String, title: String? = null): Int = withContext(Dispatchers.IO) {
         // Union canonical + legacy: refreshDownloadedCount (no title) must not
         // miss pre-migration legacy dirs.
         val dirs = listOfNotNull(
             mangaDir(mangaId, title).takeIf { it.exists() },
             title?.let { DownloadStorage.legacyMangaDir(downloadsRoot, it) }?.takeIf { it.exists() }
         ).distinctBy { it.canonicalPath }
-        if (dirs.isEmpty()) return 0
-        return dirs.sumOf { dir ->
+        if (dirs.isEmpty()) return@withContext 0
+        dirs.sumOf { dir ->
             dir.listFiles()?.count { it.isDirectory && File(it, ".completed").exists() } ?: 0
         }
     }
@@ -133,15 +133,16 @@ class DownloadQueueManager @Inject constructor(
         mangaMetadata: DownloadedMangaEntity? = null,
         sourceId: String = mangaId.substringBefore('_'),
         mangaSlug: String = ""
-    ): Boolean {
+    ): Boolean = withContext(Dispatchers.IO) {
+        // U-15: dedup disk scans (+ legacy migration) run on IO, never the caller.
         // Check-then-insert must be atomic or two concurrent enqueues for the same chapter can
         // both pass the dedup check and create duplicate rows/workers.
-        val task = queueMutex.withLock {
+        val task: DownloadTaskEntity? = queueMutex.withLock {
             if (
                 pages.isEmpty() ||
                 isChapterDownloaded(mangaId, chapterUrl, mangaTitle) ||
                 downloadTaskDao.getPendingByChapter(chapterUrl, mangaId) != null
-            ) return false
+            ) return@withLock null
 
             DownloadStorage.migrateLegacyDirectoryIfNeeded(downloadsRoot, mangaId, mangaTitle)
             val targetDir = DownloadStorage.canonicalChapterDir(downloadsRoot, mangaId, chapterUrl)
@@ -160,6 +161,7 @@ class DownloadQueueManager @Inject constructor(
                 status = "queued"
             ).also { downloadTaskDao.upsert(it) }
         }
+        if (task == null) return@withContext false
         analyticsManager.logDownloadStatus(
             mangaId = mangaId,
             sourceId = mangaId.substringBefore('_'),
@@ -169,7 +171,7 @@ class DownloadQueueManager @Inject constructor(
 
         persistMangaMetadata(mangaId, mangaMetadata)
         enqueueWorker(task)
-        return true
+        true
     }
 
     /**
@@ -186,7 +188,8 @@ class DownloadQueueManager @Inject constructor(
         failed: List<FailedChapterDownload>,
         wifiOnly: Boolean,
         mangaMetadata: DownloadedMangaEntity? = null
-    ): Int {
+    ): Int = withContext(Dispatchers.IO) {
+        // U-15: batch dedup disk scans run on IO.
         // A whole-manga selection should never create two durable rows for the same chapter,
         // even when a scraper returns duplicate chapter URLs.
         // Eager List filters — Sequence lambdas defer suspension past the coroutine body.
@@ -214,7 +217,7 @@ class DownloadQueueManager @Inject constructor(
                     downloadTaskDao.getPendingByChapter(failure.chapterUrl, mangaId) == null
             }
             total = accepted.size + failures.size
-            if (total == 0) return 0
+            if (total == 0) return@withContext 0
 
             DownloadStorage.migrateLegacyDirectoryIfNeeded(downloadsRoot, mangaId, mangaTitle)
             batchId = "batch_${UUID.randomUUID()}"
@@ -271,7 +274,7 @@ class DownloadQueueManager @Inject constructor(
         } else {
             enqueueBatchWorkers(queued)
         }
-        return total
+        total
     }
 
     private suspend fun persistMangaMetadata(mangaId: String, mangaMetadata: DownloadedMangaEntity?) {
@@ -722,10 +725,12 @@ class DownloadQueueManager @Inject constructor(
         // which live under their own unique names outside the batch queue.
         WorkManager.getInstance(app).cancelUniqueWork(mangaQueueName(mangaId)).await()
         WorkManager.getInstance(app).cancelAllWorkByTag("manga_$mangaId").await()
-        // Delete files
-        deleteMangaDirectory(canonicalMangaDir(mangaId))
-        legacyTitle?.let { title ->
-            DownloadStorage.legacyMangaDir(downloadsRoot, title)?.let(::deleteMangaDirectory)
+        // U-15: recursive file delete on IO (was on caller's dispatcher, incl. Main).
+        withContext(Dispatchers.IO) {
+            deleteMangaDirectory(canonicalMangaDir(mangaId))
+            legacyTitle?.let { title ->
+                DownloadStorage.legacyMangaDir(downloadsRoot, title)?.let(::deleteMangaDirectory)
+            }
         }
         // Remove DB records
         queueMutex.withLock {

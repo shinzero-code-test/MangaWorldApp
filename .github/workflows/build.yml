@@ -66,6 +66,16 @@ jobs:
           # U-08: the full migration chain test (MigrationDeviceTest, on
           # device) now runs against committed 8..16 JSONs. Fail fast here
           # if any version is missing instead of discovering it on devices.
+          #
+          # Backfill provenance: 14..16 are KSP-original exports (byte-stable
+          # against the :app:kspDebugKotlin artifact). 8..13 are backfilled
+          # derivations reconstructed from the historical MIGRATION_8_9…_12_13
+          # statements (chain-test-derived, NOT KSP-originals) — they exist so
+          # the 8→16 chain can execute at all. Do NOT byte-compare 16.json
+          # here: KSP regenerates it client-side on every build, so a byte
+          # check can never hold on main. The executed proof is the on-device
+          # MigrationDeviceTest (14→16, 15→16, guard) — not this presence
+          # check. See tmp/plan/adversarial-fixes/p0-release-blockers.md (U-08).
           dir="app/schemas/com.exapps.mangaworld.core.data.local.MangaDatabase"
           for v in 8 9 10 11 12 13 14 15 16; do
             if [[ ! -f "$dir/$v.json" ]]; then
@@ -74,6 +84,24 @@ jobs:
             fi
           done
           echo "Room schemas 8..16 present."
+
+      - name: Surfacing bare runCatching (warning only, U-13)
+        # detekt is not wired (absent from gradle/libs.versions.toml and
+        # app/build.gradle.kts), so this grep is the interim tripwire for
+        # the cancellation-rethrow sweep. Count-only: it warns, it never
+        # fails the job (continue-on-error), so main keeps building while
+        # the 332-line bare-runCatching baseline drains. Promote to error
+        # mode once the sweep lands and the count reaches zero — tracked in
+        # tmp/plan/adversarial-fixes/p1-reliability.md §2.1.
+        continue-on-error: true
+        run: |
+          set -u
+          bare=$(grep -rn "runCatching" app/src/main/kotlin --include="*.kt" | grep -vE "suspendRunCatching" | wc -l | tr -d ' ')
+          migrated=$(grep -rn "suspendRunCatching" app/src/main/kotlin --include="*.kt" | wc -l | tr -d ' ')
+          echo "bare runCatching sites: $bare (suspendRunCatching: $migrated)"
+          if [[ "$bare" -gt 0 ]]; then
+            echo "::warning::U-13 sweep incomplete — $bare bare runCatching site(s) remain in app/src/main/kotlin. Bare runCatching swallows CancellationException; prefer suspendRunCatching for suspend lambdas."
+          fi
 
       - name: Create google-services.json from secret
         # U-05: job-level env cannot be conditional, so gate the consuming

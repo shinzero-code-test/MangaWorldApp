@@ -17,16 +17,18 @@ class MeshmangaScraper @Inject constructor(
     settingsRepo: SettingsRepository
 ) : BaseScraperImpl(client, "meshmanga", "https://meshmanga.com", settingsRepo) {
 
-    // NOTE: hardcoded API host — NOT covered by source_<id>_base_url RC overrides.
-    // (The comment used to be INSIDE the string literal, so every API call hit a
-    // malformed URL and meshmanga reported "API unavailable" while the live API
-    // returned 200 with 1690 series.)
-    private val apiBase = "https://appswat.com/v2/api/v2"
+    // U-25: API host is RC-overridable (source_meshmanga_api_host), fallback
+    // appswat.com. (The old comment was INSIDE the string literal, so every
+    // API call hit a malformed URL.)
+    private val apiBase: String
+        get() = "https://${com.exapps.mangaworld.domain.model.SourceDomainOverrides.apiHostFor("meshmanga", "appswat.com")}/v2/api/v2"
     @Volatile private var genreIdCache: Map<String, Int>? = null
 
     override suspend fun getHomeData(): Result<HomeData> = suspendRunCatching {
         val featured = fetchSeriesPage("$apiBase/series/?is_hot=true&page_size=20")
         val latestJson = apiGetObject("$apiBase/chapters/?page_size=20&order_by=-created_at")
+            .onFailure { ScraperTelemetry.logFailure(sourceId, "home_chapters_api", it) }
+            .getOrNull()
         val latest = latestJson?.optJSONArray("results")?.let { array ->
             (0 until array.length()).mapNotNull { i ->
                 latestChapterItemFrom(array.optJSONObject(i))
@@ -43,6 +45,8 @@ class MeshmangaScraper @Inject constructor(
     override suspend fun getMangaDetail(slug: String): Result<MangaDetail> = suspendRunCatching {
         val seriesId = slug.substringBefore('-').substringBefore('_').ifBlank { slug }
         val series = apiGetObject("$apiBase/series/$seriesId/")
+            .onFailure { ScraperTelemetry.logFailure(sourceId, "detail_api", it) }
+            .getOrNull()
             ?: error("Series $seriesId not found")
         val chapters = fetchAllChapters(seriesId)
 
@@ -73,6 +77,8 @@ class MeshmangaScraper @Inject constructor(
         val chapterId = Regex("cid-(\\d+)").find(chapterUrl)?.groupValues?.get(1)
             ?: error("Missing Meshmanga chapter id in $chapterUrl")
         val json = apiGetObject("$apiBase/chapters/$chapterId/")
+            .onFailure { ScraperTelemetry.logFailure(sourceId, "pages_api", it) }
+            .getOrNull()
             ?: error("Chapter $chapterId not found")
         val images = json.optJSONArray("images") ?: JSONArray()
 
@@ -137,7 +143,9 @@ class MeshmangaScraper @Inject constructor(
     }
 
     private suspend fun fetchSeriesPage(url: String): List<MangaItem> {
-        val json = apiGetObject(url) ?: error("Meshmanga API unavailable: $url")
+        val json = apiGetObject(url)
+            .onFailure { ScraperTelemetry.logFailure(sourceId, "series_page_api", it) }
+            .getOrNull() ?: error("Meshmanga API unavailable: $url")
         val results = json.optJSONArray("results") ?: return emptyList()
         return (0 until results.length())
             .mapNotNull { i -> results.optJSONObject(i) }
@@ -154,7 +162,9 @@ class MeshmangaScraper @Inject constructor(
         var pageGuard = 0
         while (!nextUrl.isNullOrBlank() && pageGuard++ < 50) {
             if (!visited.add(nextUrl)) break
-            val json = apiGetObject(nextUrl) ?: break
+            val json = apiGetObject(nextUrl)
+                .onFailure { ScraperTelemetry.logFailure(sourceId, "chapters_paged_api", it) }
+                .getOrNull() ?: break
             val results = json.optJSONArray("results") ?: JSONArray()
             for (i in 0 until results.length()) {
                 chapterFrom(seriesId, results.optJSONObject(i))?.let(chapters::add)
@@ -281,7 +291,11 @@ runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() ?: Scrape
         return alt.split("/", ",", "،").map { it.cleanText() }.filter { it.isNotBlank() }
     }
 
-    private suspend fun apiGetObject(url: String): JSONObject? = withContext(Dispatchers.IO) {
+    /** Named failure for a null/empty Meshmanga API payload (U-20). */
+    class MeshmangaApiFailure(val url: String, cause: Throwable? = null) :
+        RuntimeException("Meshmanga API failed: ${url.take(120)} cause=${cause?.javaClass?.simpleName}: ${cause?.message?.take(120)}", cause)
+
+    private suspend fun apiGetObject(url: String): Result<JSONObject> = withContext(Dispatchers.IO) {
         require(!url.contains(' ')) { "malformed API URL (whitespace): ${url.take(120)}" }
         suspendRunCatching {
             val cookies = getCookiesForDomain(url)
@@ -294,8 +308,13 @@ runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() ?: Scrape
                 .build()
             val response = client.newCall(request).execute()
             val body = response.use { it.body?.string() ?: "" }
-            if (body.isBlank() || !body.trimStart().startsWith("{")) null else JSONObject(body)
-        }.getOrNull()
+            if (body.isBlank() || !body.trimStart().startsWith("{")) {
+                throw MeshmangaApiFailure(url, IllegalStateException("empty/non-json body (${body.take(80)})"))
+            } else JSONObject(body)
+        }.recoverCatching { e ->
+            if (e is MeshmangaApiFailure) throw e
+            throw MeshmangaApiFailure(url, e)
+        }
     }
 
     private suspend fun apiGetArray(url: String): List<JSONObject>? = withContext(Dispatchers.IO) {

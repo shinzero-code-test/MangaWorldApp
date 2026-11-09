@@ -135,6 +135,10 @@ class FirebaseRemoteConfigManager @Inject constructor(
         "engagement_tier_avid_ms" to 36000000L,
         "plugin_key_rotation" to "",
         "plugin_kill_switch" to "",
+        // U-25: API hosts — fallback constants live in the scrapers.
+        "source_azora_api_host" to "api.azorafly.com",
+        "source_mangasid_api_host" to "api.mangasid.com",
+        "source_meshmanga_api_host" to "appswat.com",
         // Read by a dependency via getValue(), which logs a warning on EVERY launch
         // when the key is absent from both the template and the defaults.
         "enable_push_monitor_broadcast" to false
@@ -207,6 +211,14 @@ class FirebaseRemoteConfigManager @Inject constructor(
             }
         }
         SourceDomainOverrides.replaceAll(domainOverrides)
+        // U-25: API-host overrides (hosts only; invalid falls back to constants).
+        SourceDomainOverrides.replaceApiAll(
+            mapOf(
+                "azora" to SourceDomainOverrides.normalizeApiHost(remoteConfig.getString("source_azora_api_host")),
+                "mangasid" to SourceDomainOverrides.normalizeApiHost(remoteConfig.getString("source_mangasid_api_host")),
+                "meshmanga" to SourceDomainOverrides.normalizeApiHost(remoteConfig.getString("source_meshmanga_api_host"))
+            ).filterValues { it != null }.mapValues { it.value!! }
+        )
 
         val overridesJson = remoteConfig.getString("scraper_selector_overrides")
         _selectorOverridesJson.value = overridesJson

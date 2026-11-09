@@ -78,6 +78,16 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
 
     override fun onCreate() {
         super.onCreate()
+        // U-15: permanent debug tripwire — Main-thread disk IO / network dies loudly.
+        if (com.exapps.mangaworld.BuildConfig.DEBUG) {
+            android.os.StrictMode.setThreadPolicy(
+                android.os.StrictMode.ThreadPolicy.Builder()
+                    .detectDiskReads().detectDiskWrites().detectNetwork()
+                    .penaltyLog()
+                    .penaltyDeath()
+                    .build()
+            )
+        }
         com.facebook.FacebookSdk.sdkInitialize(this)
         initializeAppCheck()
         createNotificationChannels()

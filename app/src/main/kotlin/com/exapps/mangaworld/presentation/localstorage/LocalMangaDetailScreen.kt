@@ -106,9 +106,12 @@ fun LocalMangaDetailScreen(
                 item {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         manga.localCoverPath?.let { path ->
-                            if (File(path).exists()) {
+                            // U-15: exists() is disk IO — hoist out of the
+                            // recomposition path (was re-checked every frame).
+                            val coverFile = remember(path) { File(path) }
+                            if (remember(coverFile) { coverFile.exists() }) {
                                 AsyncImage(
-                                    model = File(path),
+                                    model = coverFile,
                                     contentDescription = manga.title,
                                     modifier = Modifier.size(120.dp, 180.dp)
                                         .clip(RoundedCornerShape(12.dp)),

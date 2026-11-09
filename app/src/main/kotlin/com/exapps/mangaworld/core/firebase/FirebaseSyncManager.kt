@@ -1,10 +1,12 @@
 package com.exapps.mangaworld.core.firebase
 
 import com.exapps.mangaworld.core.util.suspendRunCatching
+import androidx.room.withTransaction
 import com.exapps.mangaworld.core.data.AchievementManager
 import com.exapps.mangaworld.core.data.ReadingPositionSyncManager
 import com.exapps.mangaworld.core.data.ReadingStatsStore
 import com.exapps.mangaworld.core.data.local.AppPreferences
+import com.exapps.mangaworld.core.data.local.MangaDatabase
 import com.exapps.mangaworld.core.data.local.SyncTombstone
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
@@ -35,6 +37,7 @@ import javax.inject.Singleton
 
 @Singleton
 class FirebaseSyncManager @Inject constructor(
+    private val database: MangaDatabase,
     private val favoriteDao: FavoriteDao,
     private val historyDao: ReadingHistoryDao,
     private val readerAnnotationDao: ReaderAnnotationDao,
@@ -78,6 +81,11 @@ class FirebaseSyncManager @Inject constructor(
         val readMarks = readChapterDao.getAll()
         val tombstones = prefs.getSyncTombstones()
         val settings = settingsRepository.getAppSettings().first()
+        // U-10: push the *stored* set, not the RC-filtered view. A temporarily
+        // server-disabled source must survive the push→pull round trip (the
+        // filtered view is a read-time overlay — persisting it would disable
+        // the source permanently once RC re-enables it).
+        val storedEnabledSources = settingsRepository.getStoredEnabledSources()
         val reader = settingsRepository.getReaderSettings().first()
 
         firebaseTelemetry.traceDatabaseSync(
@@ -113,7 +121,9 @@ class FirebaseSyncManager @Inject constructor(
             // in subcollections, which set() never touches.
             writes += userRef to mapOf(
                 "updatedAt" to System.currentTimeMillis(),
-                "enabledSources" to settings.enabledSources.toList(),
+                // U-10: stored set exactly (see comment at the fold above) —
+                // RC-disabled sources must survive the round trip.
+                "enabledSources" to storedEnabledSources.toList(),
                 "theme" to settings.theme.name,
                 "useDynamicColors" to settings.useDynamicColors,
                 // biometricLockEnabled is device-local (never pushed/pulled, L-review)
@@ -130,6 +140,8 @@ class FirebaseSyncManager @Inject constructor(
                 "totalMangaRead" to readingStatsStore.totalMangaRead.first()
             )
             writes += userRef.collection("preferences").document("reader") to mapOf(
+                // U-10 finish: per-group updatedAt so the reader watermark gates it.
+                "updatedAt" to System.currentTimeMillis(),
                 "mode" to reader.mode.name,
                 "brightness" to reader.brightness.toDouble(),
                 "pageSpacing" to reader.pageSpacing,
@@ -204,7 +216,7 @@ class FirebaseSyncManager @Inject constructor(
 
     /** FS-1 guard: push only rows absent remotely or strictly newer (ties keep cloud). */
     private fun shouldPushLocal(localTs: Long, remoteTs: Long?): Boolean =
-        remoteTs == null || localTs > remoteTs
+        FirebaseSyncMerge.shouldPushLocal(localTs, remoteTs)
 
     /**
      * Fetch all documents from a Firestore collection using cursor-based pagination.
@@ -252,21 +264,25 @@ class FirebaseSyncManager @Inject constructor(
 
             remoteTombstones.forEach { prefs.markSyncTombstone(it.collection, it.documentId, it.deletedAt) }
             val tombstones = newestTombstones(prefs.getSyncTombstones())
-            applyTombstones(tombstones)
-            favorites.mapNotNull { FirebaseSyncMerge.favorite(it) }
+            val parsedFavorites = favorites.mapNotNull { FirebaseSyncMerge.favorite(it) }
                 .filterNot { isTombstoned("favorites", it.mangaId, it.addedAt, tombstones) }
-                .forEach { favoriteDao.insert(it) }
-            history.mapNotNull { FirebaseSyncMerge.history(it) }
+            val parsedHistory = history.mapNotNull { FirebaseSyncMerge.history(it) }
                 .filterNot { isTombstoned("readingHistory", it.mangaId, it.lastReadAt, tombstones) }
-                .forEach { historyDao.insertOrUpdate(it) }
-            annotations.mapNotNull { FirebaseSyncMerge.annotation(it) }
+            val parsedAnnotations = annotations.mapNotNull { FirebaseSyncMerge.annotation(it) }
                 .filterNot { isAnnotationTombstoned(it, tombstones) }
-                .forEach { readerAnnotationDao.upsert(it) }
             // FS-7: read marks ride along (union — read is monotonic; unmarks
             // arrive as tombstones and are filtered here).
-            readMarks.mapNotNull { parseReadMark(it) }
+            val parsedReadMarks = readMarks.mapNotNull { parseReadMark(it) }
                 .filterNot { (id, _, readAt) -> isTombstoned("readMarks", id, readAt, tombstones) }
-                .forEach { (_, entity, _) -> readChapterDao.markRead(entity) }
+            // U-11: one Room transaction for the whole multi-table apply — a
+            // crash mid-apply must not leave torn state the next push uploads.
+            database.withTransaction {
+                applyTombstones(tombstones)
+                parsedFavorites.forEach { favoriteDao.insert(it) }
+                parsedHistory.forEach { historyDao.insertOrUpdate(it) }
+                parsedAnnotations.forEach { readerAnnotationDao.upsert(it) }
+                parsedReadMarks.forEach { (_, entity, _) -> readChapterDao.markRead(entity) }
+            }
 
             applyUserDocSettings(profile)
             applyReaderSettings(readerPrefs)
@@ -472,31 +488,33 @@ class FirebaseSyncManager @Inject constructor(
                 .mapNotNull { it.toObject(SyncTombstone::class.java) }
             remoteTombstones.forEach { prefs.markSyncTombstone(it.collection, it.documentId, it.deletedAt) }
             val tombstones = newestTombstones(prefs.getSyncTombstones())
-            applyTombstones(tombstones)
-            FirebaseSyncMerge.favorites(favoriteDao.getAllLibraryEntries(), remoteFavorites)
+            val mergedFavorites = FirebaseSyncMerge.favorites(favoriteDao.getAllLibraryEntries(), remoteFavorites)
                 .filterNot { isTombstoned("favorites", it.mangaId, it.addedAt, tombstones) }
-                .forEach { favoriteDao.insert(it) }
-            FirebaseSyncMerge.history(historyDao.getAll(), remoteHistory)
+            val mergedHistory = FirebaseSyncMerge.history(historyDao.getAll(), remoteHistory)
                 .filterNot { isTombstoned("readingHistory", it.mangaId, it.lastReadAt, tombstones) }
-                .forEach { historyDao.insertOrUpdate(it) }
-            FirebaseSyncMerge.annotations(readerAnnotationDao.getAll(), remoteAnnotations)
+            val mergedAnnotations = FirebaseSyncMerge.annotations(readerAnnotationDao.getAll(), remoteAnnotations)
                 .filterNot { isAnnotationTombstoned(it, tombstones) }
-                .forEach { readerAnnotationDao.upsert(it) }
             // FS-7: union read marks (read is monotonic; unmarks arrive as
             // tombstones and are filtered here).
             val localMarkIds = readChapterDao.getAll()
                 .associate { FirebaseSyncMerge.readMarkDocId(it.mangaId, it.chapterNumber) to it.readAt }
-            remoteReadMarks
+            val mergedReadMarks = remoteReadMarks
                 .filterNot { (id, _, readAt) -> isTombstoned("readMarks", id, readAt, tombstones) }
-                .forEach { (id, entity, readAt) ->
+            // U-11: single transaction (reads above feed the computation; the
+            // writes below are atomic).
+            database.withTransaction {
+                applyTombstones(tombstones)
+                mergedFavorites.forEach { favoriteDao.insert(it) }
+                mergedHistory.forEach { historyDao.insertOrUpdate(it) }
+                mergedAnnotations.forEach { readerAnnotationDao.upsert(it) }
+                mergedReadMarks.forEach { (id, entity, readAt) ->
                     val localTs = localMarkIds[id]
-                    if (localTs == null) {
-                        readChapterDao.markRead(entity)
-                    } else if (readAt > localTs) {
+                    if (localTs == null || readAt > localTs) {
                         // Same mark, newer cloud timestamp — refresh readAt.
                         readChapterDao.markRead(entity)
                     }
                 }
+            }
 
             // FS-6: merge applies the full settings/stats/achievements picture,
             // not just the theme (shared appliers with the pull path).
@@ -516,8 +534,10 @@ class FirebaseSyncManager @Inject constructor(
         // U-10 timestamp guard: a stale device push must not revert newer
         // local settings on every other device. Compare the cloud doc's
         // updatedAt with the local watermark; skip strictly-older docs.
+        // (Predicate lives in FirebaseSyncMerge so it is unit-testable —
+        // DocumentSnapshot cannot be faked on the JVM; see SettingsGuardTest.)
         val remoteUpdatedAt = profile.getLong("updatedAt") ?: 0L
-        if (remoteUpdatedAt < prefs.getSettingsAppliedAt()) return
+        if (!FirebaseSyncMerge.shouldApplySettings(remoteUpdatedAt, prefs.getSettingsAppliedAt())) return
         profile.getString("theme")?.let { name ->
             AppTheme.entries.firstOrNull { it.name == name }?.let { theme ->
                 settingsRepository.updateTheme(theme)
@@ -558,6 +578,10 @@ class FirebaseSyncManager @Inject constructor(
      * doubleTapZoom).
      */
     private suspend fun applyReaderSettings(readerPrefs: DocumentSnapshot) {
+        // U-10 finish: reader doc has its own updatedAt + watermark (a stale
+        // reader doc must not be masked by a fresh user doc, and vice versa).
+        val remoteReaderUpdatedAt = readerPrefs.getLong("updatedAt") ?: 0L
+        if (!FirebaseSyncMerge.shouldApplySettings(remoteReaderUpdatedAt, prefs.getSettingsReaderAppliedAt())) return
         readerPrefs.getString("mode")?.let { name ->
             com.exapps.mangaworld.domain.model.ReaderMode.entries.firstOrNull { it.name == name }?.let { mode ->
                 settingsRepository.updateReaderMode(mode)
@@ -583,6 +607,7 @@ class FirebaseSyncManager @Inject constructor(
                 settingsRepository.updateImageFilter(filter)
             }
         }
+        prefs.setSettingsReaderAppliedAt(remoteReaderUpdatedAt)
     }
 
     /**
@@ -734,14 +759,14 @@ class FirebaseSyncManager @Inject constructor(
     }
 
     private fun newestTombstones(tombstones: List<SyncTombstone>): Map<String, SyncTombstone> =
-        tombstones.groupBy { it.key }.mapValues { (_, candidates) -> candidates.maxBy { it.deletedAt } }
+        FirebaseSyncMerge.newestTombstones(tombstones)
 
     private fun isTombstoned(
         collection: String,
         documentId: String,
         updatedAt: Long,
         tombstones: Map<String, SyncTombstone>
-    ): Boolean = tombstones["$collection|$documentId"]?.deletedAt?.let { it >= updatedAt } == true
+    ): Boolean = FirebaseSyncMerge.isTombstoned(collection, documentId, updatedAt, tombstones)
 
     /**
      * FS-9: annotations match tombstones on BOTH id schemes — the old pull
@@ -750,13 +775,7 @@ class FirebaseSyncManager @Inject constructor(
     private fun isAnnotationTombstoned(
         entity: ReaderAnnotationEntity,
         tombstones: Map<String, SyncTombstone>
-    ): Boolean = isTombstoned("readerAnnotations", annotationDocId(entity), entity.updatedAt, tombstones) ||
-        isTombstoned(
-            "readerAnnotations",
-            FirebaseSyncMerge.legacyAnnotationDocId(entity),
-            entity.updatedAt,
-            tombstones
-        )
+    ): Boolean = FirebaseSyncMerge.isAnnotationTombstoned(entity, tombstones)
 
     private fun tombstoneDocumentId(tombstone: SyncTombstone): String =
         "${tombstone.collection}_${tombstone.documentId}".replace("/", "_")

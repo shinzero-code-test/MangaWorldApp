@@ -203,6 +203,7 @@ private fun CloudflareWebView(
                         loadWithOverviewMode = true
                         useWideViewPort    = true
                         allowContentAccess = false
+                        allowFileAccess = false
                         setSupportZoom(true)
                         // HTTPS challenges have no legitimate HTTP subresources.
                         mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
@@ -252,19 +253,21 @@ private fun CloudflareWebView(
                                 // carries the cookie itself.
                                 val originCookies = cm.getCookie("https://$domain").orEmpty()
                                 val pageCookies = cm.getCookie(pageUrl).orEmpty()
-                                // Sub-agent finding: bare concatenation without ';'
-                                // produces a mangled Cookie header after solve.
-                                val cookies = listOf(originCookies, pageCookies)
+                                // U-23: deny-by-default export — only the clearance
+                                // cookie is returned, never the whole jar (the old
+                                // whole-jar forward leaked session cookies cross-host
+                                // via missing cookie-strip on redirects).
+                                val allCookies = listOf(originCookies, pageCookies)
                                     .filter { it.isNotBlank() }
                                     .joinToString("; ")
+                                val clearanceOnly = extractClearanceCookies(allCookies)
                                 // Some Turnstile variants use cf_chl_* or cf_clearance under
                                 // a different name — any cf_ cookie means progress, so keep
-                                // waiting; only cf_clearance (or a non-CF page with cookies)
-                                // verifies.
-                                if (cookies.contains("cf_clearance")) {
+                                // waiting; only cf_clearance verifies.
+                                if (clearanceOnly.isNotBlank() && clearanceOnly.contains("cf_clearance")) {
                                     cm.flush()
-                                    onVerified(cookies)
-                                } else if (cookies.isNotEmpty() && title.isNotBlank() &&
+                                    onVerified(clearanceOnly)
+                                } else if (allCookies.isNotEmpty() && title.isNotBlank() &&
                                     !title.contains("Just a moment", ignoreCase = true)) {
                                     // Non-CF page reached with cookies but no clearance yet:
                                     // do NOT verify — the origin is still gating.
@@ -289,9 +292,31 @@ private fun CloudflareWebView(
                     wv.loadUrl(solverUrl)
                 }
             },
+            onRelease = { wv ->
+                // U-17: without this the WebView (DOM + native) leaked per solve.
+                try {
+                    wv.stopLoading()
+                    wv.removeAllViews()
+                    wv.destroy()
+                } catch (_: Exception) { /* already destroyed */ }
+                webViewRef = null
+            },
             modifier = Modifier.fillMaxSize()
         )
     }
+}
+
+/** U-23: keep only `cf_clearance` pairs (deduped); everything else is dropped. */
+internal fun extractClearanceCookies(raw: String): String {
+    if (raw.isBlank()) return ""
+    return raw.split(";")
+        .map { it.trim() }
+        .mapNotNull { pair ->
+            val name = pair.substringBefore("=", "").trim()
+            if (name.equals("cf_clearance", ignoreCase = true)) pair else null
+        }
+        .distinct()
+        .joinToString("; ")
 }
 
 /** Hilt entry point: the solver activity is not an @AndroidEntryPoint (no VM), so the registry arrives via lookup. */

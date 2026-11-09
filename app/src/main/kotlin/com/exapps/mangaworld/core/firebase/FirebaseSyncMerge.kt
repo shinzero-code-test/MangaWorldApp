@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.firebase
 
+import com.exapps.mangaworld.core.data.local.SyncTombstone
 import com.exapps.mangaworld.core.data.local.entity.FavoriteEntity
 import com.exapps.mangaworld.core.data.local.entity.ReaderAnnotationEntity
 import com.exapps.mangaworld.core.data.local.entity.ReadingHistoryEntity
@@ -57,6 +58,40 @@ internal object FirebaseSyncMerge {
      */
     fun readMarkDocId(mangaId: String, chapterNumber: Float): String =
         "$mangaId|$chapterNumber"
+
+    // ─── Settings-staleness guard (U-10) ─────────────────────────────────
+    //
+    // Pure predicate behind FirebaseSyncManager.applyUserDocSettings so the
+    // two-device settings drill has a JVM-level equivalent (DocumentSnapshot
+    // cannot be faked on the JVM). A stale device push must not revert newer
+    // local settings on every other device: skip strictly-older docs only —
+    // an equal watermark re-applies (idempotent push, same bytes).
+    fun shouldApplySettings(remoteUpdatedAt: Long, appliedAt: Long): Boolean =
+        remoteUpdatedAt >= appliedAt
+
+    // ─── Tombstone predicates (U-11) ─────────────────────────────────────
+    //
+    // Pure versions of the FirebaseSyncManager/LocalBackupManager filters —
+    // restore-vs-resurrect and push-guard tests exercise these directly.
+    fun isTombstoned(
+        collection: String,
+        documentId: String,
+        updatedAt: Long,
+        tombstones: Map<String, SyncTombstone>
+    ): Boolean = tombstones["$collection|$documentId"]?.deletedAt?.let { it >= updatedAt } == true
+
+    fun isAnnotationTombstoned(
+        entity: ReaderAnnotationEntity,
+        tombstones: Map<String, SyncTombstone>
+    ): Boolean = isTombstoned("readerAnnotations", annotationDocId(entity), entity.updatedAt, tombstones) ||
+        isTombstoned("readerAnnotations", legacyAnnotationDocId(entity), entity.updatedAt, tombstones)
+
+    fun newestTombstones(tombstones: List<SyncTombstone>): Map<String, SyncTombstone> =
+        tombstones.groupBy { it.key }.mapValues { (_, candidates) -> candidates.maxBy { it.deletedAt } }
+
+    /** FS-1 push guard: null remote pushes; ties keep the cloud row. */
+    fun shouldPushLocal(localTs: Long, remoteTs: Long?): Boolean =
+        remoteTs == null || localTs > remoteTs
 
     /** Inverse of [readMarkDocId]; null when the id is malformed. */
     fun parseReadMarkDocId(documentId: String): Pair<String, Float>? {

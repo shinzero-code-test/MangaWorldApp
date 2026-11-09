@@ -6,12 +6,15 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.room.withTransaction
+import com.exapps.mangaworld.core.data.local.AppPreferences
 import com.exapps.mangaworld.core.data.local.MangaDatabase
+import com.exapps.mangaworld.core.data.local.SyncTombstone
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
 import com.exapps.mangaworld.core.data.local.dao.ReaderAnnotationDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingProgressDao
+import com.exapps.mangaworld.core.firebase.FirebaseSyncMerge
 import com.exapps.mangaworld.core.data.local.entity.FavoriteEntity
 import com.exapps.mangaworld.core.data.local.entity.ReadChapterEntity
 import com.exapps.mangaworld.core.data.local.entity.ReadingHistoryEntity
@@ -27,6 +30,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -44,7 +52,10 @@ class LocalBackupManager @Inject constructor(
     private val bookmarkManager: BookmarkManager,
     private val settingsRepository: SettingsRepository,
     private val pluginIndex: com.exapps.mangaworld.core.source.plugins.PluginIndexStore,
-    private val pluginSyncScheduler: com.exapps.mangaworld.core.source.sync.PluginSyncScheduler
+    private val pluginSyncScheduler: com.exapps.mangaworld.core.source.sync.PluginSyncScheduler,
+    // U-11: current sync tombstones so a restore cannot resurrect deletions.
+    // Nullable-defaulted to keep direct test construction (JVM) compiling.
+    private val prefs: AppPreferences? = null
 ) {
     /** Outcome of a backup import — callers must surface non-success to the user. */
     sealed interface ImportResult {
@@ -64,6 +75,146 @@ class LocalBackupManager @Inject constructor(
     }
 
     /**
+     * U-09: true when any local library data exists (favorites/reading list,
+     * history, read marks, progress, annotations, collections, bookmarks, or
+     * non-zero reading stats). Read failures conservatively return true so a
+     * caller snapshots/confirms rather than wiping blind; cancellation still
+     * propagates (the helper rethrows CancellationException).
+     */
+    suspend fun hasLocalLibraryData(): Boolean =
+        suspendRunCatching {
+            if (favoriteDao.getAllLibraryEntries().isNotEmpty()) return@suspendRunCatching true
+            if (historyDao.getAll().isNotEmpty()) return@suspendRunCatching true
+            if (readChapterDao.getAll().isNotEmpty()) return@suspendRunCatching true
+            if (progressDao.getAll().isNotEmpty()) return@suspendRunCatching true
+            if (annotationDao.getAll().isNotEmpty()) return@suspendRunCatching true
+            if (collectionManager.snapshot().isNotEmpty()) return@suspendRunCatching true
+            if (bookmarkManager.snapshot().isNotEmpty()) return@suspendRunCatching true
+            val stats = readingStatsStore.snapshot()
+            if (stats.optLong("totalReadingTimeMs", 0L) != 0L) return@suspendRunCatching true
+            if (stats.optInt("totalMangaRead", 0) != 0) return@suspendRunCatching true
+            if (stats.optString("dailyPages", "{}") != "{}") return@suspendRunCatching true
+            if (stats.optString("dailyTimeMs", "{}") != "{}") return@suspendRunCatching true
+            false
+        }.getOrElse { true }
+
+    /** U-09: directory holding pre-wipe account-switch snapshots (metadata only). */
+    fun snapshotDir(): File = File(context.filesDir, SNAPSHOT_DIR_NAME)
+
+    /**
+     * U-09: timestamped pre-wipe snapshot for a named→named account switch.
+     * Reuses the same metadata JSON as [exportTo] (favorites/history/read
+     * marks/progress/annotations/collections/bookmarks/settings/stats/plugin
+     * refs — no images/media), so storage cost is bounded by library size,
+     * not downloaded pages. Returns the written file, or null on failure
+     * (caller must then abort the wipe without advancing the last-UID flag).
+     *
+     * Retention: prunes files older than 7 days by the epoch embedded in the
+     * filename and caps the directory at [MAX_ACCOUNT_SWITCH_SNAPSHOTS].
+     */
+    suspend fun exportAccountSwitchSnapshot(now: Long = System.currentTimeMillis()): File? {
+        val dir = snapshotDir()
+        if (!dir.isDirectory && !dir.mkdirs() && !dir.isDirectory) {
+            runCatching { Log.w(TAG, "Account-switch snapshot dir unavailable: ${dir.path}") }
+            return null
+        }
+        val text = buildExportJson().toString(2)
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }.format(Date(now))
+        val target = File(dir, "account_switch_${stamp}_$now.json")
+        val tmp = File(dir, "account_switch_$now.tmp")
+        fun tryWrite(): File? {
+            return try {
+                tmp.writeText(text)
+                if (!tmp.renameTo(target)) {
+                    if (target.exists()) target.delete()
+                    if (!tmp.renameTo(target)) {
+                        tmp.delete()
+                        runCatching { Log.w(TAG, "Account-switch snapshot rename failed: ${target.name}") }
+                        return null
+                    }
+                }
+                pruneAccountSwitchSnapshots(dir, now)
+                target
+            } catch (e: Exception) {
+                runCatching { Log.w(TAG, "Account-switch snapshot failed: ${e.message}") }
+                runCatching { tmp.delete() }
+                null
+            }
+        }
+        return tryWrite()
+    }
+
+    private fun pruneAccountSwitchSnapshots(dir: File, now: Long) {
+        val cutoff = now - SNAPSHOT_RETENTION_MS
+        val files = (dir.listFiles() ?: return)
+            .filter { it.name.startsWith("account_switch_") && it.name.endsWith(".json") }
+            .mapNotNull { f -> f.name.removeSuffix(".json").substringAfterLast("_").toLongOrNull()?.let { it to f } }
+            .sortedByDescending { it.first }
+        val keep = mutableListOf<File>()
+        for ((epoch, file) in files) {
+            if (epoch < cutoff) {
+                file.delete()
+            } else if (keep.size < MAX_ACCOUNT_SWITCH_SNAPSHOTS) {
+                keep.add(file)
+            } else {
+                file.delete()
+            }
+        }
+    }
+
+    private suspend fun buildExportJson(): JSONObject = JSONObject().apply {
+        put("schemaVersion", SCHEMA_VERSION)
+        put("exportedAt", System.currentTimeMillis())
+        put("favorites", JSONArray(favoriteDao.getAllLibraryEntries().map { it.toJson() }))
+        put("history", JSONArray(historyDao.getAll().map { it.toJson() }))
+        put("readChapters", JSONArray(readChapterDao.getAll().map { it.toJson() }))
+        put("progress", JSONArray(progressDao.getAll().map { it.toJson() }))
+        put("annotations", JSONArray(annotationDao.getAll().map { it.toJson() }))
+        // BK-1: user-curated collections + bookmarks used to be lost on
+        // every device migration — they now ride along in the backup.
+        put("collections", JSONArray(collectionManager.snapshot().map { it.toJson() }))
+        put("bookmarks", JSONArray(bookmarkManager.snapshot().map { (mangaId, items) ->
+            JSONObject().put("mangaId", mangaId)
+                .put("items", JSONArray(items.map { it.toJson() }))
+        }))
+        // Persist the RAW stored source set: getAppSettings() applies a Remote-Config filter
+        // whose filtered view must never be written back, or a temporarily server-disabled
+        // source would become permanently disabled after a backup round-trip.
+        put(
+            "appSettings",
+            settingsRepository.getAppSettings().first()
+                .copy(enabledSources = settingsRepository.getStoredEnabledSources())
+                .toJson()
+        )
+        put("readerSettings", settingsRepository.getReaderSettings().first().toJson())
+        suspendRunCatching { put("readingStats", readingStatsStore.snapshot()) }
+            .onFailure { Log.w(TAG, "Stats export skipped: ${it.message}") }
+        // BK-4 (plan §11A): backups store plugin REFERENCES ({id, version,
+        // origin}), never payloads. Restore re-syncs verified payloads from
+        // distribution instead of resurrecting stale or revoked bytes.
+        suspendRunCatching {
+            put(
+                "pluginRefs",
+                JSONArray(
+                    pluginIndex.getAll()
+                        .filter { it.activeVersion != null }
+                        // Revoked/quarantined/invalid installs must not
+                        // resurrect through restore (F-review): the sync
+                        // engine re-derives those states from live policy.
+                        .filter {
+                            it.status != com.exapps.mangaworld.core.source.plugins.PluginStatus.REVOKED &&
+                                it.status != com.exapps.mangaworld.core.source.plugins.PluginStatus.QUARANTINED &&
+                                it.status != com.exapps.mangaworld.core.source.plugins.PluginStatus.INVALID
+                        }
+                        .map { pluginRefToJson(it) }
+                )
+            )
+        }.onFailure { Log.w(TAG, "Plugin refs export skipped: ${it.message}") }
+    }
+
+    /**
      * Returns false when nothing was written (null output stream) — callers
      * must report failure instead of success.
      *
@@ -72,55 +223,7 @@ class LocalBackupManager @Inject constructor(
      * partial target instead of leaving a truncated backup behind.
      */
     suspend fun exportTo(uri: Uri): Boolean {
-        val root = JSONObject().apply {
-            put("schemaVersion", SCHEMA_VERSION)
-            put("exportedAt", System.currentTimeMillis())
-            put("favorites", JSONArray(favoriteDao.getAllLibraryEntries().map { it.toJson() }))
-            put("history", JSONArray(historyDao.getAll().map { it.toJson() }))
-            put("readChapters", JSONArray(readChapterDao.getAll().map { it.toJson() }))
-            put("progress", JSONArray(progressDao.getAll().map { it.toJson() }))
-            put("annotations", JSONArray(annotationDao.getAll().map { it.toJson() }))
-            // BK-1: user-curated collections + bookmarks used to be lost on
-            // every device migration — they now ride along in the backup.
-            put("collections", JSONArray(collectionManager.snapshot().map { it.toJson() }))
-            put("bookmarks", JSONArray(bookmarkManager.snapshot().map { (mangaId, items) ->
-                JSONObject().put("mangaId", mangaId)
-                    .put("items", JSONArray(items.map { it.toJson() }))
-            }))
-            // Persist the RAW stored source set: getAppSettings() applies a Remote-Config filter
-            // whose filtered view must never be written back, or a temporarily server-disabled
-            // source would become permanently disabled after a backup round-trip.
-            put(
-                "appSettings",
-                settingsRepository.getAppSettings().first()
-                    .copy(enabledSources = settingsRepository.getStoredEnabledSources())
-                    .toJson()
-            )
-            put("readerSettings", settingsRepository.getReaderSettings().first().toJson())
-            suspendRunCatching { put("readingStats", readingStatsStore.snapshot()) }
-                .onFailure { Log.w(TAG, "Stats export skipped: ${it.message}") }
-            // BK-4 (plan §11A): backups store plugin REFERENCES ({id, version,
-            // origin}), never payloads. Restore re-syncs verified payloads from
-            // distribution instead of resurrecting stale or revoked bytes.
-            suspendRunCatching {
-                put(
-                    "pluginRefs",
-                    JSONArray(
-                        pluginIndex.getAll()
-                            .filter { it.activeVersion != null }
-                            // Revoked/quarantined/invalid installs must not
-                            // resurrect through restore (F-review): the sync
-                            // engine re-derives those states from live policy.
-                            .filter {
-                                it.status != com.exapps.mangaworld.core.source.plugins.PluginStatus.REVOKED &&
-                                    it.status != com.exapps.mangaworld.core.source.plugins.PluginStatus.QUARANTINED &&
-                                    it.status != com.exapps.mangaworld.core.source.plugins.PluginStatus.INVALID
-                            }
-                            .map { pluginRefToJson(it) }
-                    )
-                )
-            }.onFailure { Log.w(TAG, "Plugin refs export skipped: ${it.message}") }
-        }
+        val root = buildExportJson()
         val text = root.toString(2)
         val tmp = runCatching {
             java.io.File.createTempFile("mangaworld-backup", ".json", context.cacheDir)
@@ -168,26 +271,49 @@ class LocalBackupManager @Inject constructor(
         // One atomic unit: a crash mid-import must never leave a half-restored library.
         // Rows merge newest-wins so an old backup cannot clobber fresher local state.
         // Array caps bound a hostile 500k-row array to one bounded transaction.
+        // U-11: rows the sync tombstones say are deleted are skipped on the way
+        // in (restore ≠ resurrect) and swept out afterwards (rows that were
+        // already local but deleted elsewhere). Predicates mirror
+        // FirebaseSyncManager.isTombstoned/isAnnotationTombstoned.
+        val restoreTombstones = prefs?.getSyncTombstones()?.let { newestTombstoneMap(it) } ?: emptyMap()
         var favCount = 0
         var histCount = 0
         var readCount = 0
         database.withTransaction {
             root.optJSONArray("favorites")?.forEachObjects(MAX_ROWS_PER_ARRAY) { row ->
-                runCatching { row.toFavoriteEntity() }.getOrNull()?.let { mergeFavorite(it); favCount++ }
+                runCatching { row.toFavoriteEntity() }.getOrNull()?.let { entity ->
+                    if (!isTombstoned("favorites", entity.mangaId, entity.addedAt, restoreTombstones)) {
+                        mergeFavorite(entity); favCount++
+                    }
+                }
             }
             root.optJSONArray("history")?.forEachObjects(MAX_ROWS_PER_ARRAY) { row ->
-                runCatching { row.toHistoryEntity() }.getOrNull()?.let { mergeHistory(it); histCount++ }
+                runCatching { row.toHistoryEntity() }.getOrNull()?.let { entity ->
+                    if (!isTombstoned("readingHistory", entity.mangaId, entity.lastReadAt, restoreTombstones)) {
+                        mergeHistory(entity); histCount++
+                    }
+                }
             }
             // markRead uses OnConflictStrategy.IGNORE — a natural union of read chapters.
             root.optJSONArray("readChapters")?.forEachObjects(MAX_ROWS_PER_ARRAY) { row ->
-                runCatching { row.toReadChapterEntity() }.getOrNull()?.let { readChapterDao.markRead(it); readCount++ }
+                runCatching { row.toReadChapterEntity() }.getOrNull()?.let { entity ->
+                    val docId = FirebaseSyncMerge.readMarkDocId(entity.mangaId, entity.chapterNumber)
+                    if (!isTombstoned("readMarks", docId, entity.readAt, restoreTombstones)) {
+                        readChapterDao.markRead(entity); readCount++
+                    }
+                }
             }
             root.optJSONArray("progress")?.forEachObjects(MAX_ROWS_PER_ARRAY) { row ->
                 runCatching { row.toProgressEntity() }.getOrNull()?.let { mergeProgress(it) }
             }
             root.optJSONArray("annotations")?.forEachObjects(MAX_ROWS_PER_ARRAY) { row ->
-                runCatching { row.toAnnotationEntity() }.getOrNull()?.let { mergeAnnotation(it) }
+                runCatching { row.toAnnotationEntity() }.getOrNull()?.let { entity ->
+                    if (!isAnnotationTombstoned(entity, restoreTombstones)) mergeAnnotation(entity)
+                }
             }
+        }
+        if (restoreTombstones.isNotEmpty()) {
+            database.withTransaction { applyRestoreTombstones(restoreTombstones) }
         }
 
         // BK-1: collections + bookmarks merge newest-wins / id-union outside
@@ -288,6 +414,47 @@ class LocalBackupManager @Inject constructor(
     private suspend fun mergeAnnotation(backup: ReaderAnnotationEntity) {
         val existing = annotationDao.get(backup.mangaId, backup.chapterUrl, backup.pageIndex)
         if (existing == null || backup.updatedAt >= existing.updatedAt) annotationDao.upsert(backup)
+    }
+
+    // ─── U-11 tombstone predicates (delegate to FirebaseSyncMerge) ─────────
+    private fun newestTombstoneMap(tombstones: List<SyncTombstone>): Map<String, SyncTombstone> =
+        FirebaseSyncMerge.newestTombstones(tombstones)
+
+    private fun isTombstoned(
+        collection: String,
+        documentId: String,
+        updatedAt: Long,
+        tombstones: Map<String, SyncTombstone>
+    ): Boolean = FirebaseSyncMerge.isTombstoned(collection, documentId, updatedAt, tombstones)
+
+    private fun isAnnotationTombstoned(
+        entity: ReaderAnnotationEntity,
+        tombstones: Map<String, SyncTombstone>
+    ): Boolean = FirebaseSyncMerge.isAnnotationTombstoned(entity, tombstones)
+
+    /** Post-import sweep: drop rows the tombstones say are deleted. */
+    private suspend fun applyRestoreTombstones(tombstones: Map<String, SyncTombstone>) {
+        tombstones.values.forEach { tombstone ->
+            when (tombstone.collection) {
+                "favorites" -> favoriteDao.deleteIfOlder(tombstone.documentId, tombstone.deletedAt)
+                "readingHistory" -> historyDao.deleteIfOlder(tombstone.documentId, tombstone.deletedAt)
+                "readerAnnotations" -> {
+                    val all = annotationDao.getAll()
+                    all.find {
+                        (FirebaseSyncMerge.annotationDocId(it) == tombstone.documentId ||
+                            FirebaseSyncMerge.legacyAnnotationDocId(it) == tombstone.documentId) &&
+                            it.updatedAt <= tombstone.deletedAt
+                    }?.let { annotationDao.deleteIfOlder(it.mangaId, it.chapterUrl, it.pageIndex, tombstone.deletedAt) }
+                }
+                "readMarks" -> {
+                    val (mangaId, chapter) = FirebaseSyncMerge.parseReadMarkDocId(tombstone.documentId)
+                        ?: return@forEach
+                    readChapterDao.getAll().find {
+                        it.mangaId == mangaId && it.chapterNumber == chapter && it.readAt <= tombstone.deletedAt
+                    }?.let { readChapterDao.markUnread(mangaId, chapter) }
+                }
+            }
+        }
     }
 
     private suspend fun applyAppSettings(settings: AppSettings) {
@@ -539,6 +706,11 @@ class LocalBackupManager @Inject constructor(
 
         /** v4: adds `pluginRefs` (references, never payloads); v1–v3 remain accepted. */
         const val SCHEMA_VERSION = 4
+
+        /** U-09: pre-wipe snapshot dir + retention (7 days, capped count). */
+        const val SNAPSHOT_DIR_NAME = "account_switch_snapshots"
+        const val SNAPSHOT_RETENTION_MS = 7L * 24L * 60L * 60L * 1000L
+        const val MAX_ACCOUNT_SWITCH_SNAPSHOTS = 10
     }
 }
 

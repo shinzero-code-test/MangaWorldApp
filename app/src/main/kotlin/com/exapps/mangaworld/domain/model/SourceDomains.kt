@@ -35,6 +35,35 @@ object SourceDomainOverrides {
 
     fun snapshot(): Map<String, String> = overrides.toMap()
 
+    // ── U-25: API-host overrides (api.azorafly.com / api.mangasid.com /
+    // appswat.com) — RC keys source_<id>_api_host, fallback = constant.
+    private val apiOverrides = ConcurrentHashMap<String, String>()
+
+    /** Replace the whole API-host override table (Remote Config apply path). */
+    fun replaceApiAll(map: Map<String, String>) {
+        apiOverrides.clear()
+        map.forEach { (id, host) ->
+            normalizeApiHost(host)?.let { apiOverrides[id] = it }
+        }
+    }
+
+    /** Effective API host for a source id: valid override, else [default]. */
+    fun apiHostFor(sourceId: String, default: String): String =
+        apiOverrides[sourceId] ?: default
+
+    fun apiSnapshot(): Map<String, String> = apiOverrides.toMap()
+
+    /** Host-only (no scheme/path): `api.azorafly.com`. Invalid → null. */
+    fun normalizeApiHost(raw: String?): String? {
+        val trimmed = raw?.trim()?.trimEnd('/')?.trim() ?: return null
+        if (trimmed.isEmpty()) return null
+        // Accept host or https://host form; never paths/ports.
+        val host = trimmed.removePrefix("https://").removePrefix("http://")
+        if (host.contains('/') || host.contains(':') || host.contains('?') || host.contains('#')) return null
+        val match = Regex("^[A-Za-z0-9.-]+$").matchEntire(host) ?: return null
+        return match.value.lowercase()
+    }
+
     /**
      * Returns a canonical base URL or null when the remote value is not a
      * plain https? origin (path/query/whitespace → rejected).

@@ -83,7 +83,7 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(@ApplicationContext ctx: Context, firebaseNetworkInterceptor: FirebaseNetworkInterceptor, stellarDecryptInterceptor: StellarDecryptInterceptor): OkHttpClient {
+    fun provideOkHttpClient(@ApplicationContext ctx: Context, firebaseNetworkInterceptor: FirebaseNetworkInterceptor, stellarDecryptInterceptor: StellarDecryptInterceptor, registryProvider: javax.inject.Provider<com.exapps.mangaworld.core.source.plugins.SourceRegistry>): OkHttpClient {
         val cacheDir = File(ctx.cacheDir, "http_cache")
         val cache = Cache(cacheDir, 50L * 1024 * 1024) // 50MB
 
@@ -94,11 +94,60 @@ object NetworkModule {
 
         return OkHttpClient.Builder()
             .cache(cache)
+            // U-18: whole-call deadline (connect+read+write) so a hung
+            // connection cannot pin a scraper worker forever. Interceptor
+            // retry count is bounded by this (retryCount+1 tries ≤ 60s).
+            .callTimeout(60, TimeUnit.SECONDS)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
             .connectionPool(ConnectionPool(10, 5, TimeUnit.MINUTES))
             .addInterceptor(firebaseNetworkInterceptor)
+            // U-23: shared-client host gate (dynamic allow-list from the
+            // registry, per-request — late-registered plugins are covered).
+            // Per-plugin DescriptorScraper keeps its stricter static gate;
+            // this one closes the built-in gap (https/userinfo/port +
+            // cross-host Cookie-strip so cf_clearance never rides a redirect).
+            .addNetworkInterceptor { chain ->
+                val request = chain.request()
+                val url = request.url
+                if (!url.scheme.equals("https", ignoreCase = true)) {
+                    throw java.io.IOException("scraper fetch requires https: ${url.host}")
+                }
+                if (url.username.isNotEmpty() || url.password.isNotEmpty()) {
+                    throw java.io.IOException("scraper fetch rejects userinfo urls")
+                }
+                if (url.port != -1 && url.port != 443) {
+                    throw java.io.IOException("scraper fetch rejects non-default port ${url.port}")
+                }
+                val host = url.host.lowercase().trimEnd('.')
+                val allowed = runCatching {
+                    registryProvider.get().allDescriptors().flatMap { d ->
+                        val id = d.id.value
+                        listOf(
+                            com.exapps.mangaworld.core.source.plugins.HostPolicy.hostOf(
+                                com.exapps.mangaworld.domain.model.SourceDomainOverrides.baseUrlFor(id, d.baseUrl)
+                            ),
+                            com.exapps.mangaworld.core.source.plugins.HostPolicy.hostOf(d.baseUrl)
+                        )
+                    }.toSet()
+                }.getOrDefault(emptySet())
+                // Fail-open only when the registry is empty (tests / early
+                // boot before plugins register) — never fail-closed into a
+                // hard outage for unregistered hosts.
+                if (allowed.isNotEmpty() &&
+                    !com.exapps.mangaworld.core.source.plugins.HostPolicy.isHostAllowed(host, allowed)) {
+                    throw java.io.IOException("scraper fetch host not allowed: $host")
+                }
+                val first = request.tag(com.exapps.mangaworld.core.source.plugins.HostGateInterceptor.InitialHost::class.java)?.host ?: host
+                var gated = request.newBuilder()
+                    .tag(com.exapps.mangaworld.core.source.plugins.HostGateInterceptor.InitialHost::class.java, com.exapps.mangaworld.core.source.plugins.HostGateInterceptor.InitialHost(first))
+                    .build()
+                if (host != first) {
+                    gated = gated.newBuilder().removeHeader("Cookie").build()
+                }
+                chain.proceed(gated)
+            }
             .addInterceptor(logging)
             // Host-gated Stellar CDN decryption (matches .bin on cdn-stellarsaber.com
             // only; every other request passes through untouched).

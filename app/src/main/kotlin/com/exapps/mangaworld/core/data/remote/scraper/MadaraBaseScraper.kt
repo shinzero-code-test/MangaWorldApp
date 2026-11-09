@@ -450,7 +450,10 @@ open class MadaraBaseScraper(
                 val chapDoc = Jsoup.parse(body, resolvedBaseUrl)
                 val ajaxChapters = chapDoc.select("li.wp-manga-chapter, li")
                     .mapNotNull { li -> parseChapterLi(li, slug) }
-                if (ajaxChapters.isNotEmpty()) {
+                // U-21: never replace a longer inline list with a partial
+                // AJAX payload (a truncated AJAX response used to drop
+                // older chapters silently). Prefer the longer list.
+                if (ajaxChapters.isNotEmpty() && ajaxChapters.size >= allChapters.size) {
                     allChapters.clear()
                     allChapters.addAll(ajaxChapters)
                 }

@@ -92,8 +92,14 @@ class AutoDownloadWorker @AssistedInject constructor(
                 }
             } catch (exception: CancellationException) {
                 throw exception
-            } catch (_: Exception) {
-                // Skip this manga on error
+            } catch (exception: Exception) {
+                // U-20: per-manga correlation log (was silent continue).
+                val correlationId = "auto_manga_${favorite.mangaId}_${System.currentTimeMillis()}"
+                android.util.Log.w(
+                    "AutoDownload",
+                    "[$correlationId] failed manga=${favorite.mangaId} " +
+                        "cause=${exception.javaClass.simpleName}: ${exception.message?.take(160)}"
+                )
                 continue
             }
         }

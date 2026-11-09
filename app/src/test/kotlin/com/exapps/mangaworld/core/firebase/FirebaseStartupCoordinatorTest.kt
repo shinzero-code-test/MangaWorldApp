@@ -2,6 +2,11 @@ package com.exapps.mangaworld.core.firebase
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.exapps.mangaworld.core.data.AchievementManager
+import com.exapps.mangaworld.core.data.BookmarkManager
+import com.exapps.mangaworld.core.data.CollectionManager
+import com.exapps.mangaworld.core.data.LocalBackupManager
+import com.exapps.mangaworld.core.data.ReadingStatsStore
 import com.exapps.mangaworld.core.data.local.AppPreferences
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadChapterDao
@@ -15,10 +20,12 @@ import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import java.io.File
 
 /**
  * FS-3: account-switch isolation. The startup prefs + DAOs are mocked; no
@@ -37,14 +44,20 @@ class FirebaseStartupCoordinatorTest {
         val syncManager: FirebaseSyncManager,
         val sessionManager: FirebaseSessionManager,
         val editor: SharedPreferences.Editor,
-        val prefsStore: SharedPreferences
+        val prefsStore: SharedPreferences,
+        val backupManager: LocalBackupManager,
+        val readingStatsStore: ReadingStatsStore,
+        val collectionManager: CollectionManager,
+        val bookmarkManager: BookmarkManager
     )
 
     private fun newHarness(
         lastUid: String? = null,
         lastNamed: Boolean = false,
         currentUid: String = "uB",
-        currentAnonymous: Boolean = false
+        currentAnonymous: Boolean = false,
+        libraryHasData: Boolean = false,
+        snapshotFile: File? = File("account_switch_20260101_000000_1234567890123.json")
     ): Harness {
         val context = mockk<Context>(relaxed = true)
         val prefsStore = mockk<SharedPreferences>(relaxed = true)
@@ -72,6 +85,18 @@ class FirebaseStartupCoordinatorTest {
         coEvery { favoriteDao.getFavoritesList() } returns emptyList()
         val syncManager = mockk<FirebaseSyncManager>(relaxed = true)
 
+        val backupManager = mockk<LocalBackupManager>(relaxed = true)
+        coEvery { backupManager.hasLocalLibraryData() } returns libraryHasData
+        coEvery { backupManager.exportAccountSwitchSnapshot(any()) } returns snapshotFile
+
+        val readingStatsStore = mockk<ReadingStatsStore>(relaxed = true)
+        val achievementManager = mockk<AchievementManager>(relaxed = true)
+        every { achievementManager.goals } returns flowOf(emptyList())
+        val collectionManager = mockk<CollectionManager>(relaxed = true)
+        coEvery { collectionManager.snapshot() } returns emptyList()
+        val bookmarkManager = mockk<BookmarkManager>(relaxed = true)
+        every { bookmarkManager.snapshot() } returns emptyMap()
+
         val coordinator = FirebaseStartupCoordinator(
             context = context,
             remoteConfigManager = mockk(relaxed = true),
@@ -87,11 +112,17 @@ class FirebaseStartupCoordinatorTest {
             messagingRegistrar = mockk(relaxed = true),
             userInsightsCoordinator = mockk(relaxed = true),
             notificationPolicyManager = mockk(relaxed = true),
-            telemetry = mockk(relaxed = true)
+            telemetry = mockk(relaxed = true),
+            backupManager = backupManager,
+            readingStatsStore = readingStatsStore,
+            achievementManager = achievementManager,
+            collectionManager = collectionManager,
+            bookmarkManager = bookmarkManager
         )
         return Harness(
             coordinator, favoriteDao, historyDao, annotationDao,
-            readChapterDao, progressDao, syncManager, sessionManager, editor, prefsStore
+            readChapterDao, progressDao, syncManager, sessionManager, editor, prefsStore,
+            backupManager, readingStatsStore, collectionManager, bookmarkManager
         )
     }
 
@@ -144,5 +175,83 @@ class FirebaseStartupCoordinatorTest {
         h.coordinator.initialize()
         advanceUntilIdle()
         coVerify(exactly = 0) { h.favoriteDao.clearAll() }
+    }
+
+    // U-09: a failed wipe must NOT advance the identity flag (otherwise the
+    // old library would next be pushed into the new uid's cloud), and the
+    // next initialize() call must retry the full wipe. The prefsStore stub
+    // always reports the old uid (lastUid="uA"), so only the flag-write
+    // itself is under test — a bug that wrote flags unconditionally would
+    // still retry in the mock, which is why this asserts on the editor.
+    @Test
+    fun failedWipe_doesNotAdvanceFlag_andRetriesNextInitialize() = runTest(StandardTestDispatcher()) {
+        val h = newHarness(lastUid = "uA", lastNamed = true, currentUid = "uB", currentAnonymous = false)
+        coEvery { h.favoriteDao.clearAll() } throws RuntimeException("simulated DAO failure")
+        h.coordinator.initialize()
+        advanceUntilIdle()
+        // Wipe attempted, flag NOT written, sync aborted before merge/push.
+        coVerify { h.favoriteDao.clearAll() }
+        verify(exactly = 0) { h.editor.putString("last_sync_uid", "uB") }
+        coVerify(exactly = 0) { h.syncManager.mergeRemoteSnapshot() }
+        coVerify(exactly = 0) { h.syncManager.pushLocalSnapshot(force = true) }
+
+        // Retry: DAO now healthy, the SAME initialize() re-runs the wipe,
+        // advances flags, and only then merges.
+        coEvery { h.favoriteDao.clearAll() } returns Unit
+        h.coordinator.initialize()
+        advanceUntilIdle()
+        coVerify(exactly = 2) { h.favoriteDao.clearAll() }
+        verify { h.editor.putString("last_sync_uid", "uB") }
+        coVerifyOrder {
+            h.favoriteDao.clearAll()
+            h.syncManager.mergeRemoteSnapshot()
+        }
+        coVerify { h.readingStatsStore.pruneOldStats(0) }
+    }
+
+    @Test
+    fun namedToNamedSwitch_withNonEmptyLibrary_snapshotsBeforeWipeAndWritesFlag() =
+        runTest(StandardTestDispatcher()) {
+            val h = newHarness(
+                lastUid = "uA", lastNamed = true, currentUid = "uB",
+                currentAnonymous = false, libraryHasData = true
+            )
+            h.coordinator.initialize()
+            advanceUntilIdle()
+            coVerifyOrder {
+                h.backupManager.exportAccountSwitchSnapshot(any())
+                h.favoriteDao.clearAll()
+                h.syncManager.mergeRemoteSnapshot()
+            }
+            verify { h.editor.putString("last_sync_uid", "uB") }
+            coVerify { h.readingStatsStore.pruneOldStats(0) }
+        }
+
+    @Test
+    fun confirmationGateDeclined_abortsWipeAndKeepsFlags() = runTest(StandardTestDispatcher()) {
+        val h = newHarness(
+            lastUid = "uA", lastNamed = true, currentUid = "uB",
+            currentAnonymous = false, libraryHasData = true
+        )
+        h.coordinator.onAccountSwitchRequiresConfirmation = { false }
+        h.coordinator.initialize()
+        advanceUntilIdle()
+        coVerify(exactly = 0) { h.favoriteDao.clearAll() }
+        coVerify(exactly = 0) { h.backupManager.exportAccountSwitchSnapshot(any()) }
+        verify(exactly = 0) { h.editor.putString("last_sync_uid", "uB") }
+        coVerify(exactly = 0) { h.syncManager.mergeRemoteSnapshot() }
+    }
+
+    @Test
+    fun snapshotFailure_abortsWipeAndKeepsFlags() = runTest(StandardTestDispatcher()) {
+        val h = newHarness(
+            lastUid = "uA", lastNamed = true, currentUid = "uB",
+            currentAnonymous = false, libraryHasData = true, snapshotFile = null
+        )
+        h.coordinator.initialize()
+        advanceUntilIdle()
+        coVerify(exactly = 0) { h.favoriteDao.clearAll() }
+        verify(exactly = 0) { h.editor.putString("last_sync_uid", "uB") }
+        coVerify(exactly = 0) { h.syncManager.mergeRemoteSnapshot() }
     }
 }

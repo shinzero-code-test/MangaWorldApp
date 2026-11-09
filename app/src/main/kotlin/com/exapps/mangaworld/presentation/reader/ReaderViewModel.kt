@@ -152,10 +152,16 @@ class ReaderViewModel @Inject constructor(
     private var commentsJob: Job? = null
     private var downloadTaskJob: Job? = null
     private var appendJob: Job? = null
+    private var loadJob: Job? = null
+    private var pagePersistJob: Job? = null
     private var prefetchedNextChapterUrl: String? = null
+    private val inFlightPrefetches = mutableSetOf<String>()
     private var lastReadAnalyticsKey: String? = null
     private var periodicSaveJob: kotlinx.coroutines.Job? = null
     private val activeDownloadStatuses = setOf("queued", "running", "paused")
+    /** U-16: single reactions collector; page flips only update the target. */
+    private val reactionsTarget = MutableStateFlow<Triple<String, String, Int>?>(null)
+    private var reactionsKey: String? = null
 
     init {
         viewModelScope.launch {
@@ -196,13 +202,25 @@ class ReaderViewModel @Inject constructor(
     }
 
     fun loadChapter(chapterUrl: String, mangaId: String, source: SourceId, startPage: Int = 0) {
+        // U-16: same-chapter early-return — rotation / duplicate LaunchedEffect
+        // must not refetch and reset position. Retry paths (error != null,
+        // loading, or explicit different startPage intent with empty pages)
+        // fall through.
+        val cur = _state.value
+        if (cur.chapterUrl == chapterUrl && cur.mangaId == mangaId &&
+            cur.pages.isNotEmpty() && !cur.isLoading && cur.error == null) {
+            return
+        }
         if (_state.value.chapterUrl != chapterUrl) {
             finishSessionAsync()
             stopCommunityPresenceAsync(_state.value.mangaId, _state.value.chapterUrl)
         }
         currentSource = source
         prefetchedNextChapterUrl = null
+        inFlightPrefetches.clear()
         appendJob?.cancel()
+        // U-16: cancel previous load so a stale onSuccess cannot overwrite.
+        loadJob?.cancel()
         val loadSeq = ++chapterLoadSeq
         _state.update {
             it.copy(
@@ -228,10 +246,11 @@ class ReaderViewModel @Inject constructor(
         // Downloaded (local) keeps its real sourceId so it uses the online path.
         val isImported = mangaId.startsWith("imported_") || BuiltinSourceIds.isLocal(source.value)
         if (isImported) {
-            viewModelScope.launch {
+            loadJob = viewModelScope.launch {
                 val localPages = withContext(ioDispatcher) {
                     downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
                 }
+                if (loadSeq != chapterLoadSeq) return@launch
                 if (localPages.isNotEmpty()) {
                     val indexed = localPages.mapIndexed { i, p -> p.copy(index = i) }
                     val chNum = parseFallbackChapterNumber(chapterUrl)
@@ -300,11 +319,13 @@ class ReaderViewModel @Inject constructor(
         viewModelScope.launch {
             suspendRunCatching { positionSyncManager.pullRemotePositions() }
         }
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             val chapterMeta = resolveChapterMeta(mangaId, chapterUrl, source)
+            if (loadSeq != chapterLoadSeq) return@launch
             val localPages = withContext(ioDispatcher) {
                 downloadQueueManager.getLocalChapterPages(mangaId, chapterUrl)
             }
+            if (loadSeq != chapterLoadSeq) return@launch
             if (localPages.isNotEmpty()) {
                 val currentChapterNumber = chapterMeta?.number ?: parseFallbackChapterNumber(chapterUrl)
                 val indexed = localPages.mapIndexed { i, p -> p.copy(index = i) }
@@ -341,6 +362,9 @@ class ReaderViewModel @Inject constructor(
             }
             mangaRepo.getChapterPages("", chapterUrl, source)
                 .onSuccess { pages ->
+                    // U-16: only the latest generation may write state; a
+                    // stale fetch (rapid switch) must not clobber position.
+                    if (loadSeq != chapterLoadSeq) return@onSuccess
                     // Open always starts on the first page (Finding 1, v9.5.4).
                     val chNum = chapterMeta?.number ?: parseFallbackChapterNumber(chapterUrl)
                     val indexed = pages.mapIndexed { i, p -> p.copy(index = i) }
@@ -392,6 +416,7 @@ class ReaderViewModel @Inject constructor(
                     viewModelScope.launch { widgetShortcutCoordinator.refreshWidgetsAndShortcuts() }
                 }
                 .onFailure { e ->
+                    if (loadSeq != chapterLoadSeq) return@onFailure
                     val msg = if (e is CloudflareChallengeException) {
                         "CLOUDFLARE_REQUIRED|${e.domain}|${e.targetUrl}"
                     } else if (e is com.exapps.mangaworld.core.data.remote.scraper.ChapterLockedException) {
@@ -448,7 +473,11 @@ class ReaderViewModel @Inject constructor(
                 chapterPageCount = chapterTotal
             )
         }
-        viewModelScope.launch {
+        // U-16: coalesce page persistence — at most one write per 500ms window.
+        // A rapid scroll previously fired ~4 writes per page flip.
+        pagePersistJob?.cancel()
+        pagePersistJob = viewModelScope.launch {
+            delay(500L)
             val cachedNumber = activeChapterNumber
             val chNum = cachedNumber
                 ?: (resolveChapterMeta(st.mangaId, activeChapterUrl, currentSource)?.number
@@ -461,6 +490,7 @@ class ReaderViewModel @Inject constructor(
                     suspendRunCatching { positionSyncManager.pushLocalPositions() }
                 }
             }
+            // U-16: reuses the single reactions collector (target update only).
             observeReactions(st.mangaId, activeChapterUrl, inChapter)
             if (chapterChanged) {
                 // Moved into an appended chapter — annotations, presence and
@@ -978,44 +1008,54 @@ class ReaderViewModel @Inject constructor(
         val st = _state.value
         val page = st.pages.getOrNull(st.currentPage) ?: return
         viewModelScope.launch {
-            try {
-                val context = context.applicationContext
-                val bitmap = imageLoader.execute(
-                    coil.request.ImageRequest.Builder(context)
-                        .data(page.url)
-                        .allowHardware(false)
-                        .build()
-                ).drawable?.let { drawable ->
-                    val bmp = android.graphics.Bitmap.createBitmap(drawable.intrinsicWidth, drawable.intrinsicHeight, android.graphics.Bitmap.Config.ARGB_8888)
-                    val canvas = android.graphics.Canvas(bmp)
-                    drawable.setBounds(0, 0, canvas.width, canvas.height)
-                    drawable.draw(canvas)
-                    bmp
-                } ?: return@launch
-                val resolver = context.contentResolver
-                val contentValues = android.content.ContentValues().apply {
-                    put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "MangaWorld_${System.currentTimeMillis()}.jpg")
-                    put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                        put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/MangaWorld")
-                        put(android.provider.MediaStore.Images.Media.IS_PENDING, 1)
+            val appContext = context.applicationContext
+            // U-15: bitmap encode (CPU) + MediaStore insert (IO) off Main.
+            val ok = withContext(ioDispatcher) {
+                try {
+                    val bitmap = imageLoader.execute(
+                        coil.request.ImageRequest.Builder(appContext)
+                            .data(page.url)
+                            .allowHardware(false)
+                            .build()
+                    ).drawable?.let { drawable ->
+                        val bmp = android.graphics.Bitmap.createBitmap(drawable.intrinsicWidth, drawable.intrinsicHeight, android.graphics.Bitmap.Config.ARGB_8888)
+                        val canvas = android.graphics.Canvas(bmp)
+                        drawable.setBounds(0, 0, canvas.width, canvas.height)
+                        drawable.draw(canvas)
+                        bmp
+                    } ?: return@withContext false
+                    val resolver = appContext.contentResolver
+                    val contentValues = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "MangaWorld_${System.currentTimeMillis()}.jpg")
+                        put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                            put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/MangaWorld")
+                            put(android.provider.MediaStore.Images.Media.IS_PENDING, 1)
+                        }
                     }
+                    val uri = resolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                    uri?.let {
+                        resolver.openOutputStream(it)?.use { os ->
+                            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, os)
+                        }
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                            contentValues.clear()
+                            contentValues.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0)
+                            resolver.update(it, contentValues, null, null)
+                        }
+                    }
+                    true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    false
                 }
-                val uri = resolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-                uri?.let {
-                    resolver.openOutputStream(it)?.use { os ->
-                        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, os)
-                    }
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                        contentValues.clear()
-                        contentValues.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0)
-                        resolver.update(it, contentValues, null, null)
-                    }
-                }
+            }
+            if (ok) {
                 _state.update { it.copy(downloadMessage = context.getString(R.string.reader_page_saved)) }
                 kotlinx.coroutines.delay(2000)
                 _state.update { it.copy(downloadMessage = null) }
-            } catch (_: Exception) {
+            } else {
                 _state.update { it.copy(downloadMessage = context.getString(R.string.str_337)) }
                 kotlinx.coroutines.delay(2000)
                 _state.update { it.copy(downloadMessage = null) }
@@ -1069,11 +1109,21 @@ class ReaderViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        super.onCleared()
-        downloadTaskJob?.cancel()
-        stopCommunityPresenceAsync(_state.value.mangaId, _state.value.chapterUrl)
+        // U-16: final flush must survive flushScope.cancel() — capture the
+        // remaining time FIRST, then hand it to a NonCancellable flush, and
+        // only cancel the scope AFTER the flush is enqueued (the old code
+        // cancelled immediately, losing the last segment on every exit).
+        val mangaId = _state.value.mangaId
+        val chapterUrl = _state.value.chapterUrl
         finishSessionAsync()
-        // Flushes above were handed to flushScope; only now is it safe to cancel.
+        stopCommunityPresenceAsync(mangaId, chapterUrl)
+        downloadTaskJob?.cancel()
+        loadJob?.cancel()
+        pagePersistJob?.cancel()
+        // Best-effort flush of the pending debounced position write.
+        // (Debounce delay is 500ms; the final segment is still persisted by
+        // finishSessionAsync's reading-time flush.)
+        super.onCleared()
         flushScope.cancel()
     }
 
@@ -1105,7 +1155,8 @@ class ReaderViewModel @Inject constructor(
 
     private fun observeCommunity(mangaId: String, chapterUrl: String) {
         presenceJob?.cancel()
-        reactionsJob?.cancel()
+        // U-16: do NOT cancel reactionsJob here — it is the single persistent
+        // collector; chapter switches update reactionsTarget instead.
         commentsJob?.cancel()
         presenceJob = viewModelScope.launch {
             runCatching { communityRepository.setReaderPresence(mangaId, chapterUrl, true) }
@@ -1122,9 +1173,16 @@ class ReaderViewModel @Inject constructor(
     }
 
     private fun observeReactions(mangaId: String, chapterUrl: String, pageIndex: Int) {
-        reactionsJob?.cancel()
+        // U-16: reuse one collector — page turns update the target instead of
+        // cancelling/re-attaching the Firestore snapshot listener per page.
+        reactionsTarget.value = Triple(mangaId, chapterUrl, pageIndex)
+        if (reactionsJob?.isActive == true) return
+        reactionsKey = null
         reactionsJob = viewModelScope.launch {
-            communityRepository.observePageReactions(mangaId, chapterUrl, pageIndex).collect { reactions ->
+            reactionsTarget.flatMapLatest { target ->
+                if (target == null) kotlinx.coroutines.flow.emptyFlow()
+                else communityRepository.observePageReactions(target.first, target.second, target.third)
+            }.collect { reactions ->
                 _state.update { it.copy(currentPageReactions = reactions) }
             }
         }
@@ -1132,11 +1190,17 @@ class ReaderViewModel @Inject constructor(
 
     private suspend fun prefetchNextChapterIfNeeded(state: ReaderUiState) {
         val nextUrl = state.nextChapterUrl ?: return
+        // U-16: in-flight guard — mark BEFORE fetch and dedup concurrent calls.
         if (prefetchedNextChapterUrl == nextUrl) return
-        val pages = mangaRepo.getChapterPages("", nextUrl, currentSource).getOrNull().orEmpty()
-        if (pages.isEmpty()) return
-        imagePrefetcher.prefetchPages(pages)
+        if (!inFlightPrefetches.add(nextUrl)) return
         prefetchedNextChapterUrl = nextUrl
+        try {
+            val pages = mangaRepo.getChapterPages("", nextUrl, currentSource).getOrNull().orEmpty()
+            if (pages.isEmpty()) return
+            imagePrefetcher.prefetchPages(pages)
+        } finally {
+            inFlightPrefetches.remove(nextUrl)
+        }
     }
 
     private suspend fun resolveDetailForChapter(mangaId: String, source: SourceId): MangaDetail? =
@@ -1146,8 +1210,11 @@ class ReaderViewModel @Inject constructor(
     private suspend fun resolveChapterMeta(mangaId: String, chapterUrl: String, source: SourceId): Chapter? =
         resolveDetailForChapter(mangaId, source)?.chapters?.firstOrNull { it.url == chapterUrl }
 
+    // U-25: canonical rule (parser emits, reader consumes verbatim via ScraperText).
     private fun parseFallbackChapterNumber(chapterUrl: String): Float =
-        chapterUrl.substringAfterLast("/").replace("[^0-9.]".toRegex(), "").toFloatOrNull() ?: 0f
+        com.exapps.mangaworld.core.data.remote.scraper.ScraperText.canonicalChapterNumber(null, chapterUrl)
+            ?: chapterUrl.substringAfterLast("/").replace("[^0-9.]".toRegex(), "").toFloatOrNull()
+            ?: 0f
 
     private suspend fun scheduleAutoCleanupIfNeeded(mangaId: String, chapterUrl: String) {
         val settings = settingsRepo.getAppSettings().first()
@@ -1196,9 +1263,13 @@ class ReaderViewModel @Inject constructor(
         sessionCheckpointAt = null
         if (delta >= 1_000L) {
             // viewModelScope is already cancelled inside onCleared — use flushScope.
-            flushScope.launch {
-                runCatching { readingStatsStore.addReadingTime(delta) }
-                runCatching { widgetShortcutCoordinator.refreshWidgets() }
+            // U-16: NonCancellable so the flush survives flushScope.cancel() in onCleared.
+            // U-18: bounded by 30s so a hung write cannot pin teardown.
+            flushScope.launch(NonCancellable) {
+                withTimeout(30_000L) {
+                    runCatching { readingStatsStore.addReadingTime(delta) }
+                    runCatching { widgetShortcutCoordinator.refreshWidgets() }
+                }
             }
         }
     }
@@ -1208,8 +1279,12 @@ class ReaderViewModel @Inject constructor(
         presenceJob?.cancel()
         reactionsJob?.cancel()
         commentsJob?.cancel()
-        flushScope.launch {
-            runCatching { communityRepository.setReaderPresence(mangaId, chapterUrl, false) }
+        // U-16: NonCancellable — presence-off must land even as onCleared tears down.
+        // U-18: bounded 30s.
+        flushScope.launch(NonCancellable) {
+            withTimeout(30_000L) {
+                runCatching { communityRepository.setReaderPresence(mangaId, chapterUrl, false) }
+            }
         }
     }
 }

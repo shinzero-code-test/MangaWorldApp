@@ -224,8 +224,10 @@ class PluginSyncEngine @Inject constructor(
             // partial-sweep lines + telemetry still land, then cancellation
             // propagates to the caller below.
             kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                logOutcomeLines(result)
-                telemetry.logSync(reportOf(result, System.currentTimeMillis() - start))
+                kotlinx.coroutines.withTimeout(30_000L) {
+                    logOutcomeLines(result)
+                    telemetry.logSync(reportOf(result, System.currentTimeMillis() - start))
+                }
             }
             result
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -418,14 +420,16 @@ class PluginSyncEngine @Inject constructor(
         // D8: same cancellation discipline as the outcome report above —
         // retry bookkeeping must survive a mid-sweep screen exit.
         kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-            // Failures/rollbacks must be retried, so they block the 304 shortcut.
-            val retry = outcomes
-                .filterValues { it is EntryOutcome.Failed || it is EntryOutcome.RolledBack }
-                .keys
-            // Persist both reasons to revisit an entry: this sweep's failures, and
-            // records whose revocation the policy no longer carries (computed above,
-            // before the 304 gate, so a lifted revocation recovers in ONE sweep).
-            etags.setUnresolved(retry + lifted)
+            kotlinx.coroutines.withTimeout(30_000L) {
+                // Failures/rollbacks must be retried, so they block the 304 shortcut.
+                val retry = outcomes
+                    .filterValues { it is EntryOutcome.Failed || it is EntryOutcome.RolledBack }
+                    .keys
+                // Persist both reasons to revisit an entry: this sweep's failures, and
+                // records whose revocation the policy no longer carries (computed above,
+                // before the 304 gate, so a lifted revocation recovers in ONE sweep).
+                etags.setUnresolved(retry + lifted)
+            }
         }
         SyncResult(outcomes = outcomes, revocationsApplied = revocations, evictedVersions = evicted)
     }

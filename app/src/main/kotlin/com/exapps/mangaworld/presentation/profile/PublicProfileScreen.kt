@@ -84,6 +84,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import androidx.compose.runtime.Stable
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withTimeout
+
+/** U-18: NonCancellable writes bounded by a 30s deadline. */
+private fun CoroutineScope.launchNonCancellableTimed(block: suspend () -> Unit): Job =
+    launch(NonCancellable) { withTimeout(30_000L) { block() } }
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -241,7 +248,7 @@ class PublicProfileViewModel @Inject constructor(
 
     fun toggleFollow() {
         if (isOwnProfile.value) return
-        viewModelScope.launch(NonCancellable) {
+        viewModelScope.launchNonCancellableTimed {
             runCatching {
                 if (isFollowing.value) communityRepository.unfollowUser(userId)
                 else communityRepository.followUser(userId)

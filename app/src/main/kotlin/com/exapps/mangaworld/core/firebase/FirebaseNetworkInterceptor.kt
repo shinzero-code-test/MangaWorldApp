@@ -6,6 +6,7 @@ import com.google.firebase.perf.FirebasePerformance
 import okhttp3.Interceptor
 import okhttp3.Response
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -60,21 +61,64 @@ class FirebaseNetworkInterceptor @Inject constructor(
 
         try {
             var lastException: IOException? = null
-            repeat(runtimeConfig.retryCount + 1) { attempt ->
+            // U-18: bounded exponential backoff + Retry-After; cancellation
+            // must propagate (caller cancellation kills the retry loop).
+            for (attempt in 0..runtimeConfig.retryCount) {
                 try {
                     val response = tunedChain.proceed(request)
                     trace.putAttribute("response_code", response.code.toString())
+                    // Honor Retry-After on 429/503 when we will retry.
+                    if ((response.code == 429 || response.code == 503) && attempt < runtimeConfig.retryCount) {
+                        val retryAfterMs = parseRetryAfter(response)
+                        response.close()
+                        lastException = IOException("HTTP ${response.code} (retrying)")
+                        trace.incrementMetric("retry_count", 1)
+                        sleepBackoff(attempt, retryAfterMs)
+                        continue
+                    }
                     return response
+                } catch (e: InterruptedIOException) {
+                    // U-18: cancellation passthrough — never retry a cancelled call.
+                    throw e
                 } catch (exception: IOException) {
+                    // OkHttp surfaces coroutine cancellation as InterruptedIOException
+                    // (handled above). Any other IOException is retryable unless the
+                    // thread was interrupted.
+                    if (Thread.currentThread().isInterrupted) throw exception
                     lastException = exception
                     trace.incrementMetric("retry_count", 1)
                     if (attempt == runtimeConfig.retryCount) throw exception
+                    sleepBackoff(attempt, null)
                 }
             }
 
             throw lastException ?: IOException("Unknown scraper network error")
         } finally {
             trace.stop()
+        }
+    }
+
+    private fun parseRetryAfter(response: Response): Long? {
+        val raw = response.header("Retry-After")?.trim() ?: return null
+        // Delta seconds form (preferred); HTTP-date form is ignored (coarse).
+        val secs = raw.toLongOrNull() ?: return null
+        // Clamp to [0, 30]s so a hostile far-future date cannot pin the queue.
+        return (secs.coerceIn(0L, 30L)) * 1000L
+    }
+
+    private fun sleepBackoff(attempt: Int, retryAfterMs: Long?) {
+        val backoff = when {
+            retryAfterMs != null -> retryAfterMs
+            else -> (200L shl attempt).coerceAtMost(2000L) // 200,400,800… capped 2s
+        }
+        if (backoff <= 0) return
+        // Sleep respects interruption (cancellation): an interrupted sleep
+        // aborts the retry loop on the next proceed() or here.
+        try {
+            Thread.sleep(backoff)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw IOException("interrupted during retry backoff", e)
         }
     }
 }

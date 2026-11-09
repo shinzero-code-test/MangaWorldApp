@@ -67,10 +67,23 @@ class LocalStorageViewModel @Inject constructor(
     private val _autoTags = MutableStateFlow<Map<String, List<String>>>(emptyMap())
     val autoTags: StateFlow<Map<String, List<String>>> = _autoTags.asStateFlow()
 
+    /** U-15: chapter counts computed off-Main (suspend IO) and hoisted out of composition. */
+    private val _chapterCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val chapterCounts: StateFlow<Map<String, Int>> = _chapterCounts.asStateFlow()
+
     init {
         // Sync filesystem → DB so imported/downloaded manga always appear
+        // U-15: the scan itself runs on IO inside the manager; launch stays on Main.
         viewModelScope.launch {
             manager.syncFileSystemWithDatabase()
+        }
+        viewModelScope.launch {
+            manager.observeDownloadedMangas().collectLatest { mangas ->
+                val counts = mangas.associate { entity ->
+                    entity.mangaId to manager.countDownloadedChapters(entity.mangaId, entity.title)
+                }
+                _chapterCounts.value = counts
+            }
         }
         viewModelScope.launch {
             manager.observeDownloadedMangas().collectLatest { mangas ->
@@ -110,9 +123,10 @@ class LocalStorageViewModel @Inject constructor(
     fun confirmDeleteManga() {
         val manga = _confirmDelete.value ?: return
         _confirmDelete.value = null
+        // U-15: deleteDownloadedManga runs file IO on IO internally.
         viewModelScope.launch { manager.deleteDownloadedManga(manga.mangaId) }
     }
-    fun chapterCount(entity: DownloadedMangaEntity): Int =
+    suspend fun chapterCount(entity: DownloadedMangaEntity): Int =
         manager.countDownloadedChapters(entity.mangaId, entity.title)
 
     fun tagsFor(entity: DownloadedMangaEntity): List<String> = autoTags.value[entity.mangaId].orEmpty()
@@ -128,6 +142,7 @@ fun LocalStorageScreen(
     val confirmDelete by viewModel.confirmDelete.collectAsStateWithLifecycle()
     val autoTags by viewModel.autoTags.collectAsStateWithLifecycle()
     val sourceNames by viewModel.sourceNames.collectAsStateWithLifecycle()
+    val chapterCounts by viewModel.chapterCounts.collectAsStateWithLifecycle()
 
     Box(Modifier.fillMaxSize().background(MangaColors.Background)) {
         Column(Modifier.fillMaxSize()) {
@@ -183,7 +198,7 @@ fun LocalStorageScreen(
                             sourceNames = sourceNames,
                             manga = manga,
                             autoTags = autoTags[manga.mangaId].orEmpty(),
-                            downloadedChapters = viewModel.chapterCount(manga),
+                            downloadedChapters = chapterCounts[manga.mangaId] ?: manga.downloadedChapters,
                             onClick = {
                                 // All manga (imported + downloaded) go through the regular detail screen
                                 // which has local-disk loading support

@@ -3,9 +3,12 @@ package com.exapps.mangaworld.core.data.remote.scraper
 import com.exapps.mangaworld.core.data.resolveCookieForDomain
 import com.exapps.mangaworld.core.data.resolveCookieForUrl
 import com.exapps.mangaworld.core.firebase.RemoteSelectorOverridesStore
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.invokeOnCancellation
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -105,39 +108,41 @@ abstract class BaseScraperImpl(
 
             val request = requestBuilder.build()
 
-            val response = client.newCall(request).execute()
+            val call = client.newCall(request)
+            // U-18: coroutine cancellation must abort the blocking call.
+            currentCoroutineContext().invokeOnCancellation { runCatching { call.cancel() } }
+            val response = call.execute()
             val body: String
             val code: Int
             try {
                 body = response.body?.string() ?: ""
                 code = response.code
+                val headers = response.headers
+                val doc = Jsoup.parse(body, url)
+                val title = doc.title().lowercase()
+                // Narrowed (v9.5.9, review 2026-11-07): the previous matcher fired on
+                // passive embeds that ship on normal pages (RUM jsd/main.js via
+                // /cdn-cgi/, Turnstile comment widgets via challenges.cloudflare.com
+                // / cf-turnstile, bot cookie __cf_bm, ordinary JS word "orchestrate").
+                // A challenge gates content: the cf-mitigated header (strongest), an
+                // interstitial title, or the live challenge marker __cf_chl_ that
+                // only appears in the interstitial body.
+                // U-22: 403/503 is a WEAK signal alone — a non-CF 403 (IP ban,
+                // rate-limit) must not route to the solver. It counts only with
+                // a CF marker (header/title/body).
+                val isCf = isCloudflareChallenge(code, title, body, headers["cf-mitigated"])
+                if (isCf) {
+                    throw CloudflareChallengeException(resolvedBaseUrl.removePrefix("https://").removePrefix("http://"), url)
+                }
+                // Server error bodies used to be parsed as content → silent empty results.
+                // Fail loudly so repositories can fall back to cache instead.
+                if (code >= 400) {
+                    throw SourceHttpException(code, url.takeWhile { it != '?' })
+                }
+                return@withContext doc
             } finally {
                 response.close()
             }
-            val doc = Jsoup.parse(body, url)
-            val title = doc.title().lowercase()
-            // Narrowed (v9.5.9, review 2026-11-07): the previous matcher fired on
-            // passive embeds that ship on normal pages (RUM jsd/main.js via
-            // /cdn-cgi/, Turnstile comment widgets via challenges.cloudflare.com
-            // / cf-turnstile, bot cookie __cf_bm, ordinary JS word "orchestrate").
-            // A challenge gates content: the cf-mitigated header (strongest), an
-            // interstitial title, or the live challenge marker __cf_chl_ that
-            // only appears in the interstitial body.
-            val cfMitigated = response.headers["cf-mitigated"]?.lowercase() == "challenge"
-            val isCf = cfMitigated || code == 403 || code == 503 ||
-                title.contains("just a moment") ||
-                title.contains("attention required") ||
-                title.contains("access denied") ||
-                body.contains("__cf_chl_", ignoreCase = true)
-            if (isCf) {
-                throw CloudflareChallengeException(resolvedBaseUrl.removePrefix("https://").removePrefix("http://"), url)
-            }
-            // Server error bodies used to be parsed as content → silent empty results.
-            // Fail loudly so repositories can fall back to cache instead.
-            if (code >= 400) {
-                throw SourceHttpException(code, url.takeWhile { it != '?' })
-            }
-            doc
         }
 
     protected fun String.absoluteUrl(base: String = resolvedBaseUrl): String {
@@ -208,4 +213,54 @@ abstract class BaseScraperImpl(
 
     protected open fun remoteSelector(key: String, default: String): String =
         RemoteSelectorOverridesStore.selector(sourceId, key, default)
+
+    /**
+     * U-24: shared scraper envelope — cancellation-aware (via [suspendRunCatching])
+     * + telemetry on failure. All scraper Result paths should build on this.
+     * CF challenges are rethrown (callers route to the solver), never logged
+     * as generic failures.
+     */
+    protected suspend fun <T> guarded(stage: String, block: suspend () -> T): Result<T> =
+        suspendRunCatching(block).onFailure { e ->
+            if (e !is CloudflareChallengeException) ScraperTelemetry.logFailure(sourceId, stage, e)
+        }
+
+    /**
+     * U-24: probe-loop unification — `runCatching { fetchDocument }.getOrNull()`
+     * appeared at 3+ sites with slightly different CF handling. Returns the
+     * first document that loads, or null when every probe failed (CF returns
+     * null here; callers that must surface CF should use [guarded] instead).
+     */
+    protected suspend fun probeDocument(url: String): Document? =
+        suspendRunCatching { fetchDocument(url) }.getOrNull()
+
+    /** First-success probe across [urls] in order; null when all fail. */
+    protected suspend fun probeFirst(urls: List<String>): Document? {
+        for (u in urls) {
+            val d = probeDocument(u)
+            if (d != null) return d
+        }
+        return null
+    }
+
+    /**
+     * U-22 helper — single CF heuristic site. `code` alone never triggers;
+     * status 403/503 counts only together with a CF marker.
+     */
+    internal fun isCloudflareChallenge(
+        code: Int,
+        title: String,
+        body: String,
+        cfMitigatedHeader: String? = null
+    ): Boolean {
+        val cfMitigated = cfMitigatedHeader?.lowercase() == "challenge"
+        val t = title.lowercase()
+        val hasMarker = cfMitigated ||
+            t.contains("just a moment") ||
+            t.contains("attention required") ||
+            t.contains("access denied") ||
+            body.contains("__cf_chl_", ignoreCase = true) ||
+            body.contains("challenges.cloudflare.com", ignoreCase = true)
+        return hasMarker
+    }
 }

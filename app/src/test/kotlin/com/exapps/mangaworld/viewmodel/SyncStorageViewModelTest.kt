@@ -237,7 +237,7 @@ class SyncStorageViewModelTest {
         val manager = mockk<DownloadQueueManager>(relaxed = true)
         every { manager.observeDownloadedMangas() } returns flowOf(mangas)
         coEvery { manager.syncFileSystemWithDatabase() } returns Unit
-        every { manager.countDownloadedChapters(any(), any()) } returns chapterCount
+        coEvery { manager.countDownloadedChapters(any(), any()) } returns chapterCount
         val vm = LocalStorageViewModel(
             manager = manager,
             remoteConfigManager = mockk(relaxed = true),

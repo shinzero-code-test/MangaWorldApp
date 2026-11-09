@@ -48,7 +48,9 @@ class AppPreferences @Inject constructor(
         val KEY_SYNC_TOMBSTONES = stringPreferencesKey("sync_tombstones")
         // FS-4: 500 silently dropped mass deletions (clear-history on 500+
         // rows). 2000 entries ≈ 120KB worst case — bounded, and clearHistory
-        // additionally deletes cloud copies directly.
+        // additionally deletes cloud copies directly (paged, unbounded — U-11).
+        // Mass deletes still lose their oldest tombstones to this cap; the
+        // paged cloud wipe is what prevents their resurrection.
         const val MAX_SYNC_TOMBSTONES = 2000
         const val TOMBSTONE_TTL_MS = 90L * 24L * 60L * 60L * 1000L
         val KEY_LAST_POSITIONS_PUSH = longPreferencesKey("last_positions_push_ms")
@@ -56,6 +58,9 @@ class AppPreferences @Inject constructor(
         val KEY_LAST_SOURCE_ID = stringPreferencesKey("last_source_id")
         // U-10: timestamp guard for cloud settings apply (FirebaseSyncManager).
         val KEY_SETTINGS_APPLIED_AT = longPreferencesKey("settings_applied_at_ms")
+        // U-10 finish: reader doc carries its own updatedAt — separate watermark
+        // so a stale reader doc cannot be masked by a fresh user doc.
+        val KEY_SETTINGS_READER_APPLIED_AT = longPreferencesKey("settings_reader_applied_at_ms")
 
         val KEY_READER_MODE = stringPreferencesKey("reader_mode")
         val KEY_BRIGHTNESS = floatPreferencesKey("brightness")
@@ -256,6 +261,13 @@ class AppPreferences @Inject constructor(
 
     suspend fun setSettingsAppliedAt(timestampMs: Long) =
         dataStore.edit { it[KEY_SETTINGS_APPLIED_AT] = timestampMs }
+
+    /** U-10 finish: reader-doc watermark (independent from the user-doc one). */
+    suspend fun getSettingsReaderAppliedAt(): Long =
+        dataStore.data.first()[KEY_SETTINGS_READER_APPLIED_AT] ?: 0L
+
+    suspend fun setSettingsReaderAppliedAt(timestampMs: Long) =
+        dataStore.edit { it[KEY_SETTINGS_READER_APPLIED_AT] = timestampMs }
 
     suspend fun getSyncTombstones(): List<SyncTombstone> =
         decodeSyncTombstones(dataStore.data.first()[KEY_SYNC_TOMBSTONES])
