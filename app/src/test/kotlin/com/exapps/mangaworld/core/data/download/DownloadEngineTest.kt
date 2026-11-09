@@ -793,12 +793,12 @@ class DownloadEngineTest {
         // Canonical chapter.
         completedChapterDir("azora_solo", "https://x.com/solo/12", listOf("1.jpg"))
         // Legacy title-based dir (pre-migration) with its own chapter.
-        val legacy = File(downloadsRoot(), "Solo Leveling", "13")
+        val legacy = File(File(downloadsRoot(), "Solo Leveling"), "13")
         legacy.mkdirs()
         File(legacy, "1.jpg").writeBytes(jpegBytes)
         File(legacy, ".completed").writeText("ok")
         // A non-completed chapter dir must not be counted.
-        File(downloadsRoot(), "azora_solo", "14").mkdirs()
+        File(File(downloadsRoot(), "azora_solo"), "14").mkdirs()
 
         assertEquals(2, manager.countDownloadedChapters("azora_solo", "Solo Leveling"))
         // Without the title, the legacy dir is invisible (same as prod).
@@ -808,7 +808,7 @@ class DownloadEngineTest {
     @Test
     fun `getDownloadedChapterDir resolves the legacy title fallback`() = runBlocking {
         val url = "https://x.com/solo/12"
-        val legacyChapter = File(downloadsRoot(), "Solo Leveling", "12")
+        val legacyChapter = File(File(downloadsRoot(), "Solo Leveling"), "12")
         legacyChapter.mkdirs()
         File(legacyChapter, "1.jpg").writeBytes(jpegBytes)
         File(legacyChapter, ".completed").writeText("ok")

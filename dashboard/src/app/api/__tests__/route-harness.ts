@@ -71,13 +71,18 @@ export const SESSION_USER: Record<string, unknown> = {
  */
 export function mockSessionUser(
   overrides: Record<string, unknown> = {},
-  authTime: number = Date.now()
+  authTime: number | undefined = undefined
 ) {
+  // NB: JS default parameters fire when an argument is `undefined`, so a
+  // test naming "no authTime" must pass it via overrides:
+  // `mockSessionUser({ authTime: undefined } as never)`. The effective
+  // value is then undefined, and the route's `!user.authTime` → 403.
+  const effectiveAuthTime = authTime !== undefined ? authTime : Date.now();
   vi.mocked(getCurrentUser).mockImplementation(
     async () =>
       ({
         ...SESSION_USER,
-        authTime,
+        authTime: effectiveAuthTime,
         ...overrides,
       }) as never
   );

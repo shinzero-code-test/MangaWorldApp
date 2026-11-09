@@ -68,7 +68,8 @@ function fakeDb(opts: {
           return {
             ...ref(subPath),
             id,
-            get: async () => snapshot(undefined),
+            get: async () =>
+              subPath.endsWith("/reviews/rev1") ? snapshot(opts.reviewData) : snapshot(undefined),
             set: async (data: Record<string, unknown>) => {
               notificationWrites.push({ ref: ref(subPath), data });
             },
