@@ -680,6 +680,15 @@ class DownloadQueueManager @Inject constructor(
     suspend fun clearCompleted() = downloadTaskDao.clearCompleted()
 
     /**
+     * U-36: periodic GC of terminal download_batches rows (7-day retention).
+     * Called from [ChapterCleanupWorker] piggyback — those workers already run
+     * for read-download cleanup — so no new worker/schedule is introduced.
+     * Best-effort: callers must not fail the cleanup because GC failed.
+     */
+    suspend fun gcTerminalBatches(retentionMs: Long = BATCH_GC_RETENTION_MS): Int =
+        downloadBatchDao.deleteTerminalBefore(System.currentTimeMillis() - retentionMs)
+
+    /**
      * Re-enqueue durable task rows that were stranded `queued` by a crash between the Room
      * write and the WorkManager enqueue (or a lost work chain). `running` rows whose worker
      * is gone are reset to `queued` first, mirroring pauseMangaTasks.
@@ -901,6 +910,9 @@ class DownloadQueueManager @Inject constructor(
 
     private companion object {
         const val MIN_RETRY_BACKOFF_SECONDS = 10L
+
+        /** Terminal download_batches rows are kept 7 days for debugging, then GC'd. */
+        const val BATCH_GC_RETENTION_MS = 7L * 24L * 60L * 60L * 1000L
 
         /** Batch-summary notifications live above every per-task range (see ChapterDownloadWorker). */
         const val NOTIF_ID_BATCH = 40000

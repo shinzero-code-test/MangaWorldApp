@@ -43,6 +43,7 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
     @Inject lateinit var widgetRefreshScheduler: WidgetRefreshScheduler
     @Inject lateinit var appShortcutManager: AppShortcutManager
     @Inject lateinit var okHttpClient: OkHttpClient
+    @Inject lateinit var stellarDecryptInterceptor: com.exapps.mangaworld.core.data.remote.scraper.StellarDecryptInterceptor
     @Inject lateinit var firebaseStartupCoordinator: FirebaseStartupCoordinator
     @Inject lateinit var downloadQueueManager: com.exapps.mangaworld.core.data.download.DownloadQueueManager
     @Inject lateinit var readingStatsStore: com.exapps.mangaworld.core.data.ReadingStatsStore
@@ -64,17 +65,35 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
         // (`storage.azorafly.com`, `i0.wp.com`, …) with IOException, which
         // blanked every cover/page in v9.6.0. The gate is scraper-only;
         // Coil gets a plain client. (Triage: image-regression-triage.md)
+        //
+        // U-26 (single ImageLoader): this factory is the ONLY ImageLoader
+        // builder. The deleted Hilt duplicate carried the Stellar CDN
+        // decryption interceptor, so its absence here would silently break
+        // StellarSaber `.bin` images for prefetch/widget/save paths (whose
+        // injected loader now resolves to this factory via
+        // SingletonImageLoader). The interceptor is host-scoped to
+        // `cdn-stellarsaber.com` (pass-through for everything else) and is
+        // NOT the U-23 host gate — it never rejects traffic, so display
+        // images that already load through this client keep loading.
+        val imageClient = okhttp3.OkHttpClient.Builder()
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .apply {
+                if (::stellarDecryptInterceptor.isInitialized) {
+                    addInterceptor(stellarDecryptInterceptor)
+                }
+            }
+            .build()
         return ImageLoader.Builder(this)
-            .okHttpClient(
-                okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .build()
-            )
+            .okHttpClient(imageClient)
             .diskCache {
                 DiskCache.Builder()
                     .directory(File(cacheDir, "coil_image_cache"))
-                    .maxSizeBytes(DEFAULT_IMAGE_CACHE_MB.toLong() * 1024L * 1024L)
+                    // U-36: wired to the imageCacheLimitMb setting (mirrored
+                    // synchronously in ImageCacheLimitStore — the DataStore
+                    // value cannot be read here). Takes effect on next
+                    // process start, when the ImageLoader is rebuilt.
+                    .maxSizeBytes(com.exapps.mangaworld.core.data.ImageCacheLimitStore.readMb(this@MangaWorldApp).toLong() * 1024L * 1024L)
                     .build()
             }
             .memoryCache {

@@ -71,6 +71,25 @@ import org.junit.Test
  * - ReaderViewModel has no unmockable constructor deps (concrete collaborators
  *   are all mockk-relaxed, including final coil.ImageLoader); tests avoid the
  *   static WorkManager entry point only.
+ * - Reader pure-seam TODOs (U-33 test-net, 2026-11-09 — all reachable only
+ *   behind loadChapter-populated state, so they stay device-covered until
+ *   the VM extracts a pure helper; DO NOT call loadChapter to reach them):
+ *   1. Prefetch dedup (prefetchedNextChapterUrl + inFlightPrefetches,
+ *      prefetchNextChapterIfNeeded): extract a pure guard object
+ *      (begin(url): Boolean / finish(url)) the VM delegates to, then unit
+ *      test the transitions: first call claims, concurrent same-URL is
+ *      deduped, finish releases, new chapter re-claims.
+ *   2. parseFallbackChapterNumber: the U-25 canonical first leg IS covered
+ *      (CanonicalChapterNumberTest via ScraperText.canonicalChapterNumber);
+ *      the local regex-strip fallback leg is private and untested. Extract
+ *      a top-level pure function and table-test it.
+ *   3. Error protocol: toDownloadCodeMessage/toDownloadMessage map worker
+ *      tokens (ChapterDownloadWorker.ERROR_*, proven token-only in
+ *      DownloadErrorContractTest) to localized strings, reachable only via
+ *      observeDownloadTask after a load. Extract a pure mapper
+ *      (token → stringRes) and table-test it + the CLOUDFLARE_REQUIRED|
+ *      domain|url emit/parse contract against ONE shared constant/parser
+ *      (VM emits it, ReaderScreen parses it — today two literals).
  *
  * Both VMs hop to Dispatchers.IO internally (withContext(IO) around mocked
  * DAO/queue calls), which the test scheduler cannot advance — [TestScope.awaitUntil]

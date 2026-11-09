@@ -360,6 +360,39 @@ export async function logSecurityEvent(
   }
 }
 
+// ─── Same-origin (CSRF) guard (U-31) ────────────────────────────────────────
+
+/**
+ * True when a cookie-authenticated POST is same-origin. Browsers send Origin
+ * (and Referer) on same-origin POSTs; a present-but-cross-origin value is
+ * refused (403). A MISSING Origin+Referer means a non-browser client
+ * (curl, scripts) — allowed, since there is no ambient browser cookie to
+ * ride. The dashboard has no cross-site embeds, so same-host is the only
+ * accepted cross-check (Vercel preview hosts compare against themselves).
+ */
+export function isSameOriginRequest(headers: Headers): boolean {
+  const host = (headers.get("host") ?? headers.get("x-forwarded-host") ?? "")
+    .trim()
+    .toLowerCase();
+  const origin = headers.get("origin")?.trim();
+  if (origin) {
+    try {
+      return host !== "" && new URL(origin).host.toLowerCase() === host;
+    } catch {
+      return false;
+    }
+  }
+  const referer = headers.get("referer")?.trim();
+  if (referer) {
+    try {
+      return host !== "" && new URL(referer).host.toLowerCase() === host;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
 // ─── Generic error responses (M-5) ───────────────────────────────────────────
 
 let correlationCounter = 0;

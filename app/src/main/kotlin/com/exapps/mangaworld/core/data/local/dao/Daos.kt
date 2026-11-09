@@ -381,6 +381,16 @@ interface DownloadBatchDao {
 
     @Query("DELETE FROM download_batches WHERE mangaId = :mangaId")
     suspend fun deleteByMangaId(mangaId: String)
+
+    /**
+     * U-36: periodic GC of terminal rows — notified batches older than the
+     * cutoff are deleted. Rows accrue one per multi-chapter download and
+     * otherwise live forever (the manga-delete cascade covers only the
+     * deleted manga). A batch only earns deletion after its completion
+     * notification was claimed, so user-visible notifications are unaffected.
+     */
+    @Query("DELETE FROM download_batches WHERE completionNotified = 1 AND updatedAt < :cutoffMs")
+    suspend fun deleteTerminalBefore(cutoffMs: Long): Int
 }
 
 @Dao

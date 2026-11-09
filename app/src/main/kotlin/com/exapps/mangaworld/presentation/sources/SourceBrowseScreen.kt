@@ -301,7 +301,7 @@ fun SourceBrowseScreen(
                             tint = if (uiState.sortBy == sort) MangaColors.Cyan else MangaColors.Muted
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text(sort.label, color = MangaColors.OnSurface)
+                        Text(stringResource(sort.labelRes), color = MangaColors.OnSurface)
                     }
                 }
                 Spacer(Modifier.height(24.dp))
@@ -354,7 +354,7 @@ private fun SourceMangaCard(manga: MangaItem, onClick: () -> Unit) {
             )
             if (manga.status != MangaStatus.UNKNOWN) {
                 Text(
-                    manga.status.label,
+                    stringResource(manga.status.labelRes),
                     style = MaterialTheme.typography.labelSmall,
                     color = MangaColors.Muted,
                     maxLines = 1

@@ -755,13 +755,33 @@ private fun launchFacebookLogin(context: android.content.Context) {
  * Uses OkHttp's lenient parser — java.net.URI throws on the non-ASCII paths
  * these sources legitimately produce, and treating a parse failure as
  * "relative" would let hostile absolute URLs through.
+ *
+ * U-36 scheme allowlist: `toHttpUrlOrNull` only accepts http(s), but its
+ * null result also covers hostile absolute forms — protocol-relative
+ * (`//evil.com/x`), `javascript:`/`file:`/`content:` URIs — which the old
+ * code waved through as "relative". Only true relative paths (no scheme,
+ * no `//` prefix) are trusted; anything absolute must be http(s) on the
+ * source host. Internal (not private) so the gate is unit-testable.
  */
-private fun isTrustedChapterHost(chapterUrl: String, baseUrl: String): Boolean {
-    val linkHost = chapterUrl.toHttpUrlOrNull()?.host
-        ?: return true // not an absolute http(s) URL — resolved against the effective source base URL by the reader
-    val expectedHost = baseUrl.toHttpUrlOrNull()?.host
-        ?: return false
-    return linkHost.equals(expectedHost, ignoreCase = true)
+internal fun isTrustedChapterHost(chapterUrl: String, baseUrl: String): Boolean {
+    val trimmed = chapterUrl.trim()
+    val linkUrl = trimmed.toHttpUrlOrNull()
+    if (linkUrl != null) {
+        val expectedHost = baseUrl.toHttpUrlOrNull()?.host ?: return false
+        return linkUrl.host.equals(expectedHost, ignoreCase = true)
+    }
+    // Not an http(s) URL. A true relative path cannot carry a scheme: reject
+    // protocol-relative links and any <scheme>-looking prefix. A colon only
+    // counts as a scheme separator when it appears before the first path,
+    // query or fragment delimiter (so a legit relative path containing a
+    // colon later, e.g. "/manga/a:b", still passes).
+    if (trimmed.startsWith("//")) return false
+    val colonIndex = trimmed.indexOf(':')
+    if (colonIndex >= 0) {
+        val firstDelimiter = trimmed.indexOfFirst { it == '/' || it == '?' || it == '#' }
+        if (firstDelimiter == -1 || colonIndex < firstDelimiter) return false
+    }
+    return true // relative — resolved against the effective source base URL by the reader
 }
 
 /** Registry lookup for route guards (deep-link host checks, unknown-id blanks). */

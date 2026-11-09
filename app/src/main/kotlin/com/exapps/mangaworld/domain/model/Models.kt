@@ -1,5 +1,7 @@
 package com.exapps.mangaworld.domain.model
 
+import androidx.annotation.StringRes
+import com.exapps.mangaworld.R
 import com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds
 import com.exapps.mangaworld.core.source.plugins.SourceId
 
@@ -11,12 +13,14 @@ import com.exapps.mangaworld.core.source.plugins.SourceId
 // SourcePlugin.display + SourceDisplayResolver.)
 
 // ─── Manga Type ───────────────────────────────────────────────────────────────
+// U-36: display labels are string resources (pattern: TapGridConfig). The
+// Arabic literals left in `from()` below are parse rules, not display text.
 
-enum class MangaType(val label: String) {
-    MANGA("مانجا"),
-    MANHWA("مانهوا كورية"),
-    MANHUA("مانهوا صينية"),
-    UNKNOWN("غير محدد");
+enum class MangaType(@StringRes val labelRes: Int) {
+    MANGA(R.string.manga_type_manga),
+    MANHWA(R.string.manga_type_manhwa),
+    MANHUA(R.string.manga_type_manhua),
+    UNKNOWN(R.string.manga_type_unknown);
 
     companion object {
         fun from(text: String?): MangaType {
@@ -35,12 +39,12 @@ enum class MangaType(val label: String) {
 
 // ─── Manga Status ─────────────────────────────────────────────────────────────
 
-enum class MangaStatus(val label: String) {
-    ONGOING("مستمر"),
-    COMPLETED("مكتمل"),
-    CANCELLED("ملغي"),
-    HIATUS("متوقف"),
-    UNKNOWN("غير محدد");
+enum class MangaStatus(@StringRes val labelRes: Int) {
+    ONGOING(R.string.manga_status_ongoing),
+    COMPLETED(R.string.manga_status_completed),
+    CANCELLED(R.string.manga_status_cancelled),
+    HIATUS(R.string.manga_status_hiatus),
+    UNKNOWN(R.string.manga_status_unknown);
 
     companion object {
         fun from(text: String?): MangaStatus {
@@ -161,11 +165,11 @@ data class SearchFilters(
     val blockedKeywords: Set<String> = emptySet()
 )
 
-enum class SortBy(val label: String) {
-    LATEST("الأحدث"),
-    OLDEST("الأقدم"),
-    POPULARITY("الأكثر شعبية"),
-    RATING("الأعلى تقييماً")
+enum class SortBy(@StringRes val labelRes: Int) {
+    LATEST(R.string.sort_latest),
+    OLDEST(R.string.sort_oldest),
+    POPULARITY(R.string.sort_popularity),
+    RATING(R.string.sort_rating)
 }
 
 // ─── Library Models ───────────────────────────────────────────────────────────
@@ -208,30 +212,33 @@ data class ReadingHistoryItem(
 
 // ─── Reader Settings ──────────────────────────────────────────────────────────
 
-enum class ReaderMode(val label: String) {
-    VERTICAL_SCROLL("تمرير عمودي"),
-    HORIZONTAL_RTL("أفقي (يمين لشمال)"),
-    HORIZONTAL_LTR("أفقي (شمال ليمين)"),
-    WEBTOON("ويب تون")
+enum class ReaderMode(@StringRes val labelRes: Int) {
+    VERTICAL_SCROLL(R.string.reader_mode_vertical_scroll),
+    HORIZONTAL_RTL(R.string.reader_mode_horizontal_rtl),
+    HORIZONTAL_LTR(R.string.reader_mode_horizontal_ltr),
+    WEBTOON(R.string.reader_mode_webtoon)
 }
 
-enum class ReaderImageFilter(val label: String) {
-    NONE("بدون"),
-    GRAYSCALE("تدرج رمادي"),
-    SEPIA("سيبيا"),
-    HIGH_CONTRAST("تباين عال"),
-    SMART_CROP("قص ذكي للحواف"),
-    WARM_TINT("صبغة دافئة"),
-    COOL_TINT("صبغة باردة"),
-    OLED_BLACK("أسود OLED")
+enum class ReaderImageFilter(@StringRes val labelRes: Int) {
+    NONE(R.string.reader_filter_none),
+    GRAYSCALE(R.string.reader_filter_grayscale),
+    SEPIA(R.string.reader_filter_sepia),
+    HIGH_CONTRAST(R.string.reader_filter_high_contrast),
+    SMART_CROP(R.string.reader_filter_smart_crop),
+    WARM_TINT(R.string.reader_filter_warm_tint),
+    COOL_TINT(R.string.reader_filter_cool_tint),
+    OLED_BLACK(R.string.reader_filter_oled_black)
 }
 
-enum class TapAction(val label: String) {
-    PREV_PAGE("الفصل السابق"),
-    NEXT_PAGE("الفصل التالي"),
-    TOGGLE_CONTROLS("إظهار/إخفاء الأدوات"),
-    BOOKMARK("إضافة إشارة مرجعية"),
-    NONE("لا شيء")
+// Note: this is the persisted reader-setting enum (AppPreferences + backup
+// store it by `name`); the tap-grid UI uses TapGridConfig.TapAction, which
+// already carries labelRes. labelRes exists here for parity/localization.
+enum class TapAction(@StringRes val labelRes: Int) {
+    PREV_PAGE(R.string.tap_prev_page),
+    NEXT_PAGE(R.string.tap_next_page),
+    TOGGLE_CONTROLS(R.string.tap_toggle_controls),
+    BOOKMARK(R.string.tap_bookmark),
+    NONE(R.string.tap_none)
 }
 
 data class ReaderPageAnnotation(
@@ -264,15 +271,19 @@ data class ReaderSettings(
     val tapMiddleAction: TapAction = TapAction.TOGGLE_CONTROLS
 )
 
-enum class NotificationDeliveryMode(val label: String) {
-    INSTANT("فوري"),
-    DAILY_DIGEST("ملخص يومي"),
-    SILENT("صامت")
+enum class NotificationDeliveryMode(@StringRes val labelRes: Int) {
+    INSTANT(R.string.notification_mode_instant),
+    DAILY_DIGEST(R.string.notification_mode_daily_digest),
+    SILENT(R.string.notification_mode_silent)
 }
 
 // ─── App Settings ─────────────────────────────────────────────────────────────
 
-enum class AppTheme(val label: String) { DARK("داكن"), LIGHT("فاتح"), SYSTEM("تلقائي") }
+enum class AppTheme(@StringRes val labelRes: Int) {
+    DARK(R.string.theme_dark),
+    LIGHT(R.string.theme_light),
+    SYSTEM(R.string.theme_system)
+}
 
 data class AppSettings(
     val theme: AppTheme = AppTheme.DARK,
@@ -523,12 +534,18 @@ data class SessionEntry(
     val isCurrent: Boolean = false
 )
 
-enum class ReadingListStatus(val label: String, val arabicLabel: String) {
-    READING("reading", "أقرأ الآن"),
-    PLAN_TO_READ("plan_to_read", "سأقرأ لاحقاً"),
-    COMPLETED("completed", "مكتملة"),
-    ON_HOLD("on_hold", "متوقفة"),
-    DROPPED("dropped", "تم إسقاطها")
+/**
+ * `label` is the persisted storage key (Room `readingStatus`, cloud sync) —
+ * NEVER display text. Display uses [labelRes] (the former `arabicLabel`
+ * string, unused in prod: LibraryBottomSheet already showed localized
+ * R.string.library_* text).
+ */
+enum class ReadingListStatus(val label: String, @StringRes val labelRes: Int) {
+    READING("reading", R.string.reading_status_reading),
+    PLAN_TO_READ("plan_to_read", R.string.reading_status_plan_to_read),
+    COMPLETED("completed", R.string.reading_status_completed),
+    ON_HOLD("on_hold", R.string.reading_status_on_hold),
+    DROPPED("dropped", R.string.reading_status_dropped)
 }
 
 data class CloudRestorePreview(

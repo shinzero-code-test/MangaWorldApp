@@ -28,7 +28,6 @@ import javax.inject.Qualifier
 import com.exapps.mangaworld.core.firebase.FirebaseNetworkInterceptor
 import androidx.work.WorkManager
 import coil.ImageLoader
-import coil.disk.DiskCache
 import okhttp3.Cache
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
@@ -168,37 +167,19 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideImageLoader(@ApplicationContext ctx: Context, stellarDecryptInterceptor: StellarDecryptInterceptor): ImageLoader {
-        // Dedicated image client: the shared scraper client's Firebase perf
-        // interceptor + retry-on-IOException added trace spam and retry storms
-        // to every cover request (M-review). Images get a lean client instead.
-        val imageClient = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .connectionPool(ConnectionPool(10, 5, TimeUnit.MINUTES))
-            // Host-gated Stellar CDN decryption (see NetworkModule client).
-            .addInterceptor(stellarDecryptInterceptor)
-            .addInterceptor { chain ->
-                chain.proceed(
-                    chain.request().newBuilder()
-                        .header("User-Agent", BaseScraperImpl.USER_AGENT)
-                        .header("Accept-Language", "ar,en;q=0.9")
-                        .build()
-                )
-            }
-            .build()
-
-        return ImageLoader.Builder(ctx)
-            .okHttpClient(imageClient)
-            .diskCache {
-                DiskCache.Builder()
-                    .directory(File(ctx.cacheDir, "coil_image_cache"))
-                    .maxSizeBytes(250L * 1024L * 1024L)
-                    .build()
-            }
-            .crossfade(true)
-            .build()
-    }
+    fun provideImageLoader(@ApplicationContext ctx: Context): ImageLoader =
+        // U-26: single ImageLoader. The factory ([MangaWorldApp.newImageLoader])
+        // is the ONLY builder (one memory cache, 30%, one disk journal). The
+        // old Hilt duplicate builder ran a second memory cache (+25%) over the
+        // same "coil_image_cache" directory, and prefetch/widget/save paths
+        // read a cache display never wrote (and vice versa). Injected
+        // consumers (ImagePrefetcher, ReaderViewModel, WidgetDataRepository)
+        // therefore resolve the very instance Compose screens use via
+        // `ctx.imageLoader`. The factory's plain OkHttp client (no host
+        // gate — U-23 triage, `image-regression-triage.md`) still carries
+        // the Stellar CDN decryption interceptor, which was the only
+        // behavior unique to the deleted builder.
+        coil.SingletonImageLoader.get(ctx)
 }
 
 

@@ -216,8 +216,13 @@ class AppPreferences @Inject constructor(
     suspend fun setCleanupHours(v: Int) =
         dataStore.edit { it[KEY_CLEANUP_HOURS] = v }
 
-    suspend fun setImageCacheLimitMb(v: Int) =
+    suspend fun setImageCacheLimitMb(v: Int) {
         dataStore.edit { it[KEY_IMAGE_CACHE_LIMIT_MB] = v }
+        // U-36: mirror for the Coil builders, which cannot read DataStore
+        // synchronously at startup (see ImageCacheLimitStore). Fired after
+        // the canonical write so a torn value can never beat the store.
+        com.exapps.mangaworld.core.data.ImageCacheLimitStore.writeMb(context, v)
+    }
 
     suspend fun setContentBlacklist(values: Set<String>) =
         dataStore.edit { it[KEY_CONTENT_BLACKLIST] = values.joinToString("\n") }

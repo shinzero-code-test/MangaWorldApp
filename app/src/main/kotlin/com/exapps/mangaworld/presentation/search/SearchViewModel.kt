@@ -210,7 +210,7 @@ class SearchViewModel @Inject constructor(
     private fun saveSearchHistory() {
         viewModelScope.launch {
             val prefs = context.getSharedPreferences("search_prefs", Context.MODE_PRIVATE)
-            prefs.edit().putString("search_history", _searchHistory.value.toString()).apply()
+            prefs.edit().putString("search_history", serializeSearchHistory(_searchHistory.value)).apply()
         }
     }
 
@@ -225,15 +225,7 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private fun parseHistoryList(json: String): List<String> {
-        return try {
-            val cleaned = json.trim().removePrefix("[").removeSuffix("]")
-            if (cleaned.isBlank()) return emptyList()
-            cleaned.split(",").map { it.trim().removeSurrounding("\"") }.filter { it.isNotBlank() }
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
+    private fun parseHistoryList(json: String): List<String> = parseSearchHistory(json)
 
     companion object {
         fun isCloudflareCause(t: Throwable) = t is CloudflareChallengeException
@@ -248,3 +240,45 @@ private data class SearchRequest(
     val reloadToken: Int,
     val advancedFilters: AdvancedSearchFilters
 )
+
+/**
+ * U-36: search history is persisted as a real JSON array. The old
+ * `List.toString()` + `split(",")` format corrupted any query containing a
+ * comma or quote (it round-tripped into phantom entries on reload).
+ *
+ * Internal (not private) so JVM unit tests pin the round-trip.
+ */
+internal fun serializeSearchHistory(history: List<String>): String {
+    val array = org.json.JSONArray()
+    history.forEach { array.put(it) }
+    return array.toString()
+}
+
+/**
+ * Parses [serializeSearchHistory] output. Falls back to the legacy
+ * `["a", "b"]` toString format (written by older app versions) so existing
+ * histories survive one upgrade — anything unrecognized yields empty.
+ */
+internal fun parseSearchHistory(json: String): List<String> {
+    val trimmed = json.trim()
+    if (trimmed.isEmpty() || trimmed == "[]") return emptyList()
+    return try {
+        val array = org.json.JSONArray(trimmed)
+        (0 until array.length()).mapNotNull { index ->
+            array.optString(index).takeIf { it.isNotBlank() }
+        }
+    } catch (_: Exception) {
+        // Legacy Kotlin List.toString() format: ["query one", "query, two"].
+        // Unquoted legacy entries are split on commas as before; quoted ones
+        // keep their commas only when the whole payload parsed as JSON above.
+        try {
+            val cleaned = trimmed.removePrefix("[").removeSuffix("]")
+            if (cleaned.isBlank()) return emptyList()
+            // Split on ", " (List.toString separator) rather than bare "," so
+            // queries containing commas survive the legacy migration path.
+            cleaned.split(", ").map { it.trim().removeSurrounding("\"") }.filter { it.isNotBlank() }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+}

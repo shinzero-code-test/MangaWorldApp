@@ -264,6 +264,32 @@ class MangaPagingSource(
     private val filters: SearchFilters
 ) : PagingSource<Int, MangaItem>() {
 
+    /**
+     * U-27(d): dedupe overlapping filtered-browse windows across load()
+     * calls. A filtered page load fetches `page..page+2` per source (3x
+     * network calls); the next page load then re-fetches the overlapping
+     * subpages. Completed subpage results are memoized by (source,
+     * subPage) for this PagingSource lifetime; filters are immutable per
+     * instance so the key is complete. The memo is cleared on
+     * invalidation (registerInvalidatedCallback), so refresh/pull-to-refresh
+     * always re-fetches — paging never silently serves pre-refresh pages.
+     */
+    private val windowMemoLock = Any()
+    private val browseWindowMemo = HashMap<Pair<String, Int>, List<MangaItem>>()
+
+    init {
+        registerInvalidatedCallback {
+            synchronized(windowMemoLock) { browseWindowMemo.clear() }
+        }
+    }
+
+    private fun memoizedBrowse(sourceId: String, subPage: Int): List<MangaItem>? =
+        synchronized(windowMemoLock) { browseWindowMemo[sourceId to subPage] }
+
+    private fun rememberBrowse(sourceId: String, subPage: Int, items: List<MangaItem>) {
+        synchronized(windowMemoLock) { browseWindowMemo[sourceId to subPage] = items }
+    }
+
     private val needsLocalFiltering: Boolean
         get() = filters.query.isEmpty() && (filters.status != null || filters.type != null)
 
@@ -305,10 +331,21 @@ class MangaPagingSource(
                             val aggregate = mutableListOf<MangaItem>()
                             var failure: SourceFetchOutcome.Fail? = null
                             for (subPage in page until page + 3) {
-                                val result = scraper.browseManga(subPage, filters.genre, filters.status, filters.type, filters.sortBy)
-                                val items = result.getOrNull()
+                                // U-27(d): reuse the overlapping window from
+                                // the previous page load (1 network call for
+                                // the 2 shared subpages, 1 new for the edge).
+                                val memoed = memoizedBrowse(source.value, subPage)
+                                val (items, failureCause): Pair<List<MangaItem>?, Throwable?> =
+                                    if (memoed != null) {
+                                        memoed to null
+                                    } else {
+                                        val result = scraper.browseManga(subPage, filters.genre, filters.status, filters.type, filters.sortBy)
+                                        val fetched = result.getOrNull()
+                                        if (fetched != null) rememberBrowse(source.value, subPage, fetched)
+                                        fetched to result.exceptionOrNull()
+                                    }
                                 if (items == null) {
-                                    val e = result.exceptionOrNull() ?: IllegalStateException("browse failed")
+                                    val e = failureCause ?: IllegalStateException("browse failed")
                                     if (filters.source != null) throw e
                                     failure = SourceFetchOutcome.Fail(source.value, e)
                                     break

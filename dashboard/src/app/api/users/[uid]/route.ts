@@ -13,6 +13,13 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * TODO(U-31): this moderator endpoint returns email/phone/custom claims
+ * (policy question, NOT code — no change here without a decision): if
+ * moderator PII exposure is unwanted, strip phoneNumber/customClaims for
+ * role < super-admin. See tmp/review/stage2/dashboard-security.md.
+ */
+
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ uid: string }> }) {
   try {
     await requireRole("moderator");

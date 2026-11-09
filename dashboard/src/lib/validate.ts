@@ -25,6 +25,108 @@ export function isValidEmail(value: unknown): value is string {
 /** Remote Config keys: conservative identifier charset, bounded length. */
 const RC_KEY_RE = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 
+// ─── U-30: source_*_base_url allow-list ─────────────────────────────────────
+//
+// A dashboard/RC compromise used to reach arbitrary https hosts: the app's
+// normalizeBaseUrl enforces origin-only, not an allow-list. The server now
+// enforces https + origin-only + per-id allow-list on every PUT that can
+// write these keys, so a non-allow-listed host fails 400 before publish.
+//
+// Allow-list hosts mirror the RC UI defaults
+// (dashboard/src/app/dashboard/remote-config/page.tsx SOURCE_DOMAINS) and
+// the published plugin manifests (hijala/lavascans base hosts). A TRUE
+// domain move therefore ships as a reviewed allow-list edit + dashboard
+// deploy — the intended tradeoff: RC alone can never redirect a source to
+// an unreviewed host. To "clear" an override, publish the id's default
+// host (allow-listed); empty values are refused, not treated as clear.
+const SOURCE_BASE_URL_KEY_RE = /^source_([a-z0-9][a-z0-9_-]{0,63})_base_url$/;
+const SOURCE_BASE_HOST_RE =
+  /^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
+
+export const SOURCE_BASE_URL_ALLOWLIST: Record<string, string[]> = {
+  olympus: ["olympustaff.com"],
+  azora: ["azorafly.com"],
+  starz: ["starzmanga.com"],
+  mangasid: ["mangasid.com"],
+  meshmanga: ["meshmanga.com"],
+  asq3: ["3asq.online"],
+  lekmanga: ["mangalik.net"],
+  lekmangaonline: ["lekmanga.online"],
+  likemanga: ["like-manga.net"],
+  linkmanga: ["link-manga.net"],
+  mangaleko: ["manga-leko.site"],
+  mangalionz: ["manga-lionz.org"],
+  areascans: ["ar.kenmanga.com"],
+  hijala: ["hijala.com"],
+  lavascans: ["lavascans.com"],
+  stellarsaber: ["stellarsaber.pro"],
+  procomic: ["procomic.pro"],
+};
+
+function normalizeAllowlistHost(host: string): string {
+  return host.toLowerCase().replace(/^www\./, "");
+}
+
+/**
+ * Validates every `source_<id>_base_url` entry in a Remote-Config parameter
+ * map: https origin only (no credentials, non-default ports, path, query,
+ * fragment) and host allow-listed for that id (www.-prefix-insensitive).
+ * Non-matching keys pass untouched — this is an additive gate on top of
+ * validateRemoteConfigParams. Call AFTER that validator; both PUTs
+ * (remote-config + settings) run it before publishTemplate.
+ */
+export function validateSourceBaseUrlParams(parameters: unknown): ParamValidationResult {
+  if (!isPlainObject(parameters)) {
+    return { ok: true }; // shape errors are validateRemoteConfigParams' job
+  }
+  for (const [key, value] of Object.entries(parameters)) {
+    const match = SOURCE_BASE_URL_KEY_RE.exec(key);
+    if (!match) continue;
+    const id = match[1];
+    if (typeof value !== "string") {
+      return { ok: false, error: `parameter ${key} must be an https origin URL` };
+    }
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || trimmed.length > 2048) {
+      return { ok: false, error: `parameter ${key} exceeds 2048 characters` };
+    }
+    let url: URL;
+    try {
+      url = new URL(trimmed);
+    } catch {
+      return { ok: false, error: `parameter ${key} is not a valid URL` };
+    }
+    if (url.protocol !== "https:") {
+      return { ok: false, error: `parameter ${key} must use https` };
+    }
+    if (url.username || url.password) {
+      return { ok: false, error: `parameter ${key} must not contain credentials` };
+    }
+    if (url.port && url.port !== "443") {
+      return { ok: false, error: `parameter ${key} must not contain a non-default port` };
+    }
+    if (url.pathname !== "/" && url.pathname !== "") {
+      return { ok: false, error: `parameter ${key} must be an origin URL (no path)` };
+    }
+    if (url.search || url.hash) {
+      return { ok: false, error: `parameter ${key} must be an origin URL (no query/fragment)` };
+    }
+    const hostRaw = url.hostname.toLowerCase();
+    if (!SOURCE_BASE_HOST_RE.test(hostRaw)) {
+      return { ok: false, error: `parameter ${key} has invalid host` };
+    }
+    const allowed = SOURCE_BASE_URL_ALLOWLIST[id];
+    if (!allowed) {
+      return { ok: false, error: `parameter ${key} references unknown source` };
+    }
+    const hostNorm = normalizeAllowlistHost(hostRaw);
+    if (!allowed.map(normalizeAllowlistHost).includes(hostNorm)) {
+      return { ok: false, error: `parameter ${key} host not allow-listed for source ${id}` };
+    }
+  }
+  return { ok: true };
+}
+
 interface ParamValidationResult {
   ok: boolean;
   error?: string;

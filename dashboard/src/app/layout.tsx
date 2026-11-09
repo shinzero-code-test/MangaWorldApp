@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -33,16 +34,20 @@ if ("serviceWorker" in navigator) {
 }
 `;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // U-31: nonce minted by middleware.ts (x-nonce). Next.js framework scripts
+  // pick the same value up automatically; the two inline boot scripts below
+  // must carry it explicitly or the nonced script-src blocks them.
+  const nonce = (await headers()).get("x-nonce") ?? "";
   return (
     <html lang="ar" dir="rtl" className="dark" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-        <script dangerouslySetInnerHTML={{ __html: swRegisterScript }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: swRegisterScript }} />
       </head>
       <body className="antialiased min-h-screen">{children}</body>
     </html>

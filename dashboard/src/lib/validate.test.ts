@@ -6,6 +6,7 @@ import {
   isValidFolder,
   validateFirestoreDoc,
   validateRemoteConfigParams,
+  validateSourceBaseUrlParams,
 } from "./validate";
 
 // Pure request-body validators for admin mutation endpoints (M-6).
@@ -123,6 +124,35 @@ describe("validateRemoteConfigParams", () => {
     const over = validateRemoteConfigParams({ k: "x".repeat(2001) });
     expect(over.ok).toBe(false);
     expect(over.error).toMatch(/2000/);
+  });
+});
+
+describe("validateSourceBaseUrlParams (U-30)", () => {
+  it("accepts allow-listed https origins (incl. www. variant)", () => {
+    expect(validateSourceBaseUrlParams({ source_olympus_base_url: "https://olympustaff.com" }).ok).toBe(true);
+    expect(validateSourceBaseUrlParams({ source_olympus_base_url: "https://www.olympustaff.com" }).ok).toBe(true);
+    expect(validateSourceBaseUrlParams({ source_hijala_base_url: "https://hijala.com" }).ok).toBe(true);
+  });
+
+  it("ignores non-source keys (additive gate)", () => {
+    expect(validateSourceBaseUrlParams({ app_theme: "dark", limit: 10 }).ok).toBe(true);
+    expect(validateSourceBaseUrlParams({}).ok).toBe(true);
+  });
+
+  it("rejects non-allow-listed hosts with 400-equivalent verdict", () => {
+    const result = validateSourceBaseUrlParams({ source_olympus_base_url: "https://evil.example" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/allow-listed/);
+  });
+
+  it("rejects http, paths, credentials, ports, and unknown ids", () => {
+    expect(validateSourceBaseUrlParams({ source_olympus_base_url: "http://olympustaff.com" }).ok).toBe(false);
+    expect(validateSourceBaseUrlParams({ source_olympus_base_url: "https://olympustaff.com/manga" }).ok).toBe(false);
+    expect(validateSourceBaseUrlParams({ source_olympus_base_url: "https://user:pass@olympustaff.com" }).ok).toBe(false);
+    expect(validateSourceBaseUrlParams({ source_olympus_base_url: "https://olympustaff.com:8443" }).ok).toBe(false);
+    expect(validateSourceBaseUrlParams({ source_evil_base_url: "https://evil.example" }).ok).toBe(false);
+    expect(validateSourceBaseUrlParams({ source_olympus_base_url: "not a url" }).ok).toBe(false);
+    expect(validateSourceBaseUrlParams({ source_olympus_base_url: "" }).ok).toBe(false);
   });
 });
 

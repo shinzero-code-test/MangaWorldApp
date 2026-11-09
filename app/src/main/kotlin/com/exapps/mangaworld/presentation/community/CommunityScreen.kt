@@ -247,9 +247,12 @@ class CommunityViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val mangaCacheDao: com.exapps.mangaworld.core.data.local.dao.MangaCacheDao
 ) : ViewModel() {
-    private val mangaId: String = checkNotNull(savedStateHandle["mangaId"])
-    private val slug: String = checkNotNull(savedStateHandle["slug"])
-    private val sourceId: String = checkNotNull(savedStateHandle["sourceId"])
+    // U-36: null-safe defaulting — a missing nav arg (process-death restore
+    // races) must degrade to an empty id handled by the flows' catch blocks,
+    // not crash the VM construction with IllegalStateException.
+    private val mangaId: String = savedStateHandle["mangaId"] ?: ""
+    private val slug: String = savedStateHandle["slug"] ?: ""
+    private val sourceId: String = savedStateHandle["sourceId"] ?: ""
     private val chapterUrl: String? = decodeCommunityRouteArgument(savedStateHandle.get<String>("chapterUrl"))
     private val focusCommentId: String? = savedStateHandle.get<String>("commentId")?.takeIf { it.isNotBlank() }
 

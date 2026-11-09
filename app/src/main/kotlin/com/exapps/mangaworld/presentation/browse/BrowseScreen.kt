@@ -121,7 +121,7 @@ fun BrowseScreen(
                 FilterChip(
                     selected = uiState.sortBy == sort,
                     onClick = { viewModel.setSortBy(sort) },
-                    label = { Text(sort.label) }
+                    label = { Text(stringResource(sort.labelRes)) }
                 )
             }
         }

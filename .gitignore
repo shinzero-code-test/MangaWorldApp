@@ -19,7 +19,6 @@ local.properties
 keystore.properties
 google-services.json
 review_manifest.json
-.gitignore
 # AGENTS.md is tracked — remove this line
 logs/
 sessions/
@@ -36,3 +35,11 @@ firebase-debug.*.log
 build/
 *.apk
 *.aab
+
+# Secrets / env (U-30): never commit real env files; example stays tracked.
+# The bare `.gitignore` line above previously hid every nested .gitignore
+# (incl. dashboard/.gitignore) — removed so fresh clones get protection.
+.env
+.env.*
+!.env.example
+node_modules/

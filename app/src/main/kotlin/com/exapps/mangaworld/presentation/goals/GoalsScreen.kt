@@ -242,13 +242,13 @@ private fun GoalCard(
             ) {
                 Column {
                     Text(
-                        goal.type.label,
+                        stringResource(goal.type.labelRes),
                         style = MaterialTheme.typography.titleMedium,
                         color = MangaColors.OnSurface,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        stringResource(R.string.fmt_064, goal.targetValue, goal.period.label),
+                        stringResource(R.string.fmt_064, goal.targetValue, stringResource(goal.period.labelRes)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MangaColors.OnSurfaceVariant
                     )
@@ -349,7 +349,7 @@ private fun CreateGoalDialog(
                         FilterChip(
                             selected = selectedType == type,
                             onClick = { selectedType = type },
-                            label = { Text(type.label) }
+                            label = { Text(stringResource(type.labelRes)) }
                         )
                     }
                 }
@@ -368,7 +368,7 @@ private fun CreateGoalDialog(
                         FilterChip(
                             selected = selectedPeriod == period,
                             onClick = { selectedPeriod = period },
-                            label = { Text(period.label) }
+                            label = { Text(stringResource(period.labelRes)) }
                         )
                     }
                 }

@@ -414,6 +414,24 @@ def dashboard_pin_b64():
 
 # ---------------------------------------------------------------- authoring schema gate
 
+def _refuse_floats(node, where, path="value"):
+    """U-31: manifest numerics are integers — hard-refuse any float at SIGNING
+    time. _jcs_num's ECMAScript float-exponent fallback is kept for VERIFY
+    compatibility (published bytes must keep verifying), but a new signature
+    must never be minted over a float: Python repr and ECMAScript shortest-form
+    can disagree on exponent spellings, so the signer and the app's JCS
+    verifier could canonicalize differently. Walks the whole tree (nested
+    config floats count too)."""
+    if isinstance(node, float):
+        refuse("%s: non-integer number at %s (%r) — manifest numerics are int-only" % (where, path, node))
+    if isinstance(node, dict):
+        for k, v in node.items():
+            _refuse_floats(v, where, "%s.%s" % (path, k))
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            _refuse_floats(v, where, "%s[%d]" % (path, i))
+
+
 def validate_manifest_schema(node, where):
     """Mirror of the device-side `ManifestParser` v1 schema, fail closed. Returns
     the parsed `issuedAt` so the caller can apply the trust clock.
@@ -425,6 +443,7 @@ def validate_manifest_schema(node, where):
     """
     if not isinstance(node, dict):
         refuse("%s: top level must be an object" % where)
+    _refuse_floats(node, where)
     unknown = sorted(k for k in node if k not in KNOWN_FIELDS)
     if unknown:
         refuse("%s: unknown field(s) %s — the app fails closed on these (app schema v1)"

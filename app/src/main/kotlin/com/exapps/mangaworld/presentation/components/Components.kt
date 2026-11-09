@@ -200,7 +200,7 @@ fun StatusBadge(status: MangaStatus, modifier: Modifier = Modifier) {
         MangaStatus.UNKNOWN    -> Color(0x33888888) to MangaColors.Muted
     }
     Text(
-        status.label,
+        stringResource(status.labelRes),
         style = MaterialTheme.typography.labelSmall,
         color = fg,
         modifier = modifier

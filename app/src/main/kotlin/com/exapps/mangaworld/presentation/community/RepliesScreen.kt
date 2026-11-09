@@ -145,10 +145,12 @@ class RepliesViewModel @Inject constructor(
     private val communityRepository: CommunityRepository,
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
-    private val mangaId: String = checkNotNull(savedStateHandle["mangaId"])
-    private val slug: String = checkNotNull(savedStateHandle["slug"])
-    private val sourceId: String = checkNotNull(savedStateHandle["sourceId"])
-    private val rootId: String = checkNotNull(savedStateHandle["rootId"])
+    // U-36: null-safe defaulting (see CommunityScreen) — missing nav args
+    // degrade via the flows' catch blocks instead of crashing restore.
+    private val mangaId: String = savedStateHandle["mangaId"] ?: ""
+    private val slug: String = savedStateHandle["slug"] ?: ""
+    private val sourceId: String = savedStateHandle["sourceId"] ?: ""
+    private val rootId: String = savedStateHandle["rootId"] ?: ""
     private val reviewId: String? = savedStateHandle.get<String>("reviewId")?.takeIf { it.isNotBlank() }
     private val chapterUrl: String? = decodeCommunityRouteArgument(savedStateHandle.get<String>("chapterUrl"))
     private val selectedRecipientId = MutableStateFlow<String?>(null)

@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,6 +25,13 @@ class BookmarkManager @Inject constructor(
     private val prefs: SharedPreferences by lazy {
         context.getSharedPreferences("bookmarks", Context.MODE_PRIVATE)
     }
+
+    /**
+     * U-36: read-modify-write lock. Without it two concurrent adds (or an
+     * add racing a remove) could both read the same snapshot and the later
+     * save would silently drop the other's bookmark.
+     */
+    private val bookmarksLock = Any()
 
     fun getBookmarks(mangaId: String): List<Bookmark> {
         val json = prefs.getString("$BOOKMARK_PREFIX$mangaId", "[]") ?: return emptyList()
@@ -46,31 +54,40 @@ class BookmarkManager @Inject constructor(
     }
 
     fun addBookmark(mangaId: String, chapterUrl: String, pageIndex: Int, note: String = ""): Bookmark {
+        // U-36: UUID ids — the old "bm_<currentTimeMillis>" collided for two
+        // bookmarks created in the same millisecond (mergeBookmarks is keyed
+        // by id, so the collision would silently drop one).
         val bookmark = Bookmark(
-            id = "bm_${System.currentTimeMillis()}",
+            id = "bm_${UUID.randomUUID()}",
             mangaId = mangaId,
             chapterUrl = chapterUrl,
             pageIndex = pageIndex,
             note = note
         )
-        val current = getBookmarks(mangaId).toMutableList()
-        current.add(bookmark)
-        saveBookmarks(mangaId, current)
+        synchronized(bookmarksLock) {
+            val current = getBookmarks(mangaId).toMutableList()
+            current.add(bookmark)
+            saveBookmarks(mangaId, current)
+        }
         return bookmark
     }
 
     fun removeBookmark(mangaId: String, bookmarkId: String) {
-        val current = getBookmarks(mangaId).toMutableList()
-        current.removeAll { it.id == bookmarkId }
-        saveBookmarks(mangaId, current)
+        synchronized(bookmarksLock) {
+            val current = getBookmarks(mangaId).toMutableList()
+            current.removeAll { it.id == bookmarkId }
+            saveBookmarks(mangaId, current)
+        }
     }
 
     fun updateBookmarkNote(mangaId: String, bookmarkId: String, note: String) {
-        val current = getBookmarks(mangaId).toMutableList()
-        val index = current.indexOfFirst { it.id == bookmarkId }
-        if (index >= 0) {
-            current[index] = current[index].copy(note = note)
-            saveBookmarks(mangaId, current)
+        synchronized(bookmarksLock) {
+            val current = getBookmarks(mangaId).toMutableList()
+            val index = current.indexOfFirst { it.id == bookmarkId }
+            if (index >= 0) {
+                current[index] = current[index].copy(note = note)
+                saveBookmarks(mangaId, current)
+            }
         }
     }
 
@@ -88,9 +105,11 @@ class BookmarkManager @Inject constructor(
      * so re-imports and cross-device merges never duplicate or lose marks.
      */
     fun restoreBookmarks(incoming: Map<String, List<Bookmark>>) {
-        incoming.forEach { (mangaId, items) ->
-            if (mangaId.isBlank() || items.isEmpty()) return@forEach
-            saveBookmarks(mangaId, mergeBookmarks(getBookmarks(mangaId), items))
+        synchronized(bookmarksLock) {
+            incoming.forEach { (mangaId, items) ->
+                if (mangaId.isBlank() || items.isEmpty()) return@forEach
+                saveBookmarks(mangaId, mergeBookmarks(getBookmarks(mangaId), items))
+            }
         }
     }
 

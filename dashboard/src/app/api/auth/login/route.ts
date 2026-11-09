@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { clearMfaGrantCookie, deleteCurrentMfaGrant } from "@/lib/auth";
 import { getAdminAuth } from "@/lib/firebase-admin";
-import { consumeRateLimit, logSecurityEvent } from "@/lib/security";
+import { consumeRateLimit, isSameOriginRequest, logSecurityEvent } from "@/lib/security";
 import { ensureDashboardProfile } from "@/lib/username";
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +17,11 @@ function clientIp(request: NextRequest): string {
 
 export async function POST(request: NextRequest) {
   try {
+    // U-31: CSRF origin gate — this route mints the session cookie, so a
+    // cross-site POST must never reach Identity Toolkit (login-CSRF).
+    if (!isSameOriginRequest(request.headers)) {
+      return NextResponse.json({ error: "طلب مرفوض" }, { status: 403 });
+    }
     const { email, password } = await request.json();
     if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
       return NextResponse.json({ error: "بيانات غير صالحة" }, { status: 400 });

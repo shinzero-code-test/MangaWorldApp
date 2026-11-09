@@ -46,7 +46,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import coil.transform.Transformation
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.Flow
@@ -55,9 +54,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import coil.compose.AsyncImage
 import coil.imageLoader
-import coil.request.ImageRequest
-import coil.size.Precision
-import com.exapps.mangaworld.core.firebase.withFirebaseTrace
+import com.exapps.mangaworld.core.data.ReaderImageRequest
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
@@ -213,23 +210,21 @@ fun ReaderScreen(
                 LaunchedEffect(state.error) {
                     ctx.announceForAccessibility(ctx.getString(R.string.error_generic))
                 }
-                if (state.error!!.startsWith("CLOUDFLARE_REQUIRED|")) {
-                    val parts = state.error!!.split("|")
-                    val domain = parts.getOrNull(1).orEmpty()
-                    val url = parts.getOrNull(2).orEmpty()
-                    ReaderCloudflareError(
-                        domain = domain,
+                // U-36: branch on the sealed type, never on message text.
+                when (val loadError = state.error) {
+                    is ReaderLoadError.Cloudflare -> ReaderCloudflareError(
+                        domain = loadError.domain,
                         onBack = onBack,
                         onSolve = {
                             solverLauncher.launch(
                                 Intent(ctx, WebViewSolverActivity::class.java)
-                                    .putExtra(WebViewSolverActivity.EXTRA_URL, url)
-                                    .putExtra(WebViewSolverActivity.EXTRA_DOMAIN, domain)
+                                    .putExtra(WebViewSolverActivity.EXTRA_URL, loadError.url)
+                                    .putExtra(WebViewSolverActivity.EXTRA_DOMAIN, loadError.domain)
                             )
                         }
                     )
-                } else {
-                    ReaderError(state.error!!, onBack)
+                    is ReaderLoadError.Failure -> ReaderError(loadError.message, onBack)
+                    null -> Unit
                 }
             }
             state.pages.isEmpty() -> ReaderError(stringResource(R.string.no_pages), onBack)
@@ -1021,21 +1016,19 @@ private fun MangaPageImage(
     var aspect by remember(pageUrl) { mutableStateOf(PageAspectCache.get(pageUrl)) }
     var isLoading by remember(pageUrl) { mutableStateOf(aspect == null) }
     var isError by remember(pageUrl) { mutableStateOf(false) }
-    val transformations: List<Transformation> = remember(imageFilter) {
-        if (imageFilter == ReaderImageFilter.SMART_CROP) listOf(SmartCropTransformation()) else emptyList()
-    }
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         AsyncImage(
-            model = ImageRequest.Builder(ctx)
-                .data(page.url)
-                .crossfade(200)
-                .allowHardware(false)
-                .precision(Precision.INEXACT)
-                .withFirebaseTrace("reader_page")
-                .apply { if (transformations.isNotEmpty()) transformations(transformations) }
-                .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
-                .build(),
+            // U-26/U-27: shared builder with prefetch (decode-capped size,
+            // hardware bitmaps except on the SMART_CROP path) — identical
+            // cache-key inputs, so prefetch warms this exact request.
+            model = ReaderImageRequest.pageRequest(
+                context = ctx,
+                page = page,
+                imageFilter = imageFilter,
+                trace = "reader_page",
+                crossfadeMs = 200,
+            ),
             imageLoader = ctx.imageLoader,
             contentDescription = stringResource(R.string.accessibility_page, displayNumber),
             contentScale = ContentScale.FillWidth,
@@ -1247,7 +1240,7 @@ private fun ReaderSettingsSheet(
                     FilterChip(
                         selected = state.readerMode == mode,
                         onClick = { onModeChange(mode) },
-                        label = { Text(mode.label, maxLines = 1) },
+                        label = { Text(stringResource(mode.labelRes), maxLines = 1) },
                         shape = RoundedCornerShape(100.dp)
                     )
                 }
@@ -1264,7 +1257,7 @@ private fun ReaderSettingsSheet(
                     FilterChip(
                         selected = state.imageFilter == filter,
                         onClick = { onFilterChange(filter) },
-                        label = { Text(filter.label, maxLines = 1) },
+                        label = { Text(stringResource(filter.labelRes), maxLines = 1) },
                         shape = RoundedCornerShape(100.dp)
                     )
                 }

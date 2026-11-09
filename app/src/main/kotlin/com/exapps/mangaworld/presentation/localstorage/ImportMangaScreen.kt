@@ -536,7 +536,22 @@ private suspend fun importManga(
                             ZipInputStream(inputStream).use { zip ->
                                 var entry2 = zip.nextEntry
                                 var extracted = 0
-                                while (entry2 != null) {
+                                // U-36 zip-bomb caps (per archive): total extracted
+                                // image bytes and total entries are bounded so a
+                                // hostile CBZ cannot fill the disk. On breach the
+                                // chapter fails (no .completed mark) and any
+                                // partial file is deleted.
+                                val maxZipBytes = 500L * 1024L * 1024L
+                                val maxZipEntries = 5000
+                                val copyBuffer = ByteArray(32 * 1024)
+                                var entriesSeen = 0
+                                var extractedBytes = 0L
+                                while (entry2 != null && !chapterFailed) {
+                                    entriesSeen++
+                                    if (entriesSeen > maxZipEntries) {
+                                        chapterFailed = true
+                                        break
+                                    }
                                     if (!entry2.isDirectory) {
                                         val ext = entry2.name?.substringAfterLast('.', "")?.lowercase() ?: ""
                                         if (ext in imageExtensions) {
@@ -546,11 +561,29 @@ private suspend fun importManga(
                                                 chapterFailed = true
                                             } else {
                                                 runCatching {
+                                                    var entryOverBudget = false
                                                     FileOutputStream(outputFile).use { out ->
-                                                        zip.copyTo(out)
+                                                        while (true) {
+                                                            val read = zip.read(copyBuffer)
+                                                            if (read == -1) break
+                                                            extractedBytes += read
+                                                            if (extractedBytes > maxZipBytes) {
+                                                                entryOverBudget = true
+                                                                break
+                                                            }
+                                                            out.write(copyBuffer, 0, read)
+                                                        }
                                                     }
-                                                    extracted++
-                                                }.onFailure { chapterFailed = true }
+                                                    if (entryOverBudget) {
+                                                        outputFile.delete()
+                                                        chapterFailed = true
+                                                    } else {
+                                                        extracted++
+                                                    }
+                                                }.onFailure {
+                                                    outputFile.delete()
+                                                    chapterFailed = true
+                                                }
                                             }
                                         }
                                     }

@@ -18,6 +18,8 @@ import com.exapps.mangaworld.core.data.local.entity.ReadChapterEntity
 import com.exapps.mangaworld.core.data.local.entity.ReaderAnnotationEntity
 import com.exapps.mangaworld.core.data.local.entity.ReadingHistoryEntity
 import com.exapps.mangaworld.domain.model.AppTheme
+import com.exapps.mangaworld.domain.model.AppSettings
+import com.exapps.mangaworld.domain.model.ReaderSettings
 import com.exapps.mangaworld.domain.model.CloudRestorePreview
 import com.exapps.mangaworld.domain.model.CloudRestoreStrategy
 import com.exapps.mangaworld.domain.repository.SettingsRepository
@@ -58,6 +60,19 @@ class FirebaseSyncManager @Inject constructor(
     @Volatile private var lastPushMs = 0L
 
     /**
+     * U-27(c) cached-diff watermark: fingerprint of the last locally-read+
+     * successfully pushed snapshot. When the next push's local inputs are
+     * identical, the push short-circuits before the four remote collection
+     * reads (Firestore billed reads) and the writes — re-pushing identical
+     * bytes is idempotent, so this preserves gating semantics exactly
+     * (debounce, force-bypass, `shouldPushLocal`, and tombstone handling
+     * are untouched; a mid-push failure never stores a fingerprint, so the
+     * next push re-runs in full). Guarded by [syncMutex]; in-memory only
+     * (a restart always re-pushes in full).
+     */
+    private var lastLocalFingerprint: Long? = null
+
+    /**
      * FS-13: anonymous sessions never touch cloud sync. The anon identity is
      * per-install, so its cloud tree is unreachable from anywhere else —
      * pushing it only burns quota and seeds cross-account contamination.
@@ -87,6 +102,37 @@ class FirebaseSyncManager @Inject constructor(
         // the source permanently once RC re-enables it).
         val storedEnabledSources = settingsRepository.getStoredEnabledSources()
         val reader = settingsRepository.getReaderSettings().first()
+
+        // Hoisted so the cached-diff fingerprint (U-27(c)) covers every
+        // value this push writes; the trace block reuses these.
+        val totalReadingTimeMs = readingStatsStore.totalReadingTimeMs.first()
+        val totalMangaRead = readingStatsStore.totalMangaRead.first()
+        val achievementsData = runCatching { achievementManager.syncToFirestoreMap() }.getOrElse { emptyMap() }
+
+        // U-27(c): identical local inputs since the last successful push →
+        // skip the 4 remote reads + writes (idempotent no-op). Conservative
+        // scope: only the debounced (non-force) path skips. Forced pushes
+        // (worker/manual/restore) always run the full path, so a silently
+        // failed Firestore chunk is still retried by the next forced push
+        // -- debounce and force-bypass gating semantics are untouched.
+        val fingerprint = computeLocalPushFingerprint(
+            uid = uid,
+            favorites = favorites,
+            history = history,
+            annotations = annotations,
+            readMarks = readMarks,
+            tombstones = tombstones,
+            settings = settings,
+            reader = reader,
+            storedEnabledSources = storedEnabledSources,
+            totalReadingTimeMs = totalReadingTimeMs,
+            totalMangaRead = totalMangaRead,
+            achievements = achievementsData,
+        )
+        if (!force && fingerprint == lastLocalFingerprint) {
+            lastPushMs = System.currentTimeMillis()
+            return@withLock
+        }
 
         firebaseTelemetry.traceDatabaseSync(
             operation = "push",
@@ -135,9 +181,10 @@ class FirebaseSyncManager @Inject constructor(
                 "contentBlacklist" to settings.contentBlacklist.take(200).toList(),
                 "spoilerCollapseDefault" to settings.spoilerCollapseDefault,
                 "mutedUserIds" to settings.mutedUserIds.take(100).toList(),
-                // Sync reading stats so they survive device switches
-                "totalReadingTimeMs" to readingStatsStore.totalReadingTimeMs.first(),
-                "totalMangaRead" to readingStatsStore.totalMangaRead.first()
+                // Sync reading stats so they survive device switches.
+                // (Hoisted above for the U-27(c) fingerprint.)
+                "totalReadingTimeMs" to totalReadingTimeMs,
+                "totalMangaRead" to totalMangaRead
             )
             writes += userRef.collection("preferences").document("reader") to mapOf(
                 // U-10 finish: per-group updatedAt so the reader watermark gates it.
@@ -194,9 +241,9 @@ class FirebaseSyncManager @Inject constructor(
                 writes += userRef.collection("syncTombstones").document(tombstoneDocumentId(tombstone)) to tombstone
             }
 
-            // Sync achievements and goals
+            // Sync achievements and goals (hoisted for the fingerprint —
+            // same value the first push computed).
             runCatching {
-                val achievementsData = achievementManager.syncToFirestoreMap()
                 writes += userRef.collection("preferences").document("achievements") to achievementsData
             }
 
@@ -211,6 +258,7 @@ class FirebaseSyncManager @Inject constructor(
             // pruned at TTL) — reap them so the 10k cap never drops live ones.
             pruneExpiredCloudTombstones(userRef)
         }
+        lastLocalFingerprint = fingerprint
         lastPushMs = System.currentTimeMillis()
     }
 
@@ -784,4 +832,91 @@ class FirebaseSyncManager @Inject constructor(
         /** FS-12: UI-toggle pushes closer than this are coalesced (force bypasses). */
         const val PUSH_DEBOUNCE_MS = 60_000L
     }
+}
+
+/**
+ * U-27(c) cached-diff fingerprint over every value [FirebaseSyncManager.pushLocalSnapshot]
+ * writes. Identical inputs ⇒ the push would write identical bytes, so the
+ * second push is a safe no-op. Lists are combined in id-sorted order (Room
+ * `ORDER BY <ts>` tie order can vary between reads); all pushed scalar/map
+ * fields are included so any user-visible change fails the match. Pure
+ * function (no Android/Firestore) → unit-tested.
+ */
+internal fun computeLocalPushFingerprint(
+    uid: String,
+    favorites: List<FavoriteEntity>,
+    history: List<ReadingHistoryEntity>,
+    annotations: List<ReaderAnnotationEntity>,
+    readMarks: List<ReadChapterEntity>,
+    tombstones: List<SyncTombstone>,
+    settings: AppSettings,
+    reader: ReaderSettings,
+    storedEnabledSources: Set<String>,
+    totalReadingTimeMs: Long,
+    totalMangaRead: Int,
+    achievements: Map<String, Any>,
+): Long {
+    var h = 17
+    fun Long.mix(): Long {
+        h = h * 31 + hashCode().toLong()
+        return h
+    }
+    fun Int.mix(): Long {
+        h = h * 31 + this
+        return h
+    }
+    fun String.mix(): Long {
+        h = h * 31 + hashCode()
+        return h
+    }
+    fun Boolean.mix(): Long {
+        h = h * 31 + (if (this) 1 else 0)
+        return h
+    }
+
+    uid.mix()
+    favorites.size.mix()
+    favorites.sortedBy { it.mangaId }.forEach {
+        it.mangaId.mix(); it.addedAt.mix(); it.readChapters.mix(); it.totalChapters.mix()
+        it.isFavorite.mix(); it.readingStatus.orEmpty().mix()
+    }
+    history.size.mix()
+    history.sortedBy { it.mangaId }.forEach {
+        it.mangaId.mix(); it.lastReadAt.mix(); it.lastChapterNumber.hashCode().mix()
+        it.readChapters.mix(); it.totalChapters.mix(); it.durationMs.mix()
+    }
+    annotations.size.mix()
+    annotations.sortedBy { it.mangaId + "|" + it.chapterUrl + "|" + it.pageIndex }.forEach {
+        it.mangaId.mix(); it.chapterUrl.mix(); it.pageIndex.mix()
+        it.updatedAt.mix(); it.note.mix(); it.isBookmarked.mix()
+    }
+    readMarks.size.mix()
+    readMarks.sortedWith(
+        compareBy<ReadChapterEntity>({ it.mangaId }, { it.chapterNumber })
+    ).forEach { it.mangaId.mix(); it.chapterNumber.hashCode().mix(); it.readAt.mix() }
+    tombstones.size.mix()
+    tombstones.sortedBy { it.collection + "|" + it.documentId }.forEach {
+        it.collection.mix(); it.documentId.mix(); it.deletedAt.mix()
+    }
+    storedEnabledSources.sorted().forEach { it.mix() }
+    settings.theme.name.mix()
+    settings.useDynamicColors.mix()
+    settings.secureReaderEnabled.mix()
+    settings.notificationDeliveryMode.name.mix()
+    settings.autoCleanupReadDownloads.mix()
+    settings.cleanupAfterHours.mix()
+    settings.imageCacheLimitMb.mix()
+    settings.contentBlacklist.take(200).forEach { it.mix() }
+    settings.spoilerCollapseDefault.mix()
+    settings.mutedUserIds.take(100).forEach { it.mix() }
+    totalReadingTimeMs.mix(); totalMangaRead.mix()
+    reader.mode.name.mix(); reader.brightness.hashCode().mix(); reader.pageSpacing.mix()
+    reader.keepScreenOn.mix(); reader.showPageNumber.mix(); reader.autoWebtoonDetection.mix()
+    reader.incognitoMode.mix(); reader.smartPrefetchEnabled.mix(); reader.hapticsEnabled.mix()
+    reader.imageFilter.name.mix(); reader.autoOpenNextChapter.mix(); reader.showLiveReadersOverlay.mix()
+    reader.showReactionOverlay.mix(); reader.dualPageLandscape.mix(); reader.webtoonAutoStitch.mix()
+    reader.volumeButtonPageTurn.mix(); reader.doubleTapZoom.mix()
+    achievements.size.mix()
+    achievements.entries.sortedBy { it.key }.forEach { it.key.mix(); it.value.toString().mix() }
+    return h
 }

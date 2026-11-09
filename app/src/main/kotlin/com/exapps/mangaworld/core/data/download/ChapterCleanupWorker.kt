@@ -19,6 +19,10 @@ class ChapterCleanupWorker @AssistedInject constructor(
         val chapterUrl = inputData.getString(KEY_CHAPTER_URL) ?: return Result.failure()
         return runCatching {
             downloadQueueManager.deleteDownloadedChapterDir(mangaId, chapterUrl)
+            // U-36: piggyback the terminal download_batches GC on this cleanup
+            // run (no new worker/schedule). Best-effort — a GC failure must
+            // never fail the chapter cleanup.
+            runCatching { downloadQueueManager.gcTerminalBatches() }
             Result.success()
         }.getOrElse {
             // deleteDownloadedChapterDir swallows its own errors, so reaching here

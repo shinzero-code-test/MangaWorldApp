@@ -1,17 +1,12 @@
 package com.exapps.mangaworld.core.data
 
 import android.content.Context
-import android.graphics.Bitmap
 import coil.ImageLoader
-import coil.request.CachePolicy
-import coil.request.ImageRequest
-import coil.size.Precision
-import coil.size.Size
-import com.exapps.mangaworld.core.firebase.withFirebaseTrace
+import coil.request.Disposable
 import com.exapps.mangaworld.domain.model.ChapterPage
+import com.exapps.mangaworld.domain.model.ReaderImageFilter
 import dagger.Lazy
 import dagger.hilt.android.qualifiers.ApplicationContext
-import coil.request.Disposable
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -38,22 +33,31 @@ class ImagePrefetcher @Inject constructor(
         // prefetch" destroyed display image cache. Removed (U-17).
     }
 
-    suspend fun prefetchPages(pages: List<ChapterPage>, count: Int = pages.size.coerceAtMost(6)) {
+    /**
+     * U-26: warms the SAME loader + cache keyspace the reader renders
+     * from. Screens use `ctx.imageLoader` (Coil singleton factory) and
+     * this prefetcher's injected [ImageLoader] used to be a separate Hilt
+     * instance — the Hilt binding now delegates to `SingletonImageLoader`,
+     * so `imageLoader.get()` here IS the display loader. Requests are
+     * built by the shared [ReaderImageRequest] (decode-capped size,
+     * INEXACT, display-matching transformation/software gating), so a
+     * prefetched page is a memory-cache hit when the reader reaches it.
+     */
+    suspend fun prefetchPages(
+        pages: List<ChapterPage>,
+        count: Int = pages.size.coerceAtMost(6),
+        imageFilter: ReaderImageFilter = ReaderImageFilter.NONE,
+    ) {
         cancelAll()
         coroutineScope {
             pages.take(count).forEach { page ->
                 val job = launch {
-                    val request = ImageRequest.Builder(context)
-                        .data(page.url)
-                        .allowHardware(false)
-                        .bitmapConfig(Bitmap.Config.RGB_565)
-                        .precision(Precision.INEXACT)
-                        .size(Size.ORIGINAL)
-                        .diskCachePolicy(CachePolicy.ENABLED)
-                        .memoryCachePolicy(CachePolicy.ENABLED)
-                        .withFirebaseTrace("prefetch_page")
-                        .apply { page.headers.forEach { (k, v) -> addHeader(k, v) } }
-                        .build()
+                    val request = ReaderImageRequest.pageRequest(
+                        context = context,
+                        page = page,
+                        imageFilter = imageFilter,
+                        trace = "prefetch_page",
+                    )
                     pendingDisposables.add(imageLoader.get().enqueue(request))
                 }
                 pendingJobs.add(job)

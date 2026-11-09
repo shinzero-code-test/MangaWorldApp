@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
 import { getAdminRemoteConfig } from "@/lib/firebase-admin";
-import { validateRemoteConfigParams } from "@/lib/validate";
-import { genericErrorResponse } from "@/lib/security";
+import { validateRemoteConfigParams, validateSourceBaseUrlParams } from "@/lib/validate";
+import { genericErrorResponse, logSecurityEvent } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
 
@@ -44,12 +44,18 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    await requireRole("super-admin");
+    const admin = await requireRole("super-admin");
     const { parameters } = await request.json();
     // Config-injection guard before anything reaches the live template (M-6).
     const validation = validateRemoteConfigParams(parameters);
     if (!validation.ok) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+    // U-30: source base URLs additionally need https + origin-only +
+    // per-id allow-list (non-allow-listed host → 4xx, nothing published).
+    const urlValidation = validateSourceBaseUrlParams(parameters);
+    if (!urlValidation.ok) {
+      return NextResponse.json({ error: urlValidation.error }, { status: 400 });
     }
     const rc = getAdminRemoteConfig();
     const template = await rc.getTemplate();
@@ -64,6 +70,11 @@ export async function PUT(request: NextRequest) {
     await rc.publishTemplate(template);
     // Note: the fetched template carries its etag, so a concurrent publish
     // fails here instead of silently winning (last-write-wins avoided).
+    // U-30: audit every publish (same logger users/route.ts uses).
+    await logSecurityEvent("remote_config_publish", {
+      by: admin.uid,
+      keys: Object.keys(parameters as Record<string, unknown>).sort(),
+    });
     return NextResponse.json({ success: true, etag: template.etag });
   } catch (error: unknown) {
     const { body, status } = genericErrorResponse(error, "فشل نشر الإعدادات");

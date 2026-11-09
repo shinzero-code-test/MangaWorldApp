@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAppIdToken } from "@/lib/app-auth";
+import { rejectAnonymousUser, verifyAppIdToken } from "@/lib/app-auth";
 import { consumeRateLimit } from "@/lib/security";
 import { isTextAllowed } from "@/lib/moderation";
 
@@ -28,6 +28,16 @@ export async function POST(request: NextRequest) {
     user = await verifyAppIdToken(request);
   } catch {
     return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+  }
+
+  // U-29: anonymous sessions (free to mint) must not reach the keyword
+  // scanner — sibling parity with community/vote. Authenticated-but-
+  // anonymous is Forbidden (403), not Unauthorized (401): the token was
+  // valid, the caller just may not write.
+  try {
+    rejectAnonymousUser(user);
+  } catch {
+    return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
   }
 
   try {

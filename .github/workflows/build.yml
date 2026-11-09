@@ -103,6 +103,65 @@ jobs:
             echo "::warning::U-13 sweep incomplete — $bare bare runCatching site(s) remain in app/src/main/kotlin. Bare runCatching swallows CancellationException; prefer suspendRunCatching for suspend lambdas."
           fi
 
+      - name: 900-line gate for NEW files (U-35)
+        # New files (added in this diff) must be <=900 lines. Existing files
+        # over 900 are grandfathered (tracking splits in
+        # tmp/review/stage2/arch-hygiene.md) — this gate only stops the
+        # pile from growing. Base discovery: PR base SHA, else push
+        # `before`, else HEAD^; if none resolves, skip with a warning
+        # instead of failing an infrastructure edge case.
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          BASE="${PR_BASE_SHA:-$BEFORE_SHA}"
+          if [[ -z "$BASE" || "$BASE" == 0000000000000000000000000000000000000000 ]]; then
+            BASE=$(git rev-parse HEAD^ 2>/dev/null || echo "")
+          fi
+          if [[ -z "$BASE" ]]; then
+            echo "::warning::U-35 gate: no base commit resolvable (manual dispatch?) — skipping new-file size check."
+            exit 0
+          fi
+          if ! git fetch --no-tags --depth=1 origin "$BASE" >/dev/null 2>&1; then
+            echo "::warning::U-35 gate: base commit $BASE not fetchable — skipping new-file size check."
+            exit 0
+          fi
+          fail=0
+          while IFS= read -r f; do
+            [[ -z "$f" || ! -f "$f" ]] && continue
+            lines=$(wc -l < "$f" | tr -d ' ')
+            if [[ "$lines" -gt 900 ]]; then
+              echo "::error::U-35: new file $f has $lines lines (>900). Split it into smaller classes/files."
+              fail=1
+            fi
+          done < <(git diff --name-only --diff-filter=A "$BASE" HEAD)
+          if [[ "$fail" -eq 0 ]]; then echo "U-35 gate: no new file over 900 lines."; fi
+          exit $fail
+
+      - name: Import-census boundary (warning only, U-36)
+        # Presentation must not import core.data implementation classes
+        # (concrete managers/DAOs/entities) — this codebase has no literal
+        # `core.data.impl` package, so the census greps the real boundary
+        # path. Count-only with continue-on-error (same precedent as the
+        # runCatching tripwire above): it warns until the top-5 screens
+        # migrate behind domain interfaces, then promote to error mode and
+        # drop the head-list allowance.
+        continue-on-error: true
+        run: |
+          set -u
+          P_DIR=app/src/main/kotlin/com/exapps/mangaworld/presentation
+          HITS_FILE=$(mktemp)
+          grep -rn "^import com.exapps.mangaworld.core.data" "$P_DIR" --include="*.kt" > "$HITS_FILE" || true
+          hits=$(wc -l < "$HITS_FILE" | tr -d ' ')
+          files=$(cut -d: -f1 "$HITS_FILE" | sort -u | wc -l | tr -d ' ')
+          echo "presentation -> core.data imports: $hits import(s) across $files file(s)"
+          if [[ "$hits" -gt 0 ]]; then
+            echo "::warning::U-36 boundary census — presentation imports core.data impl (top files):"
+            cut -d: -f1 "$HITS_FILE" | sort | uniq -c | sort -rn | head -n 10
+          fi
+          rm -f "$HITS_FILE"
+
       - name: Create google-services.json from secret
         # U-05: job-level env cannot be conditional, so gate the consuming
         # step — PR code must never materialize the secret.

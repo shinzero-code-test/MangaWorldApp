@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminRemoteConfig } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
-import { validateRemoteConfigParams } from "@/lib/validate";
-import { genericErrorResponse } from "@/lib/security";
+import { validateRemoteConfigParams, validateSourceBaseUrlParams } from "@/lib/validate";
+import { genericErrorResponse, logSecurityEvent } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
 
@@ -33,12 +33,18 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    await requireRole("super-admin");
+    const admin = await requireRole("super-admin");
     const { settings } = await request.json();
     // Config-injection guard: known key charset, primitive values, bounded count/size.
     const validation = validateRemoteConfigParams(settings);
     if (!validation.ok) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+    // U-30: second PUT path for source base URLs — same https +
+    // origin-only + allow-list gate as remote-config (both PUTs).
+    const urlValidation = validateSourceBaseUrlParams(settings);
+    if (!urlValidation.ok) {
+      return NextResponse.json({ error: urlValidation.error }, { status: 400 });
     }
     const template = await getAdminRemoteConfig().getTemplate();
 
@@ -53,6 +59,11 @@ export async function PUT(request: NextRequest) {
     await getAdminRemoteConfig().publishTemplate(template);
     // Note: the fetched template carries its etag, so a concurrent publish
     // fails here instead of silently winning (last-write-wins avoided).
+    // U-30: audit every publish (same logger users/route.ts uses).
+    await logSecurityEvent("remote_config_publish", {
+      by: admin.uid,
+      keys: Object.keys(settings as Record<string, unknown>).sort(),
+    });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const { body, status } = genericErrorResponse(error, "فشل حفظ الإعدادات");

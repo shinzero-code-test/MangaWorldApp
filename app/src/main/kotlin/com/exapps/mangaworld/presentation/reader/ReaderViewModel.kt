@@ -36,6 +36,27 @@ import kotlinx.coroutines.flow.*
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
+/**
+ * U-36: typed chapter-load failure. Replaces the old stringly-typed protocol
+ * (`startsWith("CLOUDFLARE_REQUIRED|")` + `split("|")` in ReaderScreen) —
+ * the UI branches on the sealed type, so a future error kind cannot be
+ * silently rendered as a generic message. [message] carries the localized
+ * text for generic failures; Cloudflare carries the solver payload instead
+ * (its UI copy is fixed, it only needs domain + URL).
+ */
+@Immutable
+sealed interface ReaderLoadError {
+    val message: String
+
+    @Immutable
+    data class Cloudflare(val domain: String, val url: String) : ReaderLoadError {
+        override val message: String = ""
+    }
+
+    @Immutable
+    data class Failure(override val message: String) : ReaderLoadError
+}
+
 @Immutable
 data class ReaderChapterRange(
     val chapterUrl: String = "",
@@ -64,7 +85,7 @@ data class ReaderUiState(
     val showControls: Boolean = true,
     val readerMode: ReaderMode = ReaderMode.VERTICAL_SCROLL,
     val brightness: Float = 1.0f,
-    val error: String? = null,
+    val error: ReaderLoadError? = null,
     val chapterUrl: String = "",
     /**
      * Chapter-load generation, bumped on every loadChapter reset. The UI keys
@@ -309,7 +330,7 @@ class ReaderViewModel @Inject constructor(
                     }
                     beginSession(mangaId, chapterUrl)
                 } else {
-                    _state.update { it.copy(isLoading = false, error = context.getString(R.string.no_pages_loaded)) }
+                    _state.update { it.copy(isLoading = false, error = ReaderLoadError.Failure(context.getString(R.string.no_pages_loaded))) }
                 }
             }
             return
@@ -417,12 +438,14 @@ class ReaderViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     if (loadSeq != chapterLoadSeq) return@onFailure
-                    val msg = if (e is CloudflareChallengeException) {
-                        "CLOUDFLARE_REQUIRED|${e.domain}|${e.targetUrl}"
-                    } else if (e is com.exapps.mangaworld.core.data.remote.scraper.ChapterLockedException) {
-                        context.getString(R.string.reader_chapter_locked)
-                    } else context.getString(R.string.download_error)
-                    _state.update { it.copy(isLoading = false, error = msg) }
+                    val failure: ReaderLoadError = when {
+                        e is CloudflareChallengeException ->
+                            ReaderLoadError.Cloudflare(domain = e.domain, url = e.targetUrl)
+                        e is com.exapps.mangaworld.core.data.remote.scraper.ChapterLockedException ->
+                            ReaderLoadError.Failure(context.getString(R.string.reader_chapter_locked))
+                        else -> ReaderLoadError.Failure(context.getString(R.string.download_error))
+                    }
+                    _state.update { it.copy(isLoading = false, error = failure) }
                 }
         }
     }
@@ -622,7 +645,13 @@ class ReaderViewModel @Inject constructor(
                 // Advance prev/next pointers from the same index-based list.
                 updateAdjacentUrls()
                 if (!st.incognitoMode) {
-                    imagePrefetcher.prefetchPages(indexed.take(APPEND_PREFETCH_COUNT))
+                    // U-26: pass the live filter so prefetch matches the
+                    // display request (SMART_CROP transform + software
+                    // decode) and warms the memory cache the reader hits.
+                    imagePrefetcher.prefetchPages(
+                        indexed.take(APPEND_PREFETCH_COUNT),
+                        imageFilter = _state.value.imageFilter,
+                    )
                 }
             } catch (e: CancellationException) {
                 // A chapter switch cancels the in-flight append: reset the flag
@@ -1197,7 +1226,8 @@ class ReaderViewModel @Inject constructor(
         try {
             val pages = mangaRepo.getChapterPages("", nextUrl, currentSource).getOrNull().orEmpty()
             if (pages.isEmpty()) return
-            imagePrefetcher.prefetchPages(pages)
+            // U-26: pass the live filter so prefetch matches the display request.
+            imagePrefetcher.prefetchPages(pages, imageFilter = state.imageFilter)
         } finally {
             inFlightPrefetches.remove(nextUrl)
         }

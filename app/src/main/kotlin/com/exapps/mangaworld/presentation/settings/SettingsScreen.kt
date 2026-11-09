@@ -76,19 +76,19 @@ fun SettingsScreen(
         SettingsSection(stringResource(R.string.appearance)) {
             SettingsItem(
                 icon = Icons.Filled.Palette, title = stringResource(R.string.theme),
-                subtitle = app.theme.label
+                subtitle = stringResource(app.theme.labelRes)
             ) {
                 var expanded by remember { mutableStateOf(false) }
                 Box {
                     TextButton(onClick = { expanded = true }) {
-                        Text(app.theme.label, color = MangaColors.Cyan)
+                        Text(stringResource(app.theme.labelRes), color = MangaColors.Cyan)
                         Icon(Icons.Filled.ArrowDropDown, null, tint = MangaColors.Cyan)
                     }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
                         modifier = Modifier.background(MangaColors.SurfaceContainer)) {
                         AppTheme.entries.forEach { theme ->
                             DropdownMenuItem(
-                                text = { Text(theme.label, color = MangaColors.OnSurface) },
+                                text = { Text(stringResource(theme.labelRes), color = MangaColors.OnSurface) },
                                 onClick = { viewModel.setTheme(theme); expanded = false },
                                 leadingIcon = {
                                     if (theme == app.theme)
@@ -138,18 +138,18 @@ fun SettingsScreen(
         // ── Reader ────────────────────────────────────────────────────────────
         SettingsSection(stringResource(R.string.settings_reader)) {
             SettingsItem(icon = Icons.Filled.ChromeReaderMode, title = stringResource(R.string.reading_mode),
-                subtitle = reader.mode.label) {
+                subtitle = stringResource(reader.mode.labelRes)) {
                 var expanded by remember { mutableStateOf(false) }
                 Box {
                     TextButton(onClick = { expanded = true }) {
-                        Text(reader.mode.label, color = MangaColors.Cyan)
+                        Text(stringResource(reader.mode.labelRes), color = MangaColors.Cyan)
                         Icon(Icons.Filled.ArrowDropDown, null, tint = MangaColors.Cyan)
                     }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
                         modifier = Modifier.background(MangaColors.SurfaceContainer)) {
                         ReaderMode.entries.forEach { m ->
                             DropdownMenuItem(
-                                text = { Text(m.label, color = MangaColors.OnSurface) },
+                                text = { Text(stringResource(m.labelRes), color = MangaColors.OnSurface) },
                                 onClick = { viewModel.setReaderMode(m); expanded = false },
                                 leadingIcon = {
                                     if (m == reader.mode) Icon(Icons.Filled.Check, null, tint = MangaColors.Primary)
@@ -196,17 +196,17 @@ fun SettingsScreen(
                 onCheckedChange = viewModel::setReaderHaptics
             )
             GradientDivider(Modifier.padding(horizontal = 16.dp))
-            SettingsItem(icon = Icons.Filled.Tune, title = stringResource(R.string.str_342), subtitle = reader.imageFilter.label) {
+            SettingsItem(icon = Icons.Filled.Tune, title = stringResource(R.string.str_342), subtitle = stringResource(reader.imageFilter.labelRes)) {
                 var expanded by remember { mutableStateOf(false) }
                 Box {
                     TextButton(onClick = { expanded = true }) {
-                        Text(reader.imageFilter.label, color = MangaColors.Cyan)
+                        Text(stringResource(reader.imageFilter.labelRes), color = MangaColors.Cyan)
                         Icon(Icons.Filled.ArrowDropDown, null, tint = MangaColors.Cyan)
                     }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(MangaColors.SurfaceContainer)) {
                         ReaderImageFilter.entries.forEach { filter ->
                             DropdownMenuItem(
-                                text = { Text(filter.label, color = MangaColors.OnSurface) },
+                                text = { Text(stringResource(filter.labelRes), color = MangaColors.OnSurface) },
                                 onClick = { viewModel.setImageFilter(filter); expanded = false },
                                 leadingIcon = {
                                     if (filter == reader.imageFilter) Icon(Icons.Filled.Check, null, tint = MangaColors.Primary)
@@ -389,18 +389,18 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Filled.Notifications,
                 title = stringResource(R.string.alert_mode),
-                subtitle = app.notificationDeliveryMode.label
+                subtitle = stringResource(app.notificationDeliveryMode.labelRes)
             ) {
                 var expanded by remember { mutableStateOf(false) }
                 Box {
                     TextButton(onClick = { expanded = true }) {
-                        Text(app.notificationDeliveryMode.label, color = MangaColors.Cyan)
+                        Text(stringResource(app.notificationDeliveryMode.labelRes), color = MangaColors.Cyan)
                         Icon(Icons.Filled.ArrowDropDown, null, tint = MangaColors.Cyan)
                     }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(MangaColors.SurfaceContainer)) {
                         NotificationDeliveryMode.entries.forEach { mode ->
                             DropdownMenuItem(
-                                text = { Text(mode.label, color = MangaColors.OnSurface) },
+                                text = { Text(stringResource(mode.labelRes), color = MangaColors.OnSurface) },
                                 onClick = { viewModel.setNotificationMode(mode); expanded = false },
                                 leadingIcon = {
                                     if (mode == app.notificationDeliveryMode) Icon(Icons.Filled.Check, null, tint = MangaColors.Primary)

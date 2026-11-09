@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.core.data
 
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -36,16 +37,17 @@ data class ReadingGoal(
     val isCompleted: Boolean get() = currentValue >= targetValue
 }
 
-enum class GoalType(val label: String) {
-    PAGES_READ("صفحات مقروءة"),
-    READING_TIME("وقت القراءة (دقائق)"),
-    CHAPTERS_READ("فصول مقروءة")
+// U-36: display labels are string resources (persisted storage is `name`).
+enum class GoalType(@StringRes val labelRes: Int) {
+    PAGES_READ(com.exapps.mangaworld.R.string.goal_type_pages_read),
+    READING_TIME(com.exapps.mangaworld.R.string.goal_type_reading_time),
+    CHAPTERS_READ(com.exapps.mangaworld.R.string.goal_type_chapters_read)
 }
 
-enum class GoalPeriod(val label: String) {
-    DAILY("يومي"),
-    WEEKLY("أسبوعي"),
-    MONTHLY("شهري")
+enum class GoalPeriod(@StringRes val labelRes: Int) {
+    DAILY(com.exapps.mangaworld.R.string.goal_period_daily),
+    WEEKLY(com.exapps.mangaworld.R.string.goal_period_weekly),
+    MONTHLY(com.exapps.mangaworld.R.string.goal_period_monthly)
 }
 
 data class Achievement(

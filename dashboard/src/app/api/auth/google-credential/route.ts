@@ -8,6 +8,12 @@ export const dynamic = 'force-dynamic';
 // GIS button flow. Must match the Firebase-managed google.com provider.
 const GOOGLE_CLIENT_ID = (process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "").trim();
 
+// Bounds the tokeninfo `exp` replay window (U-29): Google ID tokens are
+// issued with ~1h validity, so anything whose `exp` sits more than 2h in
+// the future is anomalous (forged/clock-skewed) and refused even though
+// tokeninfo returned 200.
+const GOOGLE_ID_TOKEN_MAX_TTL_SECONDS = 2 * 60 * 60;
+
 function clientIp(request: NextRequest): string {
   return (
     request.headers.get("x-real-ip")?.split(",")[0]?.trim() ||
@@ -67,6 +73,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "تعذر التحقق من حساب Google" }, { status: 401 });
     }
     const info = (await infoRes.json()) as GoogleTokenInfo;
+    // U-29: fail closed on missing/stale `exp`. tokeninfo returning 200 is
+    // not proof of freshness — an expired token must never exchange for a
+    // custom token (replay window). `exp` arrives as a decimal string.
+    const expSeconds = Number(info.exp);
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (
+      !Number.isInteger(expSeconds) ||
+      expSeconds <= nowSeconds ||
+      expSeconds > nowSeconds + GOOGLE_ID_TOKEN_MAX_TTL_SECONDS
+    ) {
+      return NextResponse.json({ error: "تعذر التحقق من حساب Google" }, { status: 401 });
+    }
     const email = (info.email ?? "").trim().toLowerCase();
     const emailVerified = info.email_verified === true || info.email_verified === "true";
     const validIssuer = info.iss === "https://accounts.google.com" || info.iss === "accounts.google.com";

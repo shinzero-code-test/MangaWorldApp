@@ -1,5 +1,15 @@
 rules_version = '2';
 service cloud.firestore {
+  // ─── DOCUMENTED DECISION (U-30/U-31 audit): fail-open privacy defaults ───
+  // Legacy accounts predate publicProfiles, so a MISSING privacy flag reads as
+  // PUBLIC (publicFlag() defaults to true; publicProfiles read defaults
+  // isPublic to true; favorites/lists mirror the same). This is DELIBERATE,
+  // not accidental: the app itself defaults a missing flag to public, and
+  // fail-closed would render every legacy profile blank to other users.
+  // The compensating controls are signedIn() on all public reads (RA-1 — no
+  // unauthenticated enumeration) and explicit owner writes that always
+  // persist the flags. Revisit only with a plan to backfill/migrate legacy
+  // docs; do not silently flip to fail-closed.
   match /databases/{database}/documents {
     function signedIn() {
       return request.auth != null;
@@ -32,8 +42,11 @@ service cloud.firestore {
     // Server-side text bounds (F1) + badge allowlist (F2): badgeLabel is
     // client-computed from achievements, so free text would let any user wear
     // "Admin" in chat snapshots. The 7 values mirror AchievementManager.
+    // U-31: username charset mirrors app UsernameRules.REGEX exactly
+    // (3-20 chars, alphanumerics/underscore, no leading/trailing underscore);
+    // Firestore matches() is RE2 — anchors + classes are literal here.
     function validProfileStrings() {
-      return (!request.resource.data.keys().hasAny(['username']) || (request.resource.data.username is string && request.resource.data.username.size() <= 20))
+      return (!request.resource.data.keys().hasAny(['username']) || (request.resource.data.username is string && request.resource.data.username.size() >= 3 && request.resource.data.username.size() <= 20 && request.resource.data.username.matches('^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$')))
         && (!request.resource.data.keys().hasAny(['displayName']) || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 64))
         && (!request.resource.data.keys().hasAny(['bio']) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 1000))
         && (!request.resource.data.keys().hasAny(['location']) || (request.resource.data.location is string && request.resource.data.location.size() <= 64))
@@ -387,8 +400,12 @@ service cloud.firestore {
 
     match /usernames/{username} {
       allow read: if signedIn();
+      // U-31: charset mirrors app UsernameRules (see validProfileStrings) —
+      // the doc id IS the normalized handle, so this also blocks claims the
+      // app would reject or that could squat reserved-looking names.
       allow create: if canWriteCommunity(request.resource.data.uid)
-        && username.size() >= 3 && username.size() <= 20;
+        && username.size() >= 3 && username.size() <= 20
+        && username.matches('^[a-zA-Z0-9][a-zA-Z0-9_]{1,18}[a-zA-Z0-9]$');
       allow update: if canWriteCommunity(request.resource.data.uid)
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == resource.data.uid;
@@ -399,6 +416,15 @@ service cloud.firestore {
     // listeners never reject with PERMISSION_DENIED for public reads, regardless
     // of which parent path (manga-level vs chapter-level) a doc lives under.
     // Read-only — writes stay governed by the nested matches below.
+    // TODO(U-31, deferred — do NOT prefix-narrow): world-readable
+    // /{path=**}/comments|reviews is latent-but-accepted. Verified every app
+    // comment/review write goes through firestore.collection("community_manga")
+    // (manga + chapter level) and writes are only permitted by the nested
+    // matches below, so the wildcard's extra surface has no writer. Prefix-
+    // narrowing to /community_manga/{path=**}/... BREAKS collectionGroup
+    // ("No matching allow statements", emulator v1.22.0: the recursive
+    // wildcard must lead the match), and a path-prefix condition cannot
+    // inspect the wildcard (unbound variable). Leave broad + read-only.
     match /{path=**}/comments/{commentId} {
       allow read: if true;
     }
@@ -506,6 +532,10 @@ service cloud.firestore {
       allow read, update, delete: if canModerate();
     }
 
+    // TODO(U-31): user_achievements owner-rw lets any owner forge KPI counters
+    // (read/total treats them as display-only). Document-or-decide only — no
+    // code change here: if achievements ever gate rewards/recognition, move
+    // writes server-side (dashboard API + admin SDK) and keep owner read-only.
     match /user_achievements/{uid} {
       allow read, write: if owner(uid);
     }

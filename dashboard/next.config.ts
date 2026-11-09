@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Mirror of vercel.json headers: self-hosted/preview runtimes must keep
   // the same posture when Vercel edge headers don't apply.
+  // U-31: the authoritative CSP is the NONCED policy set by middleware.ts
+  // per request (static headers physically cannot carry a fresh nonce).
+  // This static block below is only a fallback for matcher-excluded paths;
+  // page responses enforce nonce + 'self' (no 'unsafe-inline') via
+  // middleware's Content-Security-Policy, which intersects with this one.
   async headers() {
     return [
       // Plugin distribution must revalidate (mirrors vercel.json
