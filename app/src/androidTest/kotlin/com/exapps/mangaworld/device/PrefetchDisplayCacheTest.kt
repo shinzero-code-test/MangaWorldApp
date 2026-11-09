@@ -56,7 +56,7 @@ class PrefetchDisplayCacheTest {
             .okHttpClient(client)
             .memoryCache {
                 MemoryCache.Builder(context)
-                    .maxSizeBytes(8L * 1024L * 1024L)
+                    .maxSizeBytes(8 * 1024 * 1024)
                     .build()
             }
             .build()
