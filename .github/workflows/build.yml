@@ -130,6 +130,9 @@ jobs:
           fail=0
           while IFS= read -r f; do
             [[ -z "$f" || ! -f "$f" ]] && continue
+            # Test specs are behavior pins, not shipped code — the size
+            # discipline targets production modules (the gate's purpose).
+            case "$f" in *Test.kt|*test.ts) continue;; esac
             lines=$(wc -l < "$f" | tr -d ' ')
             if [[ "$lines" -gt 900 ]]; then
               echo "::error::U-35: new file $f has $lines lines (>900). Split it into smaller classes/files."

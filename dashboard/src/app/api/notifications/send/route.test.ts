@@ -21,7 +21,7 @@ vi.mock("@/lib/security", async (importOriginal) => {
     ...actual,
     consumeRateLimit: vi.fn(),
   };
-}));
+});
 
 /** Fake broadcast fleet: collectionGroup("devices").select("token").limit(n). */
 function fakeDb(deviceTokens: string[]) {
