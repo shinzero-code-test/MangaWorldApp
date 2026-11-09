@@ -146,6 +146,15 @@ class MigrationDeviceTest {
             execSQL("INSERT INTO favorites (mangaId, slug, title, coverUrl, sourceId, addedAt, readChapters, totalChapters) VALUES ('m3','s3','T3','https://example.com/c.jpg','hijala',3,0,0)")
             close()
         }
+        val steps = listOf(
+            8 to MangaDatabase.MIGRATION_8_9,
+            9 to MangaDatabase.MIGRATION_9_10,
+            10 to MangaDatabase.MIGRATION_10_11,
+            11 to MangaDatabase.MIGRATION_11_12,
+            12 to MangaDatabase.MIGRATION_12_13,
+            13 to MangaDatabase.MIGRATION_13_14,
+            14 to MangaDatabase.MIGRATION_14_15
+        )
         for ((from, mig) in steps) {
             // MigrationTestHelper: the DB file is NAMED by the database name,
             // not versioned — `runMigrationsAndValidate("mig8", from+1, ...)`
