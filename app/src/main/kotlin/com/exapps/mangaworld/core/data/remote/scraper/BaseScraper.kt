@@ -113,7 +113,8 @@ abstract class BaseScraperImpl(
             // the internal CancellableContinuation overload (kotlinx 1.8+ marks
             // the latter internal: currentCoroutineContext().invokeOnCancellation
             // does not compile from app code).
-            currentCoroutineContext()[kotlinx.coroutines.Job]?.invokeOnCancellation { runCatching { call.cancel() } }
+            currentCoroutineContext()[kotlinx.coroutines.Job]
+                ?.invokeOnCompletion { cause -> if (cause is CancellationException) runCatching { call.cancel() } }
             val response = call.execute()
             val body: String
             val code: Int
