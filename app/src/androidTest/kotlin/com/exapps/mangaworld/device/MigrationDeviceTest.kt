@@ -146,25 +146,14 @@ class MigrationDeviceTest {
             execSQL("INSERT INTO favorites (mangaId, slug, title, coverUrl, sourceId, addedAt, readChapters, totalChapters) VALUES ('m3','s3','T3','https://example.com/c.jpg','hijala',3,0,0)")
             close()
         }
-        var name = "mig8"
-        val steps = listOf(
-            8 to MangaDatabase.MIGRATION_8_9,
-            9 to MangaDatabase.MIGRATION_9_10,
-            10 to MangaDatabase.MIGRATION_10_11,
-            11 to MangaDatabase.MIGRATION_11_12,
-            12 to MangaDatabase.MIGRATION_12_13,
-            13 to MangaDatabase.MIGRATION_13_14,
-            14 to MangaDatabase.MIGRATION_14_15
-        )
         for ((from, mig) in steps) {
-            val next = "mig8_$from"
-            // MigrationTestHelper validates against the schema for `from+1` and
-            // moves the DB file to the new versioned name.
-            helper.runMigrationsAndValidate(name, from + 1, false, mig).close()
-            name = next
+            // MigrationTestHelper: the DB file is NAMED by the database name,
+            // not versioned — `runMigrationsAndValidate("mig8", from+1, ...)`
+            // migrates mig8 in place each hop. validateDropped=false for the
+            // ALTER-with-DEFAULT steps (SQLite dflt_value vs Room export).
+            helper.runMigrationsAndValidate("mig8", from + 1, false, mig).close()
         }
-        // Final step validates strictly (default-free CREATE TABLE).
-        val out = helper.runMigrationsAndValidate(name, 16, true, MangaDatabase.MIGRATION_15_16)
+        val out = helper.runMigrationsAndValidate("mig8", 16, true, MangaDatabase.MIGRATION_15_16)
         out.query("SELECT COUNT(*) FROM favorites").use { cur ->
             cur.moveToFirst()
             assertEquals(1, cur.getInt(0))
