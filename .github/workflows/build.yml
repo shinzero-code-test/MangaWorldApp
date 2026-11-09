@@ -989,8 +989,11 @@ jobs:
           # carries the per-signer digest lines we grep. (First failure was
           # `2>/dev/null` silently eating an empty verbose stream under
           # pipefail, and the bare `apksigner` lookup failing on the PATH.)
+          # The extraction pipeline must NEVER fail the step via pipefail:
+          # no-match (grep exit 1) would otherwise make `set -e` abort at the
+          # assignment — masking everything. `|| true` first, diagnose after.
           actual_fingerprint=$("$APKSIGNER" verify --print-certs "${apks[0]}" 2>/dev/null \
-            | grep -oE "([0-9A-Fa-f]{2}:)+[0-9A-Fa-f]{2}" | tail -1 | tr -d ':')
+            | grep -oE "([0-9A-Fa-f]{2}:)+[0-9A-Fa-f]{2}" | tail -1 | tr -d ':') || true
           echo "release cert SHA-256: ${actual_fingerprint:-<empty>}"
           if [[ -z "$actual_fingerprint" ]]; then
             echo "Could not extract the certificate fingerprint (apksigner found nothing)." >&2
