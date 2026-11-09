@@ -966,6 +966,7 @@ jobs:
         # enforce. A set-but-mismatched secret still fails hard.
         run: |
           set -euo pipefail
+          set -x
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
           shopt -s nullglob
           apks=(app/build/outputs/apk/release/*universal*.apk)
