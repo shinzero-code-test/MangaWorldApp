@@ -168,7 +168,7 @@ class DownloadEngineTest {
             }.also { if (it == 1) publish() }
 
         // Daos.kt: UPDATE ... SET failureNotified = 1 WHERE failureNotified = 0
-        override suspend fun markFailureNotified(id: String, updatedAt: Long = System.currentTimeMillis()): Int =
+        override suspend fun markFailureNotified(id: String, updatedAt: Long): Int =
             synchronized(lock) {
             val current = rows[id]
             if (current == null || current.failureNotified) return@synchronized 0
@@ -243,7 +243,7 @@ class DownloadEngineTest {
         }
 
         /** Daos.kt synchronizeOutcomeCounts: recount terminal tasks for the batch. */
-        override suspend fun synchronizeOutcomeCounts(id: String, updatedAt: Long = System.currentTimeMillis()) {
+        override suspend fun synchronizeOutcomeCounts(id: String, updatedAt: Long) {
             val tasks = allTasks().filter { it.batchId == id }
             synchronized(lock) {
                 val current = rows[id] ?: return
@@ -256,7 +256,7 @@ class DownloadEngineTest {
         }
 
         /** Daos.kt claimTerminalNotification: atomic 0→1 once counts reach the total. */
-        override suspend fun claimTerminalNotification(id: String, updatedAt: Long = System.currentTimeMillis()): Int =
+        override suspend fun claimTerminalNotification(id: String, updatedAt: Long): Int =
             synchronized(lock) {
                 val current = rows[id] ?: return@synchronized 0
                 if (current.completionNotified) return@synchronized 0
@@ -297,7 +297,7 @@ class DownloadEngineTest {
         }
 
         // Daos.kt: targeted UPDATE downloadedChapters (never whole-entity).
-        override suspend fun updateChapterCount(mangaId: String, count: Int, now: Long = System.currentTimeMillis()) {
+        override suspend fun updateChapterCount(mangaId: String, count: Int, now: Long) {
             synchronized(lock) { rows[mangaId]?.let { rows[mangaId] = it.copy(downloadedChapters = count, lastUpdatedAt = now) } }
             publish()
         }
