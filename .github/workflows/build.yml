@@ -904,11 +904,6 @@ jobs:
         # enforce. A set-but-mismatched secret still fails hard.
         run: |
           set -euo pipefail
-          if [[ -z "${RELEASE_CERT_SHA256:-}" ]]; then
-            echo "::warning::RELEASE_CERT_SHA256 is not set — fingerprint check SKIPPED. Set the secret to enforce cert gating (U-02)."
-            echo "verified=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
           shopt -s nullglob
           apks=(app/build/outputs/apk/release/*universal*.apk)
@@ -918,14 +913,20 @@ jobs:
           fi
           # NOTE (2026-11-09): keytool -printcert CANNOT read v2/v3-scheme-only
           # APKs ("Not a signed jar file") — use apksigner (present in every
-          # Android SDK build-tools dir) and already verified by Stage-1 runs
-          # that keytool never sees them. The digest line is public data.
+          # Android SDK build-tools dir). The digest line is public data and is
+          # printed unconditionally so the fingerprint is always inspectable
+          # (the RELEASE_CERT_SHA256 secret fingerprints the SAME cert).
           actual_fingerprint=$(apksigner verify --print-certs --verbose "${apks[0]}" 2>/dev/null \
             | grep -iE "SHA-256 digest of the certificate|Signer #[0-9]+ certificate SHA-256 digest" | head -1 | awk -F': ' '{print $2}' | tr -d ':')
           echo "release cert SHA-256: ${actual_fingerprint:-<empty>}"
           if [[ -z "$actual_fingerprint" ]]; then
             echo "Could not extract the certificate fingerprint (apksigner found nothing)." >&2
             exit 1
+          fi
+          if [[ -z "${RELEASE_CERT_SHA256:-}" ]]; then
+            echo "::warning::RELEASE_CERT_SHA256 is not set — fingerprint check passes WITH this warning (U-02: set the secret to enforce cert gating). Actual: ${actual_fingerprint}"
+            echo "verified=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           expected_fingerprint=${RELEASE_CERT_SHA256//:/}
           if [[ "${actual_fingerprint^^}" != "${expected_fingerprint^^}" ]]; then
