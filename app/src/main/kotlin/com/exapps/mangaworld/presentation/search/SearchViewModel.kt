@@ -269,10 +269,12 @@ internal fun parseSearchHistory(json: String): List<String> {
         }
     } catch (_: Exception) {
         // Legacy Kotlin List.toString() format: ["query one", "query, two"].
-        // Unquoted legacy entries are split on commas as before; quoted ones
-        // keep their commas only when the whole payload parsed as JSON above.
+        // Garbage that is neither a JSON array nor a bracketed list must not
+        // leak through as "history" — treat it as empty.
+        val trimmedValue = trimmed
+        if (!trimmedValue.startsWith("[") || !trimmedValue.endsWith("]")) return emptyList()
         try {
-            val cleaned = trimmed.removePrefix("[").removeSuffix("]")
+            val cleaned = trimmedValue.removePrefix("[").removeSuffix("]")
             if (cleaned.isBlank()) return emptyList()
             // Split on ", " (List.toString separator) rather than bare "," so
             // queries containing commas survive the legacy migration path.

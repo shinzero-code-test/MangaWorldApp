@@ -123,7 +123,10 @@ describe("POST /api/auth/2fa/setup", () => {
   });
 
   it("refuses a session without an authTime with 403", async () => {
-    mockSessionUser({}, undefined as unknown as number);
+    // authTime travels via overrides (the harness' second positional carries
+    // a `Date.now()` default for undefined — the "missing" shape must be
+    // forced through overrides, as the spread lands last).
+    mockSessionUser({ authTime: undefined } as never);
     vi.mocked(getAdminDb).mockReturnValue(fakeDb(undefined).db as never);
     const res = await POST();
     expect(res.status).toBe(403);
