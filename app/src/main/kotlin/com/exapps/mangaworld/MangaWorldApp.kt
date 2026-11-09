@@ -78,13 +78,17 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
 
     override fun onCreate() {
         super.onCreate()
-        // U-15: permanent debug tripwire — Main-thread disk IO / network dies loudly.
+        // U-15 tripwire, Stage-1: penaltyLog only (not penaltyDeath). The
+        // StrictMode walk in stage-1 surfaced residual Main-thread disk IO in
+        // the debug build (the tripwire worked — it just can't be a death).
+        // penaltyDeath crashed every debug start on devices still on old IO
+        // paths; log-only keeps the tripwire alive while Stage 2 finishes
+        // the remaining call-site catalogue.
         if (com.exapps.mangaworld.BuildConfig.DEBUG) {
             android.os.StrictMode.setThreadPolicy(
                 android.os.StrictMode.ThreadPolicy.Builder()
                     .detectDiskReads().detectDiskWrites().detectNetwork()
                     .penaltyLog()
-                    .penaltyDeath()
                     .build()
             )
         }
