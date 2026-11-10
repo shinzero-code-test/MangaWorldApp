@@ -992,8 +992,12 @@ jobs:
           # The extraction pipeline must NEVER fail the step via pipefail:
           # no-match (grep exit 1) would otherwise make `set -e` abort at the
           # assignment — masking everything. `|| true` first, diagnose after.
+          # apksigner prints the digest with OR without colons depending on
+          # the build-tools version ("SHA-256 digest: aabb…" vs "aa:bb:…"),
+          # so take whatever follows the label and strip separators.
           actual_fingerprint=$("$APKSIGNER" verify --print-certs "${apks[0]}" 2>/dev/null \
-            | grep -oE "([0-9A-Fa-f]{2}:)+[0-9A-Fa-f]{2}" | tail -1 | tr -d ':') || true
+            | grep -i "SHA-256 digest" | head -1 \
+            | sed 's/.*digest:[[:space:]]*//' | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]') || true
           echo "release cert SHA-256: ${actual_fingerprint:-<empty>}"
           if [[ -z "$actual_fingerprint" ]]; then
             echo "Could not extract the certificate fingerprint (apksigner found nothing)." >&2
