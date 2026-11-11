@@ -8,6 +8,7 @@ import androidx.core.content.getSystemService
 import com.exapps.mangaworld.MangaWorldApp
 import com.exapps.mangaworld.core.data.NotificationCenterStore
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import dagger.hilt.android.AndroidEntryPoint
@@ -35,7 +36,7 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         serviceScope.launch {
-            runCatching { messagingRegistrar.onTokenRefreshed(token) }
+            suspendRunCatching { messagingRegistrar.onTokenRefreshed(token) }
         }
     }
 
@@ -58,7 +59,7 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
         // Granular community toggles (settings screen): drop muted categories
         // before building anything. Types come from the dashboard push routes.
         serviceScope.launch {
-            runCatching {
+            suspendRunCatching {
                 val settings = settingsRepository.getAppSettings().first()
                 if (!isPushAllowed(type, settings)) return@launch
                 showNotification(message, title, body, type, mangaId, imageUrl)
@@ -155,7 +156,7 @@ class MangaWorldFirebaseMessagingService : FirebaseMessagingService() {
      */
     private fun logToNotificationCenter(title: String, body: String, mangaId: String?) {
         serviceScope.launch {
-            runCatching {
+            suspendRunCatching {
                 NotificationCenterStore.update(this@MangaWorldFirebaseMessagingService) { arr ->
                     val obj = org.json.JSONObject().apply {
                         put("id", "push_${System.currentTimeMillis()}_${(title + body).hashCode()}")

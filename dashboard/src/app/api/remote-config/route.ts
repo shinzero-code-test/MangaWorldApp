@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
 import { getAdminRemoteConfig } from "@/lib/firebase-admin";
-import { validateRemoteConfigParams, validateSourceBaseUrlParams } from "@/lib/validate";
+import { validateRemoteConfigParams, validateSourceDomainParams } from "@/lib/validate";
 import { genericErrorResponse, logSecurityEvent } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
@@ -52,8 +52,10 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
     // U-30: source base URLs additionally need https + origin-only +
-    // per-id allow-list (non-allow-listed host → 4xx, nothing published).
-    const urlValidation = validateSourceBaseUrlParams(parameters);
+    // per-id allow-list, and the API-host overrides (`source_<id>_api_host`)
+    // need the same per-id gate (non-allow-listed host → 4xx, nothing
+    // published). Both halves run through one entry point.
+    const urlValidation = validateSourceDomainParams(parameters);
     if (!urlValidation.ok) {
       return NextResponse.json({ error: urlValidation.error }, { status: 400 });
     }

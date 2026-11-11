@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.exapps.mangaworld.core.data.WidgetDataRepository
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 
@@ -17,7 +18,11 @@ class RemoteWidgetRefreshWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
-        return runCatching {
+        // U-13: both calls below are suspend. `suspendRunCatching` rethrows a
+        // CancellationException instead of turning a cancelled refresh into a
+        // retry/failure verdict (the old `runCatching` caught it and only
+        // rethrew it later, after the fan-out had already been abandoned).
+        return suspendRunCatching {
             widgetDataRepository.refreshRemoteSnapshot()
             widgetShortcutCoordinator.refreshWidgetsAndShortcuts()
             Result.success()

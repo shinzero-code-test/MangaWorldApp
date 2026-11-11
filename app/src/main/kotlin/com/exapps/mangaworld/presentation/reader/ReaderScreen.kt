@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.presentation.reader
 import com.exapps.mangaworld.R
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import androidx.compose.ui.res.stringResource
 
 import android.app.Activity
@@ -854,7 +855,7 @@ private fun DualPageReader(
         if (spreadPages.isEmpty()) return@LaunchedEffect
         val target = spreadForGlobal(currentPage.coerceIn(0, maxOf(0, pages.size - 1)))
         if (target != pagerState.currentPage) {
-            runCatching {
+            suspendRunCatching {
                 if (kotlin.math.abs(target - pagerState.currentPage) > 2) pagerState.scrollToPage(target)
                 else pagerState.animateScrollToPage(target)
             }
@@ -869,7 +870,7 @@ private fun DualPageReader(
         if (spreadPages.isEmpty()) return@LaunchedEffect
         val target = spreadForGlobal(currentPage.coerceIn(0, maxOf(0, pages.size - 1)))
         if (target != pagerState.currentPage) {
-            runCatching { pagerState.scrollToPage(target) }
+            suspendRunCatching { pagerState.scrollToPage(target) }
         }
     }
 
@@ -939,7 +940,7 @@ private fun HorizontalReader(
         if (orderedPages.isEmpty()) return@LaunchedEffect
         val target = pagerIndexForGlobal(currentPage.coerceIn(0, maxOf(0, pages.size - 1)))
         if (target != pagerState.currentPage) {
-            runCatching {
+            suspendRunCatching {
                 if (kotlin.math.abs(target - pagerState.currentPage) > 2) pagerState.scrollToPage(target)
                 else pagerState.animateScrollToPage(target)
             }
@@ -953,7 +954,7 @@ private fun HorizontalReader(
         if (orderedPages.isEmpty()) return@LaunchedEffect
         val target = pagerIndexForGlobal(currentPage.coerceIn(0, maxOf(0, pages.size - 1)))
         if (target != pagerState.currentPage) {
-            runCatching { pagerState.scrollToPage(target) }
+            suspendRunCatching { pagerState.scrollToPage(target) }
         }
     }
 

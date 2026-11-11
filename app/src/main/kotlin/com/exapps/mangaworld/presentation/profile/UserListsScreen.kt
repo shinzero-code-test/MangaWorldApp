@@ -58,6 +58,7 @@ import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.core.firebase.CloudinaryUploader
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.model.CustomUserList
 import com.exapps.mangaworld.domain.model.CustomUserListItem
 import com.exapps.mangaworld.domain.repository.CommunityRepository
@@ -95,7 +96,7 @@ class UserListsViewModel @Inject constructor(
     fun saveList(listId: String?, name: String, description: String, coverUrl: String, rating: Float, genres: List<String>, isPublic: Boolean) {
         viewModelScope.launch {
             val existing = listId?.let { id -> lists.value.find { it.id == id } }
-            val createdId = runCatching {
+            val createdId = suspendRunCatching {
                 communityRepository.createOrUpdateList(listId, name, description, coverUrl, rating, genres, isPublic)
             }.getOrNull() ?: return@launch
             if (existing != null && existing.coverUrl != coverUrl && existing.coverUrl.isNotBlank()) {
@@ -107,14 +108,14 @@ class UserListsViewModel @Inject constructor(
     fun deleteList(id: String) {
         viewModelScope.launch {
             val list = lists.value.find { it.id == id }
-            if (runCatching { communityRepository.deleteList(id) }.isSuccess) {
+            if (suspendRunCatching { communityRepository.deleteList(id) }.isSuccess) {
                 list?.coverUrl?.takeIf { it.isNotBlank() }
                     ?.let { url -> cloudinaryUploader.extractPublicId(url) }
                     ?.let { id -> cloudinaryUploader.deleteImage(id) }
             }
         }
     }
-    fun removeManga(listId: String, mangaId: String) { viewModelScope.launch { runCatching { communityRepository.removeMangaFromList(listId, mangaId) } } }
+    fun removeManga(listId: String, mangaId: String) { viewModelScope.launch { suspendRunCatching { communityRepository.removeMangaFromList(listId, mangaId) } } }
 
     suspend fun uploadCover(uri: Uri): CloudinaryUploader.UploadResult? {
         return cloudinaryUploader.uploadImage(uri, assetType = "list-cover")

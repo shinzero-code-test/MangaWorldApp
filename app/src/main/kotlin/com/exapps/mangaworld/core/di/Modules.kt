@@ -4,14 +4,25 @@ import android.content.Context
 import androidx.room.Room
 import com.exapps.mangaworld.BuildConfig
 import com.exapps.mangaworld.core.data.*
+import com.exapps.mangaworld.core.data.download.DownloadNotifier
+import com.exapps.mangaworld.core.data.download.DownloadWorkScheduler
+import com.exapps.mangaworld.core.data.download.NotificationDownloadNotifier
+import com.exapps.mangaworld.core.data.download.WorkManagerDownloadWorkScheduler
 import com.exapps.mangaworld.core.data.local.MangaDatabase
 import com.exapps.mangaworld.core.data.local.dao.*
 import com.exapps.mangaworld.core.data.remote.scraper.*
 import com.exapps.mangaworld.core.firebase.FirebaseCommunityRepository
 import com.exapps.mangaworld.core.firebase.FirebaseSecurityRepository
 import com.exapps.mangaworld.core.firebase.FavoriteDigestScheduler
+import com.exapps.mangaworld.core.firebase.work.CommunityWriteExecutor
+import com.exapps.mangaworld.core.firebase.work.CommunityWriteOutbox
+import com.exapps.mangaworld.core.firebase.work.CommunityWriteScheduler
+import com.exapps.mangaworld.core.firebase.work.FirestoreCommunityWriteExecutor
+import com.exapps.mangaworld.core.firebase.work.SharedPreferencesCommunityWriteOutbox
+import com.exapps.mangaworld.core.firebase.work.WorkManagerCommunityWriteScheduler
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.domain.repository.*
+import com.google.firebase.firestore.FirebaseFirestore
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -298,4 +309,56 @@ object WorkManagerModule {
     @Singleton
     fun provideWorkManager(@ApplicationContext context: Context): WorkManager =
         WorkManager.getInstance(context)
+}
+
+/**
+ * U-18e: the durable community-write path. The outbox, the executor and the
+ * scheduler are behind interfaces so the repository can enqueue a write
+ * without touching WorkManager directly and the retry policy stays
+ * unit-testable. Nothing else changes here.
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+object CommunityWriteModule {
+
+    @Provides
+    @Singleton
+    fun provideCommunityWriteOutbox(
+        @ApplicationContext context: Context
+    ): CommunityWriteOutbox = SharedPreferencesCommunityWriteOutbox(context)
+
+    @Provides
+    @Singleton
+    fun provideCommunityWriteExecutor(
+        firestore: FirebaseFirestore
+    ): CommunityWriteExecutor = FirestoreCommunityWriteExecutor(firestore)
+
+    @Provides
+    @Singleton
+    fun provideCommunityWriteScheduler(
+        workManager: WorkManager
+    ): CommunityWriteScheduler = WorkManagerCommunityWriteScheduler(workManager)
+}
+
+/**
+ * U-33: the download queue talks to WorkManager and to the notification
+ * manager through interfaces so its state machine is executable in unit
+ * tests (both APIs are stubs-only on the JVM). Nothing else changes here —
+ * this module only binds the two seams.
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+object DownloadWorkModule {
+
+    @Provides
+    @Singleton
+    fun provideDownloadWorkScheduler(
+        workManager: WorkManager
+    ): DownloadWorkScheduler = WorkManagerDownloadWorkScheduler(workManager)
+
+    @Provides
+    @Singleton
+    fun provideDownloadNotifier(
+        @ApplicationContext context: Context
+    ): DownloadNotifier = NotificationDownloadNotifier(context)
 }

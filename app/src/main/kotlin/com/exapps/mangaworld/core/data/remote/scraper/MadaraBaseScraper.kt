@@ -80,7 +80,7 @@ open class MadaraBaseScraper(
         var cfException: CloudflareChallengeException? = null
         for (path in pathsToTry) {
             val tryUrl = "${resolvedBaseUrl}$path$slug/"
-            val tryDoc = runCatching { fetchDocument(tryUrl) }
+            val tryDoc = suspendRunCatching { fetchDocument(tryUrl) }
                 .onFailure { e -> if (cfException == null && e is CloudflareChallengeException) cfException = e }
                 .getOrNull()
             if (tryDoc != null) {
@@ -95,7 +95,7 @@ open class MadaraBaseScraper(
         // Last resort: try the slug directly on the base URL (for hijala-like sites)
         if (doc == null) {
             val bareUrl = "${resolvedBaseUrl}/$slug/"
-            val bareDoc = runCatching { fetchDocument(bareUrl) }
+            val bareDoc = suspendRunCatching { fetchDocument(bareUrl) }
                 .onFailure { e -> if (cfException == null && e is CloudflareChallengeException) cfException = e }
                 .getOrNull()
             if (bareDoc != null && isMangaDetailPage(bareDoc)) {
@@ -247,7 +247,7 @@ open class MadaraBaseScraper(
         } else {
             "${resolvedBaseUrl}${listPath}page/$page/?s=$encoded"
         }
-        val doc2 = runCatching { fetchDocument(url2) }.getOrNull()
+        val doc2 = suspendRunCatching { fetchDocument(url2) }.getOrNull()
         if (doc2 != null) {
             val results2 = parseMangaGrid(doc2)
             if (results2.isNotEmpty()) return@suspendRunCatching results2

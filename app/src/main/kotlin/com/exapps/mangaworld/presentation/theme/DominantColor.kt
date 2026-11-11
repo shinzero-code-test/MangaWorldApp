@@ -14,6 +14,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.palette.graphics.Palette
 import coil.imageLoader
 import coil.request.ImageRequest
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -26,7 +27,7 @@ fun rememberDominantColor(data: Any?): Color? {
             null
         } else {
             withContext(Dispatchers.IO) {
-                runCatching {
+                suspendRunCatching {
                     val result = context.imageLoader.execute(
                         ImageRequest.Builder(context)
                             .data(data)
@@ -34,7 +35,7 @@ fun rememberDominantColor(data: Any?): Color? {
                             .size(300, 300)
                             .build()
                     )
-                    val bitmap = result.drawable?.toBitmap(width = 300, height = 300) ?: return@runCatching null
+                    val bitmap = result.drawable?.toBitmap(width = 300, height = 300) ?: return@suspendRunCatching null
                     bitmap.extractDominantColor()
                 }.getOrNull()
             }

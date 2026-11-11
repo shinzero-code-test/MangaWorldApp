@@ -163,7 +163,7 @@ class FirebaseSecurityRepository @Inject constructor(
         val sessions = firestore.collection("users").document(uid).collection("sessions")
         val currentId = securityPrefs.getString("session_id", null)
         // Cut push delivery to the linked device, then flag the session.
-        val deviceId = runCatching {
+        val deviceId = suspendRunCatching {
             sessions.document(id).get().await().getString("deviceId")
         }.getOrNull()
         if (!deviceId.isNullOrBlank()) {
@@ -257,7 +257,7 @@ class FirebaseSecurityRepository @Inject constructor(
         val createdAt = existing?.getLong("createdAt") ?: now
         // Device linkage mirrors FirebaseMessagingRegistrar's doc-id scheme
         // (sha256(token).take(32)) so revoking a session can cut its pushes.
-        val deviceId = runCatching { messaging.token.await() }
+        val deviceId = suspendRunCatching { messaging.token.await() }
             .getOrNull()?.sha256()?.take(32)
         val payload = mutableMapOf<String, Any?>(
             "createdAt" to createdAt,

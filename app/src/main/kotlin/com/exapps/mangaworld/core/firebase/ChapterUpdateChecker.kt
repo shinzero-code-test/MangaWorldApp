@@ -19,6 +19,7 @@ import com.exapps.mangaworld.MangaWorldApp
 import com.exapps.mangaworld.core.data.local.dao.FavoriteDao
 import com.exapps.mangaworld.core.data.local.dao.ReadingHistoryDao
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -331,7 +332,7 @@ class FavoriteDigestScheduler @Inject constructor(
             .build()
 
         // One-time orphan cleanup from the pre-#9 dual-worker setup.
-        runCatching {
+        suspendRunCatching {
             WorkManager.getInstance(context).cancelUniqueWork(LEGACY_TAG).await()
         }
 

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Harness manifest for the macrobenchmark module.
+
+  AGP adds the <instrumentation> element (self-instrumenting: the target is
+  this APK's own package, NOT the app under test — see
+  experimentalProperties["android.experimental.self-instrumenting"] in
+  build.gradle.kts).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Package visibility (API 30+): the harness must be able to see the app
+      under test to read its install state / launch it.
+    -->
+    <queries>
+        <package android:name="com.exapps.mangaworld" />
+    </queries>
+
+</manifest>

@@ -150,6 +150,23 @@ describe("PUT /api/remote-config", () => {
     expect(rc.publishTemplate).not.toHaveBeenCalled();
   });
 
+  it("gates the API-host overrides too (U-30 residual)", async () => {
+    const { rc } = fakeRc(structuredClone(TEMPLATE));
+    vi.mocked(getAdminRemoteConfig).mockReturnValue(rc as never);
+
+    // Arbitrary host — the same content-spoofing channel as the base URL.
+    expect((await PUT(req({ parameters: { source_azora_api_host: "evil.example.com" } }))).status).toBe(400);
+    // Another source's API host.
+    expect((await PUT(req({ parameters: { source_azora_api_host: "api.mangasid.com" } }))).status).toBe(400);
+    // Unknown id.
+    expect((await PUT(req({ parameters: { source_nope_api_host: "api.example.com" } }))).status).toBe(400);
+    expect(rc.publishTemplate).not.toHaveBeenCalled();
+
+    // The allow-listed hosts publish normally.
+    expect((await PUT(req({ parameters: { source_azora_api_host: "api.azorafly.com" } }))).status).toBe(200);
+    expect((await PUT(req({ parameters: { source_meshmanga_api_host: "appswat.com" } }))).status).toBe(200);
+  });
+
   it("returns 401/403 without the role", async () => {
     mockRoleUnauthorized();
     expect((await PUT(req({ parameters: { a: 1 } }))).status).toBe(401);

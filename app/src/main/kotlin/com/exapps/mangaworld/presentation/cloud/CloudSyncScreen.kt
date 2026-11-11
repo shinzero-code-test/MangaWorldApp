@@ -36,6 +36,7 @@ import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.exapps.mangaworld.core.firebase.FirebaseSyncManager
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.model.CloudRestorePreview
 import com.exapps.mangaworld.domain.model.CloudRestoreStrategy
 import com.exapps.mangaworld.domain.repository.CommunityRepository
@@ -92,14 +93,14 @@ class CloudSyncViewModel @Inject constructor(
         if (idToken.isNullOrBlank()) { _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_no_token)); return }
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_signing_in))
-            runCatching {
+            suspendRunCatching {
                 val uid = sessionManager.signInWithGoogleIdToken(idToken)
                 if (uid != null) {
-                    runCatching { communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid) }
+                    suspendRunCatching { communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid) }
                 }
                 // FS-3: converge before uploading — a blind push would copy the
                 // previous (guest) library into this account's cloud tree.
-                runCatching { syncManager.mergeRemoteSnapshot() }
+                suspendRunCatching { syncManager.mergeRemoteSnapshot() }
                 syncManager.pushLocalSnapshot(force = true); remoteConfigManager.refresh()
             }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_signed_in_synced)) }
@@ -110,13 +111,13 @@ class CloudSyncViewModel @Inject constructor(
     fun signInWithEmail(email: String, password: String) {
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_signing_in))
-            runCatching {
+            suspendRunCatching {
                 val uid = sessionManager.signInWithEmail(email, password)
                 if (uid != null) {
-                    runCatching { communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid) }
+                    suspendRunCatching { communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid) }
                 }
                 // FS-3: converge before uploading (see above).
-                runCatching { syncManager.mergeRemoteSnapshot() }
+                suspendRunCatching { syncManager.mergeRemoteSnapshot() }
                 syncManager.pushLocalSnapshot(force = true)
             }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_signed_in)) }
@@ -127,13 +128,13 @@ class CloudSyncViewModel @Inject constructor(
     fun signUpWithEmail(email: String, password: String) {
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_creating))
-            runCatching {
+            suspendRunCatching {
                 val uid = sessionManager.signUpWithEmail(email, password, displayName = "", username = "")
                 if (uid != null) {
-                    runCatching { communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid) }
+                    suspendRunCatching { communityRepository.ensureSocialProfile(sessionManager.currentUser(), uid) }
                 }
                 // FS-3: converge before uploading (see above).
-                runCatching { syncManager.mergeRemoteSnapshot() }
+                suspendRunCatching { syncManager.mergeRemoteSnapshot() }
                 syncManager.pushLocalSnapshot(force = true)
             }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_created_synced)) }
@@ -144,7 +145,7 @@ class CloudSyncViewModel @Inject constructor(
     fun syncNow() {
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_uploading))
-            runCatching { syncManager.pushLocalSnapshot(force = true) }
+            suspendRunCatching { syncManager.pushLocalSnapshot(force = true) }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_uploaded)) }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_upload_failed)) }
         }
@@ -153,7 +154,7 @@ class CloudSyncViewModel @Inject constructor(
     fun restoreFromCloud() {
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_fetching))
-            runCatching { syncManager.previewRemoteSnapshot() }
+            suspendRunCatching { syncManager.previewRemoteSnapshot() }
                 .onSuccess { preview -> _state.value = CloudSyncUiState(restorePreview = preview, statusMessage = context.getString(R.string.cloud_sync_review_conflicts)) }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_preview_failed)) }
         }
@@ -162,7 +163,7 @@ class CloudSyncViewModel @Inject constructor(
     fun applyRestore(strategy: CloudRestoreStrategy) {
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_applying))
-            runCatching { syncManager.applyRemoteRestore(strategy) }
+            suspendRunCatching { syncManager.applyRemoteRestore(strategy) }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_applied)) }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_restore_failed)) }
         }
@@ -172,18 +173,18 @@ class CloudSyncViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_saving_profile))
             val currentProfile = profile.value
-            runCatching { communityRepository.upsertProfile(username, bio, isPublic, currentProfile?.avatarUrl, displayName = currentProfile?.displayName ?: "") }
+            suspendRunCatching { communityRepository.upsertProfile(username, bio, isPublic, currentProfile?.avatarUrl, displayName = currentProfile?.displayName ?: "") }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_profile_saved)) }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_profile_failed)) }
         }
     }
 
-    fun markNotificationRead(id: String) { viewModelScope.launch { runCatching { communityRepository.markNotificationRead(id) } } }
+    fun markNotificationRead(id: String) { viewModelScope.launch { suspendRunCatching { communityRepository.markNotificationRead(id) } } }
 
     fun signOut() {
         viewModelScope.launch {
             _state.value = CloudSyncUiState(busy = true, statusMessage = context.getString(R.string.cloud_sync_signing_out))
-            runCatching { sessionManager.signOut() }
+            suspendRunCatching { sessionManager.signOut() }
                 .onSuccess { _state.value = CloudSyncUiState(statusMessage = context.getString(R.string.cloud_sync_signed_out)) }
                 .onFailure { e -> _state.value = CloudSyncUiState(errorMessage = context.getString(R.string.cloud_sync_sign_out_failed)) }
         }

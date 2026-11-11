@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.exapps.mangaworld.core.source.plugins.PluginRowState
 import com.exapps.mangaworld.core.source.plugins.SourceEngine
 import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.presentation.theme.MangaColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,7 +61,7 @@ fun SourcesScreen(
                 ?.takeIf { it.isNotBlank() }
                 ?.let { runCatching { context.getString(notice.resId, it) }.getOrNull() }
                 ?: context.getString(notice.resId)
-            runCatching { snackbar.showSnackbar(text) }
+            suspendRunCatching { snackbar.showSnackbar(text) }
         }
     }
 

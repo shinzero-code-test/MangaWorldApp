@@ -1,5 +1,6 @@
 package com.exapps.mangaworld.core.firebase
 
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
@@ -32,7 +33,10 @@ internal fun <T> Flow<T>.withStarvationFallback(
     launch {
         delay(timeoutMs)
         if (settled.compareAndSet(false, true)) {
-            runCatching { fallback() }
+            // U-13: cancellation-aware — a cancelled rescue fetch must not be
+            // reported as a starvation failure (the listener may simply have
+            // been torn down because the collector went away).
+            suspendRunCatching { fallback() }
                 .onSuccess { trySend(it) }
                 .onFailure { onFallbackError(it) }
         }

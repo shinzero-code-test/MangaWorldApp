@@ -26,6 +26,7 @@ import com.exapps.mangaworld.core.firebase.FavoriteDigestScheduler
 import com.exapps.mangaworld.core.firebase.installAppCheckProvider
 import com.exapps.mangaworld.core.widget.AppShortcutManager
 import com.exapps.mangaworld.core.widget.WidgetRefreshScheduler
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -146,9 +147,13 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
         // Independent launch + first in its own coroutine: the plugin subsystem
         // must never wait on the network.
         applicationScope.launch {
-            runCatching { bundledPluginLoader.bootstrap() }
+            // U-13: every call below is suspend. A bare `runCatching` swallowed
+            // the CancellationException of a torn-down scope, so the work
+            // looked "failed" in the log and the post-cancel side effects kept
+            // running. `suspendRunCatching` rethrows it.
+            suspendRunCatching { bundledPluginLoader.bootstrap() }
                 .onFailure { android.util.Log.w("MangaWorldApp", "Pilot bootstrap failed: ${it.message}") }
-            runCatching { sourceUiMapper.refresh() }
+            suspendRunCatching { sourceUiMapper.refresh() }
                 .onFailure { android.util.Log.w("MangaWorldApp", "Plugin snapshot refresh failed: ${it.message}") }
         }
         applicationScope.launch {
@@ -156,10 +161,10 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
             firebaseStartupCoordinator.initialize()
             // Re-enqueue durable download rows stranded by a crash between the Room write and
             // the WorkManager enqueue; without this they sit "pending" forever.
-            runCatching { downloadQueueManager.recoverOrphanTasks() }
+            suspendRunCatching { downloadQueueManager.recoverOrphanTasks() }
                 .onFailure { android.util.Log.w("MangaWorldApp", "Download recovery failed: ${it.message}") }
             // Bound daily reading-stat maps (no-op when nothing to prune).
-            runCatching { readingStatsStore.pruneOldStats() }
+            suspendRunCatching { readingStatsStore.pruneOldStats() }
             // The pilot bootstrap and the mapper snapshot moved to their own
             // coroutine above: they are local work and must not queue behind
             // the network-bound Firebase startup.
@@ -208,13 +213,13 @@ class MangaWorldApp : Application(), Configuration.Provider, ImageLoaderFactory 
         applicationScope.launch { favoriteDigestScheduler.schedule() }
         // Phase 2B distribution poll (24h ETag-conditional; fail-closed, background).
         applicationScope.launch {
-            runCatching { pluginSyncScheduler.schedule() }
+            suspendRunCatching { pluginSyncScheduler.schedule() }
                 .onFailure { android.util.Log.w("MangaWorldApp", "Plugin sync schedule failed: ${it.message}") }
             // v9.1.1 bootstrap: the periodic worker alone never fires promptly
             // on fresh installs (first run is at the OS's discretion), which
             // left new sources undistributed for days with no user recourse.
             // A stale boot triggers one on-demand sweep; steady state stays quiet.
-            runCatching { pluginSyncScheduler.requestNowIfStale() }
+            suspendRunCatching { pluginSyncScheduler.requestNowIfStale() }
                 .onFailure { android.util.Log.w("MangaWorldApp", "Plugin sync bootstrap failed: ${it.message}") }
         }
 

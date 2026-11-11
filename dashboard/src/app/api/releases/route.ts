@@ -26,8 +26,18 @@ interface GithubRelease {
  * release pipeline publishes APKs/AABs here on every version tag).
  */
 export async function GET() {
+  // The role gate is evaluated OUTSIDE the try/catch that owns the stale
+  // cache fallback: the catch used to swallow "Unauthorized"/"Forbidden"
+  // and answer 200 with the CACHED release list, so an unauthenticated
+  // caller could read the cached payload. The fallback now applies to
+  // upstream failures only.
   try {
     await requireRole("moderator");
+  } catch (error: unknown) {
+    const { body, status } = genericErrorResponse(error);
+    return NextResponse.json(body, { status });
+  }
+  try {
     if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
       return NextResponse.json({ releases: cached.releases });
     }

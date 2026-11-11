@@ -3,6 +3,7 @@ package com.exapps.mangaworld.core.source.script
 import com.exapps.mangaworld.core.source.plugins.PluginManifest
 import com.exapps.mangaworld.core.source.plugins.HostPolicy
 import com.exapps.mangaworld.core.data.remote.scraper.MangaScraper
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.model.Chapter
 import com.exapps.mangaworld.domain.model.ChapterPage
 import com.exapps.mangaworld.domain.model.HomeData
@@ -118,7 +119,21 @@ class ScriptScraper internal constructor(
 
     override suspend fun getGenres(): Result<List<String>> {
         // Optional extension: scripts without `genres` simply have no genre index.
-        val probe = runCatching { hasEntry(ScriptContract.ENTRY_GENRES) }.getOrDefault(false)
+        //
+        // U-13: `hasEntry` is suspend, so the probe used a bare `runCatching`
+        // — a CANCELLED probe was indistinguishable from "no genres
+        // extension" and rendered as an empty index. The cancellation-aware
+        // form rethrows a real cancellation.
+        //
+        // The probe's OWN timeout (`withTimeout` inside [hasEntry]) is a
+        // different condition: it is not the caller's work being cancelled,
+        // so it keeps degrading to "no genre index" exactly as before. Only
+        // the outer job cancellation escapes.
+        val probe = try {
+            suspendRunCatching { hasEntry(ScriptContract.ENTRY_GENRES) }.getOrDefault(false)
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            false
+        }
         if (!probe) return Result.success(emptyList())
         return invoke(ScriptContract.ENTRY_GENRES, mapOf(ARG_BASE to manifest.baseUrl), ::mapGenres)
     }

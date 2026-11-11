@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { existsSync, readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import path from "path";
 import {
   boundedString,
   isPlainObject,
@@ -6,7 +9,11 @@ import {
   isValidFolder,
   validateFirestoreDoc,
   validateRemoteConfigParams,
+  validateSourceApiHostParams,
   validateSourceBaseUrlParams,
+  validateSourceDomainParams,
+  SOURCE_API_HOST_ALLOWLIST,
+  SOURCE_BASE_URL_ALLOWLIST,
 } from "./validate";
 
 // Pure request-body validators for admin mutation endpoints (M-6).
@@ -153,6 +160,103 @@ describe("validateSourceBaseUrlParams (U-30)", () => {
     expect(validateSourceBaseUrlParams({ source_evil_base_url: "https://evil.example" }).ok).toBe(false);
     expect(validateSourceBaseUrlParams({ source_olympus_base_url: "not a url" }).ok).toBe(false);
     expect(validateSourceBaseUrlParams({ source_olympus_base_url: "" }).ok).toBe(false);
+  });
+});
+
+// The 17 shipped source ids. Mirrors the app's BuiltinSourceIds.ALL
+// (app/src/main/kotlin/.../core/source/plugins/BuiltinSourceIds.kt) — the
+// dashboard allow-list and the app's source set must never drift apart, or
+// a legitimate source becomes un-overridable (or an unknown id slips into
+// the allow-list).
+const BUILTIN_SOURCE_IDS = [
+  "olympus",
+  "azora",
+  "starz",
+  "mangasid",
+  "meshmanga",
+  "asq3",
+  "lekmanga",
+  "lekmangaonline",
+  "likemanga",
+  "linkmanga",
+  "mangaleko",
+  "mangalionz",
+  "areascans",
+  "hijala",
+  "lavascans",
+  "stellarsaber",
+  "procomic",
+];
+
+describe("source-domain allow-lists (U-30)", () => {
+  it("covers exactly the 17 shipped source ids", () => {
+    expect(Object.keys(SOURCE_BASE_URL_ALLOWLIST).sort()).toEqual([...BUILTIN_SOURCE_IDS].sort());
+    expect(Object.keys(SOURCE_BASE_URL_ALLOWLIST)).toHaveLength(17);
+  });
+
+  it("matches the app's BuiltinSourceIds.ALL when the app tree is present", () => {
+    // The dashboard is also checked out standalone in some pipelines; the
+    // cross-check is skipped there, but never silently: the pinned list
+    // above is the contract.
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const kotlin = path.resolve(
+      here,
+      "../../../app/src/main/kotlin/com/exapps/mangaworld/core/source/plugins/BuiltinSourceIds.kt",
+    );
+    if (!existsSync(kotlin)) return;
+    const source = readFileSync(kotlin, "utf8");
+    const block = /val ALL: Set<String> = set\(([\s\S]*?)\)/.exec(source);
+    expect(block).not.toBeNull();
+    const ids = [...(block?.[1] ?? "").matchAll(/"([a-z0-9]+)"/g)].map((m) => m[1]).sort();
+    expect(ids).toEqual([...BUILTIN_SOURCE_IDS].sort());
+  });
+
+  it("has no removed source id in either allow-list", () => {
+    // rockmanga died upstream and was removed from the app; a leftover
+    // template default for it would be refused by the allow-list.
+    expect(Object.keys(SOURCE_BASE_URL_ALLOWLIST)).not.toContain("rockmanga");
+    expect(Object.keys(SOURCE_API_HOST_ALLOWLIST)).not.toContain("rockmanga");
+  });
+});
+
+describe("validateSourceApiHostParams (U-30 residual)", () => {
+  it("accepts the three app API hosts (host-only or https://host)", () => {
+    expect(validateSourceApiHostParams({ source_azora_api_host: "api.azorafly.com" }).ok).toBe(true);
+    expect(validateSourceApiHostParams({ source_mangasid_api_host: "api.mangasid.com" }).ok).toBe(true);
+    expect(validateSourceApiHostParams({ source_meshmanga_api_host: "appswat.com" }).ok).toBe(true);
+    expect(validateSourceApiHostParams({ source_azora_api_host: "https://api.azorafly.com" }).ok).toBe(true);
+  });
+
+  it("ignores non-api-host keys (additive gate)", () => {
+    expect(validateSourceApiHostParams({ app_theme: "dark", limit: 10 }).ok).toBe(true);
+    expect(validateSourceApiHostParams({}).ok).toBe(true);
+  });
+
+  it("rejects a host that is not allow-listed for that id", () => {
+    const result = validateSourceApiHostParams({ source_azora_api_host: "evil.example" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/allow-listed/);
+    // Cross-source hosts are refused too.
+    expect(validateSourceApiHostParams({ source_azora_api_host: "api.mangasid.com" }).ok).toBe(false);
+  });
+
+  it("rejects unknown ids, paths, ports, empty values and non-strings", () => {
+    expect(validateSourceApiHostParams({ source_evil_api_host: "evil.example" }).ok).toBe(false);
+    expect(validateSourceApiHostParams({ source_azora_api_host: "api.azorafly.com/v2" }).ok).toBe(false);
+    expect(validateSourceApiHostParams({ source_azora_api_host: "api.azorafly.com:8443" }).ok).toBe(false);
+    expect(validateSourceApiHostParams({ source_azora_api_host: "" }).ok).toBe(false);
+    expect(validateSourceApiHostParams({ source_azora_api_host: 42 }).ok).toBe(false);
+  });
+});
+
+describe("validateSourceDomainParams (the single PUT gate)", () => {
+  it("runs BOTH the base-URL and the API-host gates", () => {
+    expect(validateSourceDomainParams({ source_olympus_base_url: "https://olympustaff.com" }).ok).toBe(true);
+    expect(validateSourceDomainParams({ source_azora_api_host: "api.azorafly.com" }).ok).toBe(true);
+    // A bad base URL is caught …
+    expect(validateSourceDomainParams({ source_olympus_base_url: "https://evil.example" }).ok).toBe(false);
+    // … and so is a bad API host (the half that used to be missing).
+    expect(validateSourceDomainParams({ source_azora_api_host: "evil.example" }).ok).toBe(false);
   });
 });
 

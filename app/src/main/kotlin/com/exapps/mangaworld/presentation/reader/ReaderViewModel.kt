@@ -1124,7 +1124,7 @@ class ReaderViewModel @Inject constructor(
     fun sendReaction(emoji: String) {
         val st = _state.value
         viewModelScope.launch {
-            runCatching {
+            suspendRunCatching {
                 communityRepository.sendPageReaction(
                     st.mangaId,
                     st.chapterUrl,
@@ -1188,7 +1188,7 @@ class ReaderViewModel @Inject constructor(
         // collector; chapter switches update reactionsTarget instead.
         commentsJob?.cancel()
         presenceJob = viewModelScope.launch {
-            runCatching { communityRepository.setReaderPresence(mangaId, chapterUrl, true) }
+            suspendRunCatching { communityRepository.setReaderPresence(mangaId, chapterUrl, true) }
             communityRepository.observeReaderPresenceCount(mangaId, chapterUrl).collect { count ->
                 _state.update { it.copy(liveReaders = count) }
             }
@@ -1297,8 +1297,8 @@ class ReaderViewModel @Inject constructor(
             // U-18: bounded by 30s so a hung write cannot pin teardown.
             flushScope.launch(NonCancellable) {
                 withTimeout(30_000L) {
-                    runCatching { readingStatsStore.addReadingTime(delta) }
-                    runCatching { widgetShortcutCoordinator.refreshWidgets() }
+                    suspendRunCatching { readingStatsStore.addReadingTime(delta) }
+                    suspendRunCatching { widgetShortcutCoordinator.refreshWidgets() }
                 }
             }
         }
@@ -1313,7 +1313,7 @@ class ReaderViewModel @Inject constructor(
         // U-18: bounded 30s.
         flushScope.launch(NonCancellable) {
             withTimeout(30_000L) {
-                runCatching { communityRepository.setReaderPresence(mangaId, chapterUrl, false) }
+                suspendRunCatching { communityRepository.setReaderPresence(mangaId, chapterUrl, false) }
             }
         }
     }

@@ -46,6 +46,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.exapps.mangaworld.core.data.isBlockedBy
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.widget.WidgetShortcutCoordinator
 import com.exapps.mangaworld.domain.model.LatestChapterItem
 import com.exapps.mangaworld.domain.repository.LibraryRepository
@@ -97,7 +98,7 @@ class LatestUpdatesViewModel @Inject constructor(
     fun refresh() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
-            val result = runCatching {
+            val result = suspendRunCatching {
                 val settings = settingsRepository.getAppSettings().first()
                 val enabled = settings.enabledSources
                 // v9.2.3: read the LIVE row stream's current value (first()

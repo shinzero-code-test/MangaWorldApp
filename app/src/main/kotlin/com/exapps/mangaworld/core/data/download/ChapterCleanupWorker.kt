@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 
@@ -17,12 +18,12 @@ class ChapterCleanupWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val mangaId = inputData.getString(KEY_MANGA_ID) ?: return Result.failure()
         val chapterUrl = inputData.getString(KEY_CHAPTER_URL) ?: return Result.failure()
-        return runCatching {
+        return suspendRunCatching {
             downloadQueueManager.deleteDownloadedChapterDir(mangaId, chapterUrl)
             // U-36: piggyback the terminal download_batches GC on this cleanup
             // run (no new worker/schedule). Best-effort — a GC failure must
             // never fail the chapter cleanup.
-            runCatching { downloadQueueManager.gcTerminalBatches() }
+            suspendRunCatching { downloadQueueManager.gcTerminalBatches() }
             Result.success()
         }.getOrElse {
             // deleteDownloadedChapterDir swallows its own errors, so reaching here

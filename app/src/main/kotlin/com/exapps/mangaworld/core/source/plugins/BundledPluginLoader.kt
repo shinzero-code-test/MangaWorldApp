@@ -3,6 +3,7 @@ package com.exapps.mangaworld.core.source.plugins
 import android.content.Context
 import android.util.Log
 import com.exapps.mangaworld.BuildConfig
+import com.exapps.mangaworld.core.util.guarded
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -57,16 +58,21 @@ class BundledPluginLoader @Inject constructor(
     internal var log: (String) -> Unit = { line -> Log.i(TAG, line) }
 
     suspend fun bootstrap(): List<Outcome> = withContext(io) {
-        val pilots = PILOT_IDS.map { id -> runCatching { bootstrapOne(id) }.getOrElse { e ->
-            log("pilot $id failed closed: ${e.message}")
-            Outcome.Skipped(id, "exception")
-        } }
+        // U-13 + U-24: the three boot envelopes below are the same shape
+        // ("fail closed, log it, keep booting") and used to be hand-written
+        // with a bare `runCatching`, which swallowed the cancellation of a
+        // cancelled boot and turned it into a skipped record. `guarded`
+        // rethrows CancellationException and logs every other failure.
+        val pilots = PILOT_IDS.map { id ->
+            guarded("pilot $id", log) { bootstrapOne(id) }
+                .getOrElse { Outcome.Skipped(id, "exception") }
+        }
         val installed = index.getAll()
             .filter { it.origin == PluginOrigin.OFFICIAL && it.activeVersion != null }
-            .map { record -> runCatching { resumeInstalled(record) }.getOrElse { e ->
-                log("resume ${record.id} failed closed: ${e.message}")
-                Outcome.Skipped(record.id, "exception")
-            } }
+            .map { record ->
+                guarded("resume ${record.id}", log) { resumeInstalled(record) }
+                    .getOrElse { Outcome.Skipped(record.id, "exception") }
+            }
         // D10: a concurrent sweep may have persisted records after the
         // snapshot above — resume anything serving-nothing that this boot has
         // not already handled, instead of leaving it dark until next boot.
@@ -80,14 +86,12 @@ class BundledPluginLoader @Inject constructor(
                 it.origin == PluginOrigin.OFFICIAL && it.activeVersion != null &&
                     it.id !in handled && registry.pluginFor(it.id) == null
             }
-            .map { record -> runCatching { resumeInstalled(record) }.getOrElse { e ->
-                log("resume ${record.id} failed closed: ${e.message}")
-                Outcome.Skipped(record.id, "exception")
-            } }
-        val revived = runCatching { reconcileUpgrades() }.getOrElse { e ->
-            log("upgrade reconciliation failed closed: ${e.message}")
-            0
-        }
+            .map { record ->
+                guarded("resume ${record.id}", log) { resumeInstalled(record) }
+                    .getOrElse { Outcome.Skipped(record.id, "exception") }
+            }
+        val revived = guarded("upgrade reconciliation", log) { reconcileUpgrades() }
+            .getOrElse { 0 }
         // Gate 0 fleet telemetry: one aggregate line per boot (activated ids
         // bounded; skips collapsed by reason) instead of per-id logcat only.
         val outcomes = pilots + installed + missed

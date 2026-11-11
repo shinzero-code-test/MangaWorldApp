@@ -5,6 +5,7 @@ import com.exapps.mangaworld.core.data.local.AppPreferences
 import com.exapps.mangaworld.core.data.local.dao.ReadingProgressDao
 import com.exapps.mangaworld.core.data.local.entity.ReadingProgressEntity
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
@@ -83,11 +84,14 @@ class ReadingPositionSyncManager @Inject constructor(
         }
         // Shrunk libraries leave stale high-index chunks behind — remove them
         // so pulls stay dense and orphaned positions can't resurrect.
-        runCatching {
+        // U-13: cancellation-aware — a cancelled cleanup aborts the push
+        // BEFORE the watermark below is stamped, so the next attempt retries
+        // instead of silently skipping the stale-chunk sweep.
+        suspendRunCatching {
             val stale = userRef.get().await().documents
                 .mapNotNull { it.id.removePrefix(CHUNK_PREFIX).toIntOrNull() }
                 .filter { it >= chunksWritten }
-            stale.forEach { runCatching { userRef.document("$CHUNK_PREFIX$it").delete().await() } }
+            stale.forEach { suspendRunCatching { userRef.document("$CHUNK_PREFIX$it").delete().await() } }
         }
         // Stamp only on success: a failed push keeps the old watermark so the
         // next attempt retries the same rows instead of skipping them forever.

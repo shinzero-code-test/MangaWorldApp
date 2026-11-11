@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import com.exapps.mangaworld.BuildConfig
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.source.plugins.PluginTrust
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.io.File
@@ -44,7 +45,9 @@ class PluginSyncWorker @AssistedInject constructor(
             // for bootstrap staleness — only transport failure retries early.
             // D4: refresh the mapper snapshot so non-Sources screens (which
             // never call refresh() themselves) see the new rows/states.
-            runCatching { sourceUiMapper.refresh() }
+            // U-13: `refresh()` is suspend — a bare `runCatching` swallowed a
+            // cancelled sweep's cancellation and logged it as a failure.
+            suspendRunCatching { sourceUiMapper.refresh() }
             scheduler.recordSyncCompleted()
             android.util.Log.i("PluginSync", "sync worker finished: success")
             Result.success()

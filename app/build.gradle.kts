@@ -64,8 +64,8 @@ android {
         applicationId = "com.exapps.mangaworld"
         minSdk        = 26
         targetSdk     = 36
-        versionCode   = 278
-        versionName   = "9.7.1"
+        versionCode   = 279
+        versionName   = "9.7.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -106,6 +106,25 @@ android {
             if (canSign) {
                 signingConfig = signingConfigs.getByName("release")
             }
+        }
+        // ─── Benchmark (macrobenchmark target) ──────────────────────────────
+        // The app-under-test for the :benchmark module (MacrobenchmarkRule).
+        // Two hard requirements come from androidx.benchmark:
+        //   * the app must NOT be debuggable — a debuggable app waits for a
+        //     debugger to attach and its runtime is several times slower, so
+        //     this type is release-like (initWith(release));
+        //   * the app must be installable WITHOUT the release keystore (CI
+        //     pull requests have no secrets), so it is debug-signed.
+        // R8 is intentionally left OFF: the behaviour under measurement
+        // (U-26 image loading, U-27 paging/sync) is not affected by code
+        // shrinking, and skipping R8 keeps the benchmark CI job minutes
+        // cheaper. The release build still covers the minified variant.
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 

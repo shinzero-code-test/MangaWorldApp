@@ -245,7 +245,7 @@ class OlympusScraper @Inject constructor(
         for (pageNum in 2..maxPage) {
             val pageUrl = "$url?page=$pageNum"
             if (!visitedPages.add(pageUrl)) break
-            val pageDoc = runCatching { fetchDocument(pageUrl) }.getOrNull() ?: break
+            val pageDoc = suspendRunCatching { fetchDocument(pageUrl) }.getOrNull() ?: break
             val pageChapters = parseChapterCards(pageDoc)
             if (pageChapters.isEmpty()) break
             var added = 0
@@ -334,7 +334,7 @@ class OlympusScraper @Inject constructor(
         status: MangaStatus?,
         type: MangaType?,
         sortBy: SortBy
-    ): Result<List<MangaItem>> = runCatching {
+    ): Result<List<MangaItem>> = suspendRunCatching {
         val params = mutableListOf("page=$page")
         genre?.takeIf { it.isNotBlank() }?.let { params += "genre=${java.net.URLEncoder.encode(it, "UTF-8")}" }
         status?.takeIf { it != MangaStatus.UNKNOWN }?.let {

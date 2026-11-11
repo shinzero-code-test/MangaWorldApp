@@ -85,23 +85,16 @@ jobs:
           done
           echo "Room schemas 8..16 present."
 
-      - name: Surfacing bare runCatching (warning only, U-13)
-        # detekt is not wired (absent from gradle/libs.versions.toml and
-        # app/build.gradle.kts), so this grep is the interim tripwire for
-        # the cancellation-rethrow sweep. Count-only: it warns, it never
-        # fails the job (continue-on-error), so main keeps building while
-        # the 332-line bare-runCatching baseline drains. Promote to error
-        # mode once the sweep lands and the count reaches zero — tracked in
-        # tmp/plan/adversarial-fixes/p1-reliability.md §2.1.
-        continue-on-error: true
+      - name: Cancellation-safety gate (U-13)
+        # The Stage-1/2 sweep converted every bare runCatching whose lambda
+        # awaits a suspend function; the remaining bare sites are provably
+        # sync (JSON/regex parsing, sync IO, telemetry sinks). The gate
+        # therefore detects the ACTUAL defect - a bare runCatching block whose
+        # body awaits a suspend call - and FAILS the job when one appears
+        # (a sweep regression, not the current baseline).
         run: |
-          set -u
-          bare=$(grep -rn "runCatching" app/src/main/kotlin --include="*.kt" | grep -vE "suspendRunCatching" | wc -l | tr -d ' ')
-          migrated=$(grep -rn "suspendRunCatching" app/src/main/kotlin --include="*.kt" | wc -l | tr -d ' ')
-          echo "bare runCatching sites: $bare (suspendRunCatching: $migrated)"
-          if [[ "$bare" -gt 0 ]]; then
-            echo "::warning::U-13 sweep incomplete — $bare bare runCatching site(s) remain in app/src/main/kotlin. Bare runCatching swallows CancellationException; prefer suspendRunCatching for suspend lambdas."
-          fi
+          set -uo pipefail
+          python3 scripts/cancellation_gate.py app/src/main/kotlin
 
       - name: 900-line gate for NEW files (U-35)
         # New files (added in this diff) must be <=900 lines. Existing files
@@ -571,6 +564,8 @@ jobs:
           # exactly as before the guard existed). Disable errexit around the
           # call, capture the status, then restore it.
           set +e
+          status=0
+
           gcloud firebase test android run \
             --type instrumentation \
             --app "$app_apk" \
@@ -578,8 +573,7 @@ jobs:
             $(printf -- '--device %s ' ${TESTLAB_DEVICE_OVERRIDE:-$TESTLAB_DEVICES}) \
             --timeout 25m \
             --results-dir="testlab/$(date -u +%Y%m%d-%H%M%S)-${{ github.sha }}" \
-            2>&1 | tee testlab-run.log
-          status=${PIPESTATUS[0]}
+            2>&1 | tee testlab-run.log || status=${PIPESTATUS[0]}
           set -e
           # A quota limit is a RESOURCE state, not a test failure: the shared daily
           # budget can be exhausted by an on-demand physical run, and the virtual
@@ -629,6 +623,320 @@ jobs:
           path: testlab/
           if-no-files-found: ignore
           retention-days: 30
+
+  # ─── Macrobenchmark (device perf gate) ─────────────────────────────────────
+  # The DEVICE half of the Stage-2 perf gate (U-26/U-27): the JVM suites
+  # prove the logic, this job proves the numbers on a real device
+  # (tmp/review/stage2/perf.md §"Measure spec", MB-1 … MB-5).
+  #
+  # NOT in build-release's `needs:` and NOT a condition of create-release:
+  # device infrastructure must never block a release (same policy as the
+  # existing firebase-test-lab job). The job is continue-on-error, and the
+  # device steps are individually continue-on-error, so a missing emulator,
+  # an unreachable site or a flaky measurement can never turn a PR red.
+  # A real regression is still VISIBLE: the last step emits an ::error::
+  # annotation with the outcome.
+  #
+  # It runs on a GitHub-hosted emulator instead of Firebase Test Lab on
+  # purpose: Test Lab minutes are a shared daily budget in this repo (one
+  # on-demand physical run exhausted a day), macrobenchmark wants a device
+  # the job controls, and the emulator path costs no quota at all.
+  benchmark:
+    name: Macrobenchmark (device perf gate)
+    runs-on: ubuntu-latest
+    needs: [lint-and-test]
+    continue-on-error: true
+    if: |
+      (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')) ||
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch'
+    env:
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      # A virtual device: no physical-device quota, no shared daily budget.
+      BENCH_AVD: manga-bench
+      BENCH_AVD_IMAGE: system-images;android-30;google_apis;x86_64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Create google-services.json from secret
+        # U-05: gate the consuming step — PR code must never materialize the secret.
+        if: github.event_name != 'pull_request' && env.GOOGLE_SERVICES_JSON != ''
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
+
+      - name: Create stub google-services.json for PRs
+        # Same stub as the other jobs — the benchmark needs a valid file for
+        # the google-services plugin, not a working Firebase project.
+        if: github.event_name == 'pull_request'
+        run: |
+          cat > app/google-services.json << 'STUB'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "mangaworld-pr-stub",
+              "storage_bucket": "mangaworld-pr-stub.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+                  "android_client_info": {"package_name": "com.exapps.mangaworld"}
+                },
+                "oauth_client": [],
+                "api_key": [{"current_key": "stub"}],
+                "services": {"appinvite_service": {"other_platform_oauth_client": []}}
+              }
+            ],
+            "configuration_version": "1"
+          }
+          STUB
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Configure Android SDK path
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$SDK_DIR" ]]; then
+            for CANDIDATE in /usr/local/lib/android/sdk /opt/android-sdk /opt/hostedtoolcache/Android/Sdk; do
+              if [[ -d "$CANDIDATE" ]]; then
+                SDK_DIR="$CANDIDATE"
+                break
+              fi
+            done
+          fi
+          if [[ -z "$SDK_DIR" ]]; then
+            echo "Android SDK directory could not be determined." >&2
+            exit 1
+          fi
+          echo "Using Android SDK at: $SDK_DIR"
+          echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK_DIR" > local.properties
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          gradle-version: wrapper
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build the benchmark APKs
+        # :app:assembleBenchmark  -> the app under test (release-like,
+        #                               non-debuggable, debug-signed)
+        # :benchmark:assembleBenchmark -> the macrobenchmark harness APK
+        # :app:assembleDebug + :benchmark:assembleDebug -> the DEBUG
+        #                               pairing, which is the only build in
+        #                               which the app logs its HTTP requests
+        #                               (the exact MB-5 counter).
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          # `|| status=$?` — under the runner's `bash -e` a failing gradle
+          # invocation aborts the step before `$?` could ever be read.
+          status=0
+          ./gradlew :app:assembleBenchmark :benchmark:assembleBenchmark \
+                     :app:assembleDebug :benchmark:assembleDebug --stacktrace || status=$?
+          echo "gradle_status=$status" >> "$GITHUB_ENV"
+          if [[ "$status" -ne 0 ]]; then
+            echo "::warning::the benchmark build failed — the device phase is skipped"
+            echo "BENCH_SKIP=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Boot the emulator
+        id: emulator
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$SDK" ]]; then
+            echo "::warning::no Android SDK — the device phase is skipped"
+            echo "BENCH_SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if [[ ! -e /dev/kvm ]]; then
+            echo "::warning::no /dev/kvm on this runner — the device phase is skipped (a software-rendered emulator is too slow to measure)"
+            echo "BENCH_SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$SDKMANAGER" ]]; then
+            SDKMANAGER=$(find "$SDK/cmdline-tools" -name sdkmanager -type f 2>/dev/null | sort | tail -1)
+          fi
+          if [[ -x "$SDKMANAGER" ]]; then
+            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+            "$SDKMANAGER" "emulator" "platform-tools" "$BENCH_AVD_IMAGE" > /dev/null 2>&1 || \
+              echo "::warning::sdkmanager could not install every package"
+          fi
+          AVDMANAGER="$SDK/cmdline-tools/latest/bin/avdmanager"
+          if [[ ! -x "$AVDMANAGER" ]]; then
+            AVDMANAGER=$(find "$SDK/cmdline-tools" -name avdmanager -type f 2>/dev/null | sort | tail -1)
+          fi
+          echo no | "$AVDMANAGER" create avd -n "$BENCH_AVD" -k "$BENCH_AVD_IMAGE" --force > /dev/null 2>&1 || {
+            echo "::warning::could not create the AVD — the device phase is skipped"
+            echo "BENCH_SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          }
+          nohup "$SDK/emulator/emulator" -avd "$BENCH_AVD" \
+            -no-window -no-audio -no-boot-anim -no-snapshot \
+            -gpu swiftshader_indirect > /tmp/emulator.log 2>&1 &
+          adb wait-for-device || true
+          booted=0
+          for _ in $(seq 1 60); do
+            if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; then
+              booted=1
+              break
+            fi
+            sleep 5
+          done
+          if [[ "$booted" != "1" ]]; then
+            echo "::warning::the emulator did not boot — the device phase is skipped"
+            tail -n 40 /tmp/emulator.log || true
+            echo "BENCH_SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          # Frame timings are meaningless while the system animates.
+          adb shell settings put global window_animation_scale 0 || true
+          adb shell settings put global transition_animation_scale 0 || true
+          adb shell settings put global animator_duration_scale 0 || true
+          adb shell input keyevent 82 || true
+          echo "emulator=ready" >> "$GITHUB_ENV"
+
+      - name: Install the app under test and the harness
+        id: install
+        if: env.BENCH_SKIP != '1'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          app_apk=$(find app/build/outputs/apk/benchmark -name "*universal*.apk" 2>/dev/null | head -n 1)
+          if [[ -z "$app_apk" ]]; then
+            app_apk=$(find app/build/outputs/apk/benchmark -name "*.apk" 2>/dev/null | head -n 1)
+          fi
+          harness_apk=$(find benchmark/build/outputs/apk/benchmark -name "*.apk" 2>/dev/null | head -n 1)
+          if [[ -z "$harness_apk" ]]; then
+            harness_apk=$(find benchmark/build/outputs/apk -name "*.apk" 2>/dev/null | head -n 1)
+          fi
+          echo "app=$app_apk"
+          echo "harness_apk=$harness_apk"
+          if [[ -z "$app_apk" || -z "$harness_apk" ]]; then
+            echo "::warning::could not locate the benchmark APKs — the device phase is skipped"
+            echo "BENCH_SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          adb install -r -g "$app_apk" || true
+          adb install -r -g "$harness_apk" || true
+          # The app asks for a storage permission on first launch; without it
+          # a system dialog covers the app and every UI step times out.
+          adb shell pm grant com.exapps.mangaworld android.permission.READ_EXTERNAL_STORAGE || true
+          adb shell pm grant com.exapps.mangaworld android.permission.READ_MEDIA_IMAGES || true
+          # The harness id is discovered, never hardcoded.
+          harness=$(adb shell pm list packages | tr -d '\r' | sed -n 's/^package://p' \
+            | grep -E '^com\.exapps\.mangaworld\.benchmark' | head -n 1)
+          echo "harness=$harness" >> "$GITHUB_OUTPUT"
+          if [[ -z "$harness" ]]; then
+            echo "::warning::the harness package could not be identified — the device phase is skipped"
+            echo "BENCH_SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+      - name: Run the macrobenchmark suite
+        id: bench
+        if: env.BENCH_SKIP != '1'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          harness="${{ steps.install.outputs.harness }}"
+          # `|| status=${PIPESTATUS[0]}` — under the runner's `bash -e` with
+          # pipefail the failing pipeline aborts the step before `$?`/
+          # PIPESTATUS could be read.
+          status=0
+          adb shell am instrument -w \
+            -e androidx.benchmark.output.enable=true \
+            -e additionalTestOutputDir "/sdcard/Android/data/$harness/files" \
+            -e class com.exapps.mangaworld.benchmark.ReaderPerfBenchmarks \
+            "$harness/androidx.test.runner.AndroidJUnitRunner" | tee instrumentation.log || status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "BENCH_EXIT_CODE=$status" >> "$GITHUB_ENV"
+
+      - name: Run the exact MB-5 counter (debug pairing)
+        id: bench-debug
+        if: env.BENCH_SKIP != '1'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          # The exact "requests per source" counter needs the app's DEBUG
+          # build (the OkHttp request log is debug-only).
+          app_apk=$(find app/build/outputs/apk/debug -name "*universal*.apk" 2>/dev/null | head -n 1)
+          harness_apk=$(find benchmark/build/outputs/apk/debug -name "*.apk" 2>/dev/null | head -n 1)
+          if [[ -z "$app_apk" || -z "$harness_apk" ]]; then
+            echo "::warning::the debug APKs are missing — the exact MB-5 counter is skipped"
+            exit 0
+          fi
+          adb uninstall com.exapps.mangaworld > /dev/null 2>&1 || true
+          adb install -r -g "$app_apk" || true
+          adb install -r -g "$harness_apk" || true
+          adb shell pm grant com.exapps.mangaworld android.permission.READ_EXTERNAL_STORAGE || true
+          harness=$(adb shell pm list packages | tr -d '\r' | sed -n 's/^package://p' \
+            | grep -E '^com\.exapps\.mangaworld\.benchmark' | head -n 1)
+          status=0
+          adb shell am instrument -w \
+            -e class com.exapps.mangaworld.benchmark.BrowseRequestBudgetTest \
+            "$harness/androidx.test.runner.AndroidJUnitRunner" | tee instrumentation-debug.log || status=${PIPESTATUS[0]}
+          echo "BENCH_DEBUG_EXIT_CODE=$status" >> "$GITHUB_ENV"
+
+      - name: Collect the benchmark metrics
+        if: always() && env.BENCH_SKIP != '1'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          harness="${{ steps.install.outputs.harness }}"
+          mkdir -p benchmark-metrics
+          adb shell "ls /sdcard/Android/data/$harness/files" || true
+          adb pull "/sdcard/Android/data/$harness/files" benchmark-metrics/ || true
+          find benchmark-metrics -name "*benchmarkData.json" -print || true
+
+      - name: Upload the benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: benchmark-metrics
+          path: |
+            benchmark-metrics/
+            instrumentation.log
+            instrumentation-debug.log
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Report the outcome
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          if [[ "${BENCH_SKIP:-0}" == "1" ]]; then
+            echo "::notice::Macrobenchmark skipped (no device available) — the perf gate produced no numbers."
+            exit 0
+          fi
+          status="${BENCH_EXIT_CODE:-unknown}"
+          debug_status="${BENCH_DEBUG_EXIT_CODE:-unknown}"
+          if [[ "$status" == "0" && "$debug_status" == "0" ]]; then
+            echo "::notice::Macrobenchmark suite finished — see the benchmark-metrics artifact."
+          else
+            echo "::error::Macrobenchmark suite failed (suite exit $status, exact-counter exit $debug_status). The perf gate did not pass — see the job log and the benchmark-metrics artifact."
+          fi
 
   # ─── Debug Build ────────────────────────────────────────────────────────────
   build-debug:
@@ -1218,7 +1526,7 @@ jobs:
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [ lint-and-test, dashboard-checks, firestore-rules, verify-deployed-plugins, firebase-test-lab, build-debug, verify-debug-artifacts, build-release, verify-release-artifacts, create-release ]
+    needs: [ lint-and-test, dashboard-checks, firestore-rules, verify-deployed-plugins, firebase-test-lab, benchmark, build-debug, verify-debug-artifacts, build-release, verify-release-artifacts, create-release ]
     if: always()
     steps:
       - name: Debug release gating contexts
@@ -1236,6 +1544,7 @@ jobs:
           echo "| Dashboard & Plugin Signature Gate | ${{ needs.dashboard-checks.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Firestore Rules | ${{ needs.firestore-rules.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Deployed Plugin Distribution | ${{ needs.verify-deployed-plugins.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Macrobenchmark (device perf gate) | ${{ needs.benchmark.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Debug APKs | ${{ needs.build-debug.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ABIs Built" >> $GITHUB_STEP_SUMMARY

@@ -136,6 +136,18 @@ describe("PUT /api/settings", () => {
     expect(rc.publishTemplate).toHaveBeenCalledTimes(1);
   });
 
+  it("gates the API-host overrides too (U-30 residual)", async () => {
+    const { rc } = fakeRc(structuredClone(TEMPLATE));
+    vi.mocked(getAdminRemoteConfig).mockReturnValue(rc as never);
+
+    expect((await PUT(req({ settings: { source_azora_api_host: "evil.example.com" } }))).status).toBe(400);
+    expect((await PUT(req({ settings: { source_azora_api_host: "api.mangasid.com" } }))).status).toBe(400);
+    expect((await PUT(req({ settings: { source_nope_api_host: "api.example.com" } }))).status).toBe(400);
+    expect(rc.publishTemplate).not.toHaveBeenCalled();
+
+    expect((await PUT(req({ settings: { source_mangasid_api_host: "api.mangasid.com" } }))).status).toBe(200);
+  });
+
   it("returns 401/403 without the role", async () => {
     mockRoleUnauthorized();
     expect((await PUT(req({ settings: { a: 1 } }))).status).toBe(401);

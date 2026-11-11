@@ -331,7 +331,7 @@ class ProfileSettingsViewModel @Inject constructor(
             if (user.isAnonymous) return@launch
             val current = suspendRunCatching { communityRepository.getCurrentProfile() }.getOrNull()
             if (current != null && current.username.isBlank()) {
-                runCatching { communityRepository.ensureSocialProfile(user, user.uid) }
+                suspendRunCatching { communityRepository.ensureSocialProfile(user, user.uid) }
                 refreshProfile()
             }
         }
@@ -349,7 +349,7 @@ class ProfileSettingsViewModel @Inject constructor(
                 _saveError.value = context.getString(R.string.settings_provider_guest_error)
                 return@launch
             }
-            val result = runCatching {
+            val result = suspendRunCatching {
                 communityRepository.updateProfilePrivacyFlag(
                     ProfilePrivacyFlag.IS_PUBLIC,
                     isPublic
@@ -366,7 +366,7 @@ class ProfileSettingsViewModel @Inject constructor(
                 _saveError.value = context.getString(R.string.settings_provider_guest_error)
                 return@launch
             }
-            val result = runCatching {
+            val result = suspendRunCatching {
                 communityRepository.updateProfilePrivacyFlag(flag, value)
             }
             result.onSuccess { refreshProfile() }
@@ -387,7 +387,7 @@ class ProfileSettingsViewModel @Inject constructor(
                 _saveError.value = context.getString(R.string.settings_provider_guest_error)
                 return@launch
             }
-            val result = runCatching {
+            val result = suspendRunCatching {
                 settingsRepository.setShowLibraryPublic(enabled)
                 communityRepository.updateProfilePrivacyFlag(
                     ProfilePrivacyFlag.SHOW_LIBRARY_PUBLIC,
@@ -414,22 +414,22 @@ class ProfileSettingsViewModel @Inject constructor(
     // ─── Security centre actions ──────────────────────────────────────────
 
     fun deleteLoginLog(id: String) {
-        viewModelScope.launch { runCatching { securityRepository.deleteLoginLog(id) } }
+        viewModelScope.launch { suspendRunCatching { securityRepository.deleteLoginLog(id) } }
     }
 
     fun clearLoginLogs() {
-        viewModelScope.launch { runCatching { securityRepository.clearLoginLogs() } }
+        viewModelScope.launch { suspendRunCatching { securityRepository.clearLoginLogs() } }
     }
 
     fun removeDevice(id: String) {
-        viewModelScope.launch { runCatching { securityRepository.removeDevice(id) } }
+        viewModelScope.launch { suspendRunCatching { securityRepository.removeDevice(id) } }
     }
 
     fun revokeSession(id: String) {
         viewModelScope.launch {
             _securityBusy.value = true
             _securityError.value = null
-            runCatching { securityRepository.revokeSession(id) }
+            suspendRunCatching { securityRepository.revokeSession(id) }
                 .onFailure { _securityError.value = context.getString(R.string.settings_security_action_failed) }
             _securityBusy.value = false
         }
@@ -440,7 +440,7 @@ class ProfileSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _securityBusy.value = true
             _securityError.value = null
-            val result = runCatching { securityRepository.signOutAllDevices() }
+            val result = suspendRunCatching { securityRepository.signOutAllDevices() }
             _securityBusy.value = false
             result
                 .onSuccess {
@@ -591,7 +591,7 @@ class ProfileSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _securityBusy.value = true
             _securityError.value = null
-            val result = runCatching { sessionManager.updatePassword(newPassword) }
+            val result = suspendRunCatching { sessionManager.updatePassword(newPassword) }
             _securityBusy.value = false
             result
                 .onSuccess { _passwordMessage.value = context.getString(R.string.settings_password_changed) }
@@ -636,11 +636,11 @@ class ProfileSettingsViewModel @Inject constructor(
                 return@launch
             }
             val uid = user.uid
-            val oldUsername = runCatching { communityRepository.getCurrentProfile() }
+            val oldUsername = suspendRunCatching { communityRepository.getCurrentProfile() }
                 .getOrNull()?.username?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
             // Best-effort Firestore wipe while still authenticated.
-            runCatching { wipeUserData(uid, oldUsername) }
-            val deleteResult = runCatching { user.delete().await() }
+            suspendRunCatching { wipeUserData(uid, oldUsername) }
+            val deleteResult = suspendRunCatching { user.delete().await() }
             if (deleteResult.isFailure) {
                 _saveError.value = deleteAccountErrorMessage(deleteResult.exceptionOrNull())
                 return@launch
@@ -686,18 +686,18 @@ class ProfileSettingsViewModel @Inject constructor(
         // users/{uid} subtree (mirrors the dashboard admin DELETE scope, plus
         // the loginLogs/sessions/preferences/syncTombstones it misses — D-5).
         for (subcol in ACCOUNT_SUBCOLLECTIONS) {
-            runCatching {
+            suspendRunCatching {
                 repeat(MAX_DELETE_PAGES) {
                     val snap = userRef.collection(subcol).limit(DELETE_PAGE_SIZE).get().await()
-                    if (snap.isEmpty) return@runCatching
-                    snap.documents.forEach { runCatching { it.reference.delete().await() } }
-                    if (snap.size() < DELETE_PAGE_SIZE) return@runCatching
+                    if (snap.isEmpty) return@suspendRunCatching
+                    snap.documents.forEach { suspendRunCatching { it.reference.delete().await() } }
+                    if (snap.size() < DELETE_PAGE_SIZE) return@suspendRunCatching
                 }
             }
         }
-        runCatching { userRef.delete().await() }
+        suspendRunCatching { userRef.delete().await() }
         // Public identity.
-        runCatching {
+        suspendRunCatching {
             firestore.collection("publicProfiles").document(uid).delete().await()
             if (oldUsername != null) {
                 firestore.collection("usernames").document(oldUsername).delete().await()
@@ -706,13 +706,13 @@ class ProfileSettingsViewModel @Inject constructor(
         // Own community content (author-delete is rule-allowed). Without this,
         // a deleted account's comments/reviews could never be removed by anyone.
         for (group in OWN_CONTENT_GROUPS) {
-            runCatching {
+            suspendRunCatching {
                 repeat(MAX_DELETE_PAGES) {
                     val snap = firestore.collectionGroup(group)
                         .whereEqualTo("authorUid", uid).limit(DELETE_PAGE_SIZE).get().await()
-                    if (snap.isEmpty) return@runCatching
-                    snap.documents.forEach { runCatching { it.reference.delete().await() } }
-                    if (snap.size() < DELETE_PAGE_SIZE) return@runCatching
+                    if (snap.isEmpty) return@suspendRunCatching
+                    snap.documents.forEach { suspendRunCatching { it.reference.delete().await() } }
+                    if (snap.size() < DELETE_PAGE_SIZE) return@suspendRunCatching
                 }
             }
         }
@@ -899,7 +899,7 @@ fun ProfileSettingsScreen(
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) {
             scope.launch {
-                runCatching {
+                suspendRunCatching {
                     val json = viewModel.exportListsJson()
                     context.contentResolver.openOutputStream(uri)?.use { out ->
                         out.write(json.toByteArray())

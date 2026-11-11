@@ -13,23 +13,16 @@ import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import com.exapps.mangaworld.MangaWorldApp
 import com.exapps.mangaworld.R
-import com.exapps.mangaworld.core.data.resolveCookieForUrl
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.data.local.dao.DownloadTaskDao
 import com.exapps.mangaworld.core.data.local.dao.DownloadedMangaDao
 import com.exapps.mangaworld.core.integration.AppLaunchIntents
-import com.exapps.mangaworld.domain.repository.SettingsRepository
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.io.File
 import org.json.JSONArray
 
@@ -40,8 +33,8 @@ class ChapterDownloadWorker @AssistedInject constructor(
     private val downloadTaskDao: DownloadTaskDao,
     private val downloadedMangaDao: DownloadedMangaDao,
     private val downloadQueueManager: DownloadQueueManager,
-    private val okHttpClient: OkHttpClient,
-    private val settingsRepository: SettingsRepository,
+    // U-33: the page loop lives in the engine so it is testable off-device.
+    private val downloadEngine: ChapterDownloadEngine,
     private val analyticsManager: FirebaseAnalyticsManager
 ) : CoroutineWorker(appContext, params) {
 
@@ -94,62 +87,24 @@ class ChapterDownloadWorker @AssistedInject constructor(
                 System.currentTimeMillis()
             ) == 0
         ) return@withContext Result.success()
-        runCatching { setForeground(buildForegroundInfo(displayTitle, 0, pages.size, mangaId, chapterUrl)) }
+        suspendRunCatching { setForeground(buildForegroundInfo(displayTitle, 0, pages.size, mangaId, chapterUrl)) }
 
         return@withContext try {
-            var done = existingPageCount(targetDir)
-            updateProgress(taskId, displayTitle, done, pages.size, mangaId, chapterUrl)
-
-            val targets = pages.mapIndexed { index, pageUrl -> pageUrl to File(targetDir, "${index + 1}.jpg") }
-            targets.chunked(PARALLEL_DOWNLOADS).forEach { chunk ->
-                coroutineScope {
-                    // One bad page must not cancel its 3 siblings via structured
-                    // concurrency and discard a whole chunk every attempt.
-                    // Isolate per-page failures; completeness is checked below.
-                    chunk.map { (pageUrl, outFile) ->
-                        async {
-                            ensureActive()
-                            try {
-                                downloadPage(pageUrl, referer, outFile)
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (_: Exception) {
-                                false
-                            }
-                        }
-                    }.awaitAll().forEach { downloaded ->
-                        if (downloaded) done += 1
-                    }
+            // U-33: the page loop (chunked parallel download, .part+rename,
+            // marker idempotency) lives in ChapterDownloadEngine so it can be
+            // verified on the JVM. The worker keeps the Room bookkeeping.
+            // A single dead page (durable 404/expired URL) makes the engine
+            // throw AFTER all other pages had their chance — that is what
+            // drives the existing retry path.
+            downloadEngine.downloadChapterPages(
+                pages = pages,
+                referer = referer,
+                targetDir = targetDir,
+                onProgress = { done, total ->
+                    updateProgress(taskId, displayTitle, done, total, mangaId, chapterUrl)
                 }
-                updateProgress(taskId, displayTitle, done, pages.size, mangaId, chapterUrl)
-            }
-            // A single dead page (durable 404/expired URL) must still trigger the
-            // existing retry path — but only after all other pages had their chance,
-            // instead of aborting mid-chunk with good siblings unattempted.
-            // Disk-truthful recount: the increment counter drifts whenever files
-            // pre-exist (resumed attempts, concurrent winner) while their
-            // downloads report "skipped". What matters is what is on disk now.
-            val onDisk = existingPageCount(targetDir)
-            done = onDisk
-            updateProgress(taskId, displayTitle, done, pages.size, mangaId, chapterUrl)
-            check(onDisk >= pages.size) { "incomplete download: $onDisk/${pages.size}" }
-
-            val pendingMarker = File(targetDir, ".completed.part")
-            val completionMarker = File(targetDir, ".completed")
-            // Idempotent marker: a previous attempt (or a concurrent winner) may
-            // have already completed. renameTo fails when the destination exists —
-            // that is success, not failure. The copyTo fallback covers
-            // filesystems where renameTo is flaky.
-            if (!completionMarker.exists()) {
-                pendingMarker.writeText("ok")
-                if (!pendingMarker.renameTo(completionMarker) && !completionMarker.exists()) {
-                    runCatching {
-                        pendingMarker.copyTo(completionMarker, overwrite = true)
-                        pendingMarker.delete()
-                    }
-                    check(completionMarker.exists()) { appContext.getString(R.string.download_error) }
-                }
-            }
+            )
+            val completionMarker = File(targetDir, ChapterDownloadEngine.COMPLETION_MARKER)
             if (
                 downloadTaskDao.updateStateIfActive(
                     taskId,
@@ -233,51 +188,6 @@ class ChapterDownloadWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun downloadPage(pageUrl: String, referer: String, outFile: File): Boolean {
-        if (outFile.exists() && outFile.length() > 0L) return false
-
-        val reqBuilder = Request.Builder()
-            .url(pageUrl)
-            .header(
-                "User-Agent",
-                "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
-            )
-            .header("Accept", "image/webp,image/apng,image/*,*/*;q=0.8")
-        if (referer.isNotBlank()) reqBuilder.header("Referer", referer)
-        runCatching { resolveCookieForUrl(settingsRepository, pageUrl) }.getOrNull()
-            ?.takeIf { it.isNotBlank() }
-            ?.let { reqBuilder.header("Cookie", it) }
-
-        val tempFile = File(outFile.absolutePath + ".part")
-        if (tempFile.exists()) tempFile.delete()
-        okHttpClient.newCall(reqBuilder.build()).execute().use { response ->
-            if (!response.isSuccessful) error("HTTP ${response.code} for $pageUrl")
-            val body = response.body ?: error("Empty body for $pageUrl")
-            // Per-file cap: a pathological response must not stream unbounded to disk.
-            var copied = 0L
-            body.byteStream().use { input ->
-                tempFile.outputStream().use { out ->
-                    val buf = ByteArray(32 * 1024)
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        copied += n
-                        if (copied > MAX_PAGE_BYTES) error("Page exceeds size cap for $pageUrl")
-                        out.write(buf, 0, n)
-                    }
-                }
-            }
-        }
-        // An HTTP-200 HTML challenge/block page must not complete as N.jpg:
-        // size floor + magic sniff engage the existing MAX_DOWNLOAD_ATTEMPTS retry.
-        if (tempFile.length() < MIN_PAGE_BYTES || !tempFile.hasImageMagic()) {
-            tempFile.delete()
-            error("Downloaded non-image body for $pageUrl")
-        }
-        check(tempFile.renameTo(outFile)) { appContext.getString(R.string.download_error) }
-        return true
-    }
-
     private fun buildForegroundInfo(title: String, done: Int, total: Int, mangaId: String, chapterUrl: String): ForegroundInfo {
         val sourceId = mangaId.substringBefore('_')
         // All chapters in a manga reuse one silent foreground notification rather than leaving
@@ -357,9 +267,6 @@ class ChapterDownloadWorker @AssistedInject constructor(
     internal fun stableNotifId(base: Int, key: String): Int =
         DownloadNotifIds.stableId(base, key)
 
-    private fun existingPageCount(dir: File): Int =
-        dir.listFiles()?.count { it.isFile && it.extension.lowercase() in setOf("jpg", "png", "webp") && it.length() > 0L } ?: 0
-
     private suspend fun updateProgress(taskId: String, title: String, done: Int, total: Int, mangaId: String, chapterUrl: String) {
         downloadTaskDao.updateStateIfActive(
             taskId,
@@ -370,7 +277,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
             System.currentTimeMillis(),
             null
         )
-        runCatching { setForeground(buildForegroundInfo(title, done, total, mangaId, chapterUrl)) }
+        suspendRunCatching { setForeground(buildForegroundInfo(title, done, total, mangaId, chapterUrl)) }
     }
 
     private fun String.toPageUrls(): List<String> = runCatching {
@@ -393,10 +300,7 @@ class ChapterDownloadWorker @AssistedInject constructor(
         internal const val NOTIF_ID_PROGRESS = 1001
         internal const val NOTIF_ID_COMPLETE = 20000
         internal const val NOTIF_ID_FAIL = 30000
-        private const val PARALLEL_DOWNLOADS = 4
         private const val MAX_DOWNLOAD_ATTEMPTS = 3
-        private const val MIN_PAGE_BYTES = 1024L
-        private const val MAX_PAGE_BYTES = 50L * 1024L * 1024L
         private val ACTIVE_TASK_STATUSES = setOf("queued", "running")
     }
 }

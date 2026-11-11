@@ -270,7 +270,7 @@ class FirebaseSessionManager @Inject constructor(
                 repeat(ANON_WIPE_MAX_PAGES) {
                     val snap = userRef.collection(subcol).limit(ANON_WIPE_PAGE_SIZE).get().await()
                     if (snap.isEmpty) return@suspendRunCatching
-                    snap.documents.forEach { runCatching { it.reference.delete().await() } }
+                    snap.documents.forEach { suspendRunCatching { it.reference.delete().await() } }
                     if (snap.size() < ANON_WIPE_PAGE_SIZE) return@suspendRunCatching
                 }
             }

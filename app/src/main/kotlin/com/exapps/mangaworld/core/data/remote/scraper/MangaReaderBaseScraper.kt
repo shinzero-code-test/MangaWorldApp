@@ -72,7 +72,7 @@ open class MangaReaderBaseScraper(
 
         for (path in pathsToTry) {
             val tryUrl = "${resolvedBaseUrl}$path$slug/"
-            val tryDoc = runCatching { fetchDocument(tryUrl) }.getOrNull()
+            val tryDoc = suspendRunCatching { fetchDocument(tryUrl) }.getOrNull()
             if (tryDoc != null && isMangaDetailPage(tryDoc)) {
                 resolvedUrl = tryUrl
                 resolvedDoc = tryDoc

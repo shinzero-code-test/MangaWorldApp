@@ -173,6 +173,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (body.disabled === true) {
         await getAdminAuth().revokeRefreshTokens(uid).catch(() => {});
       }
+      // U-31 audit parity: this route and users/route.ts PATCH and
+      // users/[uid]/ban must all write the SAME event name, otherwise the
+      // account_disable_toggle log filter silently misses one of the three
+      // disable paths (a disabled account with no audit trail).
+      await logSecurityEvent("account_disable_toggle", {
+        by: admin.uid,
+        target: uid,
+        disabled: body.disabled,
+      });
     }
     if (body.email) {
       // Email format check before hitting the Auth API (M-6).

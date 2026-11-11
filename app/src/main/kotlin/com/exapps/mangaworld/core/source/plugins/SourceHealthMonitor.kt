@@ -1,7 +1,9 @@
 package com.exapps.mangaworld.core.source.plugins
 
+import android.util.Log
 import com.exapps.mangaworld.core.data.remote.scraper.ChapterLockedException
 import com.exapps.mangaworld.core.data.remote.scraper.CloudflareChallengeException
+import com.exapps.mangaworld.core.util.guarded
 import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -38,6 +40,13 @@ class SourceHealthMonitor @Inject constructor(
     private val settingsRepo: com.exapps.mangaworld.domain.repository.SettingsRepository,
     @com.exapps.mangaworld.core.di.IoDispatcher private val io: kotlinx.coroutines.CoroutineDispatcher
 ) {
+
+    /**
+     * Log sink — raw `android.util.Log` throws on plain JVM (same reason as
+     * `PluginSyncEngine.log` / `BundledPluginLoader.log`), so the default is
+     * only ever reached in production. Tests replace it with a collector.
+     */
+    internal var log: (String) -> Unit = { line -> Log.w("SourceHealth", line) }
 
     /** Feed one scraper-level observation; returns the resulting state. */
     suspend fun observeHome(id: String, result: Result<*>): HealthState =
@@ -79,7 +88,11 @@ class SourceHealthMonitor @Inject constructor(
             }
         }
         val scraper = built.plugin.scraper
-        val ok = runCatching { scraper.getHomeData().getOrThrow() }
+        // U-13 + U-24: the probe wraps a suspend call — a bare `runCatching`
+        // swallowed the cancellation (a cancelled re-check rendered as "source
+        // is broken" and cleared the quarantine badge). The shared `guarded`
+        // envelope rethrows cancellation and logs the real failure.
+        val ok = guarded("health reverify $id", log) { scraper.getHomeData().getOrThrow() }
             .map { !it.isHomeEmpty() }
             .getOrDefault(false)
         if (!ok) {
@@ -167,7 +180,7 @@ class SourceHealthMonitor @Inject constructor(
         index.put(record.copy(status = PluginStatus.QUARANTINED))
         // Q-3: an isolated source must not keep reading "enabled" in
         // settings while nothing is registered behind it.
-        runCatching { settingsRepo.toggleSource(id, false) }
+        guarded("health quarantine $id", log) { settingsRepo.toggleSource(id, false) }
     }
 
     private fun failedOf(result: Result<*>): Boolean {

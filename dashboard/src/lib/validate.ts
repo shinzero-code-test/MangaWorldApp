@@ -63,6 +63,29 @@ export const SOURCE_BASE_URL_ALLOWLIST: Record<string, string[]> = {
   procomic: ["procomic.pro"],
 };
 
+// ─── U-30 residual: API-host overrides (`source_<id>_api_host`) ─────────────
+//
+// The app reads three RC-overridable API hosts (U-25):
+//   source_azora_api_host    → api.azorafly.com
+//   source_mangasid_api_host → api.mangasid.com
+//   source_meshmanga_api_host→ appswat.com
+// They are the SAME content-spoofing channel as `source_<id>_base_url` (the
+// app fetches chapter lists/images from them), so they get the same
+// server-side allow-list. Without this, an RC compromise could repoint the
+// Azora API at an arbitrary host — the base-URL gate did not cover it.
+//
+// Host-only values (`api.azorafly.com`), mirroring the app's
+// SourceDomainOverrides.normalizeApiHost (host or https://host; no path,
+// port, query or fragment).
+export const SOURCE_API_HOST_ALLOWLIST: Record<string, string[]> = {
+  azora: ["api.azorafly.com"],
+  mangasid: ["api.mangasid.com"],
+  meshmanga: ["appswat.com"],
+};
+
+const SOURCE_API_HOST_KEY_RE = /^source_([a-z0-9][a-z0-9_-]{0,63})_api_host$/;
+const API_HOST_RE = /^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/;
+
 function normalizeAllowlistHost(host: string): string {
   return host.toLowerCase().replace(/^www\./, "");
 }
@@ -130,6 +153,61 @@ export function validateSourceBaseUrlParams(parameters: unknown): ParamValidatio
 interface ParamValidationResult {
   ok: boolean;
   error?: string;
+}
+
+/**
+ * Validates every `source_<id>_api_host` entry in a Remote-Config parameter
+ * map: host-only (or an https://host form, which the app strips), literal
+ * hostname, and allow-listed FOR THAT ID. Non-matching keys pass untouched.
+ *
+ * Mirrors the app's `SourceDomainOverrides.normalizeApiHost` (reject paths,
+ * ports, query and fragment) but fails CLOSED where the app fails open
+ * (the app silently ignores an invalid value and keeps its constant) — the
+ * server must not publish a value the app would ignore.
+ */
+export function validateSourceApiHostParams(parameters: unknown): ParamValidationResult {
+  if (!isPlainObject(parameters)) {
+    return { ok: true }; // shape errors are validateRemoteConfigParams' job
+  }
+  for (const [key, value] of Object.entries(parameters)) {
+    const match = SOURCE_API_HOST_KEY_RE.exec(key);
+    if (!match) continue;
+    const id = match[1];
+    if (typeof value !== "string") {
+      return { ok: false, error: `parameter ${key} must be a host string` };
+    }
+    // Trailing slashes are stripped (the app trims them too). NOTE: no
+    // trimEnd() — the dashboard's TS lib is ES2017 and has no ES2019
+    // String.prototype.trimEnd.
+    const trimmed = value.trim().replace(/\/+$/, "").trim();
+    if (trimmed.length === 0 || trimmed.length > 2048) {
+      return { ok: false, error: `parameter ${key} exceeds 2048 characters` };
+    }
+    // The app strips one leading scheme prefix before validating the host.
+    const host = trimmed.replace(/^https?:\/\//, "").toLowerCase();
+    if (!API_HOST_RE.test(host) || host.includes("..")) {
+      return { ok: false, error: `parameter ${key} is not a valid host` };
+    }
+    const allowed = SOURCE_API_HOST_ALLOWLIST[id];
+    if (!allowed) {
+      return { ok: false, error: `parameter ${key} references unknown source` };
+    }
+    if (!allowed.includes(host)) {
+      return { ok: false, error: `parameter ${key} host not allow-listed for source ${id}` };
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * Single entry point for the source-domain gates: base URLs AND API hosts.
+ * Both PUTs call THIS (never one of the halves) so a new source-domain key
+ * cannot be added to one channel and forgotten in the other.
+ */
+export function validateSourceDomainParams(parameters: unknown): ParamValidationResult {
+  const base = validateSourceBaseUrlParams(parameters);
+  if (!base.ok) return base;
+  return validateSourceApiHostParams(parameters);
 }
 
 /**

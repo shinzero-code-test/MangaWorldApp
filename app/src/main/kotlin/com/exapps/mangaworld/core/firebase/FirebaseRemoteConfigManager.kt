@@ -15,6 +15,7 @@ import android.util.Log
 import org.json.JSONObject
 import javax.inject.Inject
 import com.exapps.mangaworld.core.di.IoDispatcher
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import javax.inject.Singleton
 
 private const val TAG = "RemoteConfig"
@@ -158,7 +159,9 @@ class FirebaseRemoteConfigManager @Inject constructor(
     }
 
     suspend fun refresh() {
-        runCatching {
+        // U-13: cancellation-aware — a cancelled refresh must not be reported
+        // as "Remote config fetch failed" (which reads as a policy problem).
+        suspendRunCatching {
             // Log the FetchStatus: the SDK's minimum-fetch-interval throttle
             // (3600s, set below) is SILENT, so "throttled" and "fetched, value
             // unchanged" are indistinguishable from the outside. A kill-switch

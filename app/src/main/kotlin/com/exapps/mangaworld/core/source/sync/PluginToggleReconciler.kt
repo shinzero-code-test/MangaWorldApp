@@ -7,6 +7,7 @@ import com.exapps.mangaworld.core.source.plugins.PluginIndexStore
 import com.exapps.mangaworld.core.source.plugins.PluginStatus
 import com.exapps.mangaworld.core.source.plugins.PluginTrust
 import com.exapps.mangaworld.core.source.plugins.PluginTrustKeys
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -51,11 +52,15 @@ class PluginToggleReconciler @Inject constructor(
             settingsRepo.toggleSource(id, false)
             return ToggleOutcome.Disabled
         }
-        val rec = runCatching { indexStore.get(id) }.getOrNull()
+        // U-13: both envelopes below wrap suspend calls. A bare `runCatching`
+        // swallowed the cancellation of a screen-leaving toggle (the row
+        // rendered as "failed" and the post-cancel work kept running), so the
+        // cancellation-aware form is used instead.
+        val rec = suspendRunCatching { indexStore.get(id) }.getOrNull()
         if (rec != null && rec.status == PluginStatus.DISABLED &&
             rec.activeVersion != null && rec.manifestJson != null
         ) {
-            val outcome = runCatching {
+            val outcome = suspendRunCatching {
                 engine.approveHeld(
                     id = id,
                     baseDir = File(appContext.filesDir, "plugins"),

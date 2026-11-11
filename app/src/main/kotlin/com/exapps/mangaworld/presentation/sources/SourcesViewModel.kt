@@ -19,6 +19,7 @@ import com.exapps.mangaworld.core.source.plugins.SourceUiEntry
 import com.exapps.mangaworld.core.source.plugins.SourceUiMapper
 import com.exapps.mangaworld.core.source.sync.PluginSyncEngine
 import com.exapps.mangaworld.core.source.sync.PostSmoke
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -195,7 +196,7 @@ class SourcesViewModel @Inject constructor(
     fun approve(id: String) {
         viewModelScope.launch {
             _busyId.value = id
-            val outcome = runCatching {
+            val outcome = suspendRunCatching {
                 syncEngine.approveHeld(
                     id = id,
                     baseDir = File(appContext.filesDir, "plugins"),
@@ -228,7 +229,7 @@ class SourcesViewModel @Inject constructor(
     fun recheck(id: String) {
         viewModelScope.launch {
             _busyId.value = id
-            val ok = runCatching { health.reverify(id) }
+            val ok = suspendRunCatching { health.reverify(id) }
             _busyId.value = null
             _notice.emit(
                 if (ok.getOrDefault(false)) {

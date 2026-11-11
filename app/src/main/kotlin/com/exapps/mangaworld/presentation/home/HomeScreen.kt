@@ -28,6 +28,7 @@ import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import com.exapps.mangaworld.core.firebase.withFirebaseTrace
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.model.*
 import com.exapps.mangaworld.presentation.components.*
 import com.exapps.mangaworld.presentation.theme.MangaColors
@@ -333,7 +334,7 @@ private fun FeaturedCarousel(
     // re-animate to page 0 every 4s for no visual effect.
     LaunchedEffect(items.size) {
         if (items.isNotEmpty() && pagerState.currentPage >= items.size) {
-            runCatching { pagerState.scrollToPage(0) }
+            suspendRunCatching { pagerState.scrollToPage(0) }
         }
     }
 

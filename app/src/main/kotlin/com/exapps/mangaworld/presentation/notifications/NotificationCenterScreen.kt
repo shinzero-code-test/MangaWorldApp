@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.presentation.notifications
 
 import com.exapps.mangaworld.R
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.background
@@ -164,11 +165,11 @@ class NotificationCenterViewModel @Inject constructor(
 
     /** Resolves an @mention in a notification body to a uid. Null when unknown/offline. */
     suspend fun resolveMention(username: String): String? =
-        runCatching { communityRepository.getUidForUsername(username) }.getOrNull()
+        suspendRunCatching { communityRepository.getUidForUsername(username) }.getOrNull()
 
     fun markRead(id: String) {
         viewModelScope.launch {
-            runCatching { communityRepository.markNotificationRead(id) }
+            suspendRunCatching { communityRepository.markNotificationRead(id) }
             // Mutex-serialized read-modify-write — raw prefs races lost updates (M-review).
             val changed = com.exapps.mangaworld.core.data.NotificationCenterStore.update(context) { arr ->
                 var changed = false
@@ -194,7 +195,7 @@ class NotificationCenterViewModel @Inject constructor(
             val communityIds = unread.filter { it.type !in localTypes }.map { it.id }
 
             kotlinx.coroutines.supervisorScope {
-                launch { runCatching { communityRepository.markNotificationsRead(communityIds) } }
+                launch { suspendRunCatching { communityRepository.markNotificationsRead(communityIds) } }
                 // One serialized prefs pass instead of O(n²) rewrites inside the loop.
                 com.exapps.mangaworld.core.data.NotificationCenterStore.update(context) { arr ->
                     val ids = unread.map { it.id }.toSet()

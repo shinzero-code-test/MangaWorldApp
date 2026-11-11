@@ -1,6 +1,7 @@
 package com.exapps.mangaworld.presentation.auth
 
 import android.util.Log
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.UsernameRules
 import com.exapps.mangaworld.domain.repository.CommunityRepository
 import com.google.firebase.auth.FirebaseUser
@@ -42,7 +43,7 @@ suspend fun CommunityRepository.ensureSocialProfile(
     firebaseUser: FirebaseUser?,
     uid: String
 ): Boolean {
-    val existing = runCatching { getCurrentProfile() }.getOrNull()
+    val existing = suspendRunCatching { getCurrentProfile() }.getOrNull()
     if (existing != null && existing.username.isNotBlank()) return true
     val email = firebaseUser?.email
     val providerName = firebaseUser?.displayName?.takeIf { it.isNotBlank() }
@@ -53,7 +54,7 @@ suspend fun CommunityRepository.ensureSocialProfile(
     val base = usernameFromEmail(email, uid)
     var candidate = base
     repeat(3) {
-        val ok = runCatching {
+        val ok = suspendRunCatching {
             upsertProfile(
                 username = candidate,
                 bio = existing?.bio ?: "",

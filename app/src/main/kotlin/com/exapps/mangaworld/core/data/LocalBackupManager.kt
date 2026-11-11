@@ -325,7 +325,7 @@ class LocalBackupManager @Inject constructor(
                 runCatching { row.toMangaCollection() }.getOrNull()?.let { parsed.add(it) }
             }
             if (parsed.isNotEmpty()) {
-                runCatching { collectionManager.restoreCollections(parsed) }
+                suspendRunCatching { collectionManager.restoreCollections(parsed) }
                     .onSuccess { collectionCount = parsed.size }
                     .onFailure { Log.w(TAG, "Collections restore skipped: ${it.message}") }
             }
@@ -359,7 +359,7 @@ class LocalBackupManager @Inject constructor(
         }
         root.optJSONObject("readerSettings")?.toReaderSettings()?.let { applyReaderSettings(it) }
         root.optJSONObject("readingStats")?.let { stats ->
-            runCatching { readingStatsStore.restore(stats) }
+            suspendRunCatching { readingStatsStore.restore(stats) }
                 .onFailure { Log.w(TAG, "Stats restore skipped: ${it.message}") }
         }
         // BK-4: plugin refs restore as AVAILABLE records with no bytes — the sync
@@ -371,7 +371,7 @@ class LocalBackupManager @Inject constructor(
             val total = minOf(arr.length(), MAX_PLUGIN_REFS)
             for (i in 0 until total) {
                 val ref = runCatching { arr.getJSONObject(i).toPluginRef() }.getOrNull() ?: continue
-                runCatching {
+                suspendRunCatching {
                     if (pluginIndex.get(ref.id) == null) {
                         pluginIndex.put(
                             com.exapps.mangaworld.core.source.plugins.PluginIndexRecord(
@@ -391,7 +391,7 @@ class LocalBackupManager @Inject constructor(
         // D12: restored refs are payload-less AVAILABLE markers — nudge the
         // sync lane so re-discovery does not wait for the next boot window.
         if (pluginCount > 0) {
-            runCatching { pluginSyncScheduler.requestNow() }
+            suspendRunCatching { pluginSyncScheduler.requestNow() }
         }
         return ImportResult.Success(favCount, histCount, readCount, collectionCount, bookmarkCount, pluginCount)
     }

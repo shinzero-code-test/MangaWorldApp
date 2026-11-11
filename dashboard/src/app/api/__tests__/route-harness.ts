@@ -24,9 +24,33 @@ export function req(payload: unknown): NextRequest {
   return { json: async () => payload, headers: new Headers() } as unknown as NextRequest;
 }
 
+/**
+ * NextRequest stand-in for routes that read the URL (`request.nextUrl`,
+ * `new URL(request.url)`): query params, pagination and filters.
+ */
+export function reqUrl(url: string, payload: unknown = {}): NextRequest {
+  const parsed = new URL(url);
+  return {
+    json: async () => payload,
+    headers: new Headers(),
+    nextUrl: parsed,
+    url: parsed.toString(),
+  } as unknown as NextRequest;
+}
+
 /** Route param helper for `[uid]`-shaped routes. */
 export function uidParams(uid: string) {
   return { params: Promise.resolve({ uid }) };
+}
+
+/** Route param helper for `[collection]`-shaped routes. */
+export function collectionParams(collection: string) {
+  return { params: Promise.resolve({ collection }) };
+}
+
+/** Route param helper for `[collection]/[docId]`-shaped routes. */
+export function docParams(collection: string, docId: string) {
+  return { params: Promise.resolve({ collection, docId }) };
 }
 
 export const APP_USER = {

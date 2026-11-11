@@ -98,7 +98,8 @@ class MangaRepositoryImpl @Inject constructor(
     private val firebaseTelemetry: FirebaseTelemetry,
     private val recommendationEngine: RecommendationEngine,
     // Post-activation drift watch (§11B): observes scraper results, never cache
-    // fallbacks. Observation failures must never break reads (runCatching below).
+    // fallbacks. Observation failures must never break reads (the
+    // suspendRunCatching wrappers below).
     private val health: com.exapps.mangaworld.core.source.plugins.SourceHealthMonitor
 ) : MangaRepository {
 
@@ -143,7 +144,7 @@ class MangaRepositoryImpl @Inject constructor(
         suspendRunCatching {
             if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return@suspendRunCatching com.exapps.mangaworld.domain.model.HomeData()
             val result = firebaseTelemetry.traceSuspend("home_${source.value}") { scraper(source).getHomeData() }
-            runCatching { health.observeHome(source.value, result) }
+            suspendRunCatching { health.observeHome(source.value, result) }
             result.getOrThrow()
         }
 
@@ -196,7 +197,7 @@ class MangaRepositoryImpl @Inject constructor(
         // Fetch fresh from scraper
         val networkResult = withScraper(source, "detail") { it.getMangaDetail(slug) }
         // Drift watch sees the scraper result, not the cache fallback below.
-        runCatching { health.observeDetail(source.value, networkResult) }
+        suspendRunCatching { health.observeDetail(source.value, networkResult) }
 
         return networkResult
             .map { fresh ->
@@ -210,7 +211,7 @@ class MangaRepositoryImpl @Inject constructor(
             }
             .onSuccess { detail ->
                 // Update cache with latest data (including chapters)
-                runCatching { cacheDao.insert(detail.toCacheEntity()) }
+                suspendRunCatching { cacheDao.insert(detail.toCacheEntity()) }
             }
             .recoverCatching { e ->
                 // Failure already logged by withScraper("detail").
@@ -222,7 +223,7 @@ class MangaRepositoryImpl @Inject constructor(
     override suspend fun getChapterPages(mangaSlug: String, chapterUrl: String, source: com.exapps.mangaworld.core.source.plugins.SourceId): Result<List<ChapterPage>> {
         if (com.exapps.mangaworld.core.source.plugins.BuiltinSourceIds.isLocal(source.value)) return Result.success(emptyList())
         val result = withScraper(source, "pages") { it.getChapterPages(chapterUrl) }
-        runCatching { health.observePages(source.value, result) }
+        suspendRunCatching { health.observePages(source.value, result) }
         return result
     }
 
@@ -582,9 +583,11 @@ class LibraryRepositoryImpl @Inject constructor(
                 snap.documents.forEach { doc ->
                     // Per-doc delete kept (no WriteBatch) — same failure
                     // isolation as the old loop.
-                    runCatching { doc.reference.delete().await() }
+                    // U-13: suspendRunCatching rethrows CancellationException,
+                    // so a cancelled wipe can never be reported as a plain
+                    // per-doc failure (the manual rethrow below is gone).
+                    suspendRunCatching { doc.reference.delete().await() }
                         .onFailure { e ->
-                            if (e is CancellationException) throw e
                             android.util.Log.e("LibraryRepo", "Cloud wipe $collection: delete ${doc.id} failed: ${e.message}")
                         }
                         .onSuccess { deleted++ }

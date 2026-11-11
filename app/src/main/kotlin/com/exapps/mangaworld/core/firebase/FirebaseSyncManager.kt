@@ -107,7 +107,7 @@ class FirebaseSyncManager @Inject constructor(
         // value this push writes; the trace block reuses these.
         val totalReadingTimeMs = readingStatsStore.totalReadingTimeMs.first()
         val totalMangaRead = readingStatsStore.totalMangaRead.first()
-        val achievementsData = runCatching { achievementManager.syncToFirestoreMap() }.getOrElse { emptyMap() }
+        val achievementsData = suspendRunCatching { achievementManager.syncToFirestoreMap() }.getOrElse { emptyMap() }
 
         // U-27(c): identical local inputs since the last successful push →
         // skip the 4 remote reads + writes (idempotent no-op). Conservative
@@ -433,7 +433,7 @@ class FirebaseSyncManager @Inject constructor(
                             staleCloud += collection to doc.id
                         } else if (key !in localIds) {
                             staleCloud += collection to key
-                            runCatching { prefs.markSyncTombstone(collection, key, now) }
+                            suspendRunCatching { prefs.markSyncTombstone(collection, key, now) }
                         }
                     }
                 }
@@ -515,7 +515,7 @@ class FirebaseSyncManager @Inject constructor(
         if (pulled) {
             pullRemoteSnapshot()
             // Positions have no tombstones (write-only locally) — replace outright.
-            runCatching { positionSyncManager.pullRemotePositions() }
+            suspendRunCatching { positionSyncManager.pullRemotePositions() }
         }
     }
 
@@ -672,10 +672,10 @@ class FirebaseSyncManager @Inject constructor(
         (profile.getLong("totalMangaRead") ?: (profile.getDouble("totalMangaRead"))?.toInt()?.toLong())
             ?.let { statsJson.put("totalMangaRead", it.toInt()) }
         if (statsJson.length() > 0) {
-            runCatching { readingStatsStore.restore(statsJson) }
+            suspendRunCatching { readingStatsStore.restore(statsJson) }
         }
         // Pull achievements and goals from Firestore (max/union merge).
-        runCatching {
+        suspendRunCatching {
             val achievementsDoc = userRef.collection("preferences").document("achievements").get().await()
             if (achievementsDoc.exists()) {
                 achievementManager.importFromFirestore(
@@ -707,7 +707,12 @@ class FirebaseSyncManager @Inject constructor(
         val chunks = writes.chunked(400)
         var failedChunks = 0
         for ((index, chunk) in chunks.withIndex()) {
-            runCatching {
+            // U-13: suspendRunCatching rethrows CancellationException, so a
+            // cancelled push ABORTS the remaining chunks instead of counting
+            // them as failures and pushing on (zombie writes after the caller
+            // went away). The fail-loud contract below is unchanged for real
+            // errors: a partial push still reports failure so the worker retries.
+            suspendRunCatching {
                 val batch: WriteBatch = firestore.batch()
                 chunk.forEach { (ref, value) -> batch.set(ref, value, SetOptions.merge()) }
                 batch.commit().await()
@@ -734,7 +739,7 @@ class FirebaseSyncManager @Inject constructor(
         val chunks = writes.chunked(400)
         var failedChunks = 0
         for ((index, chunk) in chunks.withIndex()) {
-            runCatching {
+            suspendRunCatching {
                 val batch: WriteBatch = firestore.batch()
                 chunk.forEach { (ref, value) -> batch.set(ref, value) }
                 batch.commit().await()
@@ -754,11 +759,11 @@ class FirebaseSyncManager @Inject constructor(
      * eventually drop live tombstones in favor of dead ones.
      */
     private suspend fun pruneExpiredCloudTombstones(userRef: DocumentReference) {
-        runCatching {
+        suspendRunCatching {
             val cutoff = System.currentTimeMillis() - AppPreferences.TOMBSTONE_TTL_MS
             userRef.collection("syncTombstones")
                 .whereLessThan("deletedAt", cutoff).limit(100).get().await()
-                .documents.forEach { runCatching { it.reference.delete().await() } }
+                .documents.forEach { suspendRunCatching { it.reference.delete().await() } }
         }
     }
 
@@ -767,7 +772,7 @@ class FirebaseSyncManager @Inject constructor(
         val chunks = refs.chunked(400)
         var failedChunks = 0
         for ((index, chunk) in chunks.withIndex()) {
-            runCatching {
+            suspendRunCatching {
                 val batch: WriteBatch = firestore.batch()
                 chunk.forEach { batch.delete(it) }
                 batch.commit().await()

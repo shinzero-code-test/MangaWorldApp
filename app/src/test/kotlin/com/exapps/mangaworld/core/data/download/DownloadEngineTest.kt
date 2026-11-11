@@ -8,9 +8,13 @@ import com.exapps.mangaworld.core.data.local.dao.DownloadedMangaDao
 import com.exapps.mangaworld.core.data.local.entity.DownloadBatchEntity
 import com.exapps.mangaworld.core.data.local.entity.DownloadTaskEntity
 import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.model.ChapterPage
+import com.exapps.mangaworld.domain.repository.MangaRepository
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
@@ -49,13 +53,13 @@ import java.io.File
  * lands, port these cases to `Room.inMemoryDatabaseBuilder` so the SQL (not
  * the fake) is under test, and retire the fakes.
  *
- * Seam boundary (documented, not faked): every path that reaches the
- * `WorkManager.getInstance(...)` static — enqueue success, batch happy
- * path, retry/resume/pause/cancel, deleteDownloadedManga teardown — throws
- * on JVM (android.jar is stubs-only) and is therefore EXCLUDED below with
- * TODOs. Do not "fix" that with mockkStatic(WorkManager): the static-init +
- * Operation-future plumbing would make the test prove the mock. The proper
- * refactor is an injected enqueue/cancel seam on the manager.
+ * Seam boundary: the WorkManager calls the queue used to make inline are now
+ * behind [DownloadWorkScheduler] and the batch-summary notification is behind
+ * [DownloadNotifier] (U-33). The manager under test is the REAL one; only the
+ * platform boundary is faked, so the enqueue/retry/resume/pause/cancel state
+ * machines, the batch teardown and the terminal notification are all executed
+ * here. The chapter page loop lives in [ChapterDownloadEngine] and is covered
+ * by `ChapterDownloadEngineTest` (never by driving the worker itself).
  * `ReaderViewModel.loadChapter` is likewise never called (AGENTS.md wedge).
  */
 class DownloadEngineTest {
@@ -328,6 +332,55 @@ class DownloadEngineTest {
     private lateinit var manager: DownloadQueueManager
     private lateinit var httpResponses: MutableMap<String, Pair<Int, ByteArray>>
     private lateinit var interceptor: FakeImageInterceptor
+    private lateinit var scheduler: RecordingDownloadWorkScheduler
+    private lateinit var notifier: RecordingDownloadNotifier
+    private lateinit var mangaRepository: MangaRepository
+
+    /**
+     * U-33 seam fake: records the work the manager asked WorkManager for.
+     * The manager is the REAL one — only the platform boundary is faked.
+     */
+    class RecordingDownloadWorkScheduler : DownloadWorkScheduler {
+        val chapterEnqueues = mutableListOf<String>()
+        val batchEnqueues = mutableListOf<List<String>>()
+        val retryEnqueues = mutableListOf<String>()
+        val cancelledMangaQueues = mutableListOf<String>()
+        val cancelledRetryQueues = mutableListOf<String>()
+        val cancelledMangaTags = mutableListOf<String>()
+
+        override fun enqueueChapter(task: DownloadTaskEntity) {
+            chapterEnqueues += task.id
+        }
+
+        override fun enqueueBatch(tasks: List<DownloadTaskEntity>) {
+            batchEnqueues += tasks.map { it.id }
+        }
+
+        override fun enqueueRetry(task: DownloadTaskEntity) {
+            retryEnqueues += task.id
+        }
+
+        override suspend fun cancelMangaQueue(mangaId: String) {
+            cancelledMangaQueues += mangaId
+        }
+
+        override suspend fun cancelRetryQueue(taskId: String) {
+            cancelledRetryQueues += taskId
+        }
+
+        override suspend fun cancelAllForManga(mangaId: String) {
+            cancelledMangaTags += mangaId
+        }
+    }
+
+    /** U-33 seam fake: records the batch summaries the queue published. */
+    class RecordingDownloadNotifier : DownloadNotifier {
+        val batches = mutableListOf<DownloadBatchEntity>()
+
+        override fun notifyBatchComplete(batch: DownloadBatchEntity) {
+            batches += batch
+        }
+    }
 
     private val jpegBytes: ByteArray = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte()) +
         ByteArray(60) { 0x11 }
@@ -361,6 +414,8 @@ class DownloadEngineTest {
         mangaDao = FakeDownloadedMangaDao()
         httpResponses = mutableMapOf()
         interceptor = FakeImageInterceptor(httpResponses)
+        scheduler = RecordingDownloadWorkScheduler()
+        notifier = RecordingDownloadNotifier()
         // Wire the two fakes to the same world (what SQL subselects would see).
         batchDao.allTasks = { taskDao.snapshot() }
         taskDao.batchNotified = { batchId -> batchDao.getById(batchId)?.completionNotified == true }
@@ -368,15 +423,28 @@ class DownloadEngineTest {
         val app = mockk<Application>(relaxed = true)
         every { app.getExternalFilesDir(any()) } returns externalFiles
 
+        // Fresh page resolution is a no-op here: the retry path falls back to
+        // the cached page list, which is what the state machine is about.
+        mangaRepository = mockk(relaxed = true)
+        coEvery { mangaRepository.getChapterPages(any(), any(), any()) } returns Result.success(emptyList())
+
+        // `withTransaction` dispatches on RoomDatabase.transactionDispatcher; a
+        // relaxed mock would return a no-op dispatcher and the transaction
+        // body would never run. Unconfined executes it inline.
+        val database = mockk<MangaDatabase>(relaxed = true)
+        every { database.transactionDispatcher } returns Dispatchers.Unconfined
+
         manager = DownloadQueueManager(
             app = app,
-            database = mockk<MangaDatabase>(relaxed = true),
+            database = database,
             downloadTaskDao = taskDao,
             downloadBatchDao = batchDao,
             downloadedMangaDao = mangaDao,
             okHttpClient = OkHttpClient.Builder().addInterceptor(interceptor).build(),
             analyticsManager = mockk(relaxed = true),
-            mangaRepository = mockk(relaxed = true)
+            mangaRepository = mangaRepository,
+            workScheduler = scheduler,
+            notifier = notifier
         )
     }
 
@@ -540,11 +608,13 @@ class DownloadEngineTest {
         assertNotNull(batchDao.getById("old-unnotified"))
     }
 
-    // ─── Idempotent enqueue (dead-end paths; success needs WorkManager) ────
-    // TODO(U-33 follow-up): enqueue success + the racing-winner needs an
-    // injectable WorkManager seam (see file header). The reachable contract
-    // is the dedup predicate + pending lookup under queueMutex, which is
-    // what guarantees a duplicate durable row can never be admitted.
+    // ─── Idempotent enqueue ───────────────────────────────────────────────
+    // The dead-end paths (empty pages, already on disk, already pending) and
+    // the racing-winner are here; the SUCCESS path (insert → metadata →
+    // schedule) is covered further down, now that the WorkManager boundary is
+    // a seam. The reachable contract is the dedup predicate + pending lookup
+    // under queueMutex, which is what guarantees a duplicate durable row can
+    // never be admitted.
 
     @Test
     fun `enqueueAndRun rejects empty page lists`() = runBlocking {
@@ -590,12 +660,10 @@ class DownloadEngineTest {
         val url = "https://x.com/solo/12"
         val pages = listOf(ChapterPage(0, "https://cdn.x.com/p1.jpg"))
         // Both callers race check-then-insert. queueMutex must serialize
-        // them so exactly one row exists. (The winner's WorkManager call
-        // throws on JVM — documented seam limit — so we assert on the
-        // durable row, which is written before any WorkManager touch.)
+        // them so exactly one row exists — and exactly one work item.
         val jobs = listOf("t1", "t2").map { id ->
             async {
-                runCatching {
+                suspendRunCatching {
                     manager.enqueueAndRun(
                         taskId = id, mangaId = "azora_solo", mangaTitle = "Solo",
                         chapterUrl = url, chapterTitle = "Ch 12",
@@ -608,6 +676,9 @@ class DownloadEngineTest {
         val rowsForChapter = taskDao.snapshot().filter { it.chapterUrl == url }
         assertEquals(1, rowsForChapter.size)
         assertEquals("queued", rowsForChapter.single().status)
+        // The loser never reached the scheduler.
+        assertEquals(1, scheduler.chapterEnqueues.size)
+        assertEquals(rowsForChapter.single().id, scheduler.chapterEnqueues.single())
     }
 
     @Test
@@ -897,10 +968,9 @@ class DownloadEngineTest {
     }
 
     // ─── Orphan-task recovery ordering (DB side only) ─────────────────────
-    // recoverOrphanTasks resets running→queued BEFORE any WorkManager call;
-    // that ordering is the crash-recovery contract. The WorkManager enqueue
-    // itself is the documented seam limit (throws on JVM), so the test
-    // asserts the durable reset and lets the enqueue failure propagate.
+    // recoverOrphanTasks resets running→queued BEFORE any work is scheduled;
+    // that ordering is the crash-recovery contract. The scheduler is a seam
+    // now, so the re-schedule is asserted too.
 
     @Test
     fun `recoverOrphanTasks resets stranded running rows to queued first`() = runBlocking {
@@ -908,11 +978,14 @@ class DownloadEngineTest {
         taskDao.upsert(task(id = "q1", chapterUrl = "https://x.com/b", status = "queued"))
         taskDao.upsert(task(id = "c1", chapterUrl = "https://x.com/c", status = "completed"))
 
-        runCatching { manager.recoverOrphanTasks() } // WorkManager statics throw on JVM
+        manager.recoverOrphanTasks()
 
         assertEquals("queued", taskDao.getById("r1")?.status)
         assertEquals("queued", taskDao.getById("q1")?.status)
         assertEquals("completed", taskDao.getById("c1")?.status)
+        // Both stranded rows are re-scheduled on the per-manga chain.
+        assertEquals(1, scheduler.batchEnqueues.size)
+        assertEquals(setOf("r1", "q1"), scheduler.batchEnqueues.single().toSet())
     }
 
     // ─── DAO state-machine contract (fake mirrors Daos.kt SQL) ─────────────
@@ -975,20 +1048,202 @@ class DownloadEngineTest {
         assertEquals(0, batchDao.claimTerminalNotification("b2")) // not terminal yet
     }
 
-    // ─── TODO (U-33 seam limit — WorkManager static) ───────────────────────
-    // The following remain UNCOVERED on JVM and need the injected-seam
-    // refactor (extract WorkManager enqueue/cancel behind an interface on
-    // DownloadQueueManager, then test the manager with a recording fake):
-    //   TODO 1. enqueue success path (insert → metadata → enqueueWorker).
-    //   TODO 2. enqueueBatch happy path (batch row + tasks + continuation).
-    //   TODO 3. retryTask / resumeTask / pauseTask / cancelTask state
-    //           machines (resubmitTasks fresh-vs-cached page resolution,
-    //           forceFreshPages partial-dir wipe).
-    //   TODO 4. deleteDownloadedManga full teardown (files + tasks +
-    //           batches + metadata row).
-    //   TODO 5. reconcileBatchCompletion terminal notification.
-    //   TODO 6. ChapterDownloadWorker.doWork page loop (chunked parallel
-    //           download, .part+rename, marker idempotency) — needs an
-    //           instrumented/device run or a worker-agnostic download
-    //           engine extraction. NEVER call from JVM unit tests.
+    // ─── U-33 seam: the WorkManager boundary is faked, the manager is real ──
+    // The six cases that were pinned to a "documented seam limit" now run
+    // against the REAL DownloadQueueManager with a recording scheduler.
+
+    @Test
+    fun `enqueueAndRun persists the row, the metadata and schedules the chapter`() = runBlocking {
+        val url = "https://x.com/solo/12"
+        val enqueued = manager.enqueueAndRun(
+            taskId = "t1", mangaId = "azora_solo", mangaTitle = "Solo",
+            chapterUrl = url, chapterTitle = "Ch 12",
+            pages = listOf(ChapterPage(0, "https://cdn.x.com/p1.jpg")),
+            mangaMetadata = mangaRow(downloadedChapters = 0)
+        )
+
+        assertTrue(enqueued)
+        val task = taskDao.getById("t1")
+        assertNotNull(task)
+        assertEquals("queued", task!!.status)
+        assertEquals(url, task.chapterUrl)
+        assertEquals("Solo", task.mangaTitle)
+        assertEquals("""["https://cdn.x.com/p1.jpg"]""", task.pagesJson)
+        // The manga metadata row is persisted with the enqueue.
+        assertNotNull(mangaDao.get("azora_solo"))
+        // The work was scheduled exactly once, for this task.
+        assertEquals(listOf("t1"), scheduler.chapterEnqueues)
+        assertTrue(scheduler.batchEnqueues.isEmpty())
+    }
+
+    @Test
+    fun `enqueueBatch persists the batch, its tasks and one ordered chain`() = runBlocking {
+        val n = manager.enqueueBatch(
+            mangaId = "azora_solo", mangaTitle = "Solo", mangaSlug = "solo",
+            sourceId = "azora",
+            ready = listOf(
+                PreparedChapterDownload(
+                    chapterUrl = "https://x.com/solo/12", chapterTitle = "Ch 12",
+                    pages = listOf(ChapterPage(0, "https://cdn.x.com/p1.jpg")), referer = ""
+                ),
+                PreparedChapterDownload(
+                    chapterUrl = "https://x.com/solo/13", chapterTitle = "Ch 13",
+                    pages = listOf(ChapterPage(0, "https://cdn.x.com/p2.jpg")), referer = ""
+                )
+            ),
+            failed = listOf(
+                FailedChapterDownload("https://x.com/solo/14", "Ch 14", "no pages")
+            ),
+            wifiOnly = true
+        )
+
+        assertEquals(3, n)
+        val tasks = taskDao.snapshot()
+        assertEquals(3, tasks.size)
+        val queued = tasks.filter { it.status == "queued" }
+        val failed = tasks.filter { it.status == "failed" }
+        assertEquals(2, queued.size)
+        assertEquals(1, failed.size)
+        assertEquals("no pages", failed.single().errorMessage)
+
+        val batchId = queued.first().batchId!!
+        val batch = batchDao.getById(batchId)
+        assertNotNull(batch)
+        assertEquals(3, batch!!.totalChapters)
+        assertEquals(1, batch.failedChapters)
+        assertEquals(0, batch.completedChapters)
+        // Every task belongs to the batch.
+        assertTrue(tasks.all { it.batchId == batch.id })
+
+        // ONE ordered chain, in request order (the chain is what keeps a
+        // whole-manga request from overwhelming the source).
+        assertEquals(1, scheduler.batchEnqueues.size)
+        assertEquals(queued.map { it.id }, scheduler.batchEnqueues.single())
+    }
+
+    @Test
+    fun `retryTask re-queues the task and schedules a standalone retry chain`() = runBlocking {
+        taskDao.upsert(task(id = "t1", chapterUrl = "https://x.com/solo/12", status = "failed"))
+        taskDao.upsert(task(id = "t2", chapterUrl = "https://x.com/solo/13", status = "failed"))
+
+        manager.retryTask("t1")
+
+        val retried = taskDao.getById("t1")!!
+        assertEquals("queued", retried.status)
+        assertEquals(0f, retried.progress, 0.0001f)
+        assertEquals(0, retried.retries)
+        assertNull(retried.errorMessage)
+        // A manual retry runs on its own queue, NOT behind the batch chain.
+        assertEquals(listOf("t1"), scheduler.retryEnqueues)
+        assertTrue(scheduler.batchEnqueues.isEmpty())
+        // The sibling task is untouched.
+        assertEquals("failed", taskDao.getById("t2")?.status)
+    }
+
+    @Test
+    fun `pauseTask parks the task, cancels the work and re-queues the rest`() = runBlocking {
+        taskDao.upsert(task(id = "t1", chapterUrl = "https://x.com/solo/12", status = "running"))
+        taskDao.upsert(task(id = "t2", chapterUrl = "https://x.com/solo/13", status = "queued"))
+
+        manager.pauseTask("t1")
+
+        assertEquals("paused", taskDao.getById("t1")?.status)
+        // A running sibling goes back to queued, never paused.
+        assertEquals("queued", taskDao.getById("t2")?.status)
+        // The per-manga chain and the per-task retry chain are cancelled.
+        assertEquals(listOf("azora_solo"), scheduler.cancelledMangaQueues)
+        assertEquals(listOf("t1"), scheduler.cancelledRetryQueues)
+        // The still-queued chapter is re-scheduled.
+        assertEquals(listOf(listOf("t2")), scheduler.batchEnqueues)
+    }
+
+    @Test
+    fun `resumeTask re-queues a paused task and schedules it again`() = runBlocking {
+        taskDao.upsert(task(id = "t1", chapterUrl = "https://x.com/solo/12", status = "paused"))
+
+        manager.resumeTask("t1")
+
+        assertEquals("queued", taskDao.getById("t1")?.status)
+        assertEquals(listOf("t1"), scheduler.retryEnqueues)
+    }
+
+    @Test
+    fun `cancelTask cancels the row, the work and the chapter directory`() = runBlocking {
+        val url = "https://x.com/solo/12"
+        completedChapterDir("azora_solo", url, listOf("1.jpg"))
+        taskDao.upsert(task(id = "t1", chapterUrl = url, status = "queued"))
+
+        manager.cancelTask("t1")
+
+        val cancelled = taskDao.getById("t1")!!
+        assertEquals("cancelled", cancelled.status)
+        assertEquals(ChapterDownloadWorker.ERROR_CANCELLED, cancelled.errorMessage)
+        assertFalse(chapterDir("azora_solo", url).exists())
+        assertEquals(listOf("azora_solo"), scheduler.cancelledMangaQueues)
+        assertEquals(listOf("t1"), scheduler.cancelledRetryQueues)
+    }
+
+    @Test
+    fun `deleteDownloadedManga tears down files, rows and scheduled work`() = runBlocking {
+        completedChapterDir("azora_solo", "https://x.com/solo/12", listOf("1.jpg"))
+        taskDao.upsert(task(id = "t1", chapterUrl = "https://x.com/solo/12", status = "completed"))
+        batchDao.upsert(
+            DownloadBatchEntity(
+                id = "b1", mangaId = "azora_solo", mangaTitle = "Solo", totalChapters = 1
+            )
+        )
+        mangaDao.upsert(mangaRow(downloadedChapters = 1))
+
+        manager.deleteDownloadedManga("azora_solo")
+
+        assertFalse(File(downloadsRoot(), "azora_solo").exists())
+        assertNull(taskDao.getById("t1"))
+        assertNull(batchDao.getById("b1"))
+        assertNull(mangaDao.get("azora_solo"))
+        // Both the chain and every tagged work item are cancelled.
+        assertEquals(listOf("azora_solo"), scheduler.cancelledMangaQueues)
+        assertEquals(listOf("azora_solo"), scheduler.cancelledMangaTags)
+    }
+
+    @Test
+    fun `reconcileBatchCompletion publishes exactly one terminal summary`() = runBlocking {
+        val batchId = "b1"
+        batchDao.upsert(
+            DownloadBatchEntity(
+                id = batchId, mangaId = "azora_solo", mangaTitle = "Solo",
+                totalChapters = 2, completedChapters = 1, failedChapters = 1
+            )
+        )
+        taskDao.upsert(task(id = "t1", chapterUrl = "https://x.com/a", status = "completed", batchId = batchId))
+        taskDao.upsert(task(id = "t2", chapterUrl = "https://x.com/b", status = "failed", batchId = batchId))
+
+        manager.reconcileBatchCompletion(batchId)
+
+        assertEquals(1, notifier.batches.size)
+        val published = notifier.batches.single()
+        assertEquals(batchId, published.id)
+        // The counts are re-read from the tasks, never from the stale row.
+        assertEquals(1, published.completedChapters)
+        assertEquals(1, published.failedChapters)
+
+        // A second reconcile publishes nothing more (claim-once).
+        manager.reconcileBatchCompletion(batchId)
+        assertEquals(1, notifier.batches.size)
+    }
+
+    @Test
+    fun `reconcileBatchCompletion stays silent while the batch is not terminal`() = runBlocking {
+        val batchId = "b1"
+        batchDao.upsert(
+            DownloadBatchEntity(
+                id = batchId, mangaId = "azora_solo", mangaTitle = "Solo",
+                totalChapters = 3, completedChapters = 1, failedChapters = 0
+            )
+        )
+        taskDao.upsert(task(id = "t1", chapterUrl = "https://x.com/a", status = "completed", batchId = batchId))
+
+        manager.reconcileBatchCompletion(batchId)
+
+        assertTrue(notifier.batches.isEmpty())
+    }
 }

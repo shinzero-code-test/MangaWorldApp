@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminRemoteConfig } from "@/lib/firebase-admin";
 import { requireRole } from "@/lib/auth";
-import { validateRemoteConfigParams, validateSourceBaseUrlParams } from "@/lib/validate";
+import { validateRemoteConfigParams, validateSourceDomainParams } from "@/lib/validate";
 import { genericErrorResponse, logSecurityEvent } from "@/lib/security";
 
 export const dynamic = 'force-dynamic';
@@ -41,8 +41,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
     // U-30: second PUT path for source base URLs — same https +
-    // origin-only + allow-list gate as remote-config (both PUTs).
-    const urlValidation = validateSourceBaseUrlParams(settings);
+    // origin-only + allow-list gate as remote-config (both PUTs), plus the
+    // API-host overrides (`source_<id>_api_host`).
+    const urlValidation = validateSourceDomainParams(settings);
     if (!urlValidation.ok) {
       return NextResponse.json({ error: urlValidation.error }, { status: 400 });
     }

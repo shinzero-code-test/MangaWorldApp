@@ -63,6 +63,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.model.CommunityComment
 import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.CustomUserList
@@ -250,7 +251,7 @@ class PublicProfileViewModel @Inject constructor(
     fun toggleFollow() {
         if (isOwnProfile.value) return
         viewModelScope.launchNonCancellableTimed {
-            runCatching {
+            suspendRunCatching {
                 if (isFollowing.value) communityRepository.unfollowUser(userId)
                 else communityRepository.followUser(userId)
             }.onFailure {

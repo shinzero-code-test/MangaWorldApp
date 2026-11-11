@@ -75,6 +75,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.exapps.mangaworld.core.data.ReadingStatsStore
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.model.CommunityNotification
 import com.exapps.mangaworld.domain.model.CommunityProfile
 import com.exapps.mangaworld.domain.model.CustomUserList
@@ -163,7 +164,7 @@ class UserProfileViewModel @Inject constructor(
         viewModelScope.launch {
             // Wait for profile to load (never crash the scope: a read failure
             // must degrade to empty state, not an instant app crash).
-            runCatching { profile.first { it != null } }
+            suspendRunCatching { profile.first { it != null } }
             _isLoading.value = false
             // Load favourites by status
             val statuses = listOf("reading", "completed", "plan_to_read", "on_hold", "dropped")
@@ -180,10 +181,10 @@ class UserProfileViewModel @Inject constructor(
 
     fun uploadAvatar(uri: Uri) {
         viewModelScope.launch {
-            val current = runCatching { communityRepository.getCurrentProfile() }.getOrNull()
+            val current = suspendRunCatching { communityRepository.getCurrentProfile() }.getOrNull()
             val result = cloudinaryUploader.uploadImage(uri, assetType = "avatar")
             if (result != null) {
-                runCatching {
+                suspendRunCatching {
                     communityRepository.upsertProfile(
                         username = current?.username ?: "",
                         bio = current?.bio ?: "",
@@ -207,10 +208,10 @@ class UserProfileViewModel @Inject constructor(
 
     fun uploadBanner(uri: Uri) {
         viewModelScope.launch {
-            val current = runCatching { communityRepository.getCurrentProfile() }.getOrNull()
+            val current = suspendRunCatching { communityRepository.getCurrentProfile() }.getOrNull()
             val result = cloudinaryUploader.uploadImage(uri, assetType = "banner")
             if (result != null) {
-                runCatching {
+                suspendRunCatching {
                     communityRepository.upsertProfile(
                         username = current?.username ?: "",
                         bio = current?.bio ?: "",
@@ -233,7 +234,7 @@ class UserProfileViewModel @Inject constructor(
     }
 
     fun markRead(id: String) {
-        viewModelScope.launch { runCatching { communityRepository.markNotificationRead(id) } }
+        viewModelScope.launch { suspendRunCatching { communityRepository.markNotificationRead(id) } }
     }
 
     /**
@@ -245,9 +246,9 @@ class UserProfileViewModel @Inject constructor(
         viewModelScope.launch {
             val user = sessionManager.currentUser() ?: return@launch
             if (user.isAnonymous) return@launch
-            val current = runCatching { communityRepository.getCurrentProfile() }.getOrNull()
+            val current = suspendRunCatching { communityRepository.getCurrentProfile() }.getOrNull()
             if (current != null && current.username.isBlank()) {
-                runCatching { communityRepository.ensureSocialProfile(user, user.uid) }
+                suspendRunCatching { communityRepository.ensureSocialProfile(user, user.uid) }
                 refreshProfile()
             }
         }

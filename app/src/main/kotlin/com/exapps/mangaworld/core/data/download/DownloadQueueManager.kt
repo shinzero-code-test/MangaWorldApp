@@ -1,14 +1,7 @@
 package com.exapps.mangaworld.core.data.download
 
 import android.app.Application
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Context
 import androidx.room.withTransaction
-import androidx.core.app.NotificationCompat
-import androidx.work.*
-import androidx.work.await
-import com.exapps.mangaworld.MangaWorldApp
 import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.core.data.local.MangaDatabase
@@ -20,7 +13,6 @@ import com.exapps.mangaworld.core.data.local.entity.DownloadTaskEntity
 import com.exapps.mangaworld.core.data.local.entity.DownloadedMangaEntity
 import com.exapps.mangaworld.domain.model.ChapterPage
 import com.exapps.mangaworld.domain.repository.MangaRepository
-import com.exapps.mangaworld.core.integration.AppLaunchIntents
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -60,7 +52,12 @@ class DownloadQueueManager @Inject constructor(
     private val downloadedMangaDao: DownloadedMangaDao,
     private val okHttpClient: OkHttpClient,
     private val analyticsManager: FirebaseAnalyticsManager,
-    private val mangaRepository: MangaRepository
+    private val mangaRepository: MangaRepository,
+    // U-33 seam: the WorkManager calls and the batch-summary notification are
+    // behind interfaces so the queue's state machine is executable on the JVM
+    // (WorkManager.getInstance / NotificationCompat are stubs-only there).
+    private val workScheduler: DownloadWorkScheduler,
+    private val notifier: DownloadNotifier
 ) {
     private val queueMutex = Mutex()
 
@@ -289,29 +286,20 @@ class DownloadQueueManager @Inject constructor(
         saveCoverAndMetadata(canonicalMangaDir(mangaId), mangaMetadata)
     }
 
+    /**
+     * U-33: the enqueue is a seam call now, not a WorkManager static. The
+     * unique-name/ordering contract lives in [WorkManagerDownloadWorkScheduler];
+     * the durable row is written BEFORE the work is scheduled, so a crash in
+     * between is recovered by [recoverOrphanTasks].
+     */
     private fun enqueueWorker(task: DownloadTaskEntity) {
-        val request = buildWorkerRequest(task)
-        WorkManager.getInstance(app).enqueueUniqueWork(
-            mangaQueueName(task.mangaId),
-            ExistingWorkPolicy.APPEND_OR_REPLACE,
-            request
-        )
+        workScheduler.enqueueChapter(task)
     }
 
     /** Adds a fully prepared manga batch as one ordered WorkManager continuation. */
-    private fun enqueueBatchWorkers(tasks: List<DownloadTaskEntity>, queueName: String? = null) {
-        val requests = tasks.map(::buildWorkerRequest)
-        if (requests.isEmpty()) return
-
-        var continuation = WorkManager.getInstance(app).beginUniqueWork(
-            queueName ?: mangaQueueName(tasks.first().mangaId),
-            ExistingWorkPolicy.APPEND_OR_REPLACE,
-            requests.first()
-        )
-        requests.drop(1).forEach { request ->
-            continuation = continuation.then(request)
-        }
-        continuation.enqueue()
+    private fun enqueueBatchWorkers(tasks: List<DownloadTaskEntity>) {
+        if (tasks.isEmpty()) return
+        workScheduler.enqueueBatch(tasks)
     }
 
     /**
@@ -322,36 +310,8 @@ class DownloadQueueManager @Inject constructor(
      * batch duration. A per-task unique name runs immediately, in parallel.
      */
     private fun enqueueSingleRetry(task: DownloadTaskEntity) {
-        WorkManager.getInstance(app).enqueueUniqueWork(
-            retryQueueName(task.id),
-            ExistingWorkPolicy.REPLACE,
-            buildWorkerRequest(task)
-        )
+        workScheduler.enqueueRetry(task)
     }
-
-    private fun retryQueueName(taskId: String): String = "manga_download_retry_$taskId"
-
-    private fun buildWorkerRequest(task: DownloadTaskEntity): OneTimeWorkRequest {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(if (task.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
-            .build()
-        val input = Data.Builder()
-            .putString(ChapterDownloadWorker.KEY_TASK_ID, task.id)
-            .build()
-        return OneTimeWorkRequestBuilder<ChapterDownloadWorker>()
-            .setInputData(input)
-            .setConstraints(constraints)
-            .setBackoffCriteria(
-                BackoffPolicy.EXPONENTIAL,
-                MIN_RETRY_BACKOFF_SECONDS,
-                java.util.concurrent.TimeUnit.SECONDS
-            )
-            .addTag(task.id)
-            .addTag("manga_${task.mangaId}")
-            .build()
-    }
-
-    private fun mangaQueueName(mangaId: String): String = "manga_download_queue_$mangaId"
 
     /** Reconciles persisted task states and emits exactly one notification per batch. */
     suspend fun reconcileBatchCompletion(batchId: String) {
@@ -364,43 +324,9 @@ class DownloadQueueManager @Inject constructor(
         // Read after atomically claiming the notification so concurrent workers cannot publish
         // an earlier, non-terminal count in the final batch summary.
         val batch = downloadBatchDao.getById(batchId) ?: return
-
-        val hasFailures = batch.failedChapters > 0
-        val notification = NotificationCompat.Builder(app, MangaWorldApp.COMPLETE_CHANNEL_ID)
-            .setSmallIcon(com.exapps.mangaworld.R.drawable.ic_shortcut_downloads)
-            .setContentTitle(
-                app.getString(
-                    if (hasFailures) com.exapps.mangaworld.R.string.download_notification_batch_partial_title
-                    else com.exapps.mangaworld.R.string.download_notification_batch_complete_title,
-                    batch.mangaTitle
-                )
-            )
-            .setContentText(
-                if (hasFailures) {
-                    app.getString(
-                        com.exapps.mangaworld.R.string.download_notification_batch_partial_body,
-                        batch.completedChapters,
-                        batch.failedChapters
-                    )
-                } else {
-                    app.getString(
-                        com.exapps.mangaworld.R.string.download_notification_batch_complete_body,
-                        batch.completedChapters
-                    )
-                }
-            )
-            .setContentIntent(
-                PendingIntent.getActivity(
-                    app,
-                    (batch.id + "complete").hashCode(),
-                    AppLaunchIntents.downloads(app),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-            )
-            .setAutoCancel(true)
-            .build()
-        (app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-            .notify(DownloadNotifIds.batchId(batch.id), notification)
+        // U-33: the notification itself is behind a seam (NotificationCompat is
+        // stubs-only on the JVM) — the claim-once contract above stays here.
+        notifier.notifyBatchComplete(batch)
     }
 
     // ─── Cancel / delete ─────────────────────────────────────────────────────
@@ -634,12 +560,12 @@ class DownloadQueueManager @Inject constructor(
     }
 
     private suspend fun cancelMangaQueue(mangaId: String) {
-        WorkManager.getInstance(app).cancelUniqueWork(mangaQueueName(mangaId)).await()
+        workScheduler.cancelMangaQueue(mangaId)
     }
 
     /** Cancels a per-task retry chain started by [enqueueSingleRetry], if any. */
     private suspend fun cancelRetryQueue(taskId: String) {
-        WorkManager.getInstance(app).cancelUniqueWork(retryQueueName(taskId)).await()
+        workScheduler.cancelRetryQueue(taskId)
     }
 
     private suspend fun enqueueQueuedTasks(mangaId: String) {
@@ -732,8 +658,8 @@ class DownloadQueueManager @Inject constructor(
         val legacyTitle = queueMutex.withLock { downloadedMangaDao.get(mangaId)?.title }
         // Cancel any active work — batch chain plus any per-task retry chains,
         // which live under their own unique names outside the batch queue.
-        WorkManager.getInstance(app).cancelUniqueWork(mangaQueueName(mangaId)).await()
-        WorkManager.getInstance(app).cancelAllWorkByTag("manga_$mangaId").await()
+        workScheduler.cancelMangaQueue(mangaId)
+        workScheduler.cancelAllForManga(mangaId)
         // U-15: recursive file delete on IO (was on caller's dispatcher, incl. Main).
         withContext(Dispatchers.IO) {
             deleteMangaDirectory(canonicalMangaDir(mangaId))
@@ -909,8 +835,6 @@ class DownloadQueueManager @Inject constructor(
     }
 
     private companion object {
-        const val MIN_RETRY_BACKOFF_SECONDS = 10L
-
         /** Terminal download_batches rows are kept 7 days for debugging, then GC'd. */
         const val BATCH_GC_RETENTION_MS = 7L * 24L * 60L * 60L * 1000L
 

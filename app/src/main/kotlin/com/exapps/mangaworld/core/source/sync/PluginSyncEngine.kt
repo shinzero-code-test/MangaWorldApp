@@ -22,6 +22,8 @@ import com.exapps.mangaworld.core.source.plugins.SourceEngine
 import com.exapps.mangaworld.core.source.plugins.SourcePlugin
 import com.exapps.mangaworld.core.source.plugins.SourceRegistry
 import com.exapps.mangaworld.core.source.script.ScriptContract
+import com.exapps.mangaworld.core.util.guarded
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.withContext
@@ -122,8 +124,12 @@ class IndexRejectedException(message: String) : IllegalStateException(message)
  * 6. End of sweep: quota enforcement evicts only non-active/non-previous
  *    versions (installs can never delete what they superseded).
  *
- * Every entry is isolated in `runCatching`: one bad candidate can never abort
- * the sweep. Only index-level transport failures throw (the worker retries those).
+ * Every entry is isolated in its own envelope: one bad candidate can never
+ * abort the sweep. Only index-level transport failures throw (the worker
+ * retries those). The per-entry envelope is cancellation-aware (U-13:
+ * `suspendRunCatching` — a cancelled sweep is not a failed entry), and the
+ * rollback/undo envelopes go through the shared `guarded` helper (U-24) so
+ * a failed undo is logged instead of silently swallowed.
  */
 @Singleton
 class PluginSyncEngine @Inject constructor(
@@ -223,12 +229,7 @@ class PluginSyncEngine @Inject constructor(
             // D8: a screen-leaving cancellation must not eat the bookkeeping —
             // partial-sweep lines + telemetry still land, then cancellation
             // propagates to the caller below.
-            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                kotlinx.coroutines.withTimeout(30_000L) {
-                    logOutcomeLines(result)
-                    telemetry.logSync(reportOf(result, System.currentTimeMillis() - start))
-                }
-            }
+            emitSweepReport(result, System.currentTimeMillis() - start)
             result
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -249,6 +250,22 @@ class PluginSyncEngine @Inject constructor(
                 )
             )
             throw e
+        }
+    }
+
+    /**
+     * D8 sweep report: the per-id outcome lines + the Gate-0 aggregate
+     * telemetry, emitted from a [kotlinx.coroutines.NonCancellable] block so a
+     * screen-leaving cancellation can never eat the bookkeeping (the caller
+     * may already be cancelled — every suspend call inside would otherwise
+     * throw immediately).
+     */
+    private suspend fun emitSweepReport(result: SyncResult, durationMs: Long) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            kotlinx.coroutines.withTimeout(30_000L) {
+                logOutcomeLines(result)
+                telemetry.logSync(reportOf(result, durationMs))
+            }
         }
     }
 
@@ -285,7 +302,8 @@ class PluginSyncEngine @Inject constructor(
         )
     }
 
-    private fun reportOf(result: SyncResult, durationMs: Long) =        com.exapps.mangaworld.core.source.plugins.PluginSyncReport(
+    private fun reportOf(result: SyncResult, durationMs: Long) =
+        com.exapps.mangaworld.core.source.plugins.PluginSyncReport(
             indexNotModified = result.indexNotModified,
             outcomeCounts = result.outcomes.values
                 .groupingBy { it.code }
@@ -311,6 +329,9 @@ class PluginSyncEngine @Inject constructor(
         allowInsecure: Boolean = false,
         baseDir: File
     ): SyncResult = withContext(io) {
+        // D8: the partial-sweep report of a CANCELLED sweep needs its own
+        // clock — `sync()`'s start covers the whole call including this body.
+        val sweepStart = System.currentTimeMillis()
         val policy = when (val parsed = PluginKillSwitch.parseResult(killSwitchJson)) {
             is PluginKillSwitch.ParseResult.Valid -> parsed.policy
             PluginKillSwitch.ParseResult.Absent -> PluginKillSwitch.Policy.EMPTY
@@ -381,41 +402,59 @@ class PluginSyncEngine @Inject constructor(
         }
 
         val outcomes = mutableMapOf<String, EntryOutcome>()
-        for (entry in parsed.entries) {
-            outcomes[entry.id] = runCatching {
-                syncEntry(
-                    entry = entry,
-                    indexUrl = indexUrl,
-                    trustedKeys = trustedKeys,
-                    host = host,
-                    policy = policy,
-                    postSmoke = postSmoke,
-                    allowInsecure = allowInsecure,
-                    baseDir = baseDir
-                )
-            }.getOrElse { e ->
-                // v9.1.5: fleet builds minify class names AND many throws carry
-                // no message (the on-device `failed: null` dead end), so log the
-                // exception class plus a stack head — framework frames keep
-                // their names under R8, which localizes the throwing layer.
-                log("sync ${entry.id} failed: ${e.javaClass.name}: ${e.message?.take(160)}")
-                log(
-                    "sync ${entry.id} stack: " + e.stackTrace
-                        .take(8)
-                        .joinToString(" <- ") { "${it.className}.${it.methodName}:${it.lineNumber}" }
-                        .take(900)
-                )
-                EntryOutcome.Failed(e.message?.take(160) ?: "unknown")
+        // U-13: the per-entry envelope is cancellation-aware, so a sweep
+        // cancelled mid-entry STOPS instead of grinding through the remaining
+        // entries as zombie work (that is the "cancelled work renders as
+        // errors" symptom this replaces). The cancellation is parked here so
+        // the D8 bookkeeping below still runs before it propagates.
+        var cancelled: kotlinx.coroutines.CancellationException? = null
+        try {
+            for (entry in parsed.entries) {
+                outcomes[entry.id] = suspendRunCatching {
+                    syncEntry(
+                        entry = entry,
+                        indexUrl = indexUrl,
+                        trustedKeys = trustedKeys,
+                        host = host,
+                        policy = policy,
+                        postSmoke = postSmoke,
+                        allowInsecure = allowInsecure,
+                        baseDir = baseDir
+                    )
+                }.getOrElse { e ->
+                    // v9.1.5: fleet builds minify class names AND many throws carry
+                    // no message (the on-device `failed: null` dead end), so log the
+                    // exception class plus a stack head — framework frames keep
+                    // their names under R8, which localizes the throwing layer.
+                    log("sync ${entry.id} failed: ${e.javaClass.name}: ${e.message?.take(160)}")
+                    log(
+                        "sync ${entry.id} stack: " + e.stackTrace
+                            .take(8)
+                            .joinToString(" <- ") { "${it.className}.${it.methodName}:${it.lineNumber}" }
+                            .take(900)
+                    )
+                    EntryOutcome.Failed(e.message?.take(160) ?: "unknown")
+                }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            cancelled = e
         }
         // Quota runs on a schedule (post-sweep), never inline on install: it can
         // only remove versions that are neither active nor rollback-eligible.
-        val evicted = runCatching {
-            pluginStore.evictIfOverBudget(baseDir, PluginStorage.STORAGE_BUDGET_BYTES)
-        }.getOrElse { e ->
-            log("quota sweep failed: ${e.message}")
-            null
-        }?.evict?.size ?: 0
+        // U-13: `evictIfOverBudget` is suspend — a bare `runCatching` would
+        // swallow the sweep's cancellation and keep going. Skipped entirely
+        // after a cancellation (the scope is already cancelled: every suspend
+        // call inside would throw again and mask the real cause).
+        val evicted = if (cancelled == null) {
+            suspendRunCatching {
+                pluginStore.evictIfOverBudget(baseDir, PluginStorage.STORAGE_BUDGET_BYTES)
+            }.getOrElse { e ->
+                log("quota sweep failed: ${e.message}")
+                null
+            }?.evict?.size ?: 0
+        } else {
+            0
+        }
         if (evicted > 0) log("quota sweep evicted $evicted old version(s)")
         // D8: same cancellation discipline as the outcome report above —
         // retry bookkeeping must survive a mid-sweep screen exit.
@@ -425,11 +464,30 @@ class PluginSyncEngine @Inject constructor(
                 val retry = outcomes
                     .filterValues { it is EntryOutcome.Failed || it is EntryOutcome.RolledBack }
                     .keys
+                // U-13: a cancelled sweep must not leave a source permanently
+                // uninstalled. The entries that never ran are NOT in `outcomes`,
+                // so without this the next sweep's 304 short-circuit would skip
+                // them forever (the index did not change, so the ETag matches,
+                // and the entry is never evaluated again). The set is recomputed
+                // from scratch every sweep, so an entry that succeeds later drops
+                // out on its own.
+                val neverRan = parsed.entries.map { it.id } - outcomes.keys
                 // Persist both reasons to revisit an entry: this sweep's failures, and
                 // records whose revocation the policy no longer carries (computed above,
                 // before the 304 gate, so a lifted revocation recovers in ONE sweep).
-                etags.setUnresolved(retry + lifted)
+                etags.setUnresolved(retry + neverRan + lifted)
             }
+        }
+        // D8 (partial): the entries that DID complete are reported before the
+        // cancellation propagates — a screen-leaving cancellation must not eat
+        // the bookkeeping (the outcome lines + the Gate-0 aggregate).
+        val cancelledNow = cancelled
+        if (cancelledNow != null) {
+            emitSweepReport(
+                SyncResult(outcomes = outcomes.toMap(), revocationsApplied = revocations),
+                System.currentTimeMillis() - sweepStart
+            )
+            throw cancelledNow
         }
         SyncResult(outcomes = outcomes, revocationsApplied = revocations, evictedVersions = evicted)
     }
@@ -710,7 +768,7 @@ class PluginSyncEngine @Inject constructor(
             (record == null && manifest.enabledByDefault)
         var toggled = false
         if (enable && record?.status != PluginStatus.ENABLED) {
-            runCatching { settingsRepo.toggleSource(entry.id, true) }
+            guarded("sync ${entry.id}: enable", log) { settingsRepo.toggleSource(entry.id, true) }
             toggled = true
         }
         indexStore.get(entry.id)?.let { rec ->
@@ -724,9 +782,9 @@ class PluginSyncEngine @Inject constructor(
             // Orphaned bytes are quota-collected (no record protects them).
             // Undo our own settings flip so a rolled-back id is not left
             // phantom-enabled with nothing registered behind it.
-            if (toggled) runCatching { settingsRepo.toggleSource(entry.id, false) }
+            if (toggled) guarded("sync ${entry.id}: disable", log) { settingsRepo.toggleSource(entry.id, false) }
             registry.clearOverride(entry.id)
-            runCatching { indexStore.remove(entry.id) }
+            guarded("sync ${entry.id}: remove record", log) { indexStore.remove(entry.id) }
             log("sync ${entry.id}: post-activation smoke failed — rolled back")
             return EntryOutcome.RolledBack
         }
@@ -789,7 +847,7 @@ class PluginSyncEngine @Inject constructor(
         val enable = record?.status != PluginStatus.DISABLED
         var toggled = false
         if (enable && record?.status != PluginStatus.ENABLED) {
-            runCatching { settingsRepo.toggleSource(entry.id, true) }
+            guarded("sync ${entry.id}: enable", log) { settingsRepo.toggleSource(entry.id, true) }
             toggled = true
         }
         indexStore.get(entry.id)?.let { rec ->
@@ -803,9 +861,9 @@ class PluginSyncEngine @Inject constructor(
             // gives PluginStore.rollback its first production caller.
             // Undo our own settings flip for the same phantom-enable reason
             // as the new-id path.
-            if (toggled) runCatching { settingsRepo.toggleSource(entry.id, false) }
+            if (toggled) guarded("sync ${entry.id}: disable", log) { settingsRepo.toggleSource(entry.id, false) }
             registry.clearOverride(entry.id)
-            runCatching { pluginStore.rollback(entry.id) }
+            guarded("sync ${entry.id}: rollback", log) { pluginStore.rollback(entry.id) }
             log("sync ${entry.id}: post-activation smoke failed — rolled back")
             return EntryOutcome.RolledBack
         }
@@ -897,26 +955,26 @@ class PluginSyncEngine @Inject constructor(
         else record.status != PluginStatus.DISABLED
         var toggled = false
         if (enable && record?.status != PluginStatus.ENABLED) {
-            runCatching { settingsRepo.toggleSource(entry.id, true) }
+            guarded("sync ${entry.id}: enable", log) { settingsRepo.toggleSource(entry.id, true) }
             toggled = true
         }
         if (!runPostSmoke(plugin, postSmoke)) {
-            if (toggled) runCatching { settingsRepo.toggleSource(entry.id, false) }
+            if (toggled) guarded("sync ${entry.id}: disable", log) { settingsRepo.toggleSource(entry.id, false) }
             if (prior != null) {
                 indexStore.put(prior)
             } else {
-                runCatching { indexStore.remove(entry.id) }
+                guarded("sync ${entry.id}: remove record", log) { indexStore.remove(entry.id) }
             }
             log("sync ${entry.id}: post-activation smoke failed — rolled back")
             return EntryOutcome.RolledBack
         }
         val outcome = registry.registerVerified(plugin, PluginOrigin.OFFICIAL)
         if (outcome is SourceRegistry.RegisterOutcome.Refused) {
-            if (toggled) runCatching { settingsRepo.toggleSource(entry.id, false) }
+            if (toggled) guarded("sync ${entry.id}: disable", log) { settingsRepo.toggleSource(entry.id, false) }
             if (prior != null) {
                 indexStore.put(prior)
             } else {
-                runCatching { indexStore.remove(entry.id) }
+                guarded("sync ${entry.id}: remove record", log) { indexStore.remove(entry.id) }
             }
             return EntryOutcome.Rejected(outcome.reason)
         }
@@ -1038,6 +1096,13 @@ class PluginSyncEngine @Inject constructor(
                 // A withTimeout budget inside the probe (not outer
                 // cancellation — that type is JobCancellationException).
                 SmokeResult.TimedOut
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // U-13: an OUTER cancellation (the user left the screen) is
+                // not a payload verdict. Swallowing it here turned a cancelled
+                // sweep into "smoke failed" — which ROLLED BACK a source that
+                // had just installed cleanly. Rethrow: the sweep stops, the
+                // entry keeps its state, and the bookkeeping still lands.
+                throw e
             } catch (e: Exception) {
                 SmokeResult.Failed(e.message?.take(120) ?: "custom smoke threw")
             }
@@ -1072,6 +1137,11 @@ class PluginSyncEngine @Inject constructor(
                 )
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
                 SmokeResult.TimedOut
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // U-13: an OUTER cancellation is not a payload verdict — the
+                // probe must not report "failed" (which rolls the source
+                // back). Rethrow so the sweep stops cleanly.
+                throw e
             } catch (e: Exception) {
                 SmokeResult.Failed(e.message?.take(120) ?: "smoke threw")
             }
@@ -1233,21 +1303,21 @@ class PluginSyncEngine @Inject constructor(
         // and is undone below unless registration AND smoke both pass (a
         // phantom-enabled id with nothing registered is the same bug class
         // as the sync rollback toggle hygiene).
-        runCatching { settingsRepo.toggleSource(id, true) }
+        guarded("approve $id: enable", log) { settingsRepo.toggleSource(id, true) }
         // Smoke BEFORE registration: the candidate object smokes directly,
         // so on failure there is no override to clear and no previous runner
         // to rebuild — the previous registration (if any) kept serving
         // throughout, and the hold simply persists.
         if (!runPostSmoke(plugin, postSmoke)) {
-            runCatching { settingsRepo.toggleSource(id, false) }
-            runCatching { indexStore.put(record) }
+            guarded("approve $id: disable", log) { settingsRepo.toggleSource(id, false) }
+            guarded("approve $id: restore record", log) { indexStore.put(record) }
             log("approve $id: post-activation smoke failed — hold restored")
             return@withContext ApproveOutcome.Failed("post-activation smoke failed")
         }
         when (val outcome = registry.registerVerified(plugin, PluginOrigin.OFFICIAL)) {
             is SourceRegistry.RegisterOutcome.Refused -> {
-                runCatching { settingsRepo.toggleSource(id, false) }
-                runCatching { indexStore.put(record) }
+                guarded("approve $id: disable", log) { settingsRepo.toggleSource(id, false) }
+                guarded("approve $id: restore record", log) { indexStore.put(record) }
                 return@withContext ApproveOutcome.Held(outcome.reason)
             }
             else -> Unit

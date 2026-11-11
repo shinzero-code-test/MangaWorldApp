@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.messaging.FirebaseMessaging
+import com.exapps.mangaworld.core.util.suspendRunCatching
 import com.exapps.mangaworld.domain.repository.SecurityRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.tasks.await
@@ -35,7 +36,7 @@ class FirebaseMessagingRegistrar @Inject constructor(
     }
 
     suspend fun syncCurrentToken() {
-        val token = runCatching { messaging.token.await() }.getOrNull() ?: return
+        val token = suspendRunCatching { messaging.token.await() }.getOrNull() ?: return
         if (token == lastPersistedToken) return  // Skip if token hasn't changed
         // Memory-only dedup loses state on process restart — confirm against prefs
         // so every cold start doesn't re-read the devices collection.
@@ -58,7 +59,7 @@ class FirebaseMessagingRegistrar @Inject constructor(
         // A-7: a revoked session's device doc was deliberately deleted — token
         // rotation must not resurrect it. Fail-open: only a positive revoked
         // signal skips the write, never a read error.
-        if (runCatching { securityRepository.isCurrentSessionRevoked() }.getOrDefault(false)) {
+        if (suspendRunCatching { securityRepository.isCurrentSessionRevoked() }.getOrDefault(false)) {
             Log.i(TAG, "Skipping device registration: session revoked")
             return
         }
@@ -86,7 +87,7 @@ class FirebaseMessagingRegistrar @Inject constructor(
             .await()
 
         if (previousDocId != null && previousDocId != deviceDocId) {
-            runCatching {
+            suspendRunCatching {
                 firestore.collection("users").document(uid)
                     .collection("devices").document(previousDocId).delete().await()
             }.onFailure { e ->

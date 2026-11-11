@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Overlay for the `benchmark` build type only (the app-under-test of the
+  :benchmark macrobenchmark module).
+
+  `android:profileable="android:shell"` lets the benchmark harness collect a
+  Perfetto/atrace trace of the app process. MacrobenchmarkRule enforces it on
+  API 29-30 ("NOT-PROFILEABLE" configuration error) and the frame-timing
+  metrics need the same privilege.
+
+  No `tools:replace` is declared: the app's main manifest does not set
+  `android:profileable`, so the overlay value wins outright — and an
+  unnecessary `tools:replace` would only emit a manifest-merger warning.
+
+  This file lives in its own build-type source set (app/src/benchmark), NOT in
+  app/src/main: the shipping app is unaffected.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The app's main manifest does not set android:profileable, so no
+         tools:replace is needed (and none is declared: an unnecessary
+         tools:replace emits a manifest-merger warning). -->
+    <application android:profileable="android:shell" />
+
+</manifest>

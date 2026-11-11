@@ -74,7 +74,9 @@ class StellarSaberScraper @Inject constructor(
         }
         if (!chapterId.isNullOrBlank() && !cdnNonce.isNullOrBlank()) {
             // Failure here must not fail the chapter: fall back to the base path below.
-            runCatching {
+            // U-13: cancellation-aware — a cancelled key fetch aborts the
+            // chapter instead of silently continuing with a missing key.
+            suspendRunCatching {
                 keyStore.put(chapterUrl, fetchCdnKey(chapterId, cdnNonce, ajaxNonce, chapterUrl))
             }
         }
@@ -88,7 +90,7 @@ class StellarSaberScraper @Inject constructor(
 
     /**
      * `POST admin-ajax.php action=flavor_cdn_get_key` → base64 16-byte key.
-     * Throws on any deviation (caught by the outer runCatching → base-path fallback):
+     * Throws on any deviation (caught by the outer suspendRunCatching → base-path fallback):
      * volatile nonces and keys must never hard-fail the chapter.
      */
     private suspend fun fetchCdnKey(

@@ -67,7 +67,7 @@ class FirebaseStartupCoordinator @Inject constructor(
         coroutineScope {
             val insightsJob = async { userInsightsCoordinator.start() }
             val configJob = async { remoteConfigManager.refresh() }
-            val tokenJob = async { runCatching { messagingRegistrar.syncCurrentToken() } }
+            val tokenJob = async { suspendRunCatching { messagingRegistrar.syncCurrentToken() } }
             insightsJob.await()
             configJob.await()
             tokenJob.await()
@@ -96,7 +96,7 @@ class FirebaseStartupCoordinator @Inject constructor(
         // fresh/wiped device with a failed merge never uploads stale
         // settings over the cloud truth.
         val mergeJustSucceeded = uid != null && !prefsStore.getBoolean(mergeKey, false) &&
-            runCatching { syncManager.mergeRemoteSnapshot() }.isSuccess
+            suspendRunCatching { syncManager.mergeRemoteSnapshot() }.isSuccess
         if (mergeJustSucceeded) {
             prefsStore.edit().putBoolean(mergeKey, true).apply()
         }
@@ -108,12 +108,15 @@ class FirebaseStartupCoordinator @Inject constructor(
         if (uid != null && merged && now - lastSync > 3_600_000L) { // 1 hour
             // Stamp only on success (#26): stamping a failed push would
             // suppress the retry until the next hour window.
-            if (runCatching { syncManager.pushLocalSnapshot(force = true) }.isSuccess) {
+            // U-13: cancellation-aware — a cancelled push must abort startup
+            // instead of being reported as "push failed" and letting the
+            // coordinator continue into the topic/reminder lanes.
+            if (suspendRunCatching { syncManager.pushLocalSnapshot(force = true) }.isSuccess) {
                 prefsStore.edit().putLong(pushKey, now).apply()
             }
         }
 
-        runCatching {
+        suspendRunCatching {
             // Bounded concurrency: N serial subscribeToTopic round-trips stall
             // cold start with 100+ favorites. Failures stay logged in the manager.
             val favorites = favoriteDao.getFavoritesList()
@@ -125,7 +128,7 @@ class FirebaseStartupCoordinator @Inject constructor(
                 }
             }
         }
-        runCatching { notificationPolicyManager.checkAndSendReminders() }
+        suspendRunCatching { notificationPolicyManager.checkAndSendReminders() }
     }
 
     /**

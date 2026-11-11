@@ -1,5 +1,15 @@
 package com.exapps.mangaworld.core.firebase
 
+import com.exapps.mangaworld.core.firebase.work.CommunityWriteExecutor
+import com.exapps.mangaworld.core.firebase.work.CommunityWriteFailureKind
+import com.exapps.mangaworld.core.firebase.work.CommunityWriteKind
+import com.exapps.mangaworld.core.firebase.work.CommunityWriteOutbox
+import com.exapps.mangaworld.core.firebase.work.CommunityWriteScheduler
+import com.exapps.mangaworld.core.firebase.work.PendingCommunityWrite
+import com.exapps.mangaworld.core.firebase.work.classifyCommunityWriteFailure
+import com.exapps.mangaworld.core.firebase.work.communityChapterKey
+import com.exapps.mangaworld.core.firebase.work.communityMentions
+import com.exapps.mangaworld.core.firebase.work.describeCommunityWriteFailure
 import com.exapps.mangaworld.core.util.suspendRunCatching
 import android.content.Context
 import com.exapps.mangaworld.R
@@ -39,12 +49,9 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
-import java.security.MessageDigest
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private const val MAX_COMMUNITY_MENTIONS = 10
 
 /**
  * U-18: every NonCancellable write is bounded by a 30s deadline so a hung
@@ -62,7 +69,13 @@ class FirebaseCommunityRepository @Inject constructor(
     private val achievementManager: com.exapps.mangaworld.core.data.AchievementManager,
     private val settingsRepository: com.exapps.mangaworld.domain.repository.SettingsRepository,
     private val telemetry: FirebaseTelemetry,
-    private val analyticsManager: FirebaseAnalyticsManager
+    private val analyticsManager: FirebaseAnalyticsManager,
+    // U-18e: the durable write path. A comment/review write is persisted in
+    // the outbox BEFORE the first attempt, so a process death mid-write cannot
+    // swallow it; the worker re-drives whatever survived.
+    private val communityWriteOutbox: com.exapps.mangaworld.core.firebase.work.CommunityWriteOutbox,
+    private val communityWriteExecutor: com.exapps.mangaworld.core.firebase.work.CommunityWriteExecutor,
+    private val communityWriteScheduler: com.exapps.mangaworld.core.firebase.work.CommunityWriteScheduler
 ) : CommunityRepository {
 
     private val firestore = FirebaseFirestore.getInstance()
@@ -263,7 +276,10 @@ class FirebaseCommunityRepository @Inject constructor(
         surface: String,
         fetch: suspend () -> T
     ) = launch {
-        runCatching { fetch() }
+        // U-13: cancellation-aware — a cancelled retry fetch must not be
+        // reported as a query failure (the watchdog would then log a false
+        // starvation report for a screen the user already left).
+        suspendRunCatching { fetch() }
             .onSuccess { trySend(it) }
             .onFailure { e ->
                 val code = (e as? com.google.firebase.firestore.FirebaseFirestoreException)?.code
@@ -353,8 +369,40 @@ class FirebaseCommunityRepository @Inject constructor(
             spoiler = spoiler,
             createdAt = System.currentTimeMillis()
         )
-        val collection = commentsCollection(mangaId, chapterUrl)
-        collection.document(comment.id).set(comment.toMap()).await()
+        // U-18e: durable write path. The intent is persisted BEFORE the first
+        // attempt and the recovery worker is scheduled, so a process death
+        // mid-write cannot swallow the comment. The comment document id IS the
+        // write id, so the worker's replay overwrites the same document
+        // instead of posting it twice.
+        val write = PendingCommunityWrite(
+            id = comment.id,
+            kind = CommunityWriteKind.COMMENT,
+            mangaId = mangaId,
+            chapterUrl = chapterUrl,
+            slug = slug,
+            sourceId = sourceId,
+            text = trimmed,
+            spoiler = spoiler,
+            authorUid = profile.uid,
+            authorName = profile.displayName.ifBlank { profile.username },
+            authorUsername = profile.username,
+            authorAvatarUrl = profile.avatarUrl,
+            authorBadge = profile.badgeLabel,
+            createdAt = comment.createdAt
+        )
+        communityWriteOutbox.enqueue(write)
+        communityWriteScheduler.schedule()
+        try {
+            communityWriteExecutor.execute(write)
+        } catch (cancellation: CancellationException) {
+            // The attempt was cut short (deadline / cancellation): the row
+            // stays, the worker re-drives it.
+            throw cancellation
+        } catch (t: Throwable) {
+            handleFailedCommunityWrite(write, t)
+            throw t
+        }
+        communityWriteOutbox.remove(write.id)
         // Top-level mentions still notify via push-reply (which carries the
         // old tally hook for old apps). Replies never reach here — the
         // replies endpoint owns their count and their REPLY/MENTION fan-out,
@@ -362,6 +410,29 @@ class FirebaseCommunityRepository @Inject constructor(
         if (shouldNotifyViaPushReply(replyTarget, comment.mentions)) {
             sendPushNotification(mangaId, chapterUrl, comment.id)
         }
+        }
+    }
+
+    /**
+     * U-18e: a failed foreground write.
+     *
+     * A retryable failure keeps the row in the outbox (the worker re-drives
+     * it with backoff); a terminal failure is recorded and dropped, because
+     * retrying it could never succeed. Either way the failure is never
+     * silently swallowed: the caller rethrows it to the UI.
+     */
+    private suspend fun handleFailedCommunityWrite(
+        write: PendingCommunityWrite,
+        error: Throwable
+    ) {
+        when (classifyCommunityWriteFailure(error)) {
+            CommunityWriteFailureKind.TERMINAL -> {
+                communityWriteOutbox.recordFailure(write.id, describeCommunityWriteFailure(error))
+                communityWriteOutbox.remove(write.id)
+            }
+            CommunityWriteFailureKind.RETRYABLE -> {
+                communityWriteOutbox.recordRetry(write.id, describeCommunityWriteFailure(error))
+            }
         }
     }
 
@@ -682,17 +753,9 @@ class FirebaseCommunityRepository @Inject constructor(
     private fun threadId(mangaId: String, chapterUrl: String): String = "$mangaId-${stableChapterKey(chapterUrl)}"
 
     /** 24 hex chars (96 bits) — matches the dashboard's stableChapterKey. Do NOT change without updating both Kotlin and TypeScript. */
-    private fun stableChapterKey(value: String): String {
-        val bytes = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
-        return bytes.joinToString("") { "%02x".format(it) }.take(24)
-    }
+    private fun stableChapterKey(value: String): String = communityChapterKey(value)
 
-    private fun extractMentions(text: String): List<String> = Regex("@([A-Za-z0-9_]{3,30})")
-        .findAll(text)
-        .map { it.groupValues[1] }
-        .distinct()
-        .take(MAX_COMMUNITY_MENTIONS)
-        .toList()
+    private fun extractMentions(text: String): List<String> = communityMentions(text)
 
     private suspend fun propagateAuthorSnapshot(profile: CommunityProfile) {
         val authorFields = mapOf<String, Any?>(
@@ -1218,7 +1281,7 @@ class FirebaseCommunityRepository @Inject constructor(
             // Small set (blocked users are few); per-doc reads with per-doc
             // guards so one private/denied profile can't fail the whole lookup.
             for (uid in uids.take(FirebaseCommunityRepository.MAX_USERNAME_LOOKUP)) {
-                val name = runCatching {
+                val name = suspendRunCatching {
                     val doc = firestore.collection("publicProfiles").document(uid).get().await()
                     doc.getString("displayName")?.takeIf { it.isNotBlank() }
                         ?: doc.getString("username")?.takeIf { it.isNotBlank() }
@@ -1398,11 +1461,12 @@ class FirebaseCommunityRepository @Inject constructor(
         }
 
         suspend fun upsertReview(mangaId: String, slug: String, sourceId: String, rating: Int, title: String, body: String) {
-            // TODO(U-18e): migrate comment/review writes to WorkManager (durable
-            // outbox + retries across process death). Too invasive for this
-            // bundle: needs a Room outbox, worker, and pending-state UI. Until
-            // then writes stay NonCancellable+30s-bounded (survive navigation,
-            // die with the process).
+            // U-18e: the write is persisted in the durable outbox BEFORE the
+            // first attempt, so a process death mid-write cannot swallow the
+            // review. A review is stored under the author's uid (one review
+            // per user per manga), so the worker's replay updates the SAME
+            // document instead of posting a second one.
+            //
             // Review edits must survive navigation: the ViewModel's viewModelScope is
             // cancelled the moment the screen is left, which previously aborted the
             // read-then-write below mid-flight while the UI already showed success.
@@ -1416,48 +1480,36 @@ class FirebaseCommunityRepository @Inject constructor(
             }
             validateModeration(trimmedTitle)
             validateModeration(trimmedBody)
-            val now = System.currentTimeMillis()
-            val reviewRef = firestore.collection("community_manga").document(mangaId)
-                .collection("reviews")
-                .document(profile.uid)
-            val existingReview = reviewRef.get().await()
-
-            // v8 (#7/#8): one code path for create/edit/RECREATE. A soft-deleted
-            // review is resurrected in place (rules permit exactly this transition),
-            // so users can write a new review after deleting their old one instead
-            // of hitting the previous dead-end error.
-            if (existingReview.exists()) {
-                reviewRef.update(
-                    mapOf(
-                        "rating" to rating.coerceIn(1, 5),
-                        "title" to trimmedTitle,
-                        "body" to trimmedBody,
-                        // Refresh the denormalized author snapshot so the card always
-                        // matches the current public profile (allowed by rules).
-                        "authorName" to (profile.displayName.ifBlank { profile.username }),
-                        "authorUsername" to profile.username,
-                        "authorAvatarUrl" to profile.avatarUrl,
-                        "isDeleted" to false,
-                        "updatedAt" to now
-                    )
-                ).await()
-            } else {
-                val review = MangaReview(
-                    id = profile.uid,
-                    mangaId = mangaId,
-                    authorUid = profile.uid,
-                    authorName = profile.displayName.ifBlank { profile.username },
-                    authorUsername = profile.username,
-                    authorAvatarUrl = profile.avatarUrl,
-                    authorBadge = profile.badgeLabel,
-                    rating = rating.coerceIn(1, 5),
-                    title = trimmedTitle,
-                    body = trimmedBody,
-                    updatedAt = now,
-                    isDeleted = false
-                )
-                reviewRef.set(review.toMap()).await()
+            val write = PendingCommunityWrite(
+                id = profile.uid,
+                kind = CommunityWriteKind.REVIEW,
+                mangaId = mangaId,
+                chapterUrl = null,
+                slug = slug,
+                sourceId = sourceId,
+                text = trimmedBody,
+                spoiler = false,
+                authorUid = profile.uid,
+                authorName = profile.displayName.ifBlank { profile.username },
+                authorUsername = profile.username,
+                authorAvatarUrl = profile.avatarUrl,
+                authorBadge = profile.badgeLabel,
+                createdAt = System.currentTimeMillis(),
+                rating = rating.coerceIn(1, 5),
+                reviewTitle = trimmedTitle,
+                reviewBody = trimmedBody
+            )
+            communityWriteOutbox.enqueue(write)
+            communityWriteScheduler.schedule()
+            try {
+                communityWriteExecutor.execute(write)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (t: Throwable) {
+                handleFailedCommunityWrite(write, t)
+                throw t
             }
+            communityWriteOutbox.remove(write.id)
             // Edit-mentions: the dashboard diffs @mentions in title+body against
             // already-notified ones and notifies only fresh mentions (best-effort).
             notifyEdit(mangaId = mangaId, chapterUrl = null, commentId = null, reviewId = profile.uid)
