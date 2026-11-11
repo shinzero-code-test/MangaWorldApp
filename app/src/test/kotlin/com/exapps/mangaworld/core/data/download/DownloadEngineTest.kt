@@ -14,7 +14,6 @@ import com.exapps.mangaworld.domain.repository.MangaRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
@@ -428,11 +427,13 @@ class DownloadEngineTest {
         mangaRepository = mockk(relaxed = true)
         coEvery { mangaRepository.getChapterPages(any(), any(), any()) } returns Result.success(emptyList())
 
-        // `withTransaction` dispatches on RoomDatabase.transactionDispatcher; a
-        // relaxed mock would return a no-op dispatcher and the transaction
-        // body would never run. Unconfined executes it inline.
+        // Room 2.6.1's `withTransaction` dispatches on
+        // `RoomDatabase.transactionExecutor` (the Java executor);
+        // `transactionDispatcher` only exists from Room 2.7 — and a relaxed
+        // mock's executor is a no-op, so the transaction body would never
+        // run. A direct executor executes it inline.
         val database = mockk<MangaDatabase>(relaxed = true)
-        every { database.transactionDispatcher } returns Dispatchers.Unconfined
+        every { database.transactionExecutor } returns java.util.concurrent.Executor { it.run() }
 
         manager = DownloadQueueManager(
             app = app,
