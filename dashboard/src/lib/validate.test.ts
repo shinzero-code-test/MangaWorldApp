@@ -205,7 +205,7 @@ describe("source-domain allow-lists (U-30)", () => {
     );
     if (!existsSync(kotlin)) return;
     const source = readFileSync(kotlin, "utf8");
-    const block = /val ALL: Set<String> = set\(([\s\S]*?)\)/.exec(source);
+    const block = /val ALL: Set<String> = setOf\(([\s\S]*?)\)/.exec(source);
     expect(block).not.toBeNull();
     const ids = [...(block?.[1] ?? "").matchAll(/"([a-z0-9]+)"/g)].map((m) => m[1]).sort();
     expect(ids).toEqual([...BUILTIN_SOURCE_IDS].sort());

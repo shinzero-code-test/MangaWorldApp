@@ -4,7 +4,7 @@ import com.exapps.mangaworld.core.firebase.toMap
 import com.exapps.mangaworld.domain.model.CommunityComment
 import com.exapps.mangaworld.domain.model.MangaReview
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.tasks.await
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
