@@ -1,8 +1,5 @@
 package com.exapps.mangaworld.core.firebase.work
 
-import com.google.firebase.firestore.FirebaseFirestoreException
-import io.mockk.every
-import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -171,19 +168,17 @@ class CommunityWriteDrainerTest {
 
     @Test
     fun `a Firestore permission denial is terminal`() = runBlocking {
-        val denial = mockk<FirebaseFirestoreException>()
-        every { denial.code } returns FirebaseFirestoreException.Code.PERMISSION_DENIED
-
+        // The Firestore exception cannot be constructed on the JVM (its
+        // static initializer needs Android), so the policy is pinned through
+        // the pure code-name seam the production classifier delegates to.
         assertEquals(
             CommunityWriteFailureKind.TERMINAL,
-            classifyCommunityWriteFailure(denial)
+            kindForFirestoreCode("PERMISSION_DENIED")
         )
         // An offline/unavailable error is retryable instead.
-        val unavailable = mockk<FirebaseFirestoreException>()
-        every { unavailable.code } returns FirebaseFirestoreException.Code.UNAVAILABLE
         assertEquals(
             CommunityWriteFailureKind.RETRYABLE,
-            classifyCommunityWriteFailure(unavailable)
+            kindForFirestoreCode("UNAVAILABLE")
         )
         // A network error is retryable.
         assertEquals(

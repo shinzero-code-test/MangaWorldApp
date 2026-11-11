@@ -33,20 +33,34 @@ enum class CommunityWriteFailureKind {
  *   post.
  */
 internal fun classifyCommunityWriteFailure(t: Throwable): CommunityWriteFailureKind {
+    // NB: `as?` compiles to instanceof, which LOADS but does NOT INITIALIZE
+    // the class — so this stays JVM-safe. (Mocking the exception instead
+    // triggers its <clinit>, which needs Android → ExceptionInInitializerError.
+    // That is why the Firestore branch is tested through the pure
+    // [kindForFirestoreCode] seam below.)
     val firestore = t as? FirebaseFirestoreException
     if (firestore != null) {
-        return when (firestore.code) {
-            FirebaseFirestoreException.Code.PERMISSION_DENIED,
-            FirebaseFirestoreException.Code.UNAUTHENTICATED,
-            FirebaseFirestoreException.Code.INVALID_ARGUMENT,
-            FirebaseFirestoreException.Code.NOT_FOUND -> CommunityWriteFailureKind.TERMINAL
-            else -> CommunityWriteFailureKind.RETRYABLE
-        }
+        return kindForFirestoreCode(firestore.code.name)
     }
     if (t is IllegalArgumentException || t is IllegalStateException || t is SecurityException) {
         return CommunityWriteFailureKind.TERMINAL
     }
     return CommunityWriteFailureKind.RETRYABLE
+}
+
+/**
+ * Maps a Firestore error CODE NAME to the write policy.
+ *
+ * Pure by design (a String in, a kind out): the Firestore exception class
+ * cannot be constructed on the JVM (its static initializer needs Android),
+ * so the policy is pinned by code name instead.
+ */
+internal fun kindForFirestoreCode(code: String): CommunityWriteFailureKind = when (code) {
+    "PERMISSION_DENIED",
+    "UNAUTHENTICATED",
+    "INVALID_ARGUMENT",
+    "NOT_FOUND" -> CommunityWriteFailureKind.TERMINAL
+    else -> CommunityWriteFailureKind.RETRYABLE
 }
 
 /** A short, log-safe description of a failure (never user-facing text). */
