@@ -31,8 +31,21 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class BrowseRequestBudgetTest {
 
-    /** "browse 5 pages" (spec). */
+    /**
+     * "browse 5 pages" (spec).
+     */
     private val pages = 5
+
+    /**
+     * The source whose listing requests are counted.
+     *
+     * The budget is PER SOURCE, and the covers of this source are served
+     * from a different host (`blogger.googleusercontent.com`), so counting
+     * this host counts the listing requests and nothing else. Counting
+     * "the busiest host" instead would charge the listing budget for every
+     * cover image the grid loaded and fail for the wrong reason.
+     */
+    private val sourceHost = Bench.DEFAULT_SOURCE_HOST
 
     @Test
     fun browseFivePagesCostsAtMostSevenRequestsPerSource() {
@@ -46,10 +59,11 @@ class BrowseRequestBudgetTest {
         Thread.sleep(3_000)
 
         val perHost = Bench.loggedRequestsPerHost(Bench.logcat())
+        val sourceRequests = perHost[sourceHost] ?: 0
         Log.i(Bench.TAG, "MB-5 exact: requests per host = $perHost")
+        Log.i(Bench.TAG, "MB-5 exact: $sourceHost listing requests = $sourceRequests")
 
-        val worst = perHost.maxByOrNull { it.value }
-        if (worst == null) {
+        if (perHost.isEmpty()) {
             assumeTrue(
                 "MB-5 skipped: the app logged no HTTP request — this variant needs the " +
                     "app's DEBUG build (the OkHttp request log is debug-only)",
@@ -58,14 +72,15 @@ class BrowseRequestBudgetTest {
             return
         }
         assumeTrue(
-            "MB-5 skipped: no request was attributed to a host ($perHost)",
-            worst.value > 0
+            "MB-5 skipped: no request was attributed to $sourceHost ($perHost) — the " +
+                "source was probably unreachable, so the counter would measure nothing",
+            sourceRequests > 0
         )
 
         assertTrue(
-            "MB-5: ${worst.key} needed ${worst.value} HTTP requests for $pages pages " +
+            "MB-5: $sourceHost needed $sourceRequests listing requests for $pages pages " +
                 "(budget ${pages + 2}); per host: $perHost",
-            worst.value <= pages + 2
+            sourceRequests <= pages + 2
         )
     }
 }

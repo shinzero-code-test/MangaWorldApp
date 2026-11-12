@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "fleet": "node scripts/fleet-report.mjs"
   },
   "dependencies": {
     "cloudinary": "^2.0.0",

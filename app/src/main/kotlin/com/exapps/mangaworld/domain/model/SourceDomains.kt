@@ -65,6 +65,29 @@ object SourceDomainOverrides {
     }
 
     /**
+     * U-31 (2.4): is a Remote Config host one the source DECLARES?
+     *
+     * The RC `source_<id>_base_url` / `source_<id>_api_host` values are
+     * unsigned remote input. The shared host gate used to build its
+     * allow-list FROM the RC value, so a flipped base URL silently widened
+     * the gate to the attacker's host — i.e. an RC/console compromise became
+     * a full content-spoofing channel for that source.
+     *
+     * The app now only honours an override whose host is already declared
+     * by the source descriptor (its signed manifest `allowedHosts` plus its
+     * base host). A domain move therefore ships with the app (or with a new
+     * signed plugin version) instead of being a one-value RC edit.
+     *
+     * @param host the candidate host (lowercase, no port)
+     * @param declaredHosts the hosts the descriptor declares
+     */
+    fun isHostDeclared(host: String, declaredHosts: Set<String>): Boolean {
+        val normalized = host.trim().trimEnd('.').lowercase()
+        if (normalized.isEmpty()) return false
+        return declaredHosts.any { it.trim().trimEnd('.').lowercase() == normalized }
+    }
+
+    /**
      * Returns a canonical base URL or null when the remote value is not a
      * plain https? origin (path/query/whitespace → rejected).
      */

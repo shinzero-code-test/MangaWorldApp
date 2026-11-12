@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, PATCH } from "./route";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
-import { wouldStrandLastSuperAdmin } from "@/lib/auth";
+import { requireRole, wouldStrandLastSuperAdmin } from "@/lib/auth";
 import { logSecurityEvent } from "@/lib/security";
 import { tryClaimUsername } from "@/lib/username";
 import {
@@ -72,6 +72,16 @@ function mockAuth() {
 
 let fake = createFakeDb();
 
+/** A moderator session (rank 1) — the role the UI actually uses. */
+function mockRoleModerator() {
+  vi.mocked(requireRole).mockResolvedValue({
+    uid: "admin-2",
+    email: "mod@example.com",
+    role: "moderator",
+    mfaVerified: true,
+  } as never);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   fake = createFakeDb();
@@ -119,6 +129,34 @@ describe("GET /api/users/[uid]", () => {
     expect((await GET(req({}), uidParams(""))).status).toBe(400);
     expect((await GET(req({}), uidParams("a/b"))).status).toBe(400);
     expect((await GET(req({}), uidParams("x".repeat(513)))).status).toBe(400);
+  });
+
+  // p3-next 2.3 / U-31: the moderator PII surface.
+  it("omits the phone number and the custom claims for a moderator", async () => {
+    mockAuth();
+    mockRoleModerator();
+
+    const res = await GET(req({}), uidParams("uid-1"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // The UI renders the email only — the phone number and the claims bag are
+    // pure exposure and the keys must be ABSENT (not null).
+    expect(body.email).toBe("user@example.com");
+    expect("phoneNumber" in body).toBe(false);
+    expect("customClaims" in body).toBe(false);
+    // The derived role badge stays visible to moderators.
+    expect(body.role).toBe("viewer");
+  });
+
+  it("returns the phone number and the custom claims to a super-admin", async () => {
+    mockAuth();
+    mockRoleOk(); // super-admin
+
+    const res = await GET(req({}), uidParams("uid-1"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.phoneNumber).toBe("+10000000000");
+    expect(body.customClaims).toEqual({ role: "viewer" });
   });
 
   it("returns 401 when unauthenticated", async () => {

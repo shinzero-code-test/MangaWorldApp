@@ -48,9 +48,12 @@
     "engagement_tier_avid_ms": { "defaultValue": { "value": "36000000" } },
     "home_layout_variant": { "defaultValue": { "value": "default" } },
     "community_banned_keywords": { "defaultValue": { "value": "" } },
-    "remote_alert_message": { "defaultValue": { "value": "" } }
+    "remote_alert_message": { "defaultValue": { "value": "" } },
+    "min_supported_version": { "defaultValue": { "value": "" } },
+    "latest_version": { "defaultValue": { "value": "" } },
+    "update_url": { "defaultValue": { "value": "https://github.com/shinzero-code-test/MangaWorldApp/releases/latest" } }
   },
   "version": {
-    "versionNumber": "3"
+    "versionNumber": "4"
   }
 }

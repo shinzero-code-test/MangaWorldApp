@@ -115,6 +115,9 @@ play-services-auth = { group = "com.google.android.gms", name = "play-services-a
 # Testing
 junit = { group = "junit", name = "junit", version = "4.13.2" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+# androidTest needs the Android artifact: the JVM one ships the JDK-attach
+# inline agent (unavailable on Android) and cannot mock final classes.
+mockk-android = { group = "io.mockk", name = "mockk-android", version.ref = "mockk" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 json-java = { group = "org.json", name = "json", version = "20240303" }

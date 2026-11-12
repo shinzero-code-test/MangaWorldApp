@@ -21,11 +21,20 @@ android {
     namespace = "com.exapps.mangaworld.benchmark"
     compileSdk = 36
 
+    // The app under test. Its `benchmark` build type is release-like,
+    // non-debuggable and debug-signed (see app/build.gradle.kts).
+    //
+    // `targetProjectPath` lives on the `com.android.test` EXTENSION
+    // (`TestExtension.targetProjectPath`), NOT on `defaultConfig` — the
+    // Groovy snippets in the AGP docs put it inside `defaultConfig`, but
+    // Groovy resolves it through the closure owner while the Kotlin DSL has
+    // no such delegation, so `defaultConfig { targetProjectPath = … }` is an
+    // "unresolved reference" here (and it was one of the two reasons this
+    // module never compiled).
+    targetProjectPath = ":app"
+
     defaultConfig {
         minSdk = 26
-        // The app under test. Its `benchmark` build type is release-like,
-        // non-debuggable and debug-signed (see app/build.gradle.kts).
-        targetProjectPath = ":app"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

@@ -64,8 +64,8 @@ android {
         applicationId = "com.exapps.mangaworld"
         minSdk        = 26
         targetSdk     = 36
-        versionCode   = 279
-        versionName   = "9.7.2"
+        versionCode   = 280
+        versionName   = "9.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -310,6 +310,12 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.room.testing)
+    // U-33 / p3-next §3: the reader load-path device test fakes the
+    // repository and relaxes the rest of the ViewModel's collaborators.
+    // mockk-ANDROID (not the JVM artifact): the JVM one ships the JDK-attach
+    // inline agent, which does not exist on Android, so it cannot mock the
+    // final classes this test relaxes.
+    androidTestImplementation(libs.mockk.android)
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.test.manifest)
 }

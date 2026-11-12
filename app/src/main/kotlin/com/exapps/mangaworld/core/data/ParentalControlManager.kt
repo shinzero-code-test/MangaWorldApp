@@ -3,6 +3,8 @@ package com.exapps.mangaworld.core.data
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
+import androidx.annotation.StringRes
+import com.exapps.mangaworld.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -36,6 +38,21 @@ class ParentalControlManager @Inject constructor(
         private const val HASH_ITERATIONS = 120_000
         private const val HASH_KEY_BITS = 256
         private const val SALT_BYTES = 16
+
+        /**
+         * The salted PBKDF2 write path landed in v8.2.4 (2026-09-07), so EVERY
+         * legacy row (a bare `String.hashCode()`) was written before that date.
+         *
+         * A numeric PIN has at most 10^4 candidates: a legacy row is a ≤10^4
+         * brute force away from the PIN, so it is refused and the user is asked
+         * to set a new PIN (the PBKDF2 path).
+         *
+         * The retirement is deliberately NOT gated on the device clock — the
+         * user controls that clock, so a clock rolled back before the cut-off
+         * would silently re-enable the legacy path. The cut-off is a
+         * documentation constant and a test pin, not a runtime condition.
+         */
+        internal const val LEGACY_HASH_RETIRED_AT_MS = 1_788_739_200_000L // 2026-09-07T00:00:00Z
     }
 
     fun isEnabled(): Boolean = prefs.getBoolean(KEY_ENABLED, false)
@@ -45,7 +62,9 @@ class ParentalControlManager @Inject constructor(
     }
 
     fun setPin(pin: String) {
-        require(pin.isNotBlank() && pin.trim().length >= 4) { "PIN must be at least 4 characters" }
+        require(pin.isNotBlank() && pin.trim().length >= 4) {
+            context.getString(R.string.parental_pin_too_short)
+        }
         prefs.edit()
             .putString(KEY_PIN_HASH, hashPin(pin))
             .remove(KEY_PIN_ATTEMPTS)
@@ -53,25 +72,49 @@ class ParentalControlManager @Inject constructor(
             .apply()
     }
 
+    /**
+     * Verifies the PIN.
+     *
+     * A stored LEGACY row (a bare `String.hashCode()`) NEVER unlocks: it is a
+     * ≤10^4 brute force and every legacy row predates the v8.2.4 PBKDF2 write
+     * path. Such a device must set a new PIN — see [requiresPinReset] and
+     * [pinResetRequiredMessageRes].
+     */
     fun verifyPin(pin: String): Boolean {
         // Brute-force throttle: a short numeric PIN is ~10k candidates, so the
         // hash cost alone is not enough friction. Exponential lockout past 5 fails.
         if (System.currentTimeMillis() < prefs.getLong(KEY_PIN_LOCKOUT_UNTIL, 0L)) return false
         val storedHash = prefs.getString(KEY_PIN_HASH, null) ?: return false
-        val matched = if (storedHash.startsWith(HASH_PREFIX)) {
-            verifySaltedPin(pin, storedHash)
-        } else {
-            // Legacy rows stored a bare String.hashCode() — verify against it, then
-            // transparently upgrade to the salted PBKDF2 format on first success.
-            val legacyMatches = pin.hashCode().toString() == storedHash
-            if (legacyMatches) {
-                prefs.edit().putString(KEY_PIN_HASH, hashPin(pin)).apply()
-            }
-            legacyMatches
+        if (!storedHash.startsWith(HASH_PREFIX)) {
+            // Retired legacy format: refuse WITHOUT burning a PIN attempt.
+            // There is no brute force to slow down here (the path is closed),
+            // and counting a failure would only lock the user out of a PIN
+            // they can never unlock with.
+            return false
         }
+        val matched = verifySaltedPin(pin, storedHash)
         recordPinAttempt(matched)
         return matched
     }
+
+    /**
+     * True when a PIN row exists in the RETIRED legacy format. Such a row can
+     * never be unlocked — the user has to set a new PIN (PBKDF2).
+     *
+     * Note: [hasPin] still reports true for such a row (a row exists); a
+     * caller that wants to know whether the PIN is USABLE must ask this.
+     */
+    fun requiresPinReset(): Boolean {
+        val storedHash = prefs.getString(KEY_PIN_HASH, null) ?: return false
+        return !storedHash.startsWith(HASH_PREFIX)
+    }
+
+    /**
+     * The message to show when [requiresPinReset] is true. A string resource
+     * (never hardcoded) so the caller renders it in the user's language.
+     */
+    @StringRes
+    fun pinResetRequiredMessageRes(): Int = R.string.parental_pin_legacy_reset_required
 
     private fun recordPinAttempt(success: Boolean) {
         if (success) {

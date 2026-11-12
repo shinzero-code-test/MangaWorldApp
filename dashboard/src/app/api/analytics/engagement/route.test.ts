@@ -12,8 +12,10 @@ import { createFakeDb } from "@/app/api/__tests__/fake-firestore";
 //  - moderator gate (401/403) and the per-admin quota-burn guard (429)
 //  - the `days` window is CLAMPED to [1, 31] — each day costs sequential
 //    count queries, so an unbounded window is a Firestore-cost DoS
-//  - the reading-hour distribution is derived from the achievement
-//    timestamps and always sums to 100%
+//  - the reading-hour distribution is derived from the SERVER-verified reading
+//    evidence (the cloud reading positions) and always sums to 100%.
+//    It used to come from the client-written `user_achievements.lastUpdated`,
+//    which the owner can forge (p3-next 2.5 / U-31).
 vi.mock("@/lib/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth")>();
   return { ...actual, requireRole: vi.fn() };
@@ -27,6 +29,8 @@ vi.mock("@/lib/security", async (importOriginal) => {
 });
 
 let fake = createFakeDb();
+
+const DAY_MS = 86_400_000;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -42,7 +46,17 @@ describe("GET /api/analytics/engagement", () => {
     fake.put("community_manga", "m1", { title: "Popular" });
     fake.setCount("community_manga/m1/comments", 4);
     fake.setCount("community_manga/m1/reviews", 1);
-    fake.put("user_achievements", "uid-1", { lastUpdated: Date.now() });
+    // The server-verified reading evidence (one reading position).
+    fake.putGroupAt(
+      "preferences",
+      "reading_positions_0",
+      {
+        "m1_1": { mangaId: "m1", chapterNumber: 1, currentPage: 4, totalPages: 20, updatedAt: Date.now() },
+      },
+      "users/uid-1/preferences/reading_positions_0",
+    );
+    // A forged client document must NOT move the distribution.
+    fake.put("user_achievements", "uid-2", { lastUpdated: Date.now() - 5 * DAY_MS });
 
     const res = await GET(reqUrl("http://localhost/api/analytics/engagement?days=3"));
     expect(res.status).toBe(200);
@@ -51,6 +65,8 @@ describe("GET /api/analytics/engagement", () => {
     expect(body.topManga[0]).toEqual({ name: "Popular", reads: 5 });
     const pctSum = body.readingDistribution.reduce((s: number, d: { pct: number }) => s + d.pct, 0);
     expect(pctSum).toBe(100);
+    // Only the verified reader is counted — the forged document is ignored.
+    expect(body.readingDistribution.filter((d: { pct: number }) => d.pct > 0)).toHaveLength(1);
   });
 
   it("clamps the days window to [1, 31]", async () => {

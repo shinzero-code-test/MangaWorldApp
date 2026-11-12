@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth";
 import { consumeRateLimit } from "@/lib/security";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { genericErrorResponse } from "@/lib/security";
+import { loadUserReadingStats } from "@/lib/achievement-kpis";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,10 @@ export async function GET(request: NextRequest) {
       // Collection may not exist
     }
 
-    // Reading time distribution (estimate from user_achievements)
+    // Reading time distribution — derived from the SERVER-verified reading
+    // evidence (the cloud reading positions), NOT from the client-written
+    // `user_achievements.lastUpdated`: the owner can write that document, so
+    // a forged timestamp used to move the distribution buckets.
     const readingDistribution = [
       { time: "6 صباحاً - 12 ظهراً", pct: 0 },
       { time: "12 ظهراً - 6 مساءً", pct: 0 },
@@ -71,11 +75,11 @@ export async function GET(request: NextRequest) {
       { time: "12 ليلاً - 6 صباحاً", pct: 0 },
     ];
     try {
-      const achieveSnap = await db.collection("user_achievements").limit(100).get();
+      const stats = await loadUserReadingStats();
       let morning = 0, afternoon = 0, evening = 0, night = 0;
-      for (const doc of achieveSnap.docs) {
-        const updated = doc.data().lastUpdated || 0;
-        const hour = new Date(updated).getHours();
+      for (const userStats of stats.values()) {
+        if (userStats.lastActivityAt <= 0) continue;
+        const hour = new Date(userStats.lastActivityAt).getHours();
         if (hour >= 6 && hour < 12) morning++;
         else if (hour >= 12 && hour < 18) afternoon++;
         else if (hour >= 18 && hour < 24) evening++;
@@ -87,7 +91,7 @@ export async function GET(request: NextRequest) {
       readingDistribution[2].pct = Math.round((evening / total) * 100);
       readingDistribution[3].pct = Math.round((night / total) * 100);
     } catch {
-      // No achievement data available
+      // No reading evidence available
     }
 
     return NextResponse.json({

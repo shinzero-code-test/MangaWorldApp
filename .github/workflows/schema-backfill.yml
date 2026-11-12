@@ -1,0 +1,92 @@
+name: Room Schema Backfill (authoritative exports)
+
+# U-08 follow-up (p3-next §2.1): the committed Room schemas for v8..v13 were
+# hand-derived, and a hand-derived export carries a fabricated identityHash —
+# the migration device test then validates against a WRONG expectation, i.e.
+# the U-07 regression net can be a false green.
+#
+# This workflow regenerates the historical exports the authoritative way:
+# check out each historical tag, run the Room KSP export, and upload the
+# generated JSON as an artifact. The exports are then committed verbatim
+# (and the hand-derived files deleted), after which
+# `.github/workflows/build.yml`'s "Room schema drift" step keeps the CURRENT
+# version honest on every push.
+#
+# Dispatch-only: six historical Gradle builds are expensive and the output
+# only changes when the schemas themselves change.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: 'Comma-separated versions to regenerate (empty = all known)'
+        required: false
+        default: ''
+
+env:
+  JAVA_VERSION: '17'
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true
+
+jobs:
+  backfill:
+    name: 'Backfill v${{ matrix.version }}'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { version: '8',  tag: 'bb6e9a6' }
+          - { version: '9',  tag: '53dbe01' }
+          - { version: '10', tag: 'dfd53a6' }
+          - { version: '11', tag: '67f220f' }
+          - { version: '12', tag: '9c176a2' }
+          - { version: '13', tag: 'c8c35b6' }
+    steps:
+      - name: Checkout historical tag
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ matrix.tag }}
+          fetch-depth: 1
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Export Room schema
+        # The historical tags need a google-services.json to configure; the
+        # google-services Gradle plugin fails the build without one.
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${GOOGLE_SERVICES_JSON:-}" ]]; then
+            echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
+          fi
+          ./gradlew :app:kspDebugKotlin --stacktrace
+
+      - name: Collect the exported schema
+        run: |
+          set -euo pipefail
+          dir="app/schemas/com.exapps.mangaworld.core.data.local.MangaDatabase"
+          if [[ ! -f "$dir/${{ matrix.version }}.json" ]]; then
+            echo "::error::tag ${{ matrix.tag }} did not export ${{ matrix.version }}.json"
+            ls -la "$dir" || true
+            exit 1
+          fi
+          echo "identityHash of the regenerated export:"
+          python3 -c "import json;print(json.load(open('$dir/${{ matrix.version }}.json'))['database']['identityHash'])"
+          mkdir -p "out/${{ matrix.version }}"
+          cp "$dir/${{ matrix.version }}.json" "out/${{ matrix.version }}/${{ matrix.version }}.json"
+
+      - name: Upload the regenerated export
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: room-schema-v${{ matrix.version }}
+          path: out/${{ matrix.version }}/${{ matrix.version }}.json
+          if-no-files-found: error
+          retention-days: 30

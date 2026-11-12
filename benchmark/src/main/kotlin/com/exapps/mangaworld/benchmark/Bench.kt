@@ -1,12 +1,15 @@
 package com.exapps.mangaworld.benchmark
 
 import android.app.Instrumentation
+import android.app.UiAutomation
+import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
+import java.util.regex.Pattern
 
 /**
  * Black-box device probes shared by the benchmark suites.
@@ -65,6 +68,20 @@ object Bench {
     private val PAGE_NUMBER = Regex("(\\d+)")
     private val RX_BYTES = Regex("rxBytes=(\\d+)")
     private val TX_BYTES = Regex("txBytes=(\\d+)")
+    private val UID_HEADER = Regex("uid=(\\d+)")
+
+    /**
+     * Matches ANY non-empty content description.
+     *
+     * The app is a Compose app: a manga cover is a *semantics* node whose
+     * content description is the title (`MangaCard` merges its descendants
+     * and sets `contentDescription = manga.title`), not an
+     * `android.widget.ImageView`. See [waitForLargestCover].
+     */
+    private val ANY_DESCRIPTION: Pattern = Pattern.compile(".+")
+
+    /** Minimum edge (px) a cover-like node must have to be considered a cover. */
+    private const val MIN_COVER_EDGE_PX = 100
 
     private val instrumentation: Instrumentation
         get() = InstrumentationRegistry.getInstrumentation()
@@ -74,14 +91,85 @@ object Bench {
     // ── shell ────────────────────────────────────────────────────────────────
 
     /**
+     * The instrumentation's [UiAutomation].
+     *
+     * `Instrumentation.getUiAutomation()` returns **null** on API 31+ when the
+     * connection to the accessibility service times out — the platform
+     * documentation says the caller should check the value and retry. The
+     * harness APK targets a modern SDK, so the first connection attempt can
+     * legitimately fail.
+     *
+     * The retry is BOUNDED on purpose: the platform waits up to 60 s
+     * (`Instrumentation.CONNECT_TIMEOUT_MILLIS`) before it gives up, and
+     * every failed attempt starts the wait again. Without the "remember the
+     * failure" latch below, one unavailable UiAutomation would stall the
+     * whole suite for minutes on every probe.
+     */
+    private var uiAutomationUnavailable = false
+
+    private fun uiAutomation(): UiAutomation {
+        if (uiAutomationUnavailable) {
+            throw IllegalStateException("UiAutomation is not available on this device")
+        }
+        repeat(2) { attempt ->
+            val automation = runCatching { instrumentation.uiAutomation }.getOrNull()
+            if (automation != null) return automation
+            Log.w(TAG, "UiAutomation is not connected yet (attempt ${attempt + 1}/2)")
+        }
+        uiAutomationUnavailable = true
+        throw IllegalStateException("UiAutomation could not be connected on this device")
+    }
+
+    /**
      * Runs [command] through the device shell and returns its stdout.
      *
-     * `UiAutomation.executeShellCommand` execs the command directly (no
-     * shell), so there is no piping/globbing: callers parse the output in
-     * Kotlin.
+     * `UiAutomation.executeShellCommand` returns the **read end of a pipe**
+     * (a `ParcelFileDescriptor`), not a stream: it has to be wrapped in an
+     * `AutoCloseInputStream` before it can be read. (This is exactly the
+     * mistake that kept the module from ever compiling.)
+     *
+     * The command is exec'd directly — `Runtime.exec(String)` tokenises it on
+     * whitespace and does NOT run a shell — so there is no piping, no
+     * globbing and no quoting: callers pass plain argv-style strings and
+     * parse the output in Kotlin.
+     *
+     * The command runs with the HARNESS's uid, not the shell's, so the
+     * privileged probes (`dumpsys …`, `logcat -d`) are refused unless the
+     * platform lets this app escalate — see [rootPrefix].
      */
-    fun shell(command: String): String = try {
-        instrumentation.uiAutomation.executeShellCommand(command)
+    fun shell(command: String): String = exec(rootPrefix + command)
+
+    /**
+     * The prefix that gives a command root privileges, or "" when root is
+     * not available.
+     *
+     * `UiAutomation.executeShellCommand` executes the command with the
+     * harness's own uid: `dumpsys` (DUMP) and `logcat -d` (READ_LOGS) are
+     * then refused and every privileged probe would read empty — the gate
+     * would skip every case and report "measured nothing".
+     *
+     * On a userdebug/eng device (the CI emulator image) `su` is available to
+     * a debuggable app, and `androidx.benchmark.Shell` uses exactly the same
+     * trick (`su root <cmd>`) with the same runtime probe. The probe is
+     * cached, so it costs two commands per process at most.
+     */
+    private val rootPrefix: String by lazy {
+        val id = exec("id")
+        when {
+            id.contains("uid=0(root)") -> ""
+            exec("su root id").contains("uid=0(root)") -> "su root "
+            else -> {
+                Log.w(TAG, "no root escalation available — privileged probes (dumpsys, logcat) will be refused")
+                ""
+            }
+        }
+    }
+
+    /** Runs [command] with the harness's own uid. */
+    private fun exec(command: String): String = try {
+        val descriptor: ParcelFileDescriptor =
+            uiAutomation().executeShellCommand(command)
+        ParcelFileDescriptor.AutoCloseInputStream(descriptor)
             .bufferedReader()
             .use { it.readText() }
     } catch (t: Throwable) {
@@ -152,20 +240,49 @@ object Bench {
      *
      * The absolute value covers the whole bucket window, so this is only
      * ever used as a DELTA around a phase.
+     *
+     * Returns **null** when the platform did not expose a per-uid byte
+     * counter. That distinction matters: "the dump contained the uid but no
+     * byte counter" means UNKNOWN, not ZERO, and reporting zero would make
+     * every "no bytes were moved" assertion pass vacuously.
      */
     fun appNetworkBytes(): Long? {
         val uid = appUid() ?: return null
-        val uidPattern = Regex("uid=$uid\\b")
         var sum = 0L
-        var seen = false
-        for (line in shell("dumpsys netstats").lineSequence()) {
-            if (!uidPattern.containsMatchIn(line)) continue
-            val rx = RX_BYTES.find(line)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
-            val tx = TX_BYTES.find(line)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
-            sum += rx + tx
-            seen = true
+        var parsed = false
+        // The netstats dump groups the counters per uid; the uid header and
+        // the byte counters are usually on DIFFERENT lines, so the current
+        // uid is tracked while walking the dump.
+        var currentUid: Int? = null
+        for (line in netstatsDump().lineSequence()) {
+            UID_HEADER.find(line)?.groupValues?.get(1)?.toIntOrNull()?.let { currentUid = it }
+            if (currentUid != uid) continue
+            val rx = RX_BYTES.find(line)?.groupValues?.get(1)?.toLongOrNull()
+            val tx = TX_BYTES.find(line)?.groupValues?.get(1)?.toLongOrNull()
+            if (rx == null && tx == null) continue
+            parsed = true
+            sum += (rx ?: 0L) + (tx ?: 0L)
         }
-        return if (seen) sum else null
+        return if (parsed) sum else null
+    }
+
+    /**
+     * The netstats dump.
+     *
+     * `dumpsys netstats` prints the per-uid counters; some builds only
+     * include the byte counters in the verbose form, so that is tried too.
+     */
+    private fun netstatsDump(): String {
+        val summary = shell("dumpsys netstats")
+        if (RX_BYTES.containsMatchIn(summary) || TX_BYTES.containsMatchIn(summary)) {
+            return summary
+        }
+        val detail = shell("dumpsys netstats detail")
+        return if (RX_BYTES.containsMatchIn(detail) || TX_BYTES.containsMatchIn(detail)) {
+            detail
+        } else {
+            summary
+        }
     }
 
     /**
@@ -306,7 +423,7 @@ object Bench {
             ?: return "the filter sheet has no apply button"
         runCatching { apply.click() }
         Thread.sleep(3_000)
-        return if (waitForLargestImage(30_000) == null) {
+        return if (waitForLargestCover(30_000) == null) {
             "the filtered browse grid never rendered a cover"
         } else {
             null
@@ -326,20 +443,35 @@ object Bench {
     }
 
     /**
-     * Largest visible image node. Manga covers are much bigger than the
-     * 28dp source logo in the top bar, so "largest" picks a cover.
+     * Largest cover-like node on screen; null on timeout.
+     *
+     * The app is a Compose app, so a cover is **not** an
+     * `android.widget.ImageView`: it is a semantics node whose content
+     * description is the manga title (`MangaCard` merges its descendants
+     * and sets `contentDescription = manga.title`, and `MangaCover` sets the
+     * same on the image). Searching for ImageViews therefore finds nothing
+     * in a Compose UI — every scenario would time out, skip, and the gate
+     * would report green while measuring nothing.
+     *
+     * Both shapes are probed (described semantics nodes first, real
+     * ImageViews as a fallback for a plain View based UI) and the largest
+     * candidate wins.
      */
-    fun waitForLargestImage(timeoutMs: Long): UiObject2? {
+    fun waitForLargestCover(timeoutMs: Long): UiObject2? {
         val device = device()
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            val images = runCatching {
-                device.findObjects(By.clazz("android.widget.ImageView"))
+            val candidates = runCatching {
+                device.findObjects(By.desc(ANY_DESCRIPTION)) +
+                    device.findObjects(By.clazz("android.widget.ImageView"))
             }.getOrDefault(emptyList())
-            val largest = images.maxByOrNull {
-                it.visibleBounds.width() * it.visibleBounds.height()
-            }
-            if (largest != null && largest.visibleBounds.width() > 100) return largest
+            val largest = candidates
+                .filter {
+                    it.visibleBounds.width() > MIN_COVER_EDGE_PX &&
+                        it.visibleBounds.height() > MIN_COVER_EDGE_PX
+                }
+                .maxByOrNull { it.visibleBounds.width() * it.visibleBounds.height() }
+            if (largest != null) return largest
             Thread.sleep(500)
         }
         return null
@@ -352,7 +484,7 @@ object Bench {
     fun openBrowse(sourceId: String = DEFAULT_SOURCE_ID): String? {
         ensureAppReady()
         shell("am start -a android.intent.action.VIEW -d mangaworld://screen/source_browse/$sourceId")
-        return if (waitForLargestImage(30_000) == null) {
+        return if (waitForLargestCover(30_000) == null) {
             "source browse screen for $sourceId never rendered a cover"
         } else {
             null
@@ -371,7 +503,7 @@ object Bench {
     fun openReader(sourceId: String = DEFAULT_SOURCE_ID): String? {
         val browseFailure = openBrowse(sourceId)
         if (browseFailure != null) return browseFailure
-        val cover = waitForLargestImage(10_000)
+        val cover = waitForLargestCover(10_000)
             ?: return "source browse screen for $sourceId lost its covers"
         val openManga = runCatching { cover.click() }
         if (openManga.isFailure) {

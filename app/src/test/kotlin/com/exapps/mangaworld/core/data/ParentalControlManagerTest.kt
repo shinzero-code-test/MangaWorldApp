@@ -12,6 +12,7 @@ import io.mockk.unmockkAll
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -22,8 +23,9 @@ import org.junit.Test
  * The v2 path once compared hashPin(pin) — which mints a FRESH random salt on
  * every call — against the stored hash, so verification could never succeed.
  * These tests pin the correct behavior: set/verify round-trip with distinct
- * salts per row, wrong-PIN rejection, legacy hashCode upgrade, and
- * fail-closed malformed rows.
+ * salts per row, wrong-PIN rejection, fail-closed malformed rows, and the
+ * RETIREMENT of the legacy `String.hashCode()` format: a legacy row is a ≤10^4
+ * brute force, so it never unlocks and the device must set a new PIN.
  */
 class ParentalControlManagerTest {
 
@@ -95,6 +97,8 @@ class ParentalControlManagerTest {
 
         val context = mockk<Context>()
         every { context.getSharedPreferences(any(), any()) } returns prefs
+        // The manager renders its failure messages from string resources.
+        every { context.getString(any<Int>()) } returns "pin-message"
 
         manager = ParentalControlManager(context)
     }
@@ -137,16 +141,17 @@ class ParentalControlManagerTest {
     }
 
     @Test
-    fun `legacy hashCode row verifies once and upgrades to v2`() {
+    fun `legacy hashCode row never unlocks and is not upgraded`() {
         store["pin_hash"] = "1234".hashCode().toString()
 
-        assertTrue(manager.verifyPin("1234"))
+        // The legacy format is RETIRED — a bare String.hashCode() PIN
+        // is a <=10^4 brute force, so it must not unlock the feature.
+        assertFalse(manager.verifyPin("1234"))
 
-        val upgraded = store["pin_hash"] as String
-        assertTrue(upgraded.startsWith("v2"))
-        // Upgraded row keeps verifying (wrong PIN still rejected).
-        assertTrue(manager.verifyPin("1234"))
-        assertFalse(manager.verifyPin("0000"))
+        // The row is left untouched (no silent upgrade) and the device is told
+        // to set a new PIN.
+        assertEquals("1234".hashCode().toString(), store["pin_hash"])
+        assertTrue(manager.requiresPinReset())
     }
 
     @Test
@@ -155,6 +160,44 @@ class ParentalControlManagerTest {
 
         assertFalse(manager.verifyPin("0000"))
         assertFalse((store["pin_hash"] as String).startsWith("v2"))
+        assertTrue(manager.requiresPinReset())
+    }
+
+    @Test
+    fun `a legacy row does not burn PIN attempts`() {
+        store["pin_hash"] = "1234".hashCode().toString()
+
+        repeat(10) { assertFalse(manager.verifyPin("1234")) }
+
+        // The retired path is closed, so there is no brute force to throttle:
+        // counting failures would only lock the user out of a PIN they can
+        // never unlock with.
+        assertNull(store["pin_attempts"])
+    }
+
+    @Test
+    fun `the legacy retirement cut-off has passed`() {
+        assertTrue(
+            ParentalControlManager.LEGACY_HASH_RETIRED_AT_MS <= System.currentTimeMillis(),
+            "the legacy hashCode format must stay retired",
+        )
+    }
+
+    @Test
+    fun `a PBKDF2 row unlocks and does not ask for a reset`() {
+        manager.setPin("1234")
+
+        assertTrue(manager.verifyPin("1234"))
+        assertFalse(manager.requiresPinReset())
+        assertTrue(manager.hasPin())
+    }
+
+    @Test
+    fun `the reset message is a string resource`() {
+        assertEquals(
+            com.exapps.mangaworld.R.string.parental_pin_legacy_reset_required,
+            manager.pinResetRequiredMessageRes(),
+        )
     }
 
     @Test

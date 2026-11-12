@@ -3,25 +3,15 @@ import { requireRole } from "@/lib/auth";
 import { consumeRateLimit } from "@/lib/security";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { genericErrorResponse } from "@/lib/security";
+import {
+  ACHIEVEMENT_CATALOG,
+  type ClientGoal,
+  hasPeriodActivity,
+  loadUserReadingStats,
+  serverGoalProgress,
+} from "@/lib/achievement-kpis";
 
 export const dynamic = 'force-dynamic';
-
-interface RawAchievement {
-  id?: string;
-  title?: string;
-  description?: string;
-  isUnlocked?: boolean;
-  unlockedAt?: number;
-}
-
-interface RawGoal {
-  id?: string;
-  type?: string;
-  targetValue?: number;
-  currentValue?: number;
-  period?: string;
-  isActive?: boolean;
-}
 
 function parseJsonArray<T>(raw: unknown): T[] {
   if (Array.isArray(raw)) return raw as T[];
@@ -51,6 +41,23 @@ const GOAL_LABELS: Record<string, { label: string; unit: string }> = {
   STREAK_DAYS: { label: "أيام متتالية", unit: "يوم" },
 };
 
+/** Max goal rows reported (the fleet table only renders the first ones). */
+const MAX_GOALS = 20;
+
+/**
+ * The fleet achievement aggregate.
+ *
+ * ─── SERVER-RECOMPUTED (p3-next 2.5 / U-31) ────────────────────────────────
+ * Every NUMBER in this response is recomputed server-side from the app's own
+ * reading evidence in the cloud (`users/{uid}/preferences/reading_positions_*`,
+ * one entry per chapter). The client-written `user_achievements/{uid}` and
+ * `users/{uid}/preferences/achievements` documents are read for CONTENT only —
+ * the user's reading GOALS — and their counters and unlock flags are ignored,
+ * because `firestore.rules` lets the owner write both documents and a single
+ * write used to inflate the fleet KPIs.
+ *
+ * See `lib/achievement-kpis.ts` for the evidence model and its limits.
+ */
 export async function GET() {
   try {
     const admin = await requireRole("moderator");
@@ -60,16 +67,15 @@ export async function GET() {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
 
-    // DA-3: the app dual-writes achievements to TWO locations —
-    // `user_achievements/{uid}` (AchievementManager.syncToFirestore) and
-    // `users/{uid}/preferences/achievements` (FirebaseSyncManager push) —
-    // with independent failure handling, so they can drift. The dashboard
-    // used to read only the first and could under-report users whose latest
-    // progress landed only in the second. Merge per uid (newer lastUpdated
-    // wins totals, achievements/goals unioned) before aggregating.
-    const snap = await getAdminDb().collection("user_achievements").limit(1000).get();
-    // collectionGroup read is best-effort: index or permission hiccups must
-    // not break the primary aggregation.
+    const now = Date.now();
+
+    // ── 1. The authoritative source: the server-visible reading evidence.
+    const stats = await loadUserReadingStats();
+
+    // ── 2. Client documents: CONTENT ONLY (the reading goals).
+    //    Their counters (totalPagesRead/totalChaptersRead) and their unlock
+    //    flags are deliberately NOT read — see the module header.
+    const clientDocs = await getAdminDb().collection("user_achievements").limit(1000).get();
     let prefDocs: { id: string; data(): Record<string, unknown>; ref: { parent: { parent: { id: string } | null } } }[] = [];
     try {
       const prefSnap = await getAdminDb().collectionGroup("preferences").limit(1000).get();
@@ -78,107 +84,101 @@ export async function GET() {
       prefDocs = [];
     }
 
-    interface MergedUser {
-      totalPagesRead: number;
-      totalChaptersRead: number;
-      lastUpdated: number;
-      achievements: Map<string, RawAchievement>;
-      goals: Map<string, RawGoal>;
-    }
-    const byUid = new Map<string, MergedUser>();
-    const ingest = (uid: string, data: Record<string, unknown>) => {
-      let entry = byUid.get(uid);
-      if (!entry) {
-        entry = { totalPagesRead: 0, totalChaptersRead: 0, lastUpdated: 0, achievements: new Map(), goals: new Map() };
-        byUid.set(uid, entry);
+    /** uid → the goals that user declared (client-authored intentions). */
+    const clientGoals = new Map<string, Map<string, ClientGoal>>();
+    const ingestGoals = (uid: string, data: Record<string, unknown>) => {
+      let goals = clientGoals.get(uid);
+      if (!goals) {
+        goals = new Map<string, ClientGoal>();
+        clientGoals.set(uid, goals);
       }
-      const updated = typeof data.lastUpdated === "number" ? data.lastUpdated : 0;
-      // Totals are monotonic counters — take the max so a stale twin never
-      // regresses the fleet aggregates.
-      if (typeof data.totalPagesRead === "number") entry.totalPagesRead = Math.max(entry.totalPagesRead, data.totalPagesRead);
-      if (typeof data.totalChaptersRead === "number") entry.totalChaptersRead = Math.max(entry.totalChaptersRead, data.totalChaptersRead);
-      entry.lastUpdated = Math.max(entry.lastUpdated, updated);
-      for (const a of parseJsonArray<RawAchievement>(data.achievements)) {
-        if (typeof a.id !== "string" || !a.id) continue;
-        const prev = entry.achievements.get(a.id);
-        if (!prev) entry.achievements.set(a.id, a);
-        else if (a.isUnlocked === true && prev.isUnlocked !== true) entry.achievements.set(a.id, a);
-        else if (a.isUnlocked === true && typeof a.unlockedAt === "number" && (prev.unlockedAt ?? 0) < a.unlockedAt) {
-          entry.achievements.set(a.id, a);
-        }
-      }
-      for (const g of parseJsonArray<RawGoal>(data.goals)) {
-        if (typeof g.id !== "string" || !g.id) continue;
-        const prev = entry.goals.get(g.id);
-        if (!prev) entry.goals.set(g.id, g);
-        else if (typeof g.currentValue === "number" && (prev.currentValue ?? 0) < g.currentValue) {
-          entry.goals.set(g.id, g);
-        }
+      for (const raw of parseJsonArray<Record<string, unknown>>(data.goals)) {
+        const id = typeof raw.id === "string" ? raw.id : "";
+        if (!id) continue;
+        const createdAt = typeof raw.createdAt === "number" ? raw.createdAt : 0;
+        const existing = goals.get(id);
+        // DA-3: the twins can drift — keep the newer declaration of a goal.
+        if (existing && existing.createdAt >= createdAt) continue;
+        goals.set(id, {
+          id,
+          type: typeof raw.type === "string" ? raw.type : "",
+          targetValue: typeof raw.targetValue === "number" ? raw.targetValue : 0,
+          currentValue: typeof raw.currentValue === "number" ? raw.currentValue : 0,
+          period: typeof raw.period === "string" ? raw.period : "DAILY",
+          isActive: raw.isActive !== false,
+          createdAt,
+        });
       }
     };
-    for (const doc of snap.docs) ingest(doc.id, doc.data() as Record<string, unknown>);
-    let fallbackCount = 0;
+    for (const doc of clientDocs.docs) ingestGoals(doc.id, doc.data() as Record<string, unknown>);
     for (const doc of prefDocs) {
       if (doc.id !== "achievements") continue;
       const uid = doc.ref.parent?.parent?.id;
       if (!uid) continue;
-      ingest(uid, doc.data());
-      fallbackCount += 1;
+      ingestGoals(uid, doc.data());
     }
 
+    // ── 3. Fleet KPIs — recomputed from the evidence.
     let totalPagesRead = 0;
     let totalChapters = 0;
     const byAchievement = new Map<string, {
-      id: string; title: string; description: string;
-      unlocked: number; total: number; unlockedAt?: number;
+      unlocked: number;
+      unlockedAt?: number;
     }>();
-    const goals: { id: string; label: string; current: number; target: number; unit: string }[] = [];
+    for (const definition of ACHIEVEMENT_CATALOG) {
+      byAchievement.set(definition.id, { unlocked: 0 });
+    }
 
-    for (const [uid, entry] of byUid) {
-      totalPagesRead += entry.totalPagesRead;
-      totalChapters += entry.totalChaptersRead;
-
-      for (const a of entry.achievements.values()) {
-        if (typeof a.id !== "string" || !a.id) continue;
-        const agg = byAchievement.get(a.id) ?? {
-          id: a.id,
-          title: typeof a.title === "string" && a.title ? a.title : a.id,
-          description: typeof a.description === "string" ? a.description : "",
-          unlocked: 0, total: 0,
-        };
-        agg.total += 1;
-        if (a.isUnlocked === true) {
-          agg.unlocked += 1;
-          if (typeof a.unlockedAt === "number" && (!agg.unlockedAt || a.unlockedAt > agg.unlockedAt)) {
-            agg.unlockedAt = a.unlockedAt;
-          }
+    for (const userStats of stats.values()) {
+      totalPagesRead += userStats.pagesRead;
+      totalChapters += userStats.chaptersRead;
+      for (const definition of ACHIEVEMENT_CATALOG) {
+        const aggregate = byAchievement.get(definition.id);
+        if (!aggregate) continue;
+        if (!definition.unlocked(userStats)) continue;
+        aggregate.unlocked += 1;
+        if (userStats.lastActivityAt > 0 && userStats.lastActivityAt > (aggregate.unlockedAt ?? 0)) {
+          aggregate.unlockedAt = userStats.lastActivityAt;
         }
-        byAchievement.set(a.id, agg);
       }
+    }
 
-      for (const g of entry.goals.values()) {
-        if (g.isActive !== true || typeof g.id !== "string" || !g.id) continue;
-        if (goals.length >= 20) break;
-        const meta = GOAL_LABELS[typeof g.type === "string" ? g.type : ""] ?? { label: String(g.type ?? "هدف"), unit: "" };
+    // ── 4. Goals: client-authored INTENTIONS, server-verified PROGRESS.
+    //    A goal is reported only when the server can see the user reading
+    //    inside the goal's own period window, so a goal row that nobody reads
+    //    towards never moves the `activeGoals` KPI.
+    const goals: { id: string; label: string; current: number; target: number; unit: string }[] = [];
+    for (const [uid, declared] of clientGoals) {
+      if (goals.length >= MAX_GOALS) break;
+      const userStats = stats.get(uid);
+      if (!userStats) continue; // no server evidence → the goal is not reported
+      for (const goal of declared.values()) {
+        if (goals.length >= MAX_GOALS) break;
+        if (!hasPeriodActivity(userStats, goal.type, goal.period, now)) continue;
+        const meta = GOAL_LABELS[goal.type] ?? { label: String(goal.type ?? "هدف"), unit: "" };
         goals.push({
-          id: `${uid}:${g.id}`,
+          id: `${uid}:${goal.id}`,
           label: meta.label,
-          current: typeof g.currentValue === "number" ? g.currentValue : 0,
-          target: typeof g.targetValue === "number" && g.targetValue > 0 ? g.targetValue : 0,
+          // SERVER progress — the client's `currentValue` is never used.
+          current: serverGoalProgress(userStats, goal.type, goal.period, now),
+          target: goal.targetValue > 0 ? goal.targetValue : 0,
           unit: meta.unit,
         });
       }
     }
 
-    const achievements = [...byAchievement.values()].map((e) => ({
-      id: e.id,
-      title: e.title,
-      description: e.description,
-      type: achievementType(e.id),
-      isUnlocked: e.unlocked > 0,
-      unlockedAt: e.unlockedAt,
-      count: e.unlocked,
-    }));
+    const achievements = ACHIEVEMENT_CATALOG.map((definition) => {
+      const aggregate = byAchievement.get(definition.id) ?? { unlocked: 0 };
+      return {
+        id: definition.id,
+        title: definition.title,
+        description: definition.description,
+        type: achievementType(definition.id),
+        isUnlocked: aggregate.unlocked > 0,
+        unlockedAt: aggregate.unlockedAt,
+        count: aggregate.unlocked,
+      };
+    });
 
     return NextResponse.json({
       totalPagesRead,
@@ -187,9 +187,10 @@ export async function GET() {
       activeGoals: goals.length,
       achievements,
       goals,
-      // DA-3 observability: how many users needed the fallback twin.
-      usersMerged: byUid.size,
-      fallbackDocs: fallbackCount,
+      // Coverage diagnostics: how much of the fleet the server can verify, and
+      // how many users still only have a client-written achievement document.
+      verifiedUsers: stats.size,
+      clientDocUsers: clientGoals.size,
     });
   } catch (error: unknown) {
     const { body, status } = genericErrorResponse(error);

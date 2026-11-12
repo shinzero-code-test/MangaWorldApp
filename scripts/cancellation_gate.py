@@ -73,7 +73,9 @@ def scan(root: pathlib.Path) -> list[str]:
         raw_lines = raw.split("\n")
         clean_lines = clean.split("\n")
         for i, line in enumerate(raw_lines):
-            if "runCatching" not in line or "suspendRunCatching" in line:
+            # Detect on the COMMENT-STRIPPED line (a comment that mentions
+            # runCatching is not a call site) but report the raw source line.
+            if "runCatching" not in clean_lines[i] or "suspendRunCatching" in clean_lines[i]:
                 continue
             body = "\n".join(lambda_bodies(clean_lines, i))
             if MARKERS.search(body):
@@ -92,8 +94,13 @@ def main(argv: list[str]) -> int:
     bare = migrated = 0
     for path in root.rglob("*.kt"):
         text = path.read_text()
-        bare += sum(1 for line in text.split("\n") if "runCatching" in line and "suspendRunCatching" not in line)
-        migrated += text.count("suspendRunCatching")
+        code = strip_noise(text)
+        bare += sum(
+            1
+            for line in code.split("\n")
+            if "runCatching" in line and "suspendRunCatching" not in line
+        )
+        migrated += code.count("suspendRunCatching")
     print(f"bare runCatching sites: {bare} (sync-only by construction) · suspendRunCatching: {migrated}")
     offenders = scan(root)
     if offenders:

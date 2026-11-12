@@ -14,15 +14,25 @@ import {
 export const dynamic = 'force-dynamic';
 
 /**
- * TODO(U-31): this moderator endpoint returns email/phone/custom claims
- * (policy question, NOT code — no change here without a decision): if
- * moderator PII exposure is unwanted, strip phoneNumber/customClaims for
- * role < super-admin. See tmp/review/stage2/dashboard-security.md.
+ * PII surface (p3-next item 2.3 / U-31).
+ *
+ * This moderator endpoint used to return `email` + `phoneNumber` +
+ * `customClaims` to ANY moderator, while the shipped UI renders ONLY the
+ * email — the phone number and the full claims bag were pure exposure.
+ *
+ * Policy now:
+ *  - `email` (and the rest of the operational profile) → moderator.
+ *  - `phoneNumber` + `customClaims` → super-admin ONLY, and the keys are
+ *    ABSENT (not null) for anyone below that rank.
+ *
+ * The target user's `role` stays visible to moderators (it is the badge the
+ * UI shows); it is a single derived field, not the claims bag.
  */
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ uid: string }> }) {
   try {
-    await requireRole("moderator");
+    const admin = await requireRole("moderator");
+    const isSuperAdmin = admin.role === "super-admin";
     const { uid } = await params;
     if (!isValidDocId(uid)) {
       return NextResponse.json({ error: "Invalid uid" }, { status: 400 });
@@ -73,8 +83,6 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         email: p.email,
         displayName: p.displayName,
       })) || [],
-      customClaims: authUser?.customClaims || {},
-      phoneNumber: authUser?.phoneNumber || null,
 
       // Profile info
       username: profile.username || "",
@@ -94,6 +102,15 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       // Activity
       recentHistory: history,
       lists,
+
+      // Super-admin-only PII. The keys are ABSENT for a moderator — a
+      // `null` value would still advertise that the field exists.
+      ...(isSuperAdmin
+        ? {
+            customClaims: authUser?.customClaims || {},
+            phoneNumber: authUser?.phoneNumber || null,
+          }
+        : {}),
     });
   } catch (error: unknown) {
     const { body, status } = genericErrorResponse(error);

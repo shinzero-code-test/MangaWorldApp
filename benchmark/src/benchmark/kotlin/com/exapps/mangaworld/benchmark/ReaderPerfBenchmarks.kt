@@ -47,10 +47,11 @@ class ReaderPerfBenchmarks {
      * out of scope for this lane, so `Partial(BaselineProfileMode.Require)`
      * cannot be used: it would fail the run instead of measuring anything.
      *
-     * `None()` measures the app exactly as it is installed (no ART
-     * pre-compilation) — the honest default for a repo that ships no
-     * baseline profile. `androidx.profileinstaller` IS already a dependency
-     * of the app, so adding a profile later is a pure addition.
+     * `None()` performs NO pre-compilation: the app's saved ART profile is
+     * reset and the app runs JIT-only, so every iteration starts from the
+     * same cold-compilation state (the honest default for a repo that ships
+     * no baseline profile). `androidx.profileinstaller` IS already a
+     * dependency of the app, so adding a profile later is a pure addition.
      */
     private val compilationMode = CompilationMode.None()
 
@@ -131,8 +132,8 @@ class ReaderPerfBenchmarks {
     @Test
     fun mb1_prefetchDisplayReusesDecodedPage() {
         var pagesAdvanced = 0
-        var displayCpuMs = 0L
-        var displayBytes = 0L
+        var displayCpuMs: Long? = null
+        var displayBytes: Long? = null
 
         benchmarkRule.measureRepeated(
             packageName = Bench.APP_ID,
@@ -145,30 +146,53 @@ class ReaderPerfBenchmarks {
                 Thread.sleep(prefetchSettleMs)
             },
             measureBlock = {
-                val cpuBefore = Bench.appCpuTimeMs() ?: 0L
-                val bytesBefore = Bench.appNetworkBytes() ?: 0L
+                val cpuBefore = Bench.appCpuTimeMs()
+                val bytesBefore = Bench.appNetworkBytes()
                 pagesAdvanced = Bench.scrollReaderPages(pagesToScroll)
-                val cpuAfter = Bench.appCpuTimeMs() ?: cpuBefore
-                val bytesAfter = Bench.appNetworkBytes() ?: bytesBefore
-                displayCpuMs = (cpuAfter - cpuBefore).coerceAtLeast(0L)
-                displayBytes = (bytesAfter - bytesBefore).coerceAtLeast(0L)
+                val cpuAfter = Bench.appCpuTimeMs()
+                val bytesAfter = Bench.appNetworkBytes()
+                // A probe that could not be read stays null: "unknown" must
+                // never be folded into "zero", or the budget below would pass
+                // without measuring anything.
+                if (cpuBefore != null && cpuAfter != null) {
+                    displayCpuMs = (cpuAfter - cpuBefore).coerceAtLeast(0L)
+                }
+                if (bytesBefore != null && bytesAfter != null) {
+                    displayBytes = (bytesAfter - bytesBefore).coerceAtLeast(0L)
+                }
             }
         )
 
-        val cpuPerPage = displayCpuMs / maxOf(1, pagesAdvanced)
+        val cpuMs = displayCpuMs
+        val bytes = displayBytes
+        val cpuPerPage = (cpuMs ?: 0L) / maxOf(1, pagesAdvanced)
         Log.i(
             Bench.TAG,
-            "MB-1 display: pages=$pagesAdvanced cpu=${displayCpuMs}ms " +
-                "(${cpuPerPage}ms/page) bytes=$displayBytes"
+            "MB-1 display: pages=$pagesAdvanced cpu=${cpuMs ?: -1}ms " +
+                "(${cpuPerPage}ms/page) bytes=${bytes ?: -1}"
         )
 
         assertTrue(
             "MB-1: the reader advanced only $pagesAdvanced page(s), expected $pagesToScroll",
             pagesAdvanced >= pagesToScroll
         )
+        // Both probes are REQUIRED: without the CPU number the per-page
+        // budget is meaningless, and without the traffic number the "the
+        // prefetched pages were not fetched again" claim is unproven.
+        assumeTrue(
+            "MB-1 skipped: the platform did not expose the app's CPU time " +
+                "(/proc/<pid>/stat was not readable)",
+            cpuMs != null
+        )
+        assumeTrue(
+            "MB-1 skipped: the platform did not expose per-uid traffic " +
+                "counters (dumpsys netstats carried no byte counter for the app)",
+            bytes != null
+        )
+
         assertTrue(
-            "MB-1: the display phase moved $displayBytes bytes — the prefetched pages were fetched again",
-            displayBytes <= displayNetBudgetBytes
+            "MB-1: the display phase moved $bytes bytes — the prefetched pages were fetched again",
+            bytes!! <= displayNetBudgetBytes
         )
         assertTrue(
             "MB-1: $cpuPerPage ms per displayed page exceeds $displayCpuBudgetMsPerPage ms/page — " +
@@ -192,8 +216,8 @@ class ReaderPerfBenchmarks {
      */
     @Test
     fun mb2_longStripScrollNoOom() {
-        var pssBeforeKb = 0L
-        var pssAfterKb = 0L
+        var pssBeforeKb: Long? = null
+        var pssAfterKb: Long? = null
 
         benchmarkRule.measureRepeated(
             packageName = Bench.APP_ID,
@@ -206,19 +230,20 @@ class ReaderPerfBenchmarks {
                 Thread.sleep(settleMs)
             },
             measureBlock = {
-                pssBeforeKb = Bench.appPssKb() ?: 0L
+                pssBeforeKb = Bench.appPssKb()
                 Bench.resetGfxInfo()
                 Bench.swipeUp(strips)
-                pssAfterKb = Bench.appPssKb() ?: 0L
+                pssAfterKb = Bench.appPssKb()
             }
         )
 
-        val growthKb = (pssAfterKb - pssBeforeKb).coerceAtLeast(0L)
+        val before = pssBeforeKb
+        val after = pssAfterKb
         val stats = Bench.gfxInfo()
         Log.i(
             Bench.TAG,
-            "MB-2 scroll: strips=$strips pss=${pssBeforeKb}KB->${pssAfterKb}KB " +
-                "(+${growthKb / 1024}MB) frames=${stats?.second ?: -1} janky=${stats?.first ?: -1}"
+            "MB-2 scroll: strips=$strips pss=${before ?: -1}KB->${after ?: -1}KB " +
+                "frames=${stats?.second ?: -1} janky=${stats?.first ?: -1}"
         )
 
         assertTrue(
@@ -228,6 +253,12 @@ class ReaderPerfBenchmarks {
         val log = Bench.logcat()
         val oom = log.contains("OutOfMemoryError") || log.contains("Failed to allocate a")
         assertTrue("MB-2: the app log contains an out-of-memory failure", !oom)
+        assumeTrue(
+            "MB-2 skipped: the platform did not expose the app's PSS " +
+                "(dumpsys meminfo carried no TOTAL line)",
+            before != null && after != null
+        )
+        val growthKb = (after!! - before!!).coerceAtLeast(0L)
         assertTrue(
             "MB-2: PSS grew by ${growthKb / 1024}MB during $strips strips",
             growthKb <= maxPssGrowthKb
@@ -360,9 +391,15 @@ class ReaderPerfBenchmarks {
         )
 
         assumeTrue(
-            "MB-4 skipped: the app has no named session (anonymous) or the first push " +
+            "MB-4 skipped: the platform did not expose per-uid traffic counters, " +
+                "or the app has no named session (anonymous), or the first push " +
                 "moved no traffic — the sync path is inert on this device",
             firstPushBytes > 0
+        )
+        assumeTrue(
+            "MB-4 skipped: the platform did not expose per-uid traffic counters " +
+                "for the second push window",
+            secondPushBytes >= 0
         )
         assertTrue(
             "MB-4: the second push moved $secondPushBytes bytes, not less than the " +
@@ -397,10 +434,13 @@ class ReaderPerfBenchmarks {
             iterations = 1,
             compilationMode = compilationMode,
             setupBlock = {
-                Bench.clearLogcat()
                 val reason = Bench.openBrowseTabWithStatusFilter()
                 assumeTrue("MB-5 skipped: browse fixture unavailable ($reason)", reason == null)
                 Thread.sleep(settleMs)
+                // The logcat is cleared AFTER the fixture settled: the first
+                // page load is not part of the measured window (it would add
+                // the three subpage fetches the budget is about).
+                Bench.clearLogcat()
             },
             measureBlock = {
                 bytesBefore = Bench.appNetworkBytes()
@@ -410,33 +450,40 @@ class ReaderPerfBenchmarks {
             }
         )
 
-        // -1 means the platform did not expose per-uid counters: the byte
-        // budget is then simply not available (the request counter below is
-        // the exact one, and it only exists for debug builds).
-        val movedBytes = if (bytesBefore != null && bytesAfter != null) {
-            (bytesAfter!! - bytesBefore!!).coerceAtLeast(0L)
-        } else {
-            -1L
-        }
         Log.i(
             Bench.TAG,
-            "MB-5 browse: pages=$browsePages bytes=$movedBytes requests=$requestsPerHost"
+            "MB-5 browse: pages=$browsePages bytes=${bytesBefore ?: -1}->${bytesAfter ?: -1} " +
+                "requests=$requestsPerHost"
         )
 
-        if (movedBytes >= 0) {
-            assertTrue(
-                "MB-5: the browse phase moved $movedBytes bytes for $browsePages pages",
-                movedBytes > 0
-            )
-        }
-        val worst = requestsPerHost.maxByOrNull { it.value }
-        if (worst != null) {
+        // The release-like app does not log its requests, so the request
+        // counter is empty here (the exact counter is the debug variant).
+        // What IS available is the traffic, and it is required: without it
+        // this case would assert nothing at all.
+        assumeTrue(
+            "MB-5 skipped: the platform did not expose per-uid traffic counters " +
+                "(dumpsys netstats carried no byte counter for the app)",
+            bytesBefore != null && bytesAfter != null
+        )
+        val movedBytes = (bytesAfter!! - bytesBefore!!).coerceAtLeast(0L)
+        assertTrue(
+            "MB-5: the browse phase moved no traffic at all for $browsePages pages — " +
+                "the fixture was not live, so nothing was measured",
+            movedBytes > 0
+        )
+        val sourceRequests = requestsPerHost[Bench.DEFAULT_SOURCE_HOST] ?: 0
+        Log.i(
+            Bench.TAG,
+            "MB-5 browse listing requests: ${Bench.DEFAULT_SOURCE_HOST}=$sourceRequests " +
+                "(budget ${browsePages + 2})"
+        )
+        if (sourceRequests > 0) {
             // Only reachable when the app runs with the OkHttp request log
             // enabled (debug builds); the exact budget of the spec applies.
             assertTrue(
-                "MB-5: ${worst.key} needed ${worst.value} HTTP requests for $browsePages " +
-                    "pages (budget ${browsePages + 2})",
-                worst.value <= browsePages + 2
+                "MB-5: ${Bench.DEFAULT_SOURCE_HOST} needed $sourceRequests listing requests " +
+                    "for $browsePages pages (budget ${browsePages + 2})",
+                sourceRequests <= browsePages + 2
             )
         }
     }

@@ -303,6 +303,20 @@
     <!-- ─── Version ────────────────────────────────────────────────────────── -->
     <string name="version_label">MangaWorld v%s</string>
 
+    <!-- ─── In-app update gate (v9.8.0) ────────────────────────────────────── -->
+    <!-- The app ships through GitHub Releases (not Play), so the update CTA
+         links to the release page and offers a copy-link fallback for the
+         sideloading users who have no browser. -->
+    <string name="update_gate_required_title">تحديث التطبيق مطلوب</string>
+    <string name="update_gate_required_body">إصدار التطبيق الحالي (%1$s) لم يعد مدعومًا، وقد لا تعمل صور الأغلفة والفصول بشكل صحيح. يُرجى تحديث التطبيق إلى الإصدار %2$s أو أحدث.</string>
+    <string name="update_gate_available_title">يتوفر إصدار جديد</string>
+    <string name="update_gate_available_body">تم نشر الإصدار %1$s. يُنصح بتحديث التطبيق للحصول على أفضل تجربة.</string>
+    <string name="update_gate_download">تحميل</string>
+    <string name="update_gate_copy_link">نسخ الرابط</string>
+    <string name="update_gate_dismiss">لاحقًا</string>
+    <string name="update_gate_link_copied">تم نسخ رابط التحديث</string>
+    <string name="update_gate_no_browser">لا يوجد متصفح على هذا الجهاز، تم نسخ الرابط بدلاً من ذلك</string>
+
     <!-- ─── Accessibility ──────────────────────────────────────────────────── -->
     <string name="accessibility_google">جوجل</string>
     <string name="accessibility_page">صفحة %d</string>
@@ -1155,4 +1169,11 @@
     <string name="goal_period_daily">يومي</string>
     <string name="goal_period_weekly">أسبوعي</string>
     <string name="goal_period_monthly">شهري</string>
+
+    <!-- ─── Parental control (legacy PIN retirement) ─────────────────────── -->
+    <!-- The legacy String.hashCode() PIN was retired: a numeric PIN has at
+         most 10^4 candidates, so a legacy row is a brute force away. Such a
+         device must set a new PIN (PBKDF2). -->
+    <string name="parental_pin_legacy_reset_required">تم إيقاف رمز المرور القديم. يرجى تعيين رمز مرور جديد.</string>
+    <string name="parental_pin_too_short">يجب أن يتكوّن رمز المرور من 4 أحرف على الأقل</string>
 </resources>

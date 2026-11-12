@@ -39,9 +39,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
+import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.exapps.mangaworld.domain.model.AppTheme
 import com.exapps.mangaworld.domain.repository.SettingsRepository
+import com.exapps.mangaworld.presentation.dialog.UpdateGateHost
 import com.exapps.mangaworld.presentation.navigation.*
 import com.exapps.mangaworld.presentation.onboarding.OnboardingScreen
 import com.exapps.mangaworld.presentation.theme.*
@@ -59,6 +61,7 @@ class MainActivity : FragmentActivity() {
 
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var sessionManager: FirebaseSessionManager
+    @Inject lateinit var remoteConfigManager: FirebaseRemoteConfigManager
     private val deepLinkIntents = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
 
     // Facebook login callback manager — set by the login composable
@@ -76,6 +79,7 @@ class MainActivity : FragmentActivity() {
             MangaApp(
                 sessionManager = sessionManager,
                 settingsRepo = settingsRepository,
+                remoteConfigManager = remoteConfigManager,
                 launchIntent = intent,
                 deepLinkIntents = deepLinkIntents.asSharedFlow(),
                 setFacebookCallbackManager = { facebookCallbackManager = it }
@@ -145,6 +149,7 @@ class MainActivity : FragmentActivity() {
 private fun MangaApp(
     sessionManager: FirebaseSessionManager,
     settingsRepo: SettingsRepository,
+    remoteConfigManager: FirebaseRemoteConfigManager,
     launchIntent: Intent?,
     deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>,
     setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit
@@ -354,6 +359,17 @@ private fun MangaApp(
             if (settings.biometricLockEnabled && biometricSupported && isLocked) {
                 BiometricLockOverlay(onUnlocked = { isLocked = false })
             }
+
+            // In-app update gate (v9.8.0): the app ships via GitHub Releases,
+            // so this is the only channel that tells a user on a broken build
+            // that a fixed one exists. Reads the published policy from Remote
+            // Config (already fetched by the startup coordinator).
+            val updateGateConfig by remoteConfigManager.updateGateConfig
+                .collectAsStateWithLifecycle()
+            UpdateGateHost(
+                installedVersion = BuildConfig.VERSION_NAME,
+                config = updateGateConfig
+            )
         }
         } // CompositionLocalProvider
     }
