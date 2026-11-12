@@ -22,7 +22,7 @@ import com.exapps.mangaworld.domain.repository.LibraryRepository
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.reader.ReaderViewModel
-import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -92,10 +92,12 @@ class ReaderLoadDeviceTest {
     private fun viewModel(repo: MangaRepository): ReaderViewModel {
         val context: Context = ApplicationProvider.getApplicationContext()
         val settings = mockk<SettingsRepository>(relaxed = true)
-        coEvery { settings.getReaderSettings() } returns flowOf(
+        // `getReaderSettings()` / `getAppSettings()` are NOT suspend (they
+        // return a Flow), so they are stubbed with `every`, not `coEvery`.
+        every { settings.getReaderSettings() } returns flowOf(
             com.exapps.mangaworld.domain.model.ReaderSettings()
         )
-        coEvery { settings.getAppSettings() } returns flowOf(
+        every { settings.getAppSettings() } returns flowOf(
             com.exapps.mangaworld.domain.model.AppSettings()
         )
         return ReaderViewModel(

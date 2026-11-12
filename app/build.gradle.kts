@@ -202,7 +202,27 @@ android {
     }
 
     packaging {
-        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // Duplicate META-INF metadata across jars is a classic AGP
+            // failure ("N files found with path 'META-INF/LICENSE.md'" — the
+            // task aborts instead of picking one). These files are licence
+            // and notice boilerplate, so "first one wins" is the correct
+            // resolution and keeps the build from breaking whenever a
+            // transitive dependency starts shipping the same file.
+            //
+            // Only the paths AGP does NOT exclude by default belong here:
+            // its defaults already cover /META-INF/LICENSE, /LICENSE.txt,
+            // /NOTICE and /NOTICE.txt (PackagingOptionsUtilsKt in AGP
+            // 8.10.1), and re-listing them here would only re-admit files
+            // AGP deliberately strips.
+            pickFirsts += setOf(
+                "META-INF/LICENSE.md",
+                "META-INF/LICENSE-notice.md",
+                "META-INF/NOTICE.md",
+                "META-INF/DEPENDENCIES",
+            )
+        }
     }
 }
 
@@ -315,7 +335,17 @@ dependencies {
     // mockk-ANDROID (not the JVM artifact): the JVM one ships the JDK-attach
     // inline agent, which does not exist on Android, so it cannot mock the
     // final classes this test relaxes.
-    androidTestImplementation(libs.mockk.android)
+    //
+    // The Jupiter exclusion is NOT optional: mockk-android -> mockk ->
+    // mockk-jvm declares `org.junit.jupiter:junit-jupiter:5.8.2` at RUNTIME
+    // scope. All six of its jars (jupiter, -api, -engine, -params,
+    // platform-engine, platform-commons) ship META-INF/LICENSE.md, so AGP's
+    // `:app:mergeDebugAndroidTestJavaResource` fails the build with
+    // "6 files found with path 'META-INF/LICENSE.md'". The device suite is
+    // JUnit 4 (AndroidJUnitRunner) — Jupiter is dead weight there.
+    androidTestImplementation(libs.mockk.android) {
+        exclude(group = "org.junit.jupiter", module = "junit-jupiter")
+    }
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.test.manifest)
 }
