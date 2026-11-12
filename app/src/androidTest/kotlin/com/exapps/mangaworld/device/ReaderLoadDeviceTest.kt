@@ -33,7 +33,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.time.Duration
 
 /**
  * U-33 / p3-next §3: the FIRST behavioural test of the reader load path.
@@ -127,7 +126,7 @@ class ReaderLoadDeviceTest {
 
         vm.loadChapter("https://example.invalid/chapter/1", "m1", SourceId("starz"))
 
-        val state = withTimeout(Duration.ofSeconds(30).toMillis()) {
+        val state = withTimeout(30_000L) {
             vm.state.first { !it.isLoading && (it.pages.isNotEmpty() || it.error != null) }
         }
         assertTrue("the load must not end in an error state: ${state.error}", state.error == null)
@@ -142,7 +141,7 @@ class ReaderLoadDeviceTest {
         val vm = viewModel(repo)
 
         vm.loadChapter("https://example.invalid/chapter/1", "m1", SourceId("starz"))
-        withTimeout(Duration.ofSeconds(30).toMillis()) {
+        withTimeout(30_000L) {
             vm.state.first { !it.isLoading && it.pages.isNotEmpty() }
         }
         vm.loadChapter("https://example.invalid/chapter/1", "m1", SourceId("starz"))
@@ -159,7 +158,7 @@ class ReaderLoadDeviceTest {
 
         vm.loadChapter("https://example.invalid/chapter/1", "m1", SourceId("starz"))
 
-        val state = withTimeout(Duration.ofSeconds(30).toMillis()) {
+        val state = withTimeout(30_000L) {
             vm.state.first { !it.isLoading && (it.error != null || it.pages.isNotEmpty()) }
         }
         assertTrue("a failed load must surface an error state", state.error != null)
