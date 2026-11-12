@@ -22,6 +22,7 @@ import com.exapps.mangaworld.domain.repository.LibraryRepository
 import com.exapps.mangaworld.domain.repository.MangaRepository
 import com.exapps.mangaworld.domain.repository.SettingsRepository
 import com.exapps.mangaworld.presentation.reader.ReaderViewModel
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
@@ -100,14 +101,28 @@ class ReaderLoadDeviceTest {
         every { settings.getAppSettings() } returns flowOf(
             com.exapps.mangaworld.domain.model.AppSettings()
         )
+
+        // The cache DAO and the download queue are stubbed EXPLICITLY rather
+        // than left relaxed. A relaxed mock answers an object-returning call
+        // with a child mock whose fields are null, and the reader then does
+        // `cacheDao.get(mangaId)?.toDetail(source)` — `MangaDetail.id` is a
+        // non-null String, so the child mock crashed the app with an NPE
+        // ("Parameter specified as non-null is null: parameter id"). The
+        // cache miss and the empty local library are also the honest state
+        // for a fresh install.
+        val cacheDao = mockk<MangaCacheDao>(relaxed = true)
+        coEvery { cacheDao.get(any()) } returns null
+        val downloadQueueManager = mockk<DownloadQueueManager>(relaxed = true)
+        every { downloadQueueManager.getLocalChapterPages(any(), any(), any()) } returns emptyList()
+
         return ReaderViewModel(
             context = context,
             mangaRepo = repo,
             libraryRepo = mockk<LibraryRepository>(relaxed = true),
             settingsRepo = settings,
             communityRepository = mockk<CommunityRepository>(relaxed = true),
-            downloadQueueManager = mockk<DownloadQueueManager>(relaxed = true),
-            cacheDao = mockk<MangaCacheDao>(relaxed = true),
+            downloadQueueManager = downloadQueueManager,
+            cacheDao = cacheDao,
             readingStatsStore = mockk<ReadingStatsStore>(relaxed = true),
             achievementManager = mockk<com.exapps.mangaworld.core.data.AchievementManager>(relaxed = true),
             imagePrefetcher = mockk<ImagePrefetcher>(relaxed = true),

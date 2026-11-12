@@ -824,6 +824,16 @@ jobs:
             echo "BENCH_SKIP=1" >> "$GITHUB_ENV"
             exit 0
           fi
+          # PATH: the runner image ships the SDK but NOT its bin directories,
+          # so `adb` was "command not found" and the boot probe could never
+          # succeed. adb/emulator/sdkmanager/avdmanager all live under the
+          # SDK, so put them on PATH once, here.
+          for BIN in "$SDK/platform-tools" "$SDK/emulator" "$SDK/cmdline-tools/latest/bin"; do
+            if [[ -d "$BIN" ]]; then
+              echo "$BIN" >> "$GITHUB_PATH"
+              export PATH="$BIN:$PATH"
+            fi
+          done
           SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
           if [[ ! -x "$SDKMANAGER" ]]; then
             SDKMANAGER=$(find "$SDK/cmdline-tools" -name sdkmanager -type f 2>/dev/null | sort | tail -1)
@@ -837,17 +847,41 @@ jobs:
           if [[ ! -x "$AVDMANAGER" ]]; then
             AVDMANAGER=$(find "$SDK/cmdline-tools" -name avdmanager -type f 2>/dev/null | sort | tail -1)
           fi
-          echo no | "$AVDMANAGER" create avd -n "$BENCH_AVD" -k "$BENCH_AVD_IMAGE" --force > /dev/null 2>&1 || {
-            echo "::warning::could not create the AVD — the device phase is skipped"
+          # The AVD must land where the emulator LOOKS for it. Without an
+          # explicit --path, `avdmanager create` can exit 0 while writing the
+          # .avd somewhere else, and the emulator then dies with
+          # "Unknown AVD name [manga-bench]" — the first real failure of this
+          # step, invisible because avdmanager's output went to /dev/null.
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          # `|| create_status=$?` — the runner's `shell: bash` runs
+          # `bash -eo pipefail`, so a failing avdmanager would abort the step
+          # at the assignment and the skip path below would never run (the
+          # same idiom as the benchmark build step).
+          create_status=0
+          create_log="$(echo no | "$AVDMANAGER" create avd -n "$BENCH_AVD" -k "$BENCH_AVD_IMAGE" --force --path "$ANDROID_AVD_HOME/$BENCH_AVD.avd" 2>&1)" || create_status=$?
+          if [[ "$create_status" -ne 0 ]]; then
+            echo "::warning::avdmanager could not create the AVD (exit $create_status):"
+            echo "$create_log" | head -20
             echo "BENCH_SKIP=1" >> "$GITHUB_ENV"
             exit 0
-          }
+          fi
+          # Verify the emulator can actually SEE the AVD before booting it.
+          if ! "$SDK/emulator/emulator" -list-avds 2>/dev/null | grep -qx "$BENCH_AVD"; then
+            echo "::warning::the AVD '$BENCH_AVD' is not visible to the emulator — the device phase is skipped"
+            echo "::warning::avdmanager said:"; echo "$create_log" | head -20
+            echo "::warning::emulator -list-avds said:"; "$SDK/emulator/emulator" -list-avds 2>&1 | head -10
+            echo "BENCH_SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
           nohup "$SDK/emulator/emulator" -avd "$BENCH_AVD" \
             -no-window -no-audio -no-boot-anim -no-snapshot \
             -gpu swiftshader_indirect > /tmp/emulator.log 2>&1 &
           adb wait-for-device || true
           booted=0
-          for _ in $(seq 1 60); do
+          # 10 minutes: a cold x86_64 system image on a fresh runner needs
+          # longer than the 5 this step originally allowed.
+          for _ in $(seq 1 120); do
             if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; then
               booted=1
               break
