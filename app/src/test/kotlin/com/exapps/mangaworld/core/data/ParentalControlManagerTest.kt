@@ -178,8 +178,8 @@ class ParentalControlManagerTest {
     @Test
     fun `the legacy retirement cut-off has passed`() {
         assertTrue(
-            ParentalControlManager.LEGACY_HASH_RETIRED_AT_MS <= System.currentTimeMillis(),
             "the legacy hashCode format must stay retired",
+            ParentalControlManager.LEGACY_HASH_RETIRED_AT_MS <= System.currentTimeMillis(),
         )
     }
 
