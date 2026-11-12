@@ -211,7 +211,7 @@ jobs:
           STUB
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
@@ -381,7 +381,7 @@ jobs:
           cache-dependency-path: dashboard/package-lock.json
 
       - name: Set up JDK 21 (Firestore emulator requirement)
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           java-version: '21'
           distribution: 'temurin'
@@ -541,7 +541,7 @@ jobs:
           STUB
 
       - name: Set up JDK 17
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5 (normalized from v4)
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v5 (normalized from v4)
         with:
           distribution: temurin
           java-version: '17'
@@ -737,7 +737,7 @@ jobs:
           STUB
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
@@ -1161,7 +1161,7 @@ jobs:
           STUB
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
@@ -1348,7 +1348,7 @@ jobs:
         run: echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
