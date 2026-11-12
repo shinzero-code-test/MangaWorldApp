@@ -55,7 +55,7 @@ class BundledPluginLoader @Inject constructor(
      * per-record lines on EVERY start, so an uninjectable sink would break
      * every JVM test of this class.
      */
-    internal var log: (String) -> Unit = { line -> Log.i(TAG, line) }
+    internal var log: (String) -> Unit = { line -> runCatching { Log.i(TAG, line) } }
 
     suspend fun bootstrap(): List<Outcome> = withContext(io) {
         // U-13 + U-24: the three boot envelopes below are the same shape

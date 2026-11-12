@@ -46,7 +46,7 @@ class SourceHealthMonitor @Inject constructor(
      * `PluginSyncEngine.log` / `BundledPluginLoader.log`), so the default is
      * only ever reached in production. Tests replace it with a collector.
      */
-    internal var log: (String) -> Unit = { line -> Log.w("SourceHealth", line) }
+    internal var log: (String) -> Unit = { line -> runCatching { Log.w("SourceHealth", line) } }
 
     /** Feed one scraper-level observation; returns the resulting state. */
     suspend fun observeHome(id: String, result: Result<*>): HealthState =

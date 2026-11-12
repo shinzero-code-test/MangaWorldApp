@@ -73,7 +73,11 @@ class FirebaseRemoteConfigManager @Inject constructor(
      * [refresh]/[applyState] may call it directly.
      */
     @Volatile
-    internal var log: (String) -> Unit = { line -> Log.i(TAG, line) }
+    // Sink-injected (the JVM suite cannot use android.util.Log: the stub
+    // throws "Stub!"). The DEFAULT sink is therefore defensive: a log call
+    // during construction (the init block applies the state) must never
+    // break a unit test that has not injected its own sink yet.
+    internal var log: (String) -> Unit = { line -> runCatching { Log.i(TAG, line) } }
 
     private val _disabledSourceIds = MutableStateFlow<Set<String>>(emptySet())
     val disabledSourceIds: StateFlow<Set<String>> = _disabledSourceIds.asStateFlow()
