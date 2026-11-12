@@ -3,27 +3,29 @@
   Overlay for the `benchmark` build type only (the app-under-test of the
   :benchmark macrobenchmark module).
 
-  `android:profileable="true"` lets the benchmark harness collect a
-  Perfetto/atrace trace of the app process. MacrobenchmarkRule enforces it on
-  API 29-30 ("NOT-PROFILEABLE" configuration error) and the frame-timing
-  metrics need the same privilege.
+  The app must be PROFILEABLE for MacrobenchmarkRule: it collects a
+  Perfetto/atrace trace of the app process and measures frame timing.
 
-  The VALUE must be the public boolean "true": the finer-grained values
-  ("android:shell" / "android:webview" / "android:everything") are HIDDEN in
-  the public SDK's attr enum, so AAPT rejects them with
-  "attribute android:profileable not found".
+  NOTE: `android:profileable` is NOT a public SDK attribute ("AAPT: error:
+  attribute android:profileable not found"). The public form is the
+  <profileable> ELEMENT inside <application>:
 
-  No `tools:replace` is declared: the app's main manifest does not set
-  `android:profileable`, so the overlay value wins outright — and an
-  unnecessary `tools:replace` would only emit a manifest-merger warning.
+      <profileable android:shell="true" tools:targetApi="29" />
+
+  (same shape as the official android/performance-samples
+  MacrobenchmarkSample). `tools:targetApi` silences the API-29 lint on a
+  minSdk-26 app.
 
   This file lives in its own build-type source set (app/src/benchmark), NOT in
   app/src/main: the shipping app is unaffected.
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- The app's main manifest does not set android:profileable, so no
-         tools:replace is needed (and none is declared: an unnecessary
-         tools:replace emits a manifest-merger warning). -->
-    <application android:profileable="true" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <profileable
+            android:shell="true"
+            tools:targetApi="29" />
+    </application>
 
 </manifest>
