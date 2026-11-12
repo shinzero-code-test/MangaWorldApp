@@ -64,7 +64,7 @@ class TwoDeviceSettingsDrillTest {
     }
 
     @Test
-    fun `an equal timestamp is applied (last writer wins, no data loss)` {
+    fun `an equal timestamp is applied - last writer wins, no data loss` {
         val deviceC = Device("C", appliedAt = 150)
         assertTrue(applyCloudDoc(deviceC, 150L))
         assertEquals(150L, deviceC.appliedAt)
