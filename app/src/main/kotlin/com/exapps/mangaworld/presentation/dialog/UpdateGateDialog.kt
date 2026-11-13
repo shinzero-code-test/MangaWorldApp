@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.exapps.mangaworld.R
 import com.exapps.mangaworld.core.firebase.DEFAULT_UPDATE_URL
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.UpdateGateConfig
 import com.exapps.mangaworld.presentation.common.UpdateGate
 import com.exapps.mangaworld.presentation.theme.mangaColors
@@ -54,7 +55,8 @@ import kotlinx.coroutines.flow.asStateFlow
 @Composable
 fun UpdateGateHost(
     installedVersion: String,
-    config: UpdateGateConfig
+    config: UpdateGateConfig,
+    analytics: FirebaseAnalyticsManager
 ) {
     val context = LocalContext.current
     val colors = mangaColors()
@@ -84,9 +86,21 @@ fun UpdateGateHost(
     // not be nagged again on the next screen or after a rotation.
     LaunchedEffect(latched) {
         when (latched) {
-            UpdateGate.Decision.Available -> UpdateGateSession.showNoticeOnce()
+            UpdateGate.Decision.Available -> {
+                UpdateGateSession.showNoticeOnce()
+                // Once per PROCESS: a rotation must not double-count the
+                // users the floor actually reached.
+                if (UpdateGateSession.shouldLog(latched)) {
+                    analytics.logUpdateGateNotice(config.latestVersion)
+                }
+            }
             // A block supersedes the notice — the two must never stack.
-            UpdateGate.Decision.Required -> UpdateGateSession.dismissNotice()
+            UpdateGate.Decision.Required -> {
+                UpdateGateSession.dismissNotice()
+                if (UpdateGateSession.shouldLog(latched)) {
+                    analytics.logUpdateGateBlocked(config.minSupportedVersion)
+                }
+            }
             UpdateGate.Decision.Current -> Unit
         }
     }
@@ -234,6 +248,17 @@ internal object UpdateGateSession {
     fun dismissNotice() {
         synchronized(lock) { noticeClaimed = true }
         _noticeVisible.value = false
+    }
+
+    private val logged = mutableSetOf<UpdateGate.Decision>()
+
+    /**
+     * Claim the one-shot right to report a decision. A rotation re-enters
+     * the composable and re-runs its effect, so without this the same
+     * user would be counted twice in the fleet report.
+     */
+    fun shouldLog(decision: UpdateGate.Decision): Boolean = synchronized(lock) {
+        logged.add(decision)
     }
 
     private fun severity(decision: UpdateGate.Decision): Int = when (decision) {

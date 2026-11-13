@@ -69,6 +69,13 @@ exact same string that is published to Remote Config as
 
 ### 2.3 The download link
 
+> **What the body can and cannot reach (measured 2026-11-13):** the in-app
+> gate ships **inside** the release that introduces it, so `min_supported_version`
+> can only ever block the builds that already contain the gate. The broken
+> population (the builds that predate the fix) is reached by the **body** and by
+> a **broadcast push** — not by the floor. Treat the floor as the mechanism for
+> the *next* raise, and the body + the push as the mechanism for this one.
+
 The body MUST contain the direct link to the release assets, in addition to the
 per-ABI table CI already generates.
 

@@ -207,7 +207,8 @@ if (cmd === "get") {
 } else if (cmd === "set") {
   const min = args[1];
   const latest = args[2];
-  if (!min) throw new Error("usage: node rc-gate.mjs set <min_supported_version> [latest_version]");
+  const updateUrl = args[3];
+  if (!min) throw new Error("usage: node rc-gate.mjs set <min_supported_version> [latest_version] [update_url]");
   const { body, etag } = await getTemplate();
   assertTemplateLooksComplete(body.parameters);
   const params = (body.parameters ??= {});
@@ -216,6 +217,7 @@ if (cmd === "get") {
   };
   setParam("min_supported_version", min);
   if (latest) setParam("latest_version", latest);
+  if (updateUrl) setParam("update_url", updateUrl);
 
   // Dry run first: a malformed template must never reach the live project.
   const check = await put(body, etag, true);
@@ -230,7 +232,11 @@ if (cmd === "get") {
     console.error("PUT failed:", res.status, JSON.stringify(res.out).slice(0, 500));
     process.exit(1);
   }
-  console.log("published: min_supported_version =", min, latest ? `, latest_version = ${latest}` : "");
+  console.log(
+    "published: min_supported_version =", min,
+    latest ? `, latest_version = ${latest}` : "",
+    updateUrl ? `, update_url = ${updateUrl}` : "",
+  );
   console.log("new etag:", res.out.etag ?? "(not echoed)");
 } else {
   console.error("usage: node rc-gate.mjs get | validate <min> [latest] | set <min> [latest]");

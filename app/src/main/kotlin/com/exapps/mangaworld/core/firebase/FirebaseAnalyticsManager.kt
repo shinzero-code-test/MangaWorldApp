@@ -51,6 +51,33 @@ class FirebaseAnalyticsManager @Inject constructor(
         )
     }
 
+    /**
+     * The in-app update gate fired (v9.8.1).
+     *
+     * The decision is encoded in the **event name**, not in a parameter:
+     * GA4 only exposes a parameter to a report once it is registered as a
+     * custom dimension, and the service account that reads the fleet report
+     * cannot register one (its OAuth scopes are refused by the Admin API).
+     * An event name is queryable as it stands, and GA4's built-in
+     * `appVersion` dimension breaks the count down by build — which is
+     * exactly what a floor raise has to be judged on ("how many users are
+     * below the floor, and which builds").
+     */
+    fun logUpdateGateBlocked(minSupportedVersion: String) {
+        logEvent(
+            name = "update_gate_block",
+            params = mapOf("min_supported_version" to minSupportedVersion)
+        )
+    }
+
+    /** The soft "a newer build exists" notice fired. */
+    fun logUpdateGateNotice(latestVersion: String) {
+        logEvent(
+            name = "update_gate_notice",
+            params = mapOf("latest_version" to latestVersion)
+        )
+    }
+
     fun logChapterRead(
         mangaId: String,
         sourceId: String,

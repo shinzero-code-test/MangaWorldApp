@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import com.exapps.mangaworld.BuildConfig
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.firebase.firestore.FirebaseFirestore
@@ -79,6 +80,11 @@ class FirebaseMessagingRegistrar @Inject constructor(
                     "token" to token,
                     "platform" to "android",
                     "sdkInt" to Build.VERSION.SDK_INT,
+                    // The app version, so a broadcast can be targeted at the
+                    // builds that still need an update (a push that reaches
+                    // only the fixed builds is noise; one that reaches the
+                    // broken builds is the point).
+                    "appVersion" to BuildConfig.VERSION_NAME,
                     "notificationsGranted" to notificationsGranted(),
                     "updatedAt" to System.currentTimeMillis()
                 ),

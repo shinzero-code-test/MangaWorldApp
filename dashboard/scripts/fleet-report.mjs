@@ -437,6 +437,33 @@ async function main() {
   });
   say(table(rejects.map((r) => [...dim(r), ...met(r)]), ["reason", "plugin_id", "events"]));
 
+  // ── Query 5: the in-app update gate, by build ─────────────────────────────
+  // The gate encodes its decision in the EVENT NAME (a GA4 parameter would
+  // need a custom-dimension registration the service account cannot make),
+  // so the count is grouped by GA4's built-in `appVersion` dimension: "which
+  // builds are still below the published floor, and how many users are on
+  // them". This is the signal a floor raise has to be judged on.
+  say(`=== Q5 update_gate (by appVersion) ===`);
+  const gate = await report(t, {
+    dimensions: [{ name: "appVersion" }, { name: "eventName" }],
+    metrics: [{ name: "eventCount" }],
+    dimensionFilter: {
+      // The Data API's FilterExpression members are andGroup / orGroup /
+      // filter / notExpression — `orFilter` is not a member and the API
+      // answers 400 (which would take the WHOLE report down, because the
+      // output is flushed at the end).
+      orGroup: {
+        expressions: [
+          { filter: { fieldName: "eventName", stringFilter: { value: "update_gate_block" } } },
+          { filter: { fieldName: "eventName", stringFilter: { value: "update_gate_notice" } } },
+        ],
+      },
+    },
+    orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+    limit: 40,
+  });
+  say(table(gate.map((r) => [...dim(r), ...met(r)]), ["appVersion", "event", "events"]));
+
   // ── Verdict (only meaningful with --strict) ────────────────────────────────
   const incidentCount = incidents.reduce((a, r) => a + Number(met(r)[0]), 0);
   const rejectCount = rejects.reduce((a, r) => a + Number(met(r)[0]), 0);

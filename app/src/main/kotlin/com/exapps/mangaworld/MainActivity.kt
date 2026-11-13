@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
+import com.exapps.mangaworld.core.firebase.FirebaseAnalyticsManager
 import com.exapps.mangaworld.core.firebase.FirebaseRemoteConfigManager
 import com.exapps.mangaworld.core.firebase.FirebaseSessionManager
 import com.exapps.mangaworld.domain.model.AppTheme
@@ -62,6 +63,8 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var sessionManager: FirebaseSessionManager
     @Inject lateinit var remoteConfigManager: FirebaseRemoteConfigManager
+    // The update gate reports its decision to analytics (once per process).
+    @Inject lateinit var analyticsManager: FirebaseAnalyticsManager
     private val deepLinkIntents = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
 
     // Facebook login callback manager — set by the login composable
@@ -80,6 +83,7 @@ class MainActivity : FragmentActivity() {
                 sessionManager = sessionManager,
                 settingsRepo = settingsRepository,
                 remoteConfigManager = remoteConfigManager,
+                analyticsManager = analyticsManager,
                 launchIntent = intent,
                 deepLinkIntents = deepLinkIntents.asSharedFlow(),
                 setFacebookCallbackManager = { facebookCallbackManager = it }
@@ -150,6 +154,7 @@ private fun MangaApp(
     sessionManager: FirebaseSessionManager,
     settingsRepo: SettingsRepository,
     remoteConfigManager: FirebaseRemoteConfigManager,
+    analyticsManager: FirebaseAnalyticsManager,
     launchIntent: Intent?,
     deepLinkIntents: kotlinx.coroutines.flow.Flow<Intent>,
     setFacebookCallbackManager: (com.facebook.CallbackManager) -> Unit
@@ -368,7 +373,8 @@ private fun MangaApp(
                 .collectAsStateWithLifecycle()
             UpdateGateHost(
                 installedVersion = BuildConfig.VERSION_NAME,
-                config = updateGateConfig
+                config = updateGateConfig,
+                analytics = analyticsManager
             )
         }
         } // CompositionLocalProvider

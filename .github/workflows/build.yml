@@ -768,6 +768,20 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
           echo "sdk.dir=$SDK_DIR" > local.properties
 
+      - name: Cache the emulator system image
+        # The system image is ~1 GB and the runner does not ship it: the
+        # download took 13 of the step's 14 minutes on every single run, so
+        # the device phase never even reached the boot probe. The image
+        # never changes -> cache it (the AVD itself is cheap to create and
+        # is deliberately NOT cached).
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            /usr/local/lib/android/sdk/system-images
+            /opt/android-sdk/system-images
+            /opt/hostedtoolcache/Android/Sdk/system-images
+          key: bench-emulator-${{ runner.os }}-${{ env.BENCH_AVD_IMAGE }}
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
@@ -828,6 +842,25 @@ jobs:
             echo "BENCH_SKIP=1" >> "$GITHUB_ENV"
             exit 0
           fi
+          # /dev/kvm EXISTING is not enough: the runner user is not in the
+          # `kvm` group, and x86_64 emulation has NO software fallback —
+          # the emulator dies instantly with "x86_64 emulation currently
+          # requires hardware acceleration!" and the boot probe then waits
+          # for a device that can never appear. Make the node usable (this
+          # is the same fix the Android emulator action applies) and then
+          # VERIFY that it really is usable.
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules > /dev/null 2>&1 || true
+          sudo udevadm control --reload-rules > /dev/null 2>&1 || true
+          sudo udevadm trigger --name-match=kvm > /dev/null 2>&1 || true
+          sudo chmod 0666 /dev/kvm 2>/dev/null || true
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            echo "::warning::/dev/kvm exists but is not usable by this user — the device phase is skipped"
+            echo "::warning::(x86_64 emulation requires hardware acceleration; there is no software fallback)"
+            echo "BENCH_SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "KVM is usable by $(id -un)" 
           # PATH: the runner image ships the SDK but NOT its bin directories,
           # so `adb` was "command not found" and the boot probe could never
           # succeed. adb/emulator/sdkmanager/avdmanager all live under the
@@ -840,7 +873,10 @@ jobs:
           done
           SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
           if [[ ! -x "$SDKMANAGER" ]]; then
-            SDKMANAGER=$(find "$SDK/cmdline-tools" -name sdkmanager -type f 2>/dev/null | sort | tail -1)
+            # `|| true`: `find` exits non-zero when the directory does not
+            # exist, and the runner's `bash -eo pipefail` would abort the
+            # step right there — the step must SKIP, not fail.
+            SDKMANAGER=$(find "$SDK/cmdline-tools" -name sdkmanager -type f 2>/dev/null | sort | tail -1 || true)
           fi
           if [[ -x "$SDKMANAGER" ]]; then
             yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
@@ -849,7 +885,7 @@ jobs:
           fi
           AVDMANAGER="$SDK/cmdline-tools/latest/bin/avdmanager"
           if [[ ! -x "$AVDMANAGER" ]]; then
-            AVDMANAGER=$(find "$SDK/cmdline-tools" -name avdmanager -type f 2>/dev/null | sort | tail -1)
+            AVDMANAGER=$(find "$SDK/cmdline-tools" -name avdmanager -type f 2>/dev/null | sort | tail -1 || true)
           fi
           # The AVD must land where the emulator LOOKS for it. Without an
           # explicit --path, `avdmanager create` can exit 0 while writing the
@@ -879,19 +915,32 @@ jobs:
             exit 0
           fi
           nohup "$SDK/emulator/emulator" -avd "$BENCH_AVD" \
-            -no-window -no-audio -no-boot-anim -no-snapshot \
+            -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save \
             -gpu swiftshader_indirect > /tmp/emulator.log 2>&1 &
-          # `timeout` is mandatory: `adb wait-for-device` blocks FOREVER when
-          # no device ever appears, and the step had no bound (the job sat
-          # in it for over an hour). The boot loop below is the real probe.
-          timeout 180 adb wait-for-device || true
+          EMU_PID=$!
+          # No `adb wait-for-device` here: it blocks FOREVER when no device
+          # appears (that alone held a runner for an hour), and it would
+          # also sit in front of the process watch below. The boot loop IS
+          # the probe — `adb shell` on a device-less host just answers with
+          # an error, which the loop treats as "not booted yet".
           booted=0
-          # 10 minutes: a cold x86_64 system image on a fresh runner needs
-          # longer than the 5 this step originally allowed.
+          # 10 minutes for a cold x86_64 system image — but the loop also
+          # watches the emulator PROCESS: when it dies (e.g. no acceleration)
+          # there is nothing to wait for, and the step must end in seconds
+          # instead of burning the whole budget on a dead emulator.
           for _ in $(seq 1 120); do
-            if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; then
+            # `|| true`: with no device attached `adb` exits non-zero, and
+            # the runner's `bash -e` would abort the step instead of treating
+            # it as "not booted yet".
+            if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)" == "1" ]]; then
               booted=1
               break
+            fi
+            if ! kill -0 "$EMU_PID" 2>/dev/null; then
+              echo "::warning::the emulator process exited — the device phase is skipped"
+              tail -n 40 /tmp/emulator.log || true
+              echo "BENCH_SKIP=1" >> "$GITHUB_ENV"
+              exit 0
             fi
             sleep 5
           done
@@ -937,8 +986,11 @@ jobs:
           adb shell pm grant com.exapps.mangaworld android.permission.READ_EXTERNAL_STORAGE || true
           adb shell pm grant com.exapps.mangaworld android.permission.READ_MEDIA_IMAGES || true
           # The harness id is discovered, never hardcoded.
+          # `|| true`: grep exits 1 when the harness is not installed, and
+          # under `bash -eo pipefail` that would abort the step instead of
+          # taking the skip path below.
           harness=$(adb shell pm list packages | tr -d '\r' | sed -n 's/^package://p' \
-            | grep -E '^com\.exapps\.mangaworld\.benchmark' | head -n 1)
+            | grep -E '^com\.exapps\.mangaworld\.benchmark' | head -n 1 || true)
           echo "harness=$harness" >> "$GITHUB_OUTPUT"
           if [[ -z "$harness" ]]; then
             echo "::warning::the harness package could not be identified — the device phase is skipped"
@@ -1003,8 +1055,11 @@ jobs:
           adb install -r -g "$app_apk" || true
           adb install -r -g "$harness_apk" || true
           adb shell pm grant com.exapps.mangaworld android.permission.READ_EXTERNAL_STORAGE || true
+          # `|| true`: grep exits 1 when the harness is not installed, and
+          # under `bash -eo pipefail` that would abort the step instead of
+          # taking the skip path below.
           harness=$(adb shell pm list packages | tr -d '\r' | sed -n 's/^package://p' \
-            | grep -E '^com\.exapps\.mangaworld\.benchmark' | head -n 1)
+            | grep -E '^com\.exapps\.mangaworld\.benchmark' | head -n 1 || true)
           status=0
           timeout 900 adb shell am instrument -w -r \
             -e class com.exapps.mangaworld.benchmark.BrowseRequestBudgetTest \

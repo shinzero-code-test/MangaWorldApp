@@ -38,14 +38,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { version: '8',  tag: 'bb6e9a6' }
-          - { version: '9',  tag: '53dbe01' }
-          - { version: '10', tag: 'dfd53a6' }
-          - { version: '11', tag: '67f220f' }
-          - { version: '12', tag: '9c176a2' }
-          - { version: '13', tag: 'c8c35b6' }
+          - { version: '8',  tag: 'bb6e9a6c20491e144729beac5f391596033c6721' }
+          - { version: '9',  tag: '53dbe0105f8d81bc8e54fc603e34108e11bc00a8' }
+          - { version: '10', tag: 'dfd53a6fe1fa9bb2ea56896c60f20e93d1eb3a00' }
+          - { version: '11', tag: '67f220f3fedd670c188a11d9c3c610534623527c' }
+          - { version: '12', tag: '9c176a2e66b3d87c3733c52e4d9dedf91186b235' }
+          - { version: '13', tag: 'c8c35b62c9282b6f3020a48f959a6e9649e374e4' }
     steps:
       - name: Checkout historical tag
+        # The ref MUST be the FULL 40-hex SHA: actions/checkout resolves a
+        # short SHA as a BRANCH name (`+refs/heads/<short>*`) and the fetch
+        # then fails with "git failed with exit code 1" — the whole matrix
+        # died at the checkout, six times over.
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ matrix.tag }}

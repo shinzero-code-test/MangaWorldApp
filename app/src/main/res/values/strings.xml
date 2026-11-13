@@ -1169,11 +1169,4 @@
     <string name="goal_period_daily">يومي</string>
     <string name="goal_period_weekly">أسبوعي</string>
     <string name="goal_period_monthly">شهري</string>
-
-    <!-- ─── Parental control (legacy PIN retirement) ─────────────────────── -->
-    <!-- The legacy String.hashCode() PIN was retired: a numeric PIN has at
-         most 10^4 candidates, so a legacy row is a brute force away. Such a
-         device must set a new PIN (PBKDF2). -->
-    <string name="parental_pin_legacy_reset_required">تم إيقاف رمز المرور القديم. يرجى تعيين رمز مرور جديد.</string>
-    <string name="parental_pin_too_short">يجب أن يتكوّن رمز المرور من 4 أحرف على الأقل</string>
 </resources>
