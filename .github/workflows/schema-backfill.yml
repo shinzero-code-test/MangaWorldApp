@@ -172,7 +172,23 @@ jobs:
               strings.write_text("\n".join(kept))
               print("renamed reserved resource names: %s" % (renamed or "none"))
 
-          # 3b. the Kotlin references of the renamed resources
+          # 3b. an import BEFORE the package declaration: legal for the
+          # era's compiler, an ERROR in Kotlin 2.x ("imports are only allowed
+          # in the beginning") -> move the leading imports below the package.
+          for kt in app.rglob("*.kt"):
+              lines = kt.read_text().split("\n")
+              pkg = next((i for i, l in enumerate(lines) if l.startswith("package ")), None)
+              if pkg is None:
+                  continue
+              head = lines[:pkg]
+              imports = [l for l in head if l.startswith("import ")]
+              if not imports:
+                  continue
+              rest = [l for l in head if not l.startswith("import ")]
+              kt.write_text("\n".join(rest + [lines[pkg]] + imports + lines[pkg + 1:]))
+              print("moved the leading imports below the package in %s" % kt)
+
+          # 3c. the Kotlin references of the renamed resources
           for kt in app.rglob("*.kt"):
               source = kt.read_text()
               patched = source
@@ -206,7 +222,11 @@ jobs:
           if [[ -n "${GOOGLE_SERVICES_JSON:-}" ]]; then
             echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
           fi
-          ./gradlew :app:kspDebugKotlin --stacktrace
+          # --no-build-cache: the schema export is an OUT-OF-BUILD-DIR sidecar,
+          # so a FROM-CACHE hit restores the classes but never regenerates the
+          # schema (the current build disables the cache for the KSP tasks for
+          # the same reason; the historical tags predate that guard).
+          ./gradlew :app:kspDebugKotlin --stacktrace --no-build-cache
 
       - name: Collect the exported schema
         run: |
