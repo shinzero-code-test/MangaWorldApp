@@ -61,6 +61,35 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
 
+      - name: Configure the Android SDK path
+        # The historical tags have no local.properties (it is git-ignored), and
+        # the Android Gradle plugin fails the build without an SDK path.
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$SDK_DIR" ]]; then
+            for CANDIDATE in /usr/local/lib/android/sdk /opt/android-sdk /opt/hostedtoolcache/Android/Sdk; do
+              if [[ -d "$CANDIDATE" ]]; then
+                SDK_DIR="$CANDIDATE"
+                break
+              fi
+            done
+          fi
+          if [[ -z "$SDK_DIR" ]]; then
+            echo "Android SDK directory could not be determined." >&2
+            exit 1
+          fi
+          echo "Using Android SDK at: $SDK_DIR"
+          echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK_DIR" > local.properties
+
+      - name: Make gradlew executable
+        # The historical commits do not carry the wrapper's executable bit, so
+        # "./gradlew" fails with "Permission denied".
+        run: chmod +x ./gradlew
+
       - name: Export Room schema
         # The historical tags need a google-services.json to configure; the
         # google-services Gradle plugin fails the build without one.
