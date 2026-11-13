@@ -14,6 +14,24 @@ name: Room Schema Backfill (authoritative exports)
 #
 # Dispatch-only: six historical Gradle builds are expensive and the output
 # only changes when the schemas themselves change.
+#
+# ── STATUS 2026-11-13: DISPATCHED, AND STILL BLOCKED ──────────────────────────
+# The workflow now gets every historical tag to BUILD with the current
+# toolchain (it had six separate incompatibilities, all of them patched in
+# the "Make the historical module buildable" step): the Firebase BoM no
+# longer provides the KTX artifacts the tags declare, the resource merger
+# rejects a reserved resource name and a library clash, Kotlin 2.x rejects
+# the era's import-before-package order, and two tags carry their own
+# compiler errors.
+#
+# What is still open: `:app:kspDebugKotlin` runs and SUCCEEDS, the
+# `room.schemaLocation` argument is verifiably in the build file, and yet
+# the Room compiler writes NO schema file anywhere in the tree (the collect
+# step searches the whole checkout and prints what it finds). The step
+# therefore still fails for every version, and the schemas 8..13 remain
+# hand-derived. The workflow is kept because it is the correct shape for the
+# job and every blocker above is now isolated — but until it produces a
+# file, do NOT read a green run as "the schemas are authoritative".
 
 permissions:
   contents: read
