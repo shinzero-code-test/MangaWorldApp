@@ -104,6 +104,98 @@ jobs:
           sed -i 's/^firebase-bom = ".*"$/firebase-bom = "33.1.2"/' gradle/libs.versions.toml
           grep -n '^firebase-bom' gradle/libs.versions.toml
 
+      - name: Make the historical module buildable with the current toolchain
+        # The Room export needs the historical module to COMPILE, and the
+        # historical tags predate several toolchain changes. Three
+        # mechanical patches, none of which touches the Room entities:
+        #  1. the historical tags did not export Room schemas AT ALL (the
+        #     room.schemaLocation KSP arg came later) -> switch it on;
+        #  2. the modern resource merger rejects a DUPLICATE string name
+        #     ("Found item String/widget_size_small more than one time");
+        #  3. it also rejects a resource whose name is a Java keyword
+        #     ("import is not a valid resource name") -> rename it and its
+        #     Kotlin references (Kotlin 2.x refuses `import` as an
+        #     identifier too).
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          import pathlib, re
+
+          KEYWORDS = {
+              "abstract", "assert", "boolean", "break", "byte", "case", "catch",
+              "char", "class", "const", "continue", "default", "do", "double",
+              "else", "enum", "extends", "final", "finally", "float", "for",
+              "goto", "if", "implements", "import", "instanceof", "int",
+              "interface", "long", "native", "new", "package", "private",
+              "protected", "public", "return", "short", "static", "strictfp",
+              "super", "switch", "synchronized", "this", "throw", "throws",
+              "transient", "try", "void", "volatile", "while",
+          }
+
+          # Resource names that clash with a LIBRARY's copy - the modern
+          # merger rejects those ("Found item String/widget_size_small more
+          # than one time"), while the era's merger only warned.
+          CLASH = {"widget_size_small"}
+
+          app = pathlib.Path("app")
+
+          # 1. switch the Room export on
+          gradle = app / "build.gradle.kts"
+          text = gradle.read_text()
+          if "room.schemaLocation" not in text:
+              gradle.write_text(
+                  text + '\nksp { arg("room.schemaLocation", "$projectDir/schemas") }\n'
+              )
+              print("room.schemaLocation injected")
+          else:
+              print("room.schemaLocation already present")
+
+          # 2 + 3. the strings: drop duplicates, rename the reserved names
+          strings = app / "src/main/res/values/strings.xml"
+          renamed = {}
+          if strings.exists():
+              seen = set()
+              kept = []
+              for line in strings.read_text().split("\n"):
+                  m = re.search(r'<string name="([^"]+)"', line)
+                  if m:
+                      name = m.group(1)
+                      if name in seen:
+                          continue  # a duplicate -> drop it
+                      seen.add(name)
+                      if name in KEYWORDS or name in CLASH:
+                          new = name + "_name"
+                          renamed[name] = new
+                          line = line.replace('name="%s"' % name, 'name="%s"' % new)
+                  kept.append(line)
+              strings.write_text("\n".join(kept))
+              print("renamed reserved resource names: %s" % (renamed or "none"))
+
+          # 3b. the Kotlin references of the renamed resources
+          for kt in app.rglob("*.kt"):
+              source = kt.read_text()
+              patched = source
+              for old_name, new_name in renamed.items():
+                  # \b matters: "R.string.import" must NOT match
+                  # "R.string.import_external_manga" (the underscore is a
+                  # word character, so \b does not match there).
+                  patched = re.sub(
+                      r"R\.string\.%s\b" % re.escape(old_name),
+                      "R.string.%s" % new_name,
+                      patched,
+                  )
+                  patched = re.sub(
+                      r"R\.string\.`%s`\b" % re.escape(old_name),
+                      "R.string.%s" % new_name,
+                      patched,
+                  )
+              if patched != source:
+                  kt.write_text(patched)
+                  print("patched %s" % kt)
+          print("historical module patched")
+          PYEOF
+
       - name: Export Room schema
         # The historical tags need a google-services.json to configure; the
         # google-services Gradle plugin fails the build without one.
@@ -119,10 +211,13 @@ jobs:
       - name: Collect the exported schema
         run: |
           set -euo pipefail
-          dir="app/schemas/com.exapps.mangaworld.core.data.local.MangaDatabase"
-          if [[ ! -f "$dir/${{ matrix.version }}.json" ]]; then
+          # The export directory is named after the database class, and that
+          # class was renamed over the years - so find the file instead of
+          # assuming today's path.
+          dir="$(dirname "$(find app/schemas -name "${{ matrix.version }}.json" -type f | head -n 1)")"
+          if [[ -z "$dir" || "$dir" == "." ]]; then
             echo "::error::tag ${{ matrix.tag }} did not export ${{ matrix.version }}.json"
-            ls -la "$dir" || true
+            ls -laR app/schemas 2>/dev/null | head -40 || true
             exit 1
           fi
           echo "identityHash of the regenerated export:"
