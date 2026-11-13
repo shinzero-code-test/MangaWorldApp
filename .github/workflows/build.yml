@@ -689,6 +689,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint-and-test]
     continue-on-error: true
+    # Backstop: the device phase must never hold a runner for hours. The
+    # steps themselves are bounded too (adb wait-for-device, the two
+    # instrumentation calls), this is the belt to their braces.
+    timeout-minutes: 60
     if: |
       (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')) ||
       github.event_name == 'pull_request' ||
@@ -877,7 +881,10 @@ jobs:
           nohup "$SDK/emulator/emulator" -avd "$BENCH_AVD" \
             -no-window -no-audio -no-boot-anim -no-snapshot \
             -gpu swiftshader_indirect > /tmp/emulator.log 2>&1 &
-          adb wait-for-device || true
+          # `timeout` is mandatory: `adb wait-for-device` blocks FOREVER when
+          # no device ever appears, and the step had no bound (the job sat
+          # in it for over an hour). The boot loop below is the real probe.
+          timeout 180 adb wait-for-device || true
           booted=0
           # 10 minutes: a cold x86_64 system image on a fresh runner needs
           # longer than the 5 this step originally allowed.
@@ -954,7 +961,7 @@ jobs:
           # pipefail the failing pipeline aborts the step before `$?`/
           # PIPESTATUS could be read.
           status=0
-          adb shell am instrument -w -r \
+          timeout 900 adb shell am instrument -w -r \
             -e androidx.benchmark.output.enable=true \
             -e additionalTestOutputDir "/sdcard/Android/data/$harness/files" \
             -e class com.exapps.mangaworld.benchmark.ReaderPerfBenchmarks \
@@ -999,7 +1006,7 @@ jobs:
           harness=$(adb shell pm list packages | tr -d '\r' | sed -n 's/^package://p' \
             | grep -E '^com\.exapps\.mangaworld\.benchmark' | head -n 1)
           status=0
-          adb shell am instrument -w -r \
+          timeout 900 adb shell am instrument -w -r \
             -e class com.exapps.mangaworld.benchmark.BrowseRequestBudgetTest \
             "$harness/androidx.test.runner.AndroidJUnitRunner" | tee instrumentation-debug.log || status=${PIPESTATUS[0]}
           echo "BENCH_DEBUG_EXIT_CODE=$status" >> "$GITHUB_ENV"
