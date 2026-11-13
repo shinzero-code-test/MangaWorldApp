@@ -1013,8 +1013,12 @@ jobs:
           # pipefail the failing pipeline aborts the step before `$?`/
           # PIPESTATUS could be read.
           status=0
+          # Every -e is a NAME/VALUE PAIR: `am` consumes the next two
+          # arguments, so the mixed "-e name=value" form made it swallow
+          # "additionalTestOutputDir" as a VALUE and then fail with
+          # "No instrumentation found for: additionalTestOutputDir".
           timeout 900 adb shell am instrument -w -r \
-            -e androidx.benchmark.output.enable=true \
+            -e androidx.benchmark.output.enable true \
             -e additionalTestOutputDir "/sdcard/Android/data/$harness/files" \
             -e class com.exapps.mangaworld.benchmark.ReaderPerfBenchmarks \
             "$harness/androidx.test.runner.AndroidJUnitRunner" | tee instrumentation.log || status=${PIPESTATUS[0]}
