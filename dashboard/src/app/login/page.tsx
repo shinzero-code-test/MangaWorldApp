@@ -106,8 +106,31 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [gisReady, setGisReady] = useState(false);
   const [gisFailed, setGisFailed] = useState(false);
+  // The release floor (Track A of dashboard/scripts/README-release-policy.md).
+  // Null = "no floor published" (or Remote Config unreachable) -> no banner.
+  const [notice, setNotice] = useState<{ minSupportedVersion: string; releaseUrl: string } | null>(null);
   const gisButtonRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/release-notice")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { minSupportedVersion?: string | null; releaseUrl?: string | null } | null) => {
+        if (cancelled) return;
+        if (!data || !data.minSupportedVersion) return;
+        setNotice({
+          minSupportedVersion: data.minSupportedVersion,
+          releaseUrl: data.releaseUrl ?? "https://github.com/shinzero-code-test/MangaWorldApp/releases/latest",
+        });
+      })
+      .catch(() => {
+        // The notice is optional: a failed read must not disturb the login.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Caps the claims-refresh handshake: a persistently true `refreshRequired` (stale custom
   // claims, clock skew) must never loop forever hammering forced token refreshes.
@@ -458,6 +481,35 @@ export default function LoginPage() {
               أدخل بياناتك للوصول إلى لوحة التحكم
             </p>
           </div>
+
+          {/* The release floor (Track A of dashboard/scripts/README-release-policy.md):
+              the admin sees the raise before anyone else. The value comes from
+              the LIVE Remote Config template, so it cannot drift from the floor
+              the app actually gates on. */}
+          {notice && (
+            <div
+              className="w-full rounded-xl border p-3 text-sm"
+              style={{ borderColor: "var(--border)", background: "var(--card)" }}
+              role="status"
+              data-testid="release-notice"
+            >
+              <p className="leading-relaxed">
+                النسخة{" "}
+                <span dir="ltr" className="font-bold">
+                  {notice.minSupportedVersion}
+                </span>{" "}
+                هي الحد الأدنى المدعوم — الإصدارات الأقدم يجب تحديثها فوراً.
+              </p>
+              <a
+                href={notice.releaseUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mt-2 underline text-xs"
+              >
+                تحميل الإصدار الأحدث
+              </a>
+            </div>
+          )}
 
           {/* Google button: official GIS button (primary — no firebaseapp iframe).
               Falls back to the redirect flow only if GIS cannot load. */}

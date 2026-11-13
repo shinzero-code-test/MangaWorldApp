@@ -227,6 +227,24 @@ wrong, and let the fleet migrate), not a reason to skip the gate.
 
 ---
 
+### 5.1 Publishing the floor (order matters)
+
+The floor is published to Remote Config **before** the release is announced
+(Track A requirement 2) and `latest_version` **after** the release exists
+(it names the newest *published* build):
+
+```bash
+# 1. after the release body is merged, before the tag exists
+node dashboard/scripts/rc-gate.mjs set 9.7.1
+# 2. after the release is published
+node dashboard/scripts/rc-gate.mjs set 9.7.1 9.8.0
+```
+
+`rc-gate.mjs` prints the live values, so "what does the fleet actually read?"
+is one command and not a console archaeology session.
+
+---
+
 ## 6. Pre-release checklist
 
 Before tagging a release:
@@ -246,5 +264,6 @@ Before tagging a release:
 |---|---|
 | The body template CI publishes | `.github/workflows/build.yml` → `create-release` → `Create Release` → `body:` |
 | The floor the app reads | Remote Config `min_supported_version` (+ `latest_version`, `update_url`) |
+| Publishing / reading the floor | `node dashboard/scripts/rc-gate.mjs get` · `node dashboard/scripts/rc-gate.mjs set <min> [latest]` (service-account JWT; the credential in `dashboard/.env.local` is a **multi-line** PEM, so it is repaired before it is parsed) |
 | The cohort measurement | `dashboard/scripts/fleet-report.mjs` (this directory) |
 | The gate itself | plan item 1.1 in `tmp/plan/adversarial-fixes/p3-next.md` |

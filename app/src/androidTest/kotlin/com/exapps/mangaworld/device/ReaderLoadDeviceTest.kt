@@ -1,6 +1,8 @@
 package com.exapps.mangaworld.device
 
 import android.content.Context
+import android.os.Build
+import android.util.Log
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.exapps.mangaworld.core.data.ImagePrefetcher
@@ -33,6 +35,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -59,6 +63,34 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class ReaderLoadDeviceTest {
+
+    /**
+     * mockk can only intercept a FINAL class's method through its inline
+     * instrumentation, and that instrumentation retransforms the class with
+     * ART's JVMTI — which is not usable before API 28. On API 26/27 the call
+     * therefore reaches the REAL method body (a mock's constructor is
+     * bypassed, so the real body dereferences a null field and the app
+     * crashes).
+     *
+     * Proven on the 3-device CI matrix: API 26 fails, API 30 and API 34 pass
+     * the whole suite. So the test is SKIPPED (reported as an assumption
+     * violation, never as a pass) on the devices where the agent cannot
+     * work — the rest of the device suite still covers API 26.
+     */
+    @Before
+    fun requireMockkInlineAgent() {
+        if (Build.VERSION.SDK_INT < 28) {
+            Log.w(
+                "ReaderLoadDeviceTest",
+                "SKIP: mockk's inline (JVMTI) agent needs ART retransform support (API 28+); " +
+                    "this device is API ${Build.VERSION.SDK_INT}.",
+            )
+        }
+        assumeTrue(
+            "mockk's inline agent needs ART JVMTI retransform (API 28+)",
+            Build.VERSION.SDK_INT >= 28,
+        )
+    }
 
     /** Fake repository: counts the chapter-page fetches so the test can assert the early-return. */
     private class FakeMangaRepository : MangaRepository {
