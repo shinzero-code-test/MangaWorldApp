@@ -234,12 +234,19 @@ jobs:
           # The export directory is named after the database class, and that
           # class was renamed over the years - so find the file instead of
           # assuming today's path.
-          dir="$(dirname "$(find app/schemas -name "${{ matrix.version }}.json" -type f | head -n 1)")"
-          if [[ -z "$dir" || "$dir" == "." ]]; then
+          # Search the WHOLE tree: the export directory is named after the
+          # database class, that class was renamed over the years, and the
+          # module's projectDir differs from the checkout root.
+          found="$(find . -name "${{ matrix.version }}.json" -path "*schema*" -type f 2>/dev/null | head -n 1)"
+          if [[ -z "$found" ]]; then
             echo "::error::tag ${{ matrix.tag }} did not export ${{ matrix.version }}.json"
-            ls -laR app/schemas 2>/dev/null | head -40 || true
+            echo "any schema json in the tree:"
+            find . -name "*.json" -path "*schema*" -type f 2>/dev/null | head -20 || true
+            echo "the patched build file's ksp block:"
+            grep -n -A2 "^ksp" app/build.gradle.kts || true
             exit 1
           fi
+          dir="$(dirname "$found")"
           echo "identityHash of the regenerated export:"
           python3 -c "import json;print(json.load(open('$dir/${{ matrix.version }}.json'))['database']['identityHash'])"
           mkdir -p "out/${{ matrix.version }}"
