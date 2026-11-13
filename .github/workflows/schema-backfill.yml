@@ -90,6 +90,20 @@ jobs:
         # "./gradlew" fails with "Permission denied".
         run: chmod +x ./gradlew
 
+      - name: Pin the Firebase BoM to the last KTX-providing version
+        # The historical tags pin firebase-bom 34.2.0, and BoM 34.0.0 dropped
+        # the KTX artifacts (firebase-auth-ktx and friends), so the historical
+        # module no longer RESOLVES: "Could not find
+        # com.google.firebase:firebase-auth-ktx:." (the BoM supplied the
+        # version, and the BoM no longer lists the artifact).
+        # The Room schema does not depend on Firebase at all — the module only
+        # has to RESOLVE so that KSP can export the schema. BoM 33.1.2 is the
+        # last version that still provides the KTX artifacts.
+        run: |
+          set -euo pipefail
+          sed -i 's/^firebase-bom = ".*"$/firebase-bom = "33.1.2"/' gradle/libs.versions.toml
+          grep -n '^firebase-bom' gradle/libs.versions.toml
+
       - name: Export Room schema
         # The historical tags need a google-services.json to configure; the
         # google-services Gradle plugin fails the build without one.
